@@ -93,10 +93,6 @@ percent-encoding = { workspace = true }
 bytes = { workspace = true }
 # 正则表达式（白名单通配符匹配）
 regex = { workspace = true }
-# 报表版式 BLOB：base64 编解码、SHA-256 内容哈希、Decimal 数值绑定
-base64 = { workspace = true }
-sha2 = { workspace = true }
-rust_decimal = { workspace = true }
 # 异步流（agent SSE 流式响应）
 futures = { workspace = true }
 

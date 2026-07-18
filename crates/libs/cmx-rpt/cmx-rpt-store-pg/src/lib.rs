@@ -1,25 +1,35 @@
-//! 报表设计工作台 API。
+//! cmx-rpt-store-pg —— 报表模块的 PostgreSQL 持久化/服务层。
 //!
-//! 数据源固定为 fico-db 中的报表数据字典物理表，不再读取 RPT JSON 定义。
+//! 承载全部 cr_* 报表数据字典物理表（fico-db）的读写：报表主档/版本/类别/元素/会计日历/
+//! 合并组织的查询，版式 BLOB(cr_report_fmt) + 关系投影(sheet/region/row/col/cell_element_map)
+//! 的事务重建，单元格数据(cr_cell_data) 按 org+period 的批量 UPSERT。读走 ZmcDataSet 零拷贝
+//! 省内存，写走强类型 DataValue 绑定。表由 data/meta 定义建，本层不建表（无 DDL）。
+//!
+//! 服务函数返回 `serde_json::Value` 载荷或语义结果（如 `SaveLayoutOutcome`），由 cmx-rpt-api
+//! 的薄 handler 包装成 HTTP 响应。错误统一走 `cmx_api_types::Error`（经 `api_err`/BizError 桥接）。
 
-use axum::Json;
-use axum::extract::{Path, Query, State};
-use serde::Deserialize;
+use std::collections::HashMap;
+
 use serde_json::{Value, json};
 use tracing::debug;
 
-use cmx_database_pg::get_default_pg_db_manager;
+use cmx_core::model::cell::{DataValue, SqlTypeMarker};
+use cmx_database_pg::{ZmcRowSource, get_default_pg_db_manager};
 
-use crate::app_state::CmxAppState;
-use crate::middleware::CmxSvrContext;
-use crate::{ApiResp, Result};
+use cmx_rpt_model::{CreateVersionBody, DEFAULT_REGION, LayoutQuery, RPT_DB_ID, ReportListQuery};
 
-const RPT_DB_ID: &str = "fico-db";
+pub use cmx_api_types::{Error, Result};
 
-fn api_err(msg: &str) -> crate::Error {
+/// 构造报表业务错误（BizError → cmx_api_types::Error）。
+pub fn api_err(msg: &str) -> Error {
     cmx_biz::BizError::business(msg.to_string()).into()
 }
 
+// ============================================================================
+// DB 门面 helper
+// ============================================================================
+
+/// JSON 参数查询 → 行数组（sqlx/json 链路；报表读取多为小体量关系投影）。
 async fn query_rows(sql: &str, params: Value, label: &str) -> Result<Vec<Value>> {
     let mm = get_default_pg_db_manager();
     let ds = mm
@@ -33,6 +43,7 @@ async fn query_rows(sql: &str, params: Value, label: &str) -> Result<Vec<Value>>
         .unwrap_or_default())
 }
 
+/// JSON 参数执行（非事务，单语句）。
 async fn execute(sql: &str, params: Value) -> Result<()> {
     let mm = get_default_pg_db_manager();
     mm.execute_sql_with_json(RPT_DB_ID, None, sql, params)
@@ -40,6 +51,19 @@ async fn execute(sql: &str, params: Value) -> Result<()> {
         .map_err(|e| api_err(&format!("报表设计数据写入失败: {e}")))?;
     Ok(())
 }
+
+/// 强类型执行（事务内），参数按 DataValue 变体精确绑定（String→text, Binary→bytea, Null→NULL…）。
+async fn exec_dv(txn_id: &str, sql: &str, params: Vec<DataValue>) -> Result<()> {
+    let mm = get_default_pg_db_manager();
+    mm.execute_sql_with_datavalues(RPT_DB_ID, Some(txn_id), sql, params)
+        .await
+        .map_err(|e| api_err(&format!("报表写入失败: {e}")))?;
+    Ok(())
+}
+
+// ============================================================================
+// JSON 字段/DataValue 绑定 helper
+// ============================================================================
 
 fn str_field(body: &Value, name: &str) -> Option<String> {
     body.get(name)
@@ -66,30 +90,83 @@ fn bool_int_field(body: &Value, name: &str) -> Option<i64> {
     })
 }
 
-#[derive(Debug, Deserialize, Default)]
-pub struct ReportListQuery {
-    #[serde(default)]
-    pub category: Option<String>,
-    #[serde(default)]
-    pub period_type: Option<String>,
-    #[serde(default)]
-    pub q: Option<String>,
+fn dv_str(s: Option<&str>) -> DataValue {
+    match s {
+        Some(v) if !v.is_empty() => DataValue::String(v.to_string()),
+        // 强类型 Text NULL：tokio-postgres 按列 OID 校验 NULL 类型（裸 Null 会当 text 绑到
+        // 非 text 列报错；这里列本就是 varchar 故 Text NULL 正确）。
+        _ => DataValue::NullTyped(SqlTypeMarker::Text),
+    }
 }
 
-#[derive(Debug, Deserialize, Default)]
-pub struct ReportDetailQuery {
-    #[serde(default)]
-    pub version: Option<String>,
+/// NOT NULL 文本列：缺失时用给定默认值（避免 null 约束冲突）。
+fn dv_str_def(s: Option<&str>, def: &str) -> DataValue {
+    match s {
+        Some(v) if !v.is_empty() => DataValue::String(v.to_string()),
+        _ => DataValue::String(def.to_string()),
+    }
 }
 
-pub async fn report_design_overview(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-) -> Result<Json<ApiResp<Value>>> {
-    debug!(
-        "{:<12} - report_design_overview db={}",
-        "HANDLER", RPT_DB_ID
-    );
+fn dv_i64(v: Option<i64>) -> DataValue {
+    // 强类型 Int NULL：宽度自适应 INT2/4/8，绑到 bigint 列的 NULL 正确（裸 Null=text 会报错）。
+    v.map(DataValue::Int)
+        .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Int))
+}
+
+/// NOT NULL 整数列：缺失时用给定默认值。
+fn dv_i64_def(v: Option<i64>, def: i64) -> DataValue {
+    DataValue::Int(v.unwrap_or(def))
+}
+
+fn s(body: &Value, k: &str) -> Option<String> {
+    body.get(k).and_then(|v| v.as_str()).map(str::to_owned)
+}
+
+fn i(body: &Value, k: &str) -> Option<i64> {
+    body.get(k).and_then(|v| match v {
+        Value::Number(n) => n.as_i64(),
+        Value::Bool(b) => Some(if *b { 1 } else { 0 }),
+        _ => None,
+    })
+}
+
+fn arr<'a>(body: &'a Value, k: &str) -> &'a [Value] {
+    body.get(k)
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[])
+}
+
+/// 0基列号 → 字母（0→A, 26→AA），列 code 缺失时的兜底。
+fn col_letter_of(idx: usize) -> String {
+    let mut n = idx + 1;
+    let mut s = String::new();
+    while n > 0 {
+        let r = (n - 1) % 26;
+        s.insert(0, (b'A' + r as u8) as char);
+        n = (n - 1) / 26;
+    }
+    if s.is_empty() { "A".to_string() } else { s }
+}
+
+/// 解析行列 id：真号(纯数字/数字)原样用；临时(空/非数字串/缺失)铸新 next_pk_id。
+fn resolve_id(v: Option<&Value>) -> i64 {
+    match v {
+        Some(Value::Number(n)) => n.as_i64().unwrap_or_else(cmx_utils::next_pk_id),
+        Some(Value::String(s)) if s.chars().all(|c| c.is_ascii_digit()) && !s.is_empty() => {
+            s.parse::<i64>().unwrap_or_else(|_| cmx_utils::next_pk_id())
+        }
+        _ => cmx_utils::next_pk_id(),
+    }
+}
+
+// ============================================================================
+// 报表主档 / 版本 / 类别 / 元素 / 日历 / 组织：读服务
+// ============================================================================
+
+/// 报表设计工作台总览：类别 + 期间类型 + 全量报表。
+pub async fn overview() -> Result<Value> {
+    debug!("{:<12} - overview db={}", "RPT-STORE", RPT_DB_ID);
     let categories = query_rows(
         r#"SELECT code, name, sort_no, status, remark
            FROM cr_report_category
@@ -109,111 +186,16 @@ pub async fn report_design_overview(
     )
     .await?;
     let reports = report_rows(&ReportListQuery::default()).await?;
-    Ok(Json(ApiResp::ok(json!({
+    Ok(json!({
         "dbId": RPT_DB_ID,
         "categories": categories,
         "periods": periods,
         "reports": reports,
-    }))))
+    }))
 }
 
-pub async fn report_design_reports(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    Query(q): Query<ReportListQuery>,
-) -> Result<Json<ApiResp<Value>>> {
-    let reports = report_rows(&q).await?;
-    Ok(Json(ApiResp::ok(
-        json!({ "dbId": RPT_DB_ID, "items": reports }),
-    )))
-}
-
-pub async fn report_design_elements(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-) -> Result<Json<ApiResp<Value>>> {
-    debug!(
-        "{:<12} - report_design_elements db={}",
-        "HANDLER", RPT_DB_ID
-    );
-    let categories = query_rows(
-        r#"SELECT code, name, sort_no, status, remark
-           FROM cr_element_category
-           WHERE COALESCE(status, 1) = 1
-           ORDER BY COALESCE(sort_no, 999999), code"#,
-        json!([]),
-        "report_design_element_categories",
-    )
-    .await?;
-    let elements = query_rows(
-        r#"SELECT code, name, category_code, data_type, unit, decimals,
-                  value_source, formula_type, calc_formula, check_formula,
-                  sort_no, status, remark
-           FROM cr_data_element
-           WHERE COALESCE(status, 1) = 1
-           ORDER BY COALESCE(sort_no, 999999), code"#,
-        json!([]),
-        "report_design_data_elements",
-    )
-    .await?;
-    Ok(Json(ApiResp::ok(json!({
-        "dbId": RPT_DB_ID,
-        "categories": categories,
-        "elements": elements,
-    }))))
-}
-
-/// GET /report-design/calendar —— 会计日历字典（cr_acct_calendar 年度→月度自分级）。
-/// 供报表应用工作台 explorer 顶部期间下拉：level_no=1 年度节点、is_leaf=1 月度期间。
-pub async fn report_design_calendar(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-) -> Result<Json<ApiResp<Value>>> {
-    debug!(
-        "{:<12} - report_design_calendar db={}",
-        "HANDLER", RPT_DB_ID
-    );
-    let periods = query_rows(
-        r#"SELECT code, name, calendar_type, fiscal_year, period_no, parent_code,
-                  full_path, level_no, is_leaf, period_type, start_date, end_date,
-                  quarter, period_status, is_year_end, days, sort_no, status
-           FROM cr_acct_calendar
-           WHERE COALESCE(status, 1) = 1
-           ORDER BY COALESCE(sort_no, 999999), code"#,
-        json!([]),
-        "report_design_calendar",
-    )
-    .await?;
-    Ok(Json(ApiResp::ok(
-        json!({ "dbId": RPT_DB_ID, "periods": periods }),
-    )))
-}
-
-/// GET /report-design/consol-org —— 报表合并组织架构（cr_consol_org parent_id 自分级树）。
-/// 供报表应用工作台 explorer 组织树：前端按 parent_id 归并成树；根节点 parent_id 为 NULL。
-pub async fn report_design_consol_org(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-) -> Result<Json<ApiResp<Value>>> {
-    debug!(
-        "{:<12} - report_design_consol_org db={}",
-        "HANDLER", RPT_DB_ID
-    );
-    let orgs = query_rows(
-        r#"SELECT id, code, name, consol_scheme, org_type, parent_id, full_path,
-                  level_no, is_leaf, entity_code, consol_method, ownership_pct, voting_pct,
-                  consol_currency, is_parent, offset_flag, remark, sort_no, status
-           FROM cr_consol_org
-           WHERE COALESCE(status, 1) = 1
-           ORDER BY COALESCE(sort_no, 999999), id"#,
-        json!([]),
-        "report_design_consol_org",
-    )
-    .await?;
-    Ok(Json(ApiResp::ok(json!({ "dbId": RPT_DB_ID, "orgs": orgs }))))
-}
-
-async fn report_rows(q: &ReportListQuery) -> Result<Vec<Value>> {
+/// 过滤报表列表（供 overview + /reports 复用）。
+pub async fn report_rows(q: &ReportListQuery) -> Result<Vec<Value>> {
     let mut wheres = Vec::new();
     let mut params = Vec::new();
     let mut n = 0usize;
@@ -281,12 +263,78 @@ async fn report_rows(q: &ReportListQuery) -> Result<Vec<Value>> {
     query_rows(&sql, Value::Array(params), "report_design_reports").await
 }
 
-pub async fn report_design_report_detail(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    Path(code): Path<String>,
-    Query(q): Query<ReportDetailQuery>,
-) -> Result<Json<ApiResp<Value>>> {
+/// 报表列表（含 dbId 信封）。
+pub async fn reports(q: &ReportListQuery) -> Result<Value> {
+    let reports = report_rows(q).await?;
+    Ok(json!({ "dbId": RPT_DB_ID, "items": reports }))
+}
+
+/// 数据元素：元素分类 + 数据元素。
+pub async fn elements() -> Result<Value> {
+    debug!("{:<12} - elements db={}", "RPT-STORE", RPT_DB_ID);
+    let categories = query_rows(
+        r#"SELECT code, name, sort_no, status, remark
+           FROM cr_element_category
+           WHERE COALESCE(status, 1) = 1
+           ORDER BY COALESCE(sort_no, 999999), code"#,
+        json!([]),
+        "report_design_element_categories",
+    )
+    .await?;
+    let elements = query_rows(
+        r#"SELECT code, name, category_code, data_type, unit, decimals,
+                  value_source, formula_type, calc_formula, check_formula,
+                  sort_no, status, remark
+           FROM cr_data_element
+           WHERE COALESCE(status, 1) = 1
+           ORDER BY COALESCE(sort_no, 999999), code"#,
+        json!([]),
+        "report_design_data_elements",
+    )
+    .await?;
+    Ok(json!({
+        "dbId": RPT_DB_ID,
+        "categories": categories,
+        "elements": elements,
+    }))
+}
+
+/// 会计日历字典（cr_acct_calendar 年度→月度自分级）。
+pub async fn calendar() -> Result<Value> {
+    debug!("{:<12} - calendar db={}", "RPT-STORE", RPT_DB_ID);
+    let periods = query_rows(
+        r#"SELECT code, name, calendar_type, fiscal_year, period_no, parent_code,
+                  full_path, level_no, is_leaf, period_type, start_date, end_date,
+                  quarter, period_status, is_year_end, days, sort_no, status
+           FROM cr_acct_calendar
+           WHERE COALESCE(status, 1) = 1
+           ORDER BY COALESCE(sort_no, 999999), code"#,
+        json!([]),
+        "report_design_calendar",
+    )
+    .await?;
+    Ok(json!({ "dbId": RPT_DB_ID, "periods": periods }))
+}
+
+/// 合并组织架构（cr_consol_org parent_id 自分级树）。
+pub async fn consol_org() -> Result<Value> {
+    debug!("{:<12} - consol_org db={}", "RPT-STORE", RPT_DB_ID);
+    let orgs = query_rows(
+        r#"SELECT id, code, name, consol_scheme, org_type, parent_id, full_path,
+                  level_no, is_leaf, entity_code, consol_method, ownership_pct, voting_pct,
+                  consol_currency, is_parent, offset_flag, remark, sort_no, status
+           FROM cr_consol_org
+           WHERE COALESCE(status, 1) = 1
+           ORDER BY COALESCE(sort_no, 999999), id"#,
+        json!([]),
+        "report_design_consol_org",
+    )
+    .await?;
+    Ok(json!({ "dbId": RPT_DB_ID, "orgs": orgs }))
+}
+
+/// 报表详情：主档 + 版本 + 选中版本统计。
+pub async fn report_detail(code: &str, version: Option<String>) -> Result<Value> {
     let report = query_rows(
         r#"SELECT code, name, report_type, report_category, format_code, period_type,
                   currency_code, amount_unit, entity_scope, template_version, data_source,
@@ -317,25 +365,18 @@ pub async fn report_design_report_detail(
         "report_design_versions",
     )
     .await?;
-    let selected_version = q
-        .version
+    let selected_version = version
         .filter(|v| !v.trim().is_empty())
         .or_else(|| {
             versions
                 .iter()
                 .find(|v| v.get("is_current").and_then(|x| x.as_i64()).unwrap_or(0) == 1)
-                .and_then(|v| {
-                    v.get("code")
-                        .and_then(|x| x.as_str())
-                        .map(ToOwned::to_owned)
-                })
+                .and_then(|v| v.get("code").and_then(|x| x.as_str()).map(ToOwned::to_owned))
         })
         .or_else(|| {
-            versions.first().and_then(|v| {
-                v.get("code")
-                    .and_then(|x| x.as_str())
-                    .map(ToOwned::to_owned)
-            })
+            versions
+                .first()
+                .and_then(|v| v.get("code").and_then(|x| x.as_str()).map(ToOwned::to_owned))
         });
 
     let stats = if let Some(ver) = selected_version.as_deref() {
@@ -357,30 +398,30 @@ pub async fn report_design_report_detail(
         json!({})
     };
 
-    Ok(Json(ApiResp::ok(json!({
+    Ok(json!({
         "dbId": RPT_DB_ID,
         "report": report,
         "versions": versions,
         "selectedVersion": selected_version,
         "stats": stats,
-    }))))
+    }))
 }
 
-pub async fn report_design_create_report(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    body: Json<Value>,
-) -> Result<Json<ApiResp<Value>>> {
-    let body = body.0;
-    let code = str_field(&body, "code").ok_or_else(|| api_err("报表编码不能为空"))?;
-    let name = str_field(&body, "name").ok_or_else(|| api_err("报表名称不能为空"))?;
-    let report_type = str_field(&body, "report_type").unwrap_or_else(|| "CUSTOM".to_string());
+// ============================================================================
+// 报表主档 / 版本：写服务
+// ============================================================================
+
+/// 新建报表（含初始版本）。
+pub async fn create_report(body: &Value) -> Result<Value> {
+    let code = str_field(body, "code").ok_or_else(|| api_err("报表编码不能为空"))?;
+    let name = str_field(body, "name").ok_or_else(|| api_err("报表名称不能为空"))?;
+    let report_type = str_field(body, "report_type").unwrap_or_else(|| "CUSTOM".to_string());
     let report_category =
-        str_field(&body, "report_category").unwrap_or_else(|| "management".to_string());
-    let period_type = str_field(&body, "period_type").unwrap_or_else(|| "month".to_string());
-    let sort_no = int_field(&body, "sort_no").unwrap_or(100);
-    let status = bool_int_field(&body, "status").unwrap_or(1);
-    let is_statutory = bool_int_field(&body, "is_statutory").unwrap_or(0);
+        str_field(body, "report_category").unwrap_or_else(|| "management".to_string());
+    let period_type = str_field(body, "period_type").unwrap_or_else(|| "month".to_string());
+    let sort_no = int_field(body, "sort_no").unwrap_or(100);
+    let status = bool_int_field(body, "status").unwrap_or(1);
+    let is_statutory = bool_int_field(body, "is_statutory").unwrap_or(0);
 
     execute(
         r#"INSERT INTO cr_report_list
@@ -393,45 +434,40 @@ pub async fn report_design_create_report(
             name.clone(),
             report_type,
             report_category,
-            str_field(&body, "format_code"),
+            str_field(body, "format_code"),
             period_type,
-            str_field(&body, "currency_code").unwrap_or_else(|| "CNY".to_string()),
-            str_field(&body, "amount_unit").unwrap_or_else(|| "yuan".to_string()),
-            str_field(&body, "entity_scope").unwrap_or_else(|| "single".to_string()),
-            str_field(&body, "template_version").unwrap_or_else(|| "V1".to_string()),
-            str_field(&body, "data_source"),
+            str_field(body, "currency_code").unwrap_or_else(|| "CNY".to_string()),
+            str_field(body, "amount_unit").unwrap_or_else(|| "yuan".to_string()),
+            str_field(body, "entity_scope").unwrap_or_else(|| "single".to_string()),
+            str_field(body, "template_version").unwrap_or_else(|| "V1".to_string()),
+            str_field(body, "data_source"),
             is_statutory,
-            str_field(&body, "remark"),
+            str_field(body, "remark"),
             sort_no,
             status
         ]),
     )
     .await?;
 
-    let version_code = str_field(&body, "version_code").unwrap_or_else(|| "V1".to_string());
+    let version_code = str_field(body, "version_code").unwrap_or_else(|| "V1".to_string());
     create_version_row(
         &code,
         &version_code,
-        &str_field(&body, "version_name").unwrap_or_else(|| "初始版本".to_string()),
+        &str_field(body, "version_name").unwrap_or_else(|| "初始版本".to_string()),
         1,
         None,
         "draft",
         1,
-        str_field(&body, "change_summary").as_deref(),
+        str_field(body, "change_summary").as_deref(),
     )
     .await?;
 
-    Ok(Json(ApiResp::ok(
-        json!({ "code": code, "name": name, "version": version_code }),
-    )))
+    Ok(json!({ "code": code, "name": name, "version": version_code }))
 }
 
-pub async fn report_design_delete_report(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    Path(code): Path<String>,
-) -> Result<Json<ApiResp<Value>>> {
-    debug!("{:<12} - report_design_delete {}", "HANDLER", code);
+/// 删除报表（级联删 7 张表）。
+pub async fn delete_report(code: &str) -> Result<Value> {
+    debug!("{:<12} - delete_report {}", "RPT-STORE", code);
     for sql in [
         "DELETE FROM cr_report_fmt WHERE report_code = $1",
         "DELETE FROM cr_report_col WHERE report_code = $1",
@@ -441,35 +477,16 @@ pub async fn report_design_delete_report(
         "DELETE FROM cr_report_version WHERE report_code = $1",
         "DELETE FROM cr_report_list WHERE code = $1",
     ] {
-        execute(sql, json!([code.clone()])).await?;
+        execute(sql, json!([code])).await?;
     }
-    Ok(Json(ApiResp::ok(json!({ "code": code }))))
+    Ok(json!({ "code": code }))
 }
 
-#[derive(Debug, Deserialize, Default)]
-pub struct CreateVersionBody {
-    #[serde(default)]
-    pub code: Option<String>,
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub base_version_code: Option<String>,
-    #[serde(default)]
-    pub change_summary: Option<String>,
-    #[serde(default)]
-    pub is_current: Option<bool>,
-}
-
-pub async fn report_design_create_version(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    Path(report_code): Path<String>,
-    body: Option<Json<CreateVersionBody>>,
-) -> Result<Json<ApiResp<Value>>> {
-    let body = body.map(|b| b.0).unwrap_or_default();
+/// 建版本。
+pub async fn create_version(report_code: &str, body: &CreateVersionBody) -> Result<Value> {
     let rows = query_rows(
         "SELECT COALESCE(MAX(version_no), 0) AS max_no FROM cr_report_version WHERE report_code = $1",
-        json!([report_code.clone()]),
+        json!([report_code]),
         "report_design_version_no",
     )
     .await?;
@@ -493,20 +510,16 @@ pub async fn report_design_create_version(
         .filter(|s| !s.is_empty())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| format!("版本 {next_no}"));
-    let is_current = if body.is_current.unwrap_or(false) {
-        1
-    } else {
-        0
-    };
+    let is_current = if body.is_current.unwrap_or(false) { 1 } else { 0 };
     if is_current == 1 {
         execute(
             "UPDATE cr_report_version SET is_current = 0, update_time = CURRENT_TIMESTAMP WHERE report_code = $1",
-            json!([report_code.clone()]),
+            json!([report_code]),
         )
         .await?;
     }
     create_version_row(
-        &report_code,
+        report_code,
         &version_code,
         &version_name,
         next_no,
@@ -516,21 +529,18 @@ pub async fn report_design_create_version(
         body.change_summary.as_deref(),
     )
     .await?;
-    Ok(Json(ApiResp::ok(json!({
+    Ok(json!({
         "reportCode": report_code,
         "version": version_code,
         "versionNo": next_no
-    }))))
+    }))
 }
 
-pub async fn report_design_set_default_version(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    Path((report_code, version)): Path<(String, String)>,
-) -> Result<Json<ApiResp<Value>>> {
+/// 设置默认（当前生效）版本。
+pub async fn set_default_version(report_code: &str, version: &str) -> Result<Value> {
     let exists = query_rows(
         "SELECT code FROM cr_report_version WHERE report_code = $1 AND code = $2",
-        json!([report_code.clone(), version.clone()]),
+        json!([report_code, version]),
         "report_design_default_version_check",
     )
     .await?;
@@ -539,15 +549,13 @@ pub async fn report_design_set_default_version(
     }
     execute(
         "UPDATE cr_report_version SET is_current = CASE WHEN code = $2 THEN 1 ELSE 0 END, update_time = CURRENT_TIMESTAMP WHERE report_code = $1",
-        json!([report_code.clone(), version.clone()]),
+        json!([report_code, version]),
     )
     .await?;
-    Ok(Json(ApiResp::ok(json!({
-        "reportCode": report_code,
-        "version": version,
-    }))))
+    Ok(json!({ "reportCode": report_code, "version": version }))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn create_version_row(
     report_code: &str,
     version_code: &str,
@@ -580,104 +588,17 @@ async fn create_version_row(
 }
 
 // ============================================================================
-// 报表版式（模式一）+ 报表数据（模式二）加载/存储
-//
-// 设计要点（见 docs/报表两模式加载存储方案.html）：
-//   - ReportModel 单一事实源；版式主真相 = cr_report_fmt.doc_content(BYTEA, SpreadJS SSJSON)，
-//     关系表(sheet/region/row/col)为可查询投影；数据层 cr_cell_data 按 org+period。
-//   - 读数据借鉴 ZmcDataSet 零拷贝方案（query_sql_zmc_with_datavalues + 惰性 getter），
-//     不整表物化成 DataValue/JSON，降低内存占用。
-//   - 写入统一走强类型 DataValue 参数（execute_sql_with_datavalues），避开 JSON 参数的
-//     类型猜测（"2026"→Decimal、base64 串→Binary 等陷阱），BLOB 用 DataValue::Binary。
+// 模式一 · 版式加载/存储
 // ============================================================================
 
-use cmx_core::model::cell::DataValue;
-use cmx_core::model::cell::SqlTypeMarker;
-// ZmcRowSource trait 提供零拷贝 get_str/get_i64/get_decimal/get_bytes 等惰性取值方法。
-use cmx_database_pg::ZmcRowSource;
-
-const DEFAULT_REGION: &str = "__default__";
-
-/// 强类型执行（事务内），参数按 DataValue 变体精确绑定（String→text, Binary→bytea, Null→NULL…）。
-async fn exec_dv(txn_id: &str, sql: &str, params: Vec<DataValue>) -> Result<()> {
-    let mm = get_default_pg_db_manager();
-    mm.execute_sql_with_datavalues(RPT_DB_ID, Some(txn_id), sql, params)
-        .await
-        .map_err(|e| api_err(&format!("报表写入失败: {e}")))?;
-    Ok(())
-}
-
-fn dv_str(s: Option<&str>) -> DataValue {
-    match s {
-        Some(v) if !v.is_empty() => DataValue::String(v.to_string()),
-        // 强类型 Text NULL：tokio-postgres 按列 OID 校验 NULL 类型（裸 Null 会当 text 绑到
-        // 非 text 列报错；这里列本就是 varchar 故 Text NULL 正确）。
-        _ => DataValue::NullTyped(SqlTypeMarker::Text),
-    }
-}
-
-/// NOT NULL 文本列：缺失时用给定默认值（避免 null 约束冲突）。
-fn dv_str_def(s: Option<&str>, def: &str) -> DataValue {
-    match s {
-        Some(v) if !v.is_empty() => DataValue::String(v.to_string()),
-        _ => DataValue::String(def.to_string()),
-    }
-}
-
-fn dv_i64(v: Option<i64>) -> DataValue {
-    // 强类型 Int NULL：宽度自适应 INT2/4/8，绑到 bigint 列的 NULL 正确（裸 Null=text 会报错）。
-    v.map(DataValue::Int).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Int))
-}
-
-/// NOT NULL 整数列：缺失时用给定默认值。
-fn dv_i64_def(v: Option<i64>, def: i64) -> DataValue {
-    DataValue::Int(v.unwrap_or(def))
-}
-
-fn s(body: &Value, k: &str) -> Option<String> {
-    body.get(k).and_then(|v| v.as_str()).map(str::to_owned)
-}
-
-fn i(body: &Value, k: &str) -> Option<i64> {
-    body.get(k).and_then(|v| match v {
-        Value::Number(n) => n.as_i64(),
-        Value::Bool(b) => Some(if *b { 1 } else { 0 }),
-        _ => None,
-    })
-}
-
-fn arr<'a>(body: &'a Value, k: &str) -> &'a [Value] {
-    body.get(k).and_then(|v| v.as_array()).map(|a| a.as_slice()).unwrap_or(&[])
-}
-
-/// 0基列号 → 字母（0→A, 26→AA），列 code 缺失时的兜底。
-fn col_letter_of(idx: usize) -> String {
-    let mut n = idx + 1;
-    let mut s = String::new();
-    while n > 0 {
-        let r = (n - 1) % 26;
-        s.insert(0, (b'A' + r as u8) as char);
-        n = (n - 1) / 26;
-    }
-    if s.is_empty() { "A".to_string() } else { s }
-}
-
-#[derive(Debug, Deserialize, Default)]
-pub struct LayoutQuery {
-    #[serde(default)]
-    pub version: Option<String>,
-}
-
-/// GET /report-design/reports/{code}/layout?version=
-/// 读版式：cr_report_fmt(BLOB) + 关系投影(sheet/region/row/col) 组装。
-/// BLOB 用 ZmcDataSet 零拷贝取 bytes → base64（避免整表 JSON 物化）。
-pub async fn report_design_load_layout(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    Path(code): Path<String>,
-    Query(q): Query<LayoutQuery>,
-) -> Result<Json<ApiResp<Value>>> {
-    let version = q.version.filter(|v| !v.trim().is_empty()).unwrap_or_default();
+/// 读版式：cr_report_fmt(BLOB, ZmcDataSet 零拷贝→base64) + 关系投影。
+pub async fn load_layout(code: &str, q: &LayoutQuery) -> Result<Value> {
+    let version = q
+        .version
+        .as_deref()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_default()
+        .to_string();
 
     // —— 版式 BLOB：ZmcDataSet 零拷贝，直接从行借出 bytes 编 base64 ——
     let mm = get_default_pg_db_manager();
@@ -687,7 +608,10 @@ pub async fn report_design_load_layout(
                 RPT_DB_ID,
                 r#"SELECT doc_content, doc_format, mime_type, file_size, content_hash, storage_type, external_uri
                    FROM cr_report_fmt WHERE report_code = $1 AND version_code = $2"#,
-                vec![DataValue::String(code.clone()), DataValue::String(version.clone())],
+                vec![
+                    DataValue::String(code.to_string()),
+                    DataValue::String(version.clone()),
+                ],
                 "rpt_fmt",
             )
             .await
@@ -716,7 +640,7 @@ pub async fn report_design_load_layout(
         }
     };
 
-    // —— 关系投影：小体量，直接 query_rows(JSON) 即可（行列可能多，但远小于数据层） ——
+    // —— 关系投影：小体量，直接 query_rows(JSON) 即可 ——
     let p = json!([code, version]);
     let sheets = query_rows(
         r#"SELECT report_code, version_code, sheet_index, name, sheet_type, tab_color,
@@ -771,7 +695,7 @@ pub async fn report_design_load_layout(
     )
     .await?;
 
-    Ok(Json(ApiResp::ok(json!({
+    Ok(json!({
         "dbId": RPT_DB_ID,
         "reportCode": code,
         "version": version,
@@ -781,31 +705,42 @@ pub async fn report_design_load_layout(
         "rows": rows,
         "cols": cols,
         "cellMap": cell_map,
-    }))))
+    }))
 }
 
-/// POST /report-design/reports/{code}/layout
-/// 存版式：事务内 UPSERT cr_report_fmt(BLOB, content_hash 乐观锁) + 重建 4 关系表 + cell_element_map。
-/// body: { version, fmt:{docContent(base64), docFormat, mimeType, contentHash}, sheets[], regions[], rows[], cols[], cellMap[] }
-pub async fn report_design_save_layout(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    Path(code): Path<String>,
-    body: Json<Value>,
-) -> Result<axum::response::Response> {
-    use axum::response::IntoResponse;
+/// 存版式的语义结果：冲突（乐观锁）或成功（含返回载荷）。api 层据此映射 409 / 200。
+pub enum SaveLayoutOutcome {
+    /// content_hash 与库内不一致（他人已更新）。
+    Conflict,
+    /// 成功，携带 { ok, contentHash, fileSize, idMap } 载荷。
+    Ok(Value),
+}
+
+/// 存版式：乐观锁校验 → 事务内 UPSERT BLOB + 重建关系投影。自管事务。
+pub async fn save_layout(code: &str, body: &Value) -> Result<SaveLayoutOutcome> {
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
     use sha2::{Digest, Sha256};
 
-    let version = s(&body, "version").unwrap_or_default();
+    let version = s(body, "version").unwrap_or_default();
     let fmt = body.get("fmt").cloned().unwrap_or(Value::Null);
     let doc_b64 = fmt.get("docContent").and_then(|v| v.as_str()).unwrap_or("");
     let doc_bytes = BASE64
         .decode(doc_b64)
         .map_err(|e| api_err(&format!("docContent 非法 base64: {e}")))?;
-    let doc_format = fmt.get("docFormat").and_then(|v| v.as_str()).unwrap_or("ssjson").to_string();
-    let mime_type = fmt.get("mimeType").and_then(|v| v.as_str()).unwrap_or("application/json").to_string();
-    let client_hash = fmt.get("contentHash").and_then(|v| v.as_str()).map(str::to_owned);
+    let doc_format = fmt
+        .get("docFormat")
+        .and_then(|v| v.as_str())
+        .unwrap_or("ssjson")
+        .to_string();
+    let mime_type = fmt
+        .get("mimeType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("application/json")
+        .to_string();
+    let client_hash = fmt
+        .get("contentHash")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
     let new_hash = format!("{:x}", Sha256::digest(&doc_bytes));
     let file_size = doc_bytes.len() as i64;
 
@@ -819,32 +754,44 @@ pub async fn report_design_save_layout(
     )
     .await?;
     if let Some(row) = cur.first() {
-        let db_hash = row.get("content_hash").and_then(|v| v.as_str()).unwrap_or_default();
-        if !db_hash.is_empty()
-            && client_hash.as_deref().map(|h| h != db_hash).unwrap_or(false)
-        {
-            return Ok((
-                axum::http::StatusCode::CONFLICT,
-                Json(json!({ "code": 409, "msg": "版式已被他人更新，请刷新后重试" })),
-            )
-                .into_response());
+        let db_hash = row
+            .get("content_hash")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        if !db_hash.is_empty() && client_hash.as_deref().map(|h| h != db_hash).unwrap_or(false) {
+            return Ok(SaveLayoutOutcome::Conflict);
         }
     }
 
     let tx = mm.get_transaction_context();
-    let txn_id = tx.begin(RPT_DB_ID).await.map_err(|e| api_err(&format!("开启事务失败: {e}")))?;
+    let txn_id = tx
+        .begin(RPT_DB_ID)
+        .await
+        .map_err(|e| api_err(&format!("开启事务失败: {e}")))?;
 
-    let result = save_layout_apply(&txn_id, &code, &version, doc_bytes, &doc_format, &mime_type, file_size, &new_hash, &body).await;
+    let result = save_layout_apply(
+        &txn_id,
+        code,
+        &version,
+        doc_bytes,
+        &doc_format,
+        &mime_type,
+        file_size,
+        &new_hash,
+        body,
+    )
+    .await;
     match result {
         Ok(id_map) => {
-            tx.commit(&txn_id).await.map_err(|e| api_err(&format!("提交事务失败: {e}")))?;
-            Ok(Json(ApiResp::ok(json!({
+            tx.commit(&txn_id)
+                .await
+                .map_err(|e| api_err(&format!("提交事务失败: {e}")))?;
+            Ok(SaveLayoutOutcome::Ok(json!({
                 "ok": true,
                 "contentHash": new_hash,
                 "fileSize": file_size,
                 "idMap": id_map,
             })))
-            .into_response())
         }
         Err(e) => {
             let _ = tx.rollback(&txn_id).await;
@@ -889,11 +836,20 @@ async fn save_layout_apply(
     .await?;
 
     // 2) 重建关系投影：先删本 report+version 全部，再批量插入（幂等）
-    for tbl in ["cr_report_sheet", "cr_report_region", "cr_report_row", "cr_report_col", "cr_cell_element_map"] {
+    for tbl in [
+        "cr_report_sheet",
+        "cr_report_region",
+        "cr_report_row",
+        "cr_report_col",
+        "cr_cell_element_map",
+    ] {
         exec_dv(
             txn_id,
             &format!("DELETE FROM {tbl} WHERE report_code=$1 AND version_code=$2"),
-            vec![DataValue::String(code.to_string()), DataValue::String(version.to_string())],
+            vec![
+                DataValue::String(code.to_string()),
+                DataValue::String(version.to_string()),
+            ],
         )
         .await?;
     }
@@ -934,7 +890,9 @@ async fn save_layout_apply(
 
     // 2b) regions（含默认区域）
     for (idx, rg) in arr(body, "regions").iter().enumerate() {
-        let region_code = s(rg, "code").filter(|c| !c.is_empty()).unwrap_or_else(|| DEFAULT_REGION.to_string());
+        let region_code = s(rg, "code")
+            .filter(|c| !c.is_empty())
+            .unwrap_or_else(|| DEFAULT_REGION.to_string());
         exec_dv(
             txn_id,
             r#"INSERT INTO cr_report_region
@@ -972,16 +930,20 @@ async fn save_layout_apply(
         .await?;
     }
 
-    // 2c) rows —— id 铸真号：临时 id(空/非数字) → next_pk_id；登记 idMap[sheet|region|code]=真id
-    //   同时登记 temp_id_map[前端临时id串]=真id，供 cellMap 的 rowId/colId 解引用。
+    // 2c) rows —— id 铸真号 + 临时id映射
     let mut id_map = serde_json::Map::new();
-    let mut temp_id_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    let mut temp_id_map: HashMap<String, i64> = HashMap::new();
     for (idx, rw) in arr(body, "rows").iter().enumerate() {
         let sheet_code = s(rw, "sheetCode").unwrap_or_default();
-        let region_code = s(rw, "regionCode").filter(|c| !c.is_empty()).unwrap_or_else(|| DEFAULT_REGION.to_string());
+        let region_code = s(rw, "regionCode")
+            .filter(|c| !c.is_empty())
+            .unwrap_or_else(|| DEFAULT_REGION.to_string());
         let row_code = s(rw, "code").unwrap_or_default();
         let real_id = resolve_id(rw.get("id"));
-        id_map.insert(format!("row|{sheet_code}|{region_code}|{row_code}"), json!(real_id));
+        id_map.insert(
+            format!("row|{sheet_code}|{region_code}|{row_code}"),
+            json!(real_id),
+        );
         if let Some(tid) = rw.get("id").and_then(|v| v.as_str()) {
             temp_id_map.insert(tid.to_string(), real_id);
         }
@@ -1021,10 +983,15 @@ async fn save_layout_apply(
     // 2d) cols
     for (idx, cl) in arr(body, "cols").iter().enumerate() {
         let sheet_code = s(cl, "sheetCode").unwrap_or_default();
-        let region_code = s(cl, "regionCode").filter(|c| !c.is_empty()).unwrap_or_else(|| DEFAULT_REGION.to_string());
+        let region_code = s(cl, "regionCode")
+            .filter(|c| !c.is_empty())
+            .unwrap_or_else(|| DEFAULT_REGION.to_string());
         let col_code = s(cl, "code").unwrap_or_default();
         let real_id = resolve_id(cl.get("id"));
-        id_map.insert(format!("col|{sheet_code}|{region_code}|{col_code}"), json!(real_id));
+        id_map.insert(
+            format!("col|{sheet_code}|{region_code}|{col_code}"),
+            json!(real_id),
+        );
         if let Some(tid) = cl.get("id").and_then(|v| v.as_str()) {
             temp_id_map.insert(tid.to_string(), real_id);
         }
@@ -1063,7 +1030,7 @@ async fn save_layout_apply(
         .await?;
     }
 
-    // 2e) cell_element_map —— 单元格↔数据元素映射（row_id/col_id 把前端临时id串解引用成真号）
+    // 2e) cell_element_map —— row_id/col_id 把前端临时id串解引用成真号
     let resolve_ref = |v: Option<&Value>| -> DataValue {
         match v {
             Some(Value::Number(n)) => n.as_i64().map(DataValue::Int).unwrap_or(DataValue::Int(0)),
@@ -1089,7 +1056,10 @@ async fn save_layout_apply(
                 DataValue::String(code.to_string()),
                 DataValue::String(version.to_string()),
                 dv_str(s(cm, "sheetCode").as_deref()),
-                dv_str_def(s(cm, "regionCode").filter(|c| !c.is_empty()).as_deref(), DEFAULT_REGION),
+                dv_str_def(
+                    s(cm, "regionCode").filter(|c| !c.is_empty()).as_deref(),
+                    DEFAULT_REGION,
+                ),
                 resolve_ref(cm.get("rowId")),
                 resolve_ref(cm.get("colId")),
                 dv_str(s(cm, "cellRef").as_deref()),
@@ -1109,34 +1079,15 @@ async fn save_layout_apply(
     Ok(Value::Object(id_map))
 }
 
-
-/// 解析行列 id：真号(纯数字/数字)原样用；临时(空/非数字串/缺失)铸新 next_pk_id。
-fn resolve_id(v: Option<&Value>) -> i64 {
-    match v {
-        Some(Value::Number(n)) => n.as_i64().unwrap_or_else(cmx_utils::next_pk_id),
-        Some(Value::String(s)) if s.chars().all(|c| c.is_ascii_digit()) && !s.is_empty() => {
-            s.parse::<i64>().unwrap_or_else(|_| cmx_utils::next_pk_id())
-        }
-        _ => cmx_utils::next_pk_id(),
-    }
-}
-
 // ============================================================================
-// 模式二 · 报表数据 query/save
+// 模式二 · 数据加载/存储
 // ============================================================================
 
-/// POST /report-design/reports/{code}/data/query
-/// body: { version, orgCode, periodCode }
-/// 读单元格数据：ZmcDataSet 零拷贝逐行取值 → 精简结果数组（不整表物化 JSON）。
-pub async fn report_design_query_data(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    Path(code): Path<String>,
-    body: Json<Value>,
-) -> Result<Json<ApiResp<Value>>> {
-    let version = s(&body, "version").unwrap_or_default();
-    let org = s(&body, "orgCode").unwrap_or_default();
-    let period = s(&body, "periodCode").unwrap_or_default();
+/// 取数：cr_cell_data 按 org+period ZmcDataSet 零拷贝读。
+pub async fn query_data(code: &str, body: &Value) -> Result<Value> {
+    let version = s(body, "version").unwrap_or_default();
+    let org = s(body, "orgCode").unwrap_or_default();
+    let period = s(body, "periodCode").unwrap_or_default();
 
     let mm = get_default_pg_db_manager();
     let ds = mm
@@ -1149,7 +1100,7 @@ pub async fn report_design_query_data(
                WHERE report_code=$1 AND version_code=$2 AND org_code=$3 AND period_code=$4
                ORDER BY sheet_code, region_code, row_id, col_id"#,
             vec![
-                DataValue::String(code.clone()),
+                DataValue::String(code.to_string()),
                 DataValue::String(version.clone()),
                 DataValue::String(org.clone()),
                 DataValue::String(period.clone()),
@@ -1159,7 +1110,7 @@ pub async fn report_design_query_data(
         .await
         .map_err(|e| api_err(&format!("读取报表数据失败: {e}")))?;
 
-    // 逐行零拷贝取值：只在结果 payload 里生成需要的小对象，峰值内存 O(结果集)而非物化整 DataSet。
+    // 逐行零拷贝取值：只在结果 payload 里生成需要的小对象，峰值内存 O(结果集)。
     let sc = &ds.schema;
     let c_sheet = sc.col_index("sheet_code");
     let c_region = sc.col_index("region_code");
@@ -1179,9 +1130,7 @@ pub async fn report_design_query_data(
     for row in &ds.rows {
         let gs = |c: Option<usize>| c.and_then(|i| row.get_str(i)).map(str::to_owned);
         let gi = |c: Option<usize>| c.and_then(|i| row.get_i64(i));
-        let num = c_num
-            .and_then(|i| row.get_decimal(i))
-            .map(|d| d.to_string());
+        let num = c_num.and_then(|i| row.get_decimal(i)).map(|d| d.to_string());
         cells.push(json!({
             "sheetCode": gs(c_sheet),
             "regionCode": gs(c_region),
@@ -1199,7 +1148,7 @@ pub async fn report_design_query_data(
         }));
     }
 
-    Ok(Json(ApiResp::ok(json!({
+    Ok(json!({
         "dbId": RPT_DB_ID,
         "reportCode": code,
         "version": version,
@@ -1207,32 +1156,30 @@ pub async fn report_design_query_data(
         "periodCode": period,
         "count": cells.len(),
         "cells": cells,
-    }))))
+    }))
 }
 
-/// POST /report-design/reports/{code}/data
-/// body: { version, orgCode, periodCode, cells:[{sheetCode,regionCode,rowId,colId,cellRef,elementCode,valueType,textValue,numValue,currencyCode,amountUnit,dataStatus,isManual}] }
-/// 批量 UPSERT cr_cell_data（8元唯一键幂等），事务内。
-pub async fn report_design_save_data(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
-    Path(code): Path<String>,
-    body: Json<Value>,
-) -> Result<Json<ApiResp<Value>>> {
-    let version = s(&body, "version").unwrap_or_default();
-    let org = s(&body, "orgCode").unwrap_or_default();
-    let period = s(&body, "periodCode").unwrap_or_default();
-    let cells = arr(&body, "cells").to_vec();
+/// 存数：批量 UPSERT cr_cell_data（8元唯一键幂等），自管事务。返回 { ok, saved }。
+pub async fn save_data(code: &str, body: &Value) -> Result<Value> {
+    let version = s(body, "version").unwrap_or_default();
+    let org = s(body, "orgCode").unwrap_or_default();
+    let period = s(body, "periodCode").unwrap_or_default();
+    let cells = arr(body, "cells").to_vec();
 
     let mm = get_default_pg_db_manager();
     let tx = mm.get_transaction_context();
-    let txn_id = tx.begin(RPT_DB_ID).await.map_err(|e| api_err(&format!("开启事务失败: {e}")))?;
+    let txn_id = tx
+        .begin(RPT_DB_ID)
+        .await
+        .map_err(|e| api_err(&format!("开启事务失败: {e}")))?;
 
-    let result = save_data_apply(&txn_id, &code, &version, &org, &period, &cells).await;
+    let result = save_data_apply(&txn_id, code, &version, &org, &period, &cells).await;
     match result {
         Ok(n) => {
-            tx.commit(&txn_id).await.map_err(|e| api_err(&format!("提交事务失败: {e}")))?;
-            Ok(Json(ApiResp::ok(json!({ "ok": true, "saved": n }))))
+            tx.commit(&txn_id)
+                .await
+                .map_err(|e| api_err(&format!("提交事务失败: {e}")))?;
+            Ok(json!({ "ok": true, "saved": n }))
         }
         Err(e) => {
             let _ = tx.rollback(&txn_id).await;
@@ -1258,7 +1205,9 @@ async fn save_data_apply(
             .get("numValue")
             .and_then(|v| match v {
                 Value::String(x) if !x.is_empty() => x.parse::<rust_decimal::Decimal>().ok(),
-                Value::Number(n) => n.as_f64().and_then(|f| rust_decimal::Decimal::from_f64_retain(f)),
+                Value::Number(n) => n
+                    .as_f64()
+                    .and_then(rust_decimal::Decimal::from_f64_retain),
                 _ => None,
             })
             .map(DataValue::Decimal)

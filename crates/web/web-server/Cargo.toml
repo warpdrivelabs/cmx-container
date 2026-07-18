@@ -13,6 +13,8 @@ cmx-database = { workspace = true }
 cmx-database-pg = { workspace = true }
 # 内部依赖 - API
 cmx-api = { workspace = true }
+# 内部依赖 - 报表模块 HTTP 层（ReportModule 路由，在此合并进主路由，避免 cmx-api⇄cmx-rpt 环）
+cmx-rpt-api = { workspace = true }
 # 内部依赖 - 审计日志
 cmx-audit = { workspace = true }
 # 内部依赖 - 认证模块

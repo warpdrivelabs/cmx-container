@@ -40,6 +40,9 @@ members = [
     "crates/libs/cmx-flow/cmx-flow-engine",
     "crates/libs/cmx-flow/cmx-flow-store-pg",
     "crates/libs/cmx-flow/cmx-flow-demo",
+    "crates/libs/cmx-rpt/cmx-rpt-model",
+    "crates/libs/cmx-rpt/cmx-rpt-store-pg",
+    "crates/libs/cmx-rpt/cmx-rpt-api",
     "sdk/cmx-cli",
     "crates/tests/cmx-database-test",
     "crates/tests/cmx-flow-tests",
@@ -125,6 +128,12 @@ cmx-flow-bpmn = { path = "crates/libs/cmx-flow/cmx-flow-bpmn", version = "0.1.12
 cmx-flow-engine = { path = "crates/libs/cmx-flow/cmx-flow-engine", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 流程引擎 PG 持久化（RuntimeStore over cmx-database-pg）
 cmx-flow-store-pg = { path = "crates/libs/cmx-flow/cmx-flow-store-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 报表模块中立模型（常量 + 请求 DTO，无 DB/HTTP 依赖）
+cmx-rpt-model = { path = "crates/libs/cmx-rpt/cmx-rpt-model", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 报表模块 PG 持久化/服务层（cr_* 表读写 + ZmcDataSet 零拷贝）
+cmx-rpt-store-pg = { path = "crates/libs/cmx-rpt/cmx-rpt-store-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 报表模块 HTTP 层（薄 handler + ReportModule 路由）
+cmx-rpt-api = { path = "crates/libs/cmx-rpt/cmx-rpt-api", version = "0.1.12", registry = "nora" }
 # 编译期全局注册
 inventory = "0.3"
 # 对象存储访问层
