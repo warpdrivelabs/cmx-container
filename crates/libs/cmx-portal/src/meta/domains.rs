@@ -110,6 +110,16 @@ mod tests {
         let crate_dir = env!("CARGO_MANIFEST_DIR");
         let data_root = std::path::Path::new(crate_dir)
             .join("../../../../CMXPortalManager/cmx-node-server/data");
+        // 该数据目录来自旧的 monorepo 布局，独立检出 cmx-container 时并不存在——
+        // 缺失时优雅跳过（对齐 PG 集成测试「无 TEST_PG_URL 即跳过」的做法），
+        // 避免把「缺测试夹具」误报成「代码回归」，也不污染共享的 CMX_PORTAL_DATA_ROOT。
+        if !data_root.join("dam").exists() && !data_root.exists() {
+            eprintln!(
+                "跳过 domains_derived_from_dam_registry：未找到夹具目录 {}",
+                data_root.display()
+            );
+            return;
+        }
         // SAFETY: 测试单线程设置进程环境变量；data_root() 读取它。
         unsafe { std::env::set_var("CMX_PORTAL_DATA_ROOT", data_root) };
 

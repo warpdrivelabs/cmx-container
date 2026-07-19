@@ -82,9 +82,7 @@ fn try_generate_optimized_count_sql(
         _ => return Err("只支持 SELECT 查询".to_string()),
     };
 
-    let where_aliases = extract_aliases_from_where(where_clause);
-
-    let optimized_query = optimize_query(query, where_clause, &where_aliases, config);
+    let optimized_query = optimize_query(query, where_clause, config);
 
     let count_sql = format!("{}", optimized_query);
 
@@ -100,7 +98,6 @@ fn wrap_count_sql(original_sql: &str) -> String {
 fn optimize_query(
     mut query: Box<Query>,
     where_clause: Option<&str>,
-    where_aliases: &HashSet<String>,
     config: &CountOptimizerConfig,
 ) -> Box<Query> {
     query.order_by = None;
@@ -108,19 +105,14 @@ fn optimize_query(
     query.offset = None;
 
     if let SetExpr::Select(select) = &mut *query.body {
-        optimize_select(select, where_clause, where_aliases, config);
+        optimize_select(select, where_clause, config);
     }
 
     query
 }
 
 /// 优化 SELECT 子句
-fn optimize_select(
-    select: &mut Select,
-    where_clause: Option<&str>,
-    where_aliases: &HashSet<String>,
-    config: &CountOptimizerConfig,
-) {
+fn optimize_select(select: &mut Select, where_clause: Option<&str>, config: &CountOptimizerConfig) {
     select.projection = vec![SelectItem::UnnamedExpr(Expr::Identifier(
         sqlparser::ast::Ident::new("COUNT(*)"),
     ))];
@@ -130,7 +122,13 @@ fn optimize_select(
     }
 
     if config.optimize_join {
-        optimize_joins(select, where_aliases);
+        // 别名来源必须是「合并后的最终 WHERE」（原始查询 WHERE + 追加条件），
+        // 而非仅追加的 where_clause 参数——否则原始 SQL 自带的 WHERE 用到的 JOIN 会被误删。
+        let where_aliases = match &select.selection {
+            Some(sel) => extract_aliases_from_where(Some(&sel.to_string())),
+            None => HashSet::new(),
+        };
+        optimize_joins(select, &where_aliases);
     }
 }
 
@@ -170,7 +168,9 @@ fn optimize_joins(select: &mut Select, where_aliases: &HashSet<String>) {
         if matches!(join.join_operator, JoinOperator::LeftOuter(_)) {
             let join_alias = get_table_alias_from_join(join);
             if let Some(alias) = join_alias {
-                !where_aliases.contains(&alias.to_lowercase())
+                // 保留：该 LEFT JOIN 的别名被 WHERE 用到（去掉会改变结果行数）。
+                // 移除：别名未在 WHERE 出现（仅出现在 SELECT 投影/JOIN 自身 ON 上，对 COUNT 无影响）。
+                where_aliases.contains(&alias.to_lowercase())
             } else {
                 true
             }
@@ -246,5 +246,41 @@ mod tests {
         assert!(count_sql.contains("COUNT(*)"));
         assert!(count_sql.contains("u.age > 18"));
         assert!(count_sql.contains("u.status = 'active'"));
+    }
+
+    /// 回归：LEFT JOIN 别名只出现在「追加的 where_clause」里时也必须保留。
+    /// （原始查询自身 WHERE 未提及该 join，若别名来源只看原始 WHERE 会误删。）
+    #[test]
+    fn test_left_join_preserved_when_used_in_additional_where() {
+        let sql = "SELECT u.id, o.order_no FROM user u LEFT JOIN orders o ON u.id = o.user_id WHERE u.age > 18";
+        let count_sql = generate_count_sql(
+            sql,
+            Some("o.status = 'paid'"),
+            &CountOptimizerConfig::default(),
+        );
+        assert!(count_sql.contains("COUNT(*)"));
+        assert!(
+            count_sql.to_lowercase().contains("left join orders"),
+            "追加 WHERE 用到了 o.，该 LEFT JOIN 不能被删：{count_sql}"
+        );
+    }
+
+    /// 回归：多个 LEFT JOIN，只删「WHERE 未用到」的那个，用到的保留。
+    #[test]
+    fn test_multi_left_join_removes_only_unused() {
+        let sql = "SELECT u.id, o.order_no, p.name FROM user u \
+                   LEFT JOIN orders o ON u.id = o.user_id \
+                   LEFT JOIN profile p ON u.id = p.user_id \
+                   WHERE p.verified = true";
+        let count_sql = generate_count_sql(sql, None, &CountOptimizerConfig::default());
+        let lower = count_sql.to_lowercase();
+        assert!(
+            !lower.contains("left join orders"),
+            "orders 未在 WHERE 出现，应删：{count_sql}"
+        );
+        assert!(
+            lower.contains("left join profile"),
+            "profile 在 WHERE 用到，应留：{count_sql}"
+        );
     }
 }
