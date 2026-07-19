@@ -878,6 +878,7 @@ dependencies = [
  "cmx-debug",
  "cmx-iam",
  "cmx-metadata",
+ "cmx-model-center",
  "cmx-plugin",
  "cmx-portal",
  "cmx-rpc",
@@ -1490,6 +1491,23 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "cmx-model-center"
+version = "0.1.12"
+dependencies = [
+ "chrono",
+ "cmx-api-types",
+ "cmx-core",
+ "cmx-database",
+ "cmx-metadata",
+ "cmx-model",
+ "cmx-utils",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

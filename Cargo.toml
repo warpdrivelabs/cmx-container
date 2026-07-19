@@ -52,6 +52,7 @@ members = [
     "crates/libs/cmx-dct/cmx-dct-model",
     "crates/libs/cmx-dct/cmx-dct-store-pg",
     "crates/libs/cmx-dct/cmx-dct-api",
+    "crates/libs/cmx-model-center",
     "sdk/cmx-cli",
     "crates/tests/cmx-database-test",
     "crates/tests/cmx-flow-tests",
@@ -161,6 +162,8 @@ cmx-dct-model = { path = "crates/libs/cmx-dct/cmx-dct-model", version = "0.1.12"
 cmx-dct-store-pg = { path = "crates/libs/cmx-dct/cmx-dct-store-pg", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 数据字典（DCT）HTTP 层（薄 handler + DctModule 路由，web-server 合并，避免 cmx-api⇄cmx-dct 环）
 cmx-dct-api = { path = "crates/libs/cmx-dct/cmx-dct-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 模型中心（DB 初始化 + 模块部署真实落库；原 cmx-api portal::model_center 抽出，cmx-api 单向依赖不成环）
+cmx-model-center = { path = "crates/libs/cmx-model-center", version = "0.1.12", registry = "nora" }
 # 编译期全局注册
 inventory = "0.3"
 # 对象存储访问层

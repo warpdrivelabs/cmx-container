@@ -25,8 +25,9 @@ use std::cmp::Reverse;
 use std::collections::HashMap;
 use tracing::debug;
 
-use crate::Result;
-use cmx_api_types::Error;
+// 错误类型与 cmx-api 同源：cmx_api::Result 本就是 cmx_api_types::Result 的 re-export，
+// 抽出后直接用 cmx-api-types，避免反向依赖 cmx-api 成环。
+use cmx_api_types::{Error, Result};
 
 const META_VERSION: i32 = 2;
 const ENGINE_VERSION: &str = "1.0.0";
@@ -535,7 +536,7 @@ fn compile_rpt(_doc: &Value, base: &Value) -> Vec<TableDefine> {
 
 /// 读某定义文件全文（domain/application/module/file）。
 async fn read_def(domain: &str, app: &str, module: &str, file: &str) -> Result<Value> {
-    let r = cmx_portal::definitions::store::DefRef {
+    let r = cmx_model::definitions::store::DefRef {
         domain: Some(domain.to_string()),
         application: Some(app.to_string()),
         app: Some(app.to_string()),
@@ -544,14 +545,14 @@ async fn read_def(domain: &str, app: &str, module: &str, file: &str) -> Result<V
         id: None,
         kind: None,
     };
-    cmx_portal::definitions::store::get_definition(&r)
+    cmx_model::definitions::store::get_definition(&r)
         .await
         .map_err(|e| Error::BadRequest(format!("读取定义失败 {file}: {e}")))
 }
 
 /// 读 base 字段集文件（domain=base）。
 async fn read_base(file: &str) -> Result<Value> {
-    let r = cmx_portal::definitions::store::DefRef {
+    let r = cmx_model::definitions::store::DefRef {
         domain: Some("base".to_string()),
         application: None,
         app: None,
@@ -560,7 +561,7 @@ async fn read_base(file: &str) -> Result<Value> {
         id: None,
         kind: None,
     };
-    cmx_portal::definitions::store::get_definition(&r)
+    cmx_model::definitions::store::get_definition(&r)
         .await
         .map_err(db_err("读取 base 字段集失败"))
 }
@@ -1490,13 +1491,13 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
     let applied_modules = read_modules(db_id).await?;
 
     // 定义列表：每模块每 kind 的默认版本 = latest。
-    let dct_list = cmx_portal::definitions::store::list_definitions(Some("DCT"), None, None, None)
+    let dct_list = cmx_model::definitions::store::list_definitions(Some("DCT"), None, None, None)
         .await
         .map_err(db_err("列出 DCT 失败"))?;
-    let doc_list = cmx_portal::definitions::store::list_definitions(Some("DOC"), None, None, None)
+    let doc_list = cmx_model::definitions::store::list_definitions(Some("DOC"), None, None, None)
         .await
         .map_err(db_err("列出 DOC 失败"))?;
-    let rpt_list = cmx_portal::definitions::store::list_definitions(Some("RPT"), None, None, None)
+    let rpt_list = cmx_model::definitions::store::list_definitions(Some("RPT"), None, None, None)
         .await
         .map_err(db_err("列出 RPT 失败"))?;
 

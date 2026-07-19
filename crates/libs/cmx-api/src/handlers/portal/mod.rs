@@ -4,7 +4,9 @@
 //! 阶段 1：域/菜单/活动、工作区节点、表单页、原生页面、事实数据等简单文件 CRUD。
 
 pub mod handler;
-pub mod model_center;
+// 模型中心已抽出为独立 crate cmx-model-center（v6 建议 P1b：cmx-api 去最后一个手写 SQL 据点）。
+// 再导出为 `model_center`，保持 handler.rs 里 `super::model_center::…` 的调用路径零改动。
+pub use cmx_model_center as model_center;
 
 use axum::Router;
 use axum::routing::{get, post};

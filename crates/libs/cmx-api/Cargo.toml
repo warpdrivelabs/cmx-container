@@ -13,6 +13,8 @@ tower-http = { workspace = true }
 tower-cookies = { workspace = true }
 # 内部依赖 - API 通用类型
 cmx-api-types = { workspace = true }
+# 内部依赖 - 模型中心（DB 初始化 + 模块部署；原 portal::model_center 抽出，portal/mod.rs 再导出）
+cmx-model-center = { workspace = true }
 # 内部依赖 - 业务逻辑层
 cmx-biz = { workspace = true, features = ["openapi"] }
 # 内部依赖 - 工具库
