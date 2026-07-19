@@ -857,7 +857,7 @@ pub async fn definitions_get(
     }
     let mut doc = match kind {
         "DOC" => {
-            let file = super::doc::resolve_doc_file(domain, app, module, Some(code)).await?;
+            let file = cmx_portal::definitions::resolve::resolve_doc_file(domain, app, module, Some(code)).await?;
             cmx_portal::definitions::store::get_definition(
                 &cmx_portal::definitions::store::DefRef {
                     domain: Some(domain.to_string()),
@@ -870,7 +870,7 @@ pub async fn definitions_get(
             .await?
         }
         "DCT" => {
-            let file = super::dct::resolve_dict_file(domain, app, module, code).await?;
+            let file = cmx_portal::definitions::resolve::resolve_dict_file(domain, app, module, code).await?;
             let mut d = cmx_portal::definitions::store::get_definition(
                 &cmx_portal::definitions::store::DefRef {
                     domain: Some(domain.to_string()),
@@ -883,7 +883,7 @@ pub async fn definitions_get(
             .await?;
             // 单表化：只保留命中的那张字典表（dictCode/tableName 任一匹配），保留 dctMeta 头与 baseDctMetaRef
             if let Some(tables) = d.get_mut("dictionaryTables").and_then(|v| v.as_array_mut()) {
-                tables.retain(|t| super::dct::dict_matches(t, code));
+                tables.retain(|t| cmx_portal::definitions::resolve::dict_matches(t, code));
             }
             d
         }
@@ -955,9 +955,9 @@ pub async fn definitions_batch(
             .unwrap_or("");
         let module = obj.get("module").and_then(|v| v.as_str()).unwrap_or("");
         let file = match kind {
-            "DOC" => super::doc::resolve_doc_file(domain, app, module, Some(id_val)).await?,
+            "DOC" => cmx_portal::definitions::resolve::resolve_doc_file(domain, app, module, Some(id_val)).await?,
             "DCT" => {
-                let f = super::dct::resolve_dict_file(domain, app, module, id_val).await?;
+                let f = cmx_portal::definitions::resolve::resolve_dict_file(domain, app, module, id_val).await?;
                 dct_filters.insert(f.clone(), id_val.to_string());
                 f
             }
@@ -984,7 +984,7 @@ pub async fn definitions_batch(
                         .and_then(|d| d.get_mut("dictionaryTables"))
                         .and_then(|v| v.as_array_mut())
                     {
-                        tables.retain(|t| super::dct::dict_matches(t, code));
+                        tables.retain(|t| cmx_portal::definitions::resolve::dict_matches(t, code));
                     }
                 }
             }

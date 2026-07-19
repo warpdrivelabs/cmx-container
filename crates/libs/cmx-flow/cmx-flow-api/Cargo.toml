@@ -1,0 +1,42 @@
+[package]
+name = "cmx-flow-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# cmx-flow 流程引擎的 HTTP 层：薄 axum handler（提取 → 调引擎/定义服务 → ApiResp 包装）+
+# FlowModule(impl cmx_api::ModuleRoutes) 路由表。依赖 cmx-api 拿 CmxAppState/CmxSvrContext/
+# ApiResp/Result；由 web-server 合并 FlowModule.routes()（cmx-api 不反向依赖本 crate，避免环）。
+# 与 RPT 的差异：引擎是有状态的（Engine::deploy 需 &mut），故用 OnceCell 全局单例（engine.rs），
+# 启动时装载已发布定义 + 注入 resolver/router 后包 Arc；handler 经 flow() 取单例。
+# 端点前缀 /flow/*（避开 /api/definitions、/api/users 等既有命名）。
+
+[dependencies]
+# 内部依赖 - 流程引擎各层
+cmx-flow-model = { workspace = true }
+cmx-flow-bpmn = { workspace = true }
+cmx-flow-engine = { workspace = true }
+cmx-flow-store-pg = { workspace = true }
+cmx-flow-def = { workspace = true }
+# 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / routes::traits::ModuleRoutes /
+#   ApiResp/Result/Error）。单向依赖：cmx-flow-api → cmx-api。
+cmx-api = { workspace = true }
+# 内部依赖 - 业务错误桥（BizError → cmx_api_types::Error）
+cmx-biz = { workspace = true }
+# 内部依赖 - tokio-postgres DB 层（list_users 直查 cmx_user）
+cmx-database-pg = { workspace = true }
+# 内部依赖 - DataValue（读 list_users 查询结果）
+cmx-core = { workspace = true }
+
+# Web 框架（handler 提取器 + Router）
+axum = { workspace = true }
+# 请求 DTO 反序列化
+serde = { workspace = true }
+# JSON 载荷
+serde_json = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# 引擎单例 + 定时器 poller（OnceCell / spawn / interval）
+tokio = { workspace = true }
+# JavaDelegate impl（RiskDelegate）
+async-trait = { workspace = true }

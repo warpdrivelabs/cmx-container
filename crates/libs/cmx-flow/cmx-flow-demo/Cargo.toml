@@ -23,6 +23,8 @@ cmx-flow-bpmn = { workspace = true }
 cmx-flow-engine = { workspace = true }
 # 内部依赖 - PG 持久化
 cmx-flow-store-pg = { workspace = true }
+# 内部依赖 - 流程定义持久化（设计器：草稿/发布/装载）
+cmx-flow-def = { workspace = true }
 # 内部依赖 - tokio-postgres DB 层（注册数据源）
 cmx-database-pg = { workspace = true }
 # 内部依赖 - DataValue（播种 IAM 时读查询结果）

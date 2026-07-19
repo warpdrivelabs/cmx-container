@@ -1,0 +1,32 @@
+[package]
+name = "cmx-dct-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 数据字典（DCT）模块的 HTTP 层：薄 axum handler（提取参数 → resolve_dict → 调
+# cmx-dct-store-pg 服务 → ApiResp/msgpack 信封）+ DctModule(impl cmx_api::ModuleRoutes)
+# 路由表。依赖 cmx-api 拿 CmxAppState/CmxSvrContext/ApiResp/Result；由 web-server 合并
+# DctModule.routes()（cmx-api 不反向依赖本 crate，避免环）。端点路径与迁移前完全一致
+# （/dct/meta、/dct/data/*、/dct/entries、/dct/save）。
+
+[dependencies]
+# 内部依赖 - DCT 中立模型（DctQuery + 列投影用的 DictColumn 字段）
+cmx-dct-model = { workspace = true }
+# 内部依赖 - DCT 持久化/服务层（resolve_dict + search/upsert/delete/save + 错误助手）
+cmx-dct-store-pg = { workspace = true }
+# 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / ModuleRoutes / ApiResp/Result/Error）
+cmx-api = { workspace = true }
+# 内部依赖 - 业务错误码（Violation：校验失败结构化响应）
+cmx-biz = { workspace = true }
+
+# Web 框架（handler 提取器 + Router + msgpack 裸响应）
+axum = { workspace = true }
+# 请求 DTO 反序列化
+serde = { workspace = true }
+# JSON 载荷
+serde_json = { workspace = true }
+# MessagePack 底层编码（zmc 成功信封手写编码 rmp::encode）
+rmp = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }

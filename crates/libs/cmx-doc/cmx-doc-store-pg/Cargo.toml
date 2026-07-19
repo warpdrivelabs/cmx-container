@@ -1,0 +1,44 @@
+[package]
+name = "cmx-doc-store-pg"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 业务单据（DOC）模块的 PostgreSQL 持久化/服务层：cv_* 单据物理表的装载（DocLoader 老
+# DataSet 全拷贝 + ZmcDocLoader/ZmcDocLoaderSqlx 零拷贝）、回存（DocSaver 双模式 + 落库前
+# 列级校验 + 铸号）、版本化（DocRevision 快照/回滚）、层级懒下钻，以及 DocMetaView 进程内
+# 缓存。SQL 由 cmx-doc-model 生成（tokio-postgres 与 sqlx 双驱动），本层负责执行 + 事务编排。
+
+[dependencies]
+# 内部依赖 - DOC 中立模型（meta/query/formula/rule/sql_builder）
+cmx-doc-model = { workspace = true }
+# 内部依赖 - 核心库（DataValue/DataSet/Row/Schema/ColumnarCodec）
+cmx-core = { workspace = true }
+# 内部依赖 - 数据库（sqlx 驱动门面：DatabaseManager，老链路 + sqlx 零拷贝）
+cmx-database = { workspace = true }
+# 内部依赖 - 数据库（tokio-postgres 并行 DB 层：ZmcDataSet 零拷贝新链路）
+cmx-database-pg = { workspace = true }
+# 内部依赖 - 工具（雪花 id：版本快照主键）
+cmx-utils = { workspace = true }
+# 内部依赖 - 业务错误 + 落库前列级校验（validation/errcode，DOC/DCT 共享）
+cmx-biz = { workspace = true }
+
+# 数值精度（Decimal 列绑定）
+rust_decimal = { workspace = true }
+# keyset 游标编解码（base64）
+base64 = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON（请求体/结果集交换）
+serde_json = { workspace = true }
+# MessagePack（列式二进制传输）
+rmp-serde = { workspace = true }
+# 时间处理
+time = { workspace = true }
+# 日期解析（saver.rs 日期/时间列绑定归一）
+chrono = { workspace = true, features = ["serde"] }
+# 日志追踪
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }

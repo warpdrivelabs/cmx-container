@@ -27,6 +27,7 @@ use serde_json::{json, Value};
 
 use cmx_database_pg::{execute_sql, get_default_pg_db_manager, DbConfig, DbType};
 use cmx_flow_bpmn::compile;
+use cmx_flow_def::{DefinitionService, PgDefinitionStore};
 use cmx_flow_engine::{
     DelegateContext, Engine, JavaDelegate, ProcessDefinition, RuntimeStore, Variables,
 };
@@ -44,12 +45,14 @@ const BPMN_SUBFLOW_MAIN: &str = include_str!("../resources/subflow_main.bpmn20.x
 const BPMN_FIN_HQ: &str = include_str!("../resources/fin_review_hq.bpmn20.xml");
 const BPMN_FIN_BRANCH: &str = include_str!("../resources/fin_review_branch.bpmn20.xml");
 const INDEX_HTML: &str = include_str!("../web/index.html");
+const DESIGNER_HTML: &str = include_str!("../web/designer.html");
 
-/// 共享应用状态：引擎（含 PG store）+ 全部已编译定义（供前端画图）。
+/// 共享应用状态：引擎（含 PG store）+ 全部已编译定义（供前端画图）+ 定义服务（设计器草稿/发布）。
 #[derive(Clone)]
 struct AppState {
     engine: Arc<Engine<PgRuntimeStore>>,
     definitions: Arc<Vec<ProcessDefinition>>,
+    def_svc: Arc<DefinitionService<PgDefinitionStore>>,
 }
 
 /// serviceTask delegate：按金额算风险等级写回变量（供前端展示，也可驱动后续判断）。
@@ -123,9 +126,50 @@ async fn main() {
     engine.set_subflow_router(Arc::new(PgSubflowRouter::new(IAM_DB_ID)));
     tracing::info!("✅ 流程定义已部署：credit / countersign / timed / candidate / subflow_main(+hq/branch 子流程)");
 
+    // 3.6) 定义服务（设计器草稿/发布）。建表 + 装载库里已发布的定义（设计器产物）。
+    //      内置 include_str! 定义是 seed；设计器发布的定义从库读，二者都进引擎。
+    let def_svc = DefinitionService::new(PgDefinitionStore::new(DB_ID));
+    def_svc.ensure_schema().await.expect("建定义表失败");
+
+    // 幂等种入内置定义到定义库，让设计器列表/详情与引擎同源（内置流程也能在设计器里打开编辑）。
+    // 已存在则跳过，不覆盖用户在设计器里的改动。
+    for (xml, name) in [
+        (BPMN_CREDIT, "信用审批"),
+        (BPMN_COUNTERSIGN, "报销会签"),
+        (BPMN_TIMED, "限时审批"),
+        (BPMN_CANDIDATE, "候选人审批"),
+        (BPMN_SUBFLOW_MAIN, "子流程主流程"),
+        (BPMN_FIN_HQ, "总部财务复核"),
+        (BPMN_FIN_BRANCH, "分公司财务复核"),
+    ] {
+        match def_svc.seed_if_absent(name, Some("demo".into()), xml).await {
+            Ok(true) => tracing::info!(name, "种入内置定义到设计器库"),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(name, error = %e, "种入内置定义失败"),
+        }
+    }
+
+    let mut defs_for_state = defs_for_state;
+    match def_svc.load_published_definitions().await {
+        Ok((loaded, errors)) => {
+            for (k, e) in &errors {
+                tracing::warn!(def = %k, error = %e, "已发布定义编译失败，跳过装载");
+            }
+            for def in loaded {
+                tracing::info!(key = %def.key, "装载设计器发布的定义");
+                defs_for_state.push(def.clone());
+                if let Err(e) = engine.deploy(def) {
+                    tracing::warn!(error = %e, "装载设计器定义失败");
+                }
+            }
+        }
+        Err(e) => tracing::warn!(error = %e, "读取已发布定义失败"),
+    }
+
     let state = AppState {
         engine: Arc::new(engine),
         definitions: Arc::new(defs_for_state),
+        def_svc: Arc::new(def_svc),
     };
 
     // 3.5) 后台定时器 poller：每 5 秒推进一次到期定时器（引擎不自带后台线程，宿主驱动）。
@@ -156,7 +200,11 @@ async fn main() {
     // 4) 路由。
     let app = Router::new()
         .route("/", get(|| async { Html(INDEX_HTML) }))
+        .route("/designer", get(|| async { Html(DESIGNER_HTML) }))
         .route("/api/definitions", get(get_definitions))
+        .route("/api/definitions/draft", post(save_definition_draft))
+        .route("/api/definitions/{key}", get(get_definition_detail))
+        .route("/api/definitions/{key}/publish", post(publish_definition))
         .route("/api/instances", get(list_instances).post(start_instance))
         .route("/api/instances/{id}", get(get_instance))
         .route("/api/instances/{id}/children", get(get_children))
@@ -277,6 +325,65 @@ async fn get_definitions(State(st): State<AppState>) -> Json<Value> {
     Json(json!({ "definitions": defs }))
 }
 
+/// 设计器：存草稿（先试编译挡回非法 BPMN）。body = { name, module?, category?, bpmnXml }。
+async fn save_definition_draft(
+    State(st): State<AppState>,
+    Json(req): Json<SaveDraftReq>,
+) -> Result<Json<Value>, ApiError> {
+    let rec = st
+        .def_svc
+        .save_draft(&req.name, req.domain, req.application, req.module, req.category, &req.bpmn_xml, req.updated_by)
+        .await
+        .map_err(ApiError::from_def)?;
+    Ok(Json(json!({
+        "key": rec.key,
+        "name": rec.name,
+        "state": rec.state.as_str(),
+        "activeVersion": rec.active_version,
+    })))
+}
+
+/// 设计器：取单个定义详情（含草稿 XML，供重新加载编辑）。
+async fn get_definition_detail(
+    State(st): State<AppState>,
+    Path(key): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let rec = st
+        .def_svc
+        .get(&key)
+        .await
+        .map_err(ApiError::from_def)?
+        .ok_or_else(|| ApiError(format!("定义不存在: {key}")))?;
+    Ok(Json(json!({
+        "key": rec.key,
+        "name": rec.name,
+        "module": rec.module,
+        "category": rec.category,
+        "state": rec.state.as_str(),
+        "activeVersion": rec.active_version,
+        "bpmnXml": rec.draft_xml,
+        "updatedAt": rec.updated_at.to_rfc3339(),
+    })))
+}
+
+/// 设计器：发布（草稿 → 版本 +1）。注意：新版在下次服务重启装载生效（Phase 5 做热更）。
+async fn publish_definition(
+    State(st): State<AppState>,
+    Path(key): Path<String>,
+    Json(req): Json<PublishReq>,
+) -> Result<Json<Value>, ApiError> {
+    let version = st
+        .def_svc
+        .publish(&key, req.note, req.published_by)
+        .await
+        .map_err(ApiError::from_def)?;
+    Ok(Json(json!({
+        "key": key,
+        "version": version,
+        "note": "已发布；重启服务后引擎装载新版（热更列入后续阶段）",
+    })))
+}
+
 /// 单份流程定义 → JSON（key/名/节点/边/是否可发起）。
 fn definition_view(def: &ProcessDefinition) -> Value {
     let nodes: Vec<Value> = def
@@ -350,6 +457,35 @@ fn node_boundary_timer(kind: &NodeKind) -> Value {
         });
     }
     Value::Null
+}
+
+/// 设计器：存草稿请求。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveDraftReq {
+    name: String,
+    #[serde(default)]
+    domain: Option<String>,
+    #[serde(default)]
+    application: Option<String>,
+    #[serde(default)]
+    module: Option<String>,
+    #[serde(default)]
+    category: Option<String>,
+    /// 设计器导出的 BPMN 2.0 XML。
+    bpmn_xml: String,
+    #[serde(default)]
+    updated_by: Option<String>,
+}
+
+/// 设计器：发布请求。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PublishReq {
+    #[serde(default)]
+    note: Option<String>,
+    #[serde(default)]
+    published_by: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -881,6 +1017,9 @@ struct ApiError(String);
 
 impl ApiError {
     fn from_engine(e: cmx_flow_engine::Error) -> Self {
+        ApiError(e.to_string())
+    }
+    fn from_def(e: cmx_flow_def::DefError) -> Self {
         ApiError(e.to_string())
     }
 }

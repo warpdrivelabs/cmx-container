@@ -12,6 +12,8 @@ authors.workspace = true
 [dependencies]
 # 内部依赖 - 报表中立模型（常量 + DTO）
 cmx-rpt-model = { workspace = true }
+# 内部依赖 - 报表函数引擎（compute_report 递归求值 + DataProvider trait，本 crate 提供 PG 实现）
+cmx-rpt-formula = { workspace = true }
 # 内部依赖 - tokio-postgres 并行 DB 层（事务/执行/查询门面 + ZmcRowSource 零拷贝）
 cmx-database-pg = { workspace = true }
 # 内部依赖 - 核心库（DataValue/SqlTypeMarker：强类型 SQL 绑定 + typed NULL）
@@ -29,5 +31,7 @@ sha2 = { workspace = true }
 rust_decimal = { workspace = true }
 # JSON（请求体/结果集交换）
 serde_json = { workspace = true }
+# 异步 trait（PgProvider 实现 DataProvider）
+async-trait = { workspace = true }
 # 日志追踪
 tracing = { workspace = true }

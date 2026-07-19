@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>cmx-container 项目评估报告（v3 · 2026-07-19）</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#1a1e33; --card2:#222843; --ink:#e8ebf5; --muted:#9aa3c0;
+    --line:#2c3350; --accent:#6c8cff; --accent2:#9a6cff;
+    --good:#3ecf8e; --warn:#f5a623; --bad:#ff5c7a; --info:#46b1ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c0f1c,#0f1220 240px);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.65;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px 80px}
+  header.hero{padding:54px 22px 40px;background:
+    radial-gradient(900px 380px at 20% -10%,rgba(255,92,122,.20),transparent 60%),
+    radial-gradient(700px 360px at 95% 0%,rgba(108,140,255,.22),transparent 55%);
+    border-bottom:1px solid var(--line)}
+  .hero-inner{max-width:1080px;margin:0 auto;padding:0 22px}
+  .eyebrow{letter-spacing:.32em;text-transform:uppercase;font-size:12px;color:var(--accent);font-weight:700}
+  h1{font-size:40px;margin:10px 0 6px;font-weight:800;letter-spacing:-.5px}
+  .sub{color:var(--muted);font-size:16px;max-width:820px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;color:var(--muted)}
+  .chip b{color:var(--ink)}
+  h2{font-size:26px;margin:54px 0 8px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:12px}
+  h2 .n{font-size:15px;color:var(--accent);background:rgba(108,140,255,.12);border:1px solid rgba(108,140,255,.3);
+    width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;font-weight:700}
+  h3{font-size:18px;margin:28px 0 6px;font-weight:700}
+  p{margin:10px 0}
+  .lead{color:var(--muted);margin-bottom:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin:16px 0}
+  .grid{display:grid;gap:16px}
+  .g5{grid-template-columns:repeat(5,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:920px){.g5{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}}
+  .gauge{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;text-align:center}
+  .ring{width:110px;height:110px;border-radius:50%;margin:4px auto 10px;display:grid;place-items:center;position:relative}
+  .ring::before{content:"";position:absolute;inset:11px;background:var(--card);border-radius:50%}
+  .ring span{position:relative;font-size:28px;font-weight:800}
+  .gauge .lab{font-size:14px;color:var(--muted);font-weight:600}
+  .big-score{display:flex;align-items:center;gap:26px;flex-wrap:wrap}
+  .big-ring{width:168px;height:168px;border-radius:50%;display:grid;place-items:center;position:relative;flex:0 0 auto}
+  .big-ring::before{content:"";position:absolute;inset:15px;background:var(--card);border-radius:50%}
+  .big-ring .v{position:relative;font-size:50px;font-weight:850;line-height:1}
+  .big-ring .v small{font-size:18px;color:var(--muted)}
+  .verdict{flex:1;min-width:260px}
+  .verdict .tag{display:inline-block;background:rgba(245,166,35,.14);color:var(--warn);border:1px solid rgba(245,166,35,.35);
+    padding:4px 12px;border-radius:999px;font-weight:700;font-size:13px;margin-bottom:8px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+  th{color:var(--muted);font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  code{background:#0c0f1c;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12.5px;
+    font-family:"SF Mono", Menlo,Consolas,monospace;color:#cdd6ff}
+  .badge{display:inline-block;padding:2px 9px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap}
+  .b-good{background:rgba(62,207,142,.15);color:var(--good);border:1px solid rgba(62,207,142,.3)}
+  .b-part{background:rgba(245,166,35,.15);color:var(--warn);border:1px solid rgba(245,166,35,.3)}
+  .b-stub{background:rgba(255,92,122,.15);color:var(--bad);border:1px solid rgba(255,92,122,.3)}
+  .b-hi{background:rgba(255,92,122,.15);color:var(--bad);border:1px solid rgba(255,92,122,.3)}
+  .b-mid{background:rgba(245,166,35,.15);color:var(--warn);border:1px solid rgba(245,166,35,.3)}
+  .b-lo{background:rgba(70,177,255,.15);color:var(--info);border:1px solid rgba(70,177,255,.3)}
+  .b-done{background:rgba(62,207,142,.15);color:var(--good);border:1px solid rgba(62,207,142,.3)}
+  .b-pending{background:rgba(154,108,255,.15);color:var(--accent2);border:1px solid rgba(154,108,255,.3)}
+  ul.clean{margin:8px 0;padding-left:20px}
+  ul.clean li{margin:6px 0}
+  .callout{border-left:4px solid var(--accent);background:var(--card2);border-radius:0 12px 12px 0;padding:14px 18px;margin:16px 0}
+  .callout.bad{border-color:var(--bad)}
+  .callout.warn{border-color:var(--warn)}
+  .callout.good{border-color:var(--good)}
+  .kpi{font-size:32px;font-weight:800;margin:0}
+  .kpi.s{font-size:26px}
+  .kpi-l{color:var(--muted);font-size:13px;font-weight:600}
+  .delta{font-size:12px;font-weight:700;margin-left:6px}
+  .d-up{color:var(--good)}
+  .d-down{color:var(--bad)}
+  .pri{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .pri:last-child{border-bottom:0}
+  .pri .rank{flex:0 0 auto;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-weight:800;
+    background:rgba(108,140,255,.14);color:var(--accent);border:1px solid rgba(108,140,255,.3)}
+  .muted{color:var(--muted)}
+  .foot{margin-top:50px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+  .arch{background:#0c0f1c;border:1px solid var(--line);border-radius:12px;padding:18px 20px;overflow-x:auto;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;color:#cdd6ff;white-space:pre}
+  .num{font-variant-numeric:tabular-nums;font-weight:700}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Rust Workspace · 评估报告 v3（增量复核）</div>
+    <h1>cmx-container 工程详细评估</h1>
+    <p class="sub">对照 2026-06-27《评估报告 v2》（91 分）基线做增量复核：近 3 周代码量暴涨 62%（13.1 万 → 21.3 万行）、新增 16 个 crate（流程引擎 / 报表 / AI / 门户），构建保持通过、测试网继续扩大，但规范执行力被高速增长稀释——生产路径 unwrap/panic 回潮，且新发现 <b>.env 敏感文件入库</b> 安全事故。</p>
+    <div class="meta-row">
+      <span class="chip"><b>~212,609</b> 行 Rust <span class="delta d-up">↑62%</span></span>
+      <span class="chip"><b>44</b> 个 crate <span class="delta d-up">↑16</span></span>
+      <span class="chip"><b>1,176</b> 测试函数 <span class="delta d-up">↑46%</span></span>
+      <span class="chip"><b>914</b> 次提交 <span class="delta d-up">↑199</span></span>
+      <span class="chip"><b>64</b> 张表 / <b>48</b> 迁移</span>
+      <span class="chip">cargo check <b>✓ 通过</b></span>
+      <span class="chip">Edition <b>2024</b> · 版本 <b>0.1.12</b></span>
+      <span class="chip">评估日期 <b>2026-07-19</b></span>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+
+<h2><span class="n">★</span>总体结论</h2>
+<div class="card">
+  <div class="big-score">
+    <div class="big-ring" style="background:conic-gradient(var(--accent) 0 80%,var(--line) 80% 100%)">
+      <div class="v">80<small>/100</small></div>
+    </div>
+    <div class="verdict">
+      <span class="tag">成熟度：生产化途中回落 <span class="delta d-down">91→80</span></span>
+      <p>不是代码变差了，而是 <b>3 周 62% 的野蛮生长稀释了上一轮加固成果</b>。架构功底与规范体系（AGENTS.md 18 章 + 技能体系 + SQL/配置双台账）依然是同级工程中的一流水平；但 v2 收尾达成的"lint 零告警、生产 unwrap 收敛"在新模块（cmx-flow / cmx-rpt / cmx-biz doc）中<b>明显回潮</b>，v2 三项冻结待办两项原样、一项倒退，且新发现 <b>.env 含 NACOS 凭据入库</b> 的实锤安全事故。</p>
+      <p class="muted">当前最大的敌人不是技术债，而是<b>高速增长下规范执行力的稀释</b>——没有 CI 门禁，914 次提交全靠人工纪律兜底。</p>
+    </div>
+  </div>
+</div>
+
+<div class="grid g5">
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 88%,var(--line) 88% 100%)"><span>88</span></div>
+    <div class="lab">架构设计</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--warn) 0 78%,var(--line) 78% 100%)"><span>78</span></div>
+    <div class="lab">代码质量</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 82%,var(--line) 82% 100%)"><span>82</span></div>
+    <div class="lab">测试与验证</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--bad) 0 70%,var(--line) 70% 100%)"><span>70</span></div>
+    <div class="lab">安全</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--warn) 0 76%,var(--line) 76% 100%)"><span>76</span></div>
+    <div class="lab">工程化</div>
+  </div>
+</div>
+
+<h2><span class="n">1</span>工程画像</h2>
+<p class="lead">插件化容器运行时：Axum HTTP + Extism WASM 插件热插拔 + 声明式服务编排 + 自研 BPMN 流程引擎 + 报表公式引擎 + IAM/认证/审计 + Nacos 注册配置 + volo gRPC——本质是低代码业务平台的完整后端底座。</p>
+<div class="grid g4">
+  <div class="card"><p class="kpi">21.3<span style="font-size:16px">万行</span></p><div class="kpi-l">Rust 代码（+62% / 3 周）</div></div>
+  <div class="card"><p class="kpi">44</p><div class="kpi-l">workspace crate（v2 时 28）</div></div>
+  <div class="card"><p class="kpi">1,176</p><div class="kpi-l">测试函数 + 17 个 pytest e2e 模块</div></div>
+  <div class="card"><p class="kpi">301<span style="font-size:16px">次</span></p><div class="kpi-l">近 30 天提交（914 总计，极活跃）</div></div>
+</div>
+
+<h2><span class="n">2</span>架构评估 <span class="badge b-good">强项</span></h2>
+<p class="lead">分层干净、依赖方向清晰，新模块沿用了正确范式——这是工程最好的部分。</p>
+<div class="arch">web-server → cmx-api(26K) → cmx-biz / iam / plugin / portal / model / form
+           → cmx-flow-*(10K) 流程引擎 / cmx-rpt-*(4.3K) 报表 / cmx-ai
+           → cmx-infra/*(45.7K: database / buffer / storage / rpc / auth / audit)
+           → cmx-core / cmx-traits / cmx-utils（零业务基础层）</div>
+<table>
+  <tr><th>设计点</th><th>复核结论</th><th>评级</th></tr>
+  <tr><td><b>Trait 解耦</b></td><td><code>cmx-auth</code> 不依赖 <code>cmx-iam</code>，经 <code>cmx-traits::{UserAuthQuery, PermissionChecker}</code> 在 <code>cmx-biz</code> 注入，抽查验证属实</td><td><span class="badge b-good">优</span></td></tr>
+  <tr><td><b>集群插件同步</b></td><td>单一写入原则（仅 API 节点写 DB）+ Redis Pub/Sub 通知 + 60s 幂等 reconciliation 补偿；只做运行时同步、天然幂等、多节点并发安全，符合根无状态/集群约束</td><td><span class="badge b-good">优</span></td></tr>
+  <tr><td><b>双数据库层</b></td><td><code>cmx-database</code>（sqlx 多库）+ <code>cmx-database-pg</code>（tokio-postgres PG 专用 + 零拷贝 rowsource），职责分离合理</td><td><span class="badge b-good">优</span></td></tr>
+  <tr><td><b>全局内存状态</b></td><td><code>OnceCell/LazyLock</code> 全工程仅约 8 处、DashMap 4 处，均为注册表/会话注册等合理用途，未见违规缓存业务数据</td><td><span class="badge b-good">优</span></td></tr>
+  <tr><td><b>自研能力内核</b></td><td>BPMN 2.0 XML 编译器 + 令牌执行内核（等待态即提交点）、报表 DSL 公式引擎——语义中立、无 DB 依赖的内核/壳分离规范</td><td><span class="badge b-good">优</span></td></tr>
+</table>
+
+<h2><span class="n">3</span>规范执行对照（AGENTS.md 18 章）</h2>
+<p class="lead">thiserror 全覆盖、tracing 统一、依赖集中管理、表前缀、迁移命名等基础项执行良好；问题集中在以下 4 项。</p>
+<div class="callout bad">
+  <b>🔴 [严重] .env 已被 git 追踪且含敏感键。</b><br/>
+  <code>.gitignore</code> 中 <code>#.env</code> 规则被注释掉，<code>git ls-files</code> 确认 <code>.env</code> 在库内，含 <code>NACOS_PASSWORD</code>、<code>NACOS_USERNAME</code>、<code>TEST_DATABASE_URL</code> 等键名，最近提交 2026-07-14。直接违反项目 AGENTS.md 4.1 硬规则，<b>凭据已进入 git 历史</b>。处置：<code>git rm --cached .env</code> + 恢复 gitignore + 轮换泄露凭据（必要时清史）。
+</div>
+<div class="callout warn">
+  <b>🟡 handler 手写 SQL 违规仍在生长。</b><br/>
+  <code>cmx-api/src/handlers/</code> 下 5 个文件（<code>portal/model_center.rs</code>、<code>dct.rs</code>、<code>doc.rs</code>、<code>auth/api_key_handler.rs</code>、<code>oauth2_client_handler.rs</code>）直接调 <code>execute_sql</code>，违反第 8 章"cmx-api 纯 HTTP 适配层"。<code>model_center.rs</code> 同时是 unwrap 热点（14 处），说明违规代码仍在生长，而非仅存量维护。
+</div>
+<div class="callout warn">
+  <b>🟡 unwrap/panic 在新代码中回潮。</b><br/>
+  全工程 <code>.unwrap()</code> 1,388 处、<code>panic!</code> 103 处（v2 称生产路径已收敛到 84）。重灾区均为近 3 周新代码：<code>cmx-flow-bpmn/src/lib.rs</code>（unwrap 17 + panic! 10）、<code>cmx-biz/src/doc/{saver,meta}.rs</code>（各 21）、<code>cmx-core/src/model/cell.rs</code> <b>panic! 20 处且在生产模型代码</b>。
+</div>
+<div class="callout warn">
+  <b>🟡 v2 三项冻结待办：两项原样、一项倒退。</b><br/>
+  插件签名 <code>validator.rs</code> 中 <code>verify_signature: false</code> 仍在（且与 <code>settings.rs</code> 默认 <code>true</code> 两处不一致）；行级数据权限 <code>get_data_scope</code> 仍恒返回 <code>DataScope::All</code>；限流中间件 <code>mw_rate_limit.rs</code> <b>整体被注释禁用</b>（v2 时是"缺失"，现在是代码留着但不用）。
+</div>
+
+<h3>unwrap / panic! 热点 TOP 10（非测试代码）</h3>
+<table>
+  <tr><th>文件</th><th class="num">unwrap</th><th class="num">panic!</th><th>备注</th></tr>
+  <tr><td><code>cmx-plugin/src/domain/version.rs</code></td><td class="num">46</td><td class="num">—</td><td>存量</td></tr>
+  <tr><td><code>cmx-utils/src/config/config_impl.rs</code></td><td class="num">43</td><td class="num">—</td><td>存量</td></tr>
+  <tr><td><code>cmx-infra/cmx-rowsource/src/lib.rs</code></td><td class="num">26</td><td class="num">—</td><td>新增零拷贝列式编码器</td></tr>
+  <tr><td><code>cmx-plugin/src/common/package.rs</code></td><td class="num">25</td><td class="num">—</td><td>存量</td></tr>
+  <tr><td><code>cmx-biz/src/doc/saver.rs</code> / <code>meta.rs</code></td><td class="num">21 + 21</td><td class="num">—</td><td><b>新增</b> 单据保存/元数据</td></tr>
+  <tr><td><code>cmx-core/src/model/cell.rs</code></td><td class="num">18</td><td class="num"><b>20</b></td><td><b>生产模型代码 panic! 全工程之最</b></td></tr>
+  <tr><td><code>cmx-flow/cmx-flow-bpmn/src/lib.rs</code></td><td class="num">17</td><td class="num">10</td><td><b>新增</b> BPMN 编译器，单文件双高</td></tr>
+  <tr><td><code>cmx-api/src/handlers/portal/model_center.rs</code></td><td class="num">14</td><td class="num">—</td><td>兼手写 SQL 违规</td></tr>
+  <tr><td><code>cmx-infra/cmx-database/src/transaction/core.rs</code></td><td class="num">11</td><td class="num">—</td><td>事务核心，宜优先收敛</td></tr>
+  <tr><td><code>cmx-service/src/orchestrator/flow_navigator.rs</code></td><td class="num">11</td><td class="num">—</td><td>编排导航</td></tr>
+</table>
+
+<h2><span class="n">4</span>其他风险</h2>
+<table>
+  <tr><th>风险</th><th>证据</th><th>等级</th></tr>
+  <tr><td><b>无 CI 门禁</b></td><td>无 <code>.github/workflows</code> / <code>.gitlab-ci.yml</code>，无 <code>rust-toolchain.toml</code> 锁定工具链；v2 达成的"clippy 零告警"已在新代码中回退</td><td><span class="badge b-hi">高</span></td></tr>
+  <tr><td><b>依赖膨胀</b></td><td><code>Cargo.lock</code> 850 包，<b>76 个包存在重复版本</b>（hashbrown 5 版、windows-sys 4 版、rand/toml/wasmparser 各 3 版）；wasmtime + extism 双 WASM 运行时并存</td><td><span class="badge b-mid">中</span></td></tr>
+  <tr><td><b>README 滞后</b></td><td>仍写"20+ crate / version 0.1.9"，实际 44 crate / 0.1.12；目录结构缺 cmx-flow / cmx-rpt / cmx-ai / cmx-portal 新模块</td><td><span class="badge b-lo">低</span></td></tr>
+  <tr><td><b>.gitignore 矛盾</b></td><td><code>/Cargo.lock</code> 在 ignore 列表中但文件实际被追踪（二进制项目追踪 lock 正确，ignore 条目是脏残留）；<code>#.env</code> 被注释导致泄露</td><td><span class="badge b-mid">中</span></td></tr>
+  <tr><td><b>工作区卫生</b></td><td>13 个文件未提交修改、多分支并行（cmx-rpt-flow / dev / dev-local / master…）、根目录散落 <code>评估报告v2.html</code>、<code>.deploy-server.pid</code> 等杂物</td><td><span class="badge b-lo">低</span></td></tr>
+</table>
+
+<h2><span class="n">5</span>测试与验证</h2>
+<div class="grid g4">
+  <div class="card"><p class="kpi s">1,176</p><div class="kpi-l">#[test] / #[tokio::test] 函数</div></div>
+  <div class="card"><p class="kpi s">162</p><div class="kpi-l">含测试的源文件</div></div>
+  <div class="card"><p class="kpi s">17</p><div class="kpi-l">pytest e2e 模块（auth/iam 全覆盖）</div></div>
+  <div class="card"><p class="kpi s">✓</p><div class="kpi-l">cargo check --workspace 通过（1m16s）</div></div>
+</div>
+<p class="muted">测试分布合理：cmx-plugin 245、cmx-biz 93、cmx-auth 67、cmx-core 121（含 tests 目录）、cmx-metadata 73。短板不在数量，而在<b>没有 CI 强制每提交必跑</b>。</p>
+
+<h2><span class="n">6</span>建议（按优先级）</h2>
+<div class="card">
+  <div class="pri"><div class="rank">1</div><div><b>本周必做：.env 出库。</b><span class="muted"> <code>git rm --cached .env</code> + 恢复 .gitignore 注释 + 轮换 NACOS 等已泄露凭据；如已推送远端，评估历史清理。</span></div></div>
+  <div class="pri"><div class="rank">2</div><div><b>设 CI 门禁。</b><span class="muted">至少 <code>cargo check --workspace</code> + <code>clippy --workspace --tests -D warnings</code> + <code>cargo test</code>，否则每次冲刺后都要重做一轮 v2 式收尾。</span></div></div>
+  <div class="pri"><div class="rank">3</div><div><b>对新模块做一轮 v2 式质量收尾。</b><span class="muted">重点：<code>cmx-flow-bpmn</code>、<code>cmx-biz/doc</code>、<code>cmx-core/model/cell.rs</code> 的 panic!/unwrap；<code>model_center.rs</code> 手写 SQL 下沉到业务 crate。</span></div></div>
+  <div class="pri"><div class="rank">4</div><div><b>收尾三项冻结待办。</b><span class="muted">签名验证默认值统一并开启；数据权限要么实现要么在 API 语义上明确标注"未生效"；限流由网关统一控制的结论写进文档。</span></div></div>
+  <div class="pri"><div class="rank">5</div><div><b>依赖治理。</b><span class="muted"><code>cargo-deny</code> 查重；评估 wasmtime/extism 双运行时并存必要性；清理 76 个重复版本包。</span></div></div>
+  <div class="pri"><div class="rank">6</div><div><b>刷新 README。</b><span class="muted">crate 数量、版本号、cmx-flow / cmx-rpt / cmx-ai / cmx-portal 模块清单同步。</span></div></div>
+</div>
+
+<div class="foot">
+  评估方法：实读 workspace 配置 / AGENTS.md / 启动入口 / 中间件 / 插件同步与对账源码，统计全量 unwrap、panic!、unsafe、测试、依赖重复版本；执行 <code>cargo check --workspace</code> 验证（通过）。<br/>
+  基线对照：《评估报告v2.html》（2026-06-27，91 分）。本报告同步落盘 <code>.trae/documents/20260719_cmx-container_工程详细评估报告.md</code>。
+</div>
+
+</div>
+</body>
+</html>

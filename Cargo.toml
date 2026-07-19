@@ -39,10 +39,19 @@ members = [
     "crates/libs/cmx-flow/cmx-flow-bpmn",
     "crates/libs/cmx-flow/cmx-flow-engine",
     "crates/libs/cmx-flow/cmx-flow-store-pg",
+    "crates/libs/cmx-flow/cmx-flow-def",
+    "crates/libs/cmx-flow/cmx-flow-api",
     "crates/libs/cmx-flow/cmx-flow-demo",
     "crates/libs/cmx-rpt/cmx-rpt-model",
+    "crates/libs/cmx-rpt/cmx-rpt-formula",
     "crates/libs/cmx-rpt/cmx-rpt-store-pg",
     "crates/libs/cmx-rpt/cmx-rpt-api",
+    "crates/libs/cmx-doc/cmx-doc-model",
+    "crates/libs/cmx-doc/cmx-doc-store-pg",
+    "crates/libs/cmx-doc/cmx-doc-api",
+    "crates/libs/cmx-dct/cmx-dct-model",
+    "crates/libs/cmx-dct/cmx-dct-store-pg",
+    "crates/libs/cmx-dct/cmx-dct-api",
     "sdk/cmx-cli",
     "crates/tests/cmx-database-test",
     "crates/tests/cmx-flow-tests",
@@ -128,12 +137,30 @@ cmx-flow-bpmn = { path = "crates/libs/cmx-flow/cmx-flow-bpmn", version = "0.1.12
 cmx-flow-engine = { path = "crates/libs/cmx-flow/cmx-flow-engine", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 流程引擎 PG 持久化（RuntimeStore over cmx-database-pg）
 cmx-flow-store-pg = { path = "crates/libs/cmx-flow/cmx-flow-store-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 流程定义持久化（设计器 ⇄ 引擎：BPMN XML + 版本 + 草稿/发布）
+cmx-flow-def = { path = "crates/libs/cmx-flow/cmx-flow-def", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 流程引擎 HTTP 层（FlowModule 路由，web-server 合并，避免 cmx-api⇄cmx-flow 环）
+cmx-flow-api = { path = "crates/libs/cmx-flow/cmx-flow-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 报表模块中立模型（常量 + 请求 DTO，无 DB/HTTP 依赖）
 cmx-rpt-model = { path = "crates/libs/cmx-rpt/cmx-rpt-model", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 报表函数引擎（DSL 词法/语法/求值 + 函数注册 + REF 递归依赖解析，语义中立无 DB）
+cmx-rpt-formula = { path = "crates/libs/cmx-rpt/cmx-rpt-formula", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 报表模块 PG 持久化/服务层（cr_* 表读写 + ZmcDataSet 零拷贝）
 cmx-rpt-store-pg = { path = "crates/libs/cmx-rpt/cmx-rpt-store-pg", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 报表模块 HTTP 层（薄 handler + ReportModule 路由）
 cmx-rpt-api = { path = "crates/libs/cmx-rpt/cmx-rpt-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 业务单据（DOC）中立模型（DocMetaView/DocQuery/formula/rule/sql_builder，DB-free）
+cmx-doc-model = { path = "crates/libs/cmx-doc/cmx-doc-model", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 业务单据（DOC）PG 持久化/服务层（cv_* 表装载/回存 + ZmcDataSet 零拷贝 + 版本化）
+cmx-doc-store-pg = { path = "crates/libs/cmx-doc/cmx-doc-store-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 业务单据（DOC）HTTP 层（薄 handler + DocModule 路由，web-server 合并，避免 cmx-api⇄cmx-doc 环）
+cmx-doc-api = { path = "crates/libs/cmx-doc/cmx-doc-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 数据字典（DCT）中立模型（DictView/SQL 构造/DTO，DB-free）
+cmx-dct-model = { path = "crates/libs/cmx-dct/cmx-dct-model", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 数据字典（DCT）PG 持久化/服务层（cf_* 表直读/写 + 校验/铸号 + ZmcDataSet 零拷贝）
+cmx-dct-store-pg = { path = "crates/libs/cmx-dct/cmx-dct-store-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 数据字典（DCT）HTTP 层（薄 handler + DctModule 路由，web-server 合并，避免 cmx-api⇄cmx-dct 环）
+cmx-dct-api = { path = "crates/libs/cmx-dct/cmx-dct-api", version = "0.1.12", registry = "nora" }
 # 编译期全局注册
 inventory = "0.3"
 # 对象存储访问层
@@ -342,8 +369,8 @@ local-ip-address = "0.6"
 opt-level = 0
 
 # 调试信息级别：0=无，1=行号，2=完整调试信息
-# 设为2确保生成完整的DWARF/PDB调试信息
-debug = 2  # 注意：true 会被转换为2，但显式写2更明确
+# 设为1仅保留行号表（backtrace 仍有行号），减小二进制体积与链接时间
+debug = 1  # 注意：false 等价于0；如需完整变量检视调试可临时改回2
 
 # 是否剥离符号：调试时必须设为false
 # 如果为true，调试器将无法找到变量和函数名

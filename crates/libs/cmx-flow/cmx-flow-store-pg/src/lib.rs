@@ -15,4 +15,4 @@ pub mod subflow_router;
 pub use ddl::DDL_STATEMENTS;
 pub use resolver::PgIamAssigneeResolver;
 pub use store::PgRuntimeStore;
-pub use subflow_router::PgSubflowRouter;
+pub use subflow_router::{OrgNode, PgSubflowBindingStore, PgSubflowRouter, SubflowBinding};

@@ -70,6 +70,15 @@ impl ModuleRoutes for ReportModule {
                 "/report-design/reports/{code}/data",
                 post(handlers::report_design_save_data),
             )
+            // 计算态：真算（装载公式→递归求值→落 cr_cell_data）+ 函数目录（设计器向导）。
+            .route(
+                "/report-design/reports/{code}/compute",
+                post(handlers::report_design_compute),
+            )
+            .route(
+                "/report-design/functions",
+                get(handlers::report_design_functions),
+            )
             // 旧 html 报表设计器预览兼容接口；新工作台不使用。
             .route("/rpt/compute", post(handlers::rpt_compute))
     }

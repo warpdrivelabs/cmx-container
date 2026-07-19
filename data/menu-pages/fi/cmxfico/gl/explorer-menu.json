@@ -1135,6 +1135,59 @@
           }
         },
         {
+          "id": "fi-gl-flow-design-workbench",
+          "name": "flow-design-workbench",
+          "caption": "流程设计工作台",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "workflow-tasks",
+          "workspace": {
+            "id": "flow_design_workbench",
+            "explorer": {
+              "caption": "流程定义",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "flow-design-workbench-explorer",
+                  "tabLabel": "定义",
+                  "icon": "tree",
+                  "type": "native_pages",
+                  "native_page": "portal.flow.design-workbench",
+                  "view": "explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "流程设计工作台",
+              "icon": "workflow-tasks",
+              "views": [
+                {
+                  "id": "flow-design-workbench-content",
+                  "tabLabel": "流程图",
+                  "icon": "workflow-tasks",
+                  "type": "native_pages",
+                  "native_page": "portal.flow.design-workbench",
+                  "view": "content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "节点属性",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "flow-design-workbench-prop",
+                  "tabLabel": "属性",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "portal.flow.design-workbench",
+                  "view": "property"
+                }
+              ]
+            }
+          }
+        },
+        {
           "id": "fi-gl-rpt-app-workbench",
           "name": "rpt-app-workbench",
           "caption": "报表应用工作台",

@@ -270,7 +270,7 @@ function styleCss () {
     .ra-sec{border:1px solid var(--ra-border);border-radius:8px;background:var(--sapTile_Background,#fff);padding:10px}.ra-sec>b{display:block;margin-bottom:7px;color:var(--ra-blue)}.ra-sec p{margin:0;color:var(--sapContent_LabelColor,#6a6d70);font-size:12px}
     .ra-empty{padding:18px;border:1px dashed var(--ra-border);border-radius:8px;background:var(--sapTile_Background,#fff);color:var(--sapContent_LabelColor,#6a6d70);text-align:center}
     .ra-note{margin:10px;border:1px dashed var(--ra-border);border-radius:8px;padding:12px;background:var(--sapList_HeaderBackground,#f7f9fc);color:var(--sapContent_LabelColor,#6a6d70)}
-    .ra-toast{position:absolute;left:50%;bottom:22px;transform:translate(-50%,14px);z-index:60;max-width:min(560px,88%);padding:10px 16px;border-radius:9px;background:#1d2d3e;color:#fff;font-size:12.5px;font-weight:600;box-shadow:0 12px 32px rgba(10,31,68,.34);opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;display:flex;align-items:center;gap:8px}.ra-toast.show{opacity:1;transform:translate(-50%,0)}.ra-toast[data-kind="success"]{background:linear-gradient(180deg,#12b56b,#0f9d5c)}.ra-toast[data-kind="error"]{background:linear-gradient(180deg,#e5544b,#c0392b)}
+    .ra-toast{position:absolute;left:50%;bottom:22px;transform:translate(-50%,14px);z-index:60;max-width:min(560px,88%);padding:10px 16px;border-radius:9px;background:#1d2d3e;color:#fff;font-size:12.5px;font-weight:600;box-shadow:0 12px 32px rgba(10,31,68,.34);opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;display:flex;align-items:center;gap:8px}.ra-toast.show{opacity:1;transform:translate(-50%,0)}.ra-toast[data-kind="success"]{background:linear-gradient(180deg,#12b56b,#0f9d5c)}.ra-toast[data-kind="warn"]{background:linear-gradient(180deg,#e0a336,#d98200)}.ra-toast[data-kind="error"]{background:linear-gradient(180deg,#e5544b,#c0392b)}
     /* explorer：期间下拉（顶部标题区，高度与 content .ra-head 一致 46px）+ 组织详情 */
     .ra-explorer{overflow:hidden}
     .ra-period-row{height:46px;flex:0 0 auto;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--ra-border);background:var(--sapList_HeaderBackground,#f7f9fc)}
@@ -362,6 +362,7 @@ function contentHtml (st) {
         ${contextBadges(st)}
         <span class="ra-hgroup">
           <button class="ra-btn primary" type="button" data-ra-cmd="load" title="按组织+期间装载数据">${'<ui5-icon name="download-from-cloud"></ui5-icon>'}<span>取数</span></button>
+          <button class="ra-btn" type="button" data-ra-cmd="compute" title="按公式后端真算（QM/QC/REF…），落库并刷新">${'<ui5-icon name="function"></ui5-icon>'}<span>计算</span></button>
           <button class="ra-btn" type="button" data-ra-cmd="save" title="保存数据到 cr_cell_data">${'<ui5-icon name="save"></ui5-icon>'}<span>存数</span></button>
           <button class="ra-btn" type="button" data-ra-cmd="export" title="导出 Excel">${'<ui5-icon name="excel-attachment"></ui5-icon>'}<span>导出</span></button>
         </span>
@@ -488,6 +489,32 @@ async function loadData (sheet, st, root) {
     refreshInstance(st, (v) => v === 'propertyStatus')
   } catch (err) {
     toast(root, `取数失败：${String(err?.message || err)}`, 'error')
+  }
+}
+
+/** 计算：POST compute → 后端装载公式递归求值（QM/QC/REF…）落 cr_cell_data → 再取数刷新画布。 */
+async function computeData (sheet, st, root) {
+  const orgCode = st.props.orgCode
+  const periodCode = st.curPeriod || st.props.periodCode
+  if (!orgCode || !periodCode) { toast(root, '缺少组织或期间上下文', 'error'); return }
+  try {
+    toast(root, '正在按公式计算…', 'info')
+    const res = await apiJson(`/api/report-design/reports/${enc(st.props.reportCode)}/compute`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version: st.props.version || '', orgCode, periodCode }),
+    })
+    const computed = res?.computed || 0
+    const errs = res?.errorCount || 0
+    if (errs > 0) {
+      const detail = (res?.errors || []).slice(0, 3).join('；')
+      toast(root, `计算完成：${computed} 格已算，${errs} 格异常（${detail}）`, 'warn')
+    } else {
+      toast(root, `计算完成：${computed} 个单元格已算并落库`, 'success')
+    }
+    // 计算已落 cr_cell_data，取数把算好的值刷回画布
+    await loadData(sheet, st, root)
+  } catch (err) {
+    toast(root, `计算失败：${String(err?.message || err)}`, 'error')
   }
 }
 
@@ -655,6 +682,7 @@ function bind (root, st, view) {
       const cmd = btn.getAttribute('data-ra-cmd')
       if (!sheet) { toast(root, '画布未就绪', 'error'); return }
       if (cmd === 'load') loadData(sheet, st, root)
+      else if (cmd === 'compute') computeData(sheet, st, root)
       else if (cmd === 'save') saveData(sheet, st, root)
       else if (cmd === 'export') sheet.exportXlsx?.(`${st.props.reportCode || 'report'}-${st.props.orgCode || ''}-${st.curPeriod || st.props.periodCode || ''}`)
     }))

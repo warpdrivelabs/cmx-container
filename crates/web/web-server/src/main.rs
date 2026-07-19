@@ -117,6 +117,12 @@ async fn main() -> Result<()> {
     init_datasources().await?;
     init_storage().await?;
 
+    // 流程引擎就绪：装载已发布定义 + 启动定时器 poller（依赖数据源，故在 init_datasources 之后）。
+    // 非致命：流程 DB/schema 不可用时只 warn，不阻塞 web-server 启动。
+    if let Err(e) = cmx_flow_api::spawn_timer_poller().await {
+        warn!("流程引擎初始化失败（流程功能不可用，其余服务照常）: {}", e);
+    }
+
     init_web_config().map_err(|e| Error::ConfigError(format!("加载 Web 配置失败: {}", e)))?;
     let web_config =
         web_config().map_err(|e| Error::ConfigError(format!("获取 Web 配置失败: {}", e)))?;

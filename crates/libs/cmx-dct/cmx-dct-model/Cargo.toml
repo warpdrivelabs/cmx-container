@@ -1,0 +1,23 @@
+[package]
+name = "cmx-dct-model"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 数据字典（DCT）模块的语义中立层：字典表视图（DictView/DictColumn，从定义 JSON 解析而来的
+# 强类型投影）、请求 DTO（DctQuery/DctSearchBody）、以及全部 DB-free 的纯逻辑——列白名单校验、
+# 主键铸号判定/临时 id 识别/自分级 parent_id 重指向、search/upsert 的参数化 SQL 构造。
+# 生成的 SQL 用 $N 占位 + JSON/DataValue 绑定，由 cmx-dct-store-pg 执行。
+
+[dependencies]
+# 内部依赖 - 核心库（DataValue：zmc 查询参数强类型绑定）
+cmx-core = { workspace = true }
+# 内部依赖 - 工具（next_pk_id：主键铸号）
+cmx-utils = { workspace = true }
+# 内部依赖 - 落库前列级校验规范（TableSpec，DictView 持有；DOC/DCT 共享，留在 cmx-biz）
+cmx-biz = { workspace = true }
+
+# 序列化框架（DTO 反序列化）
+serde = { workspace = true }
+# JSON（弱类型定义 Value → 强类型 view + 行改写）
+serde_json = { workspace = true }

@@ -1174,6 +1174,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-dct-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api",
+ "cmx-biz",
+ "cmx-dct-model",
+ "cmx-dct-store-pg",
+ "rmp",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-dct-model"
+version = "0.1.12"
+dependencies = [
+ "cmx-biz",
+ "cmx-core",
+ "cmx-utils",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cmx-dct-store-pg"
+version = "0.1.12"
+dependencies = [
+ "cmx-api-types",
+ "cmx-biz",
+ "cmx-core",
+ "cmx-database-pg",
+ "cmx-dct-model",
+ "cmx-model",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "cmx-debug"
 version = "0.1.12"
 dependencies = [
@@ -1189,6 +1230,83 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-doc-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "bytes",
+ "cmx-api",
+ "cmx-biz",
+ "cmx-core",
+ "cmx-database",
+ "cmx-database-pg",
+ "cmx-doc-model",
+ "cmx-doc-store-pg",
+ "cmx-model",
+ "futures",
+ "rmp",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-doc-model"
+version = "0.1.12"
+dependencies = [
+ "base64",
+ "chrono",
+ "cmx-biz",
+ "cmx-core",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "cmx-doc-store-pg"
+version = "0.1.12"
+dependencies = [
+ "base64",
+ "chrono",
+ "cmx-biz",
+ "cmx-core",
+ "cmx-database",
+ "cmx-database-pg",
+ "cmx-doc-model",
+ "cmx-utils",
+ "rmp-serde",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "time",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-flow-api"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "axum",
+ "cmx-api",
+ "cmx-biz",
+ "cmx-core",
+ "cmx-database-pg",
+ "cmx-flow-bpmn",
+ "cmx-flow-def",
+ "cmx-flow-engine",
+ "cmx-flow-model",
+ "cmx-flow-store-pg",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "cmx-flow-bpmn"
 version = "0.1.12"
 dependencies = [
@@ -1196,6 +1314,24 @@ dependencies = [
  "roxmltree",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "cmx-flow-def"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "cmx-core",
+ "cmx-database-pg",
+ "cmx-flow-bpmn",
+ "cmx-flow-model",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1207,6 +1343,7 @@ dependencies = [
  "cmx-core",
  "cmx-database-pg",
  "cmx-flow-bpmn",
+ "cmx-flow-def",
  "cmx-flow-engine",
  "cmx-flow-model",
  "cmx-flow-store-pg",
@@ -1347,6 +1484,7 @@ name = "cmx-model"
 version = "0.1.12"
 dependencies = [
  "chrono",
+ "cmx-api-types",
  "cmx-portal-base",
  "regex",
  "serde",
@@ -1528,10 +1666,24 @@ version = "0.1.12"
 dependencies = [
  "axum",
  "cmx-api",
+ "cmx-rpt-formula",
  "cmx-rpt-model",
  "cmx-rpt-store-pg",
  "serde",
  "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-rpt-formula"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "inventory",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "tokio",
  "tracing",
 ]
 
@@ -1547,11 +1699,13 @@ dependencies = [
 name = "cmx-rpt-store-pg"
 version = "0.1.12"
 dependencies = [
+ "async-trait",
  "base64",
  "cmx-api-types",
  "cmx-biz",
  "cmx-core",
  "cmx-database-pg",
+ "cmx-rpt-formula",
  "cmx-rpt-model",
  "cmx-utils",
  "rust_decimal",
@@ -8565,7 +8719,10 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "cmx-database-pg",
+ "cmx-dct-api",
  "cmx-debug",
+ "cmx-doc-api",
+ "cmx-flow-api",
  "cmx-iam",
  "cmx-plugin",
  "cmx-registry-config",

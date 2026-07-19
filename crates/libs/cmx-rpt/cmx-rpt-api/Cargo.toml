@@ -14,6 +14,8 @@ authors.workspace = true
 cmx-rpt-model = { workspace = true }
 # 内部依赖 - 报表持久化/服务层
 cmx-rpt-store-pg = { workspace = true }
+# 内部依赖 - 报表函数引擎（catalog_json：GET /functions 枚举已注册函数目录给设计器向导）
+cmx-rpt-formula = { workspace = true }
 # 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / routes::traits::ModuleRoutes /
 #   ApiResp/Result/Error）。单向依赖：cmx-rpt-api → cmx-api。
 cmx-api = { workspace = true }

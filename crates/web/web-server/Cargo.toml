@@ -15,6 +15,12 @@ cmx-database-pg = { workspace = true }
 cmx-api = { workspace = true }
 # 内部依赖 - 报表模块 HTTP 层（ReportModule 路由，在此合并进主路由，避免 cmx-api⇄cmx-rpt 环）
 cmx-rpt-api = { workspace = true }
+# 内部依赖 - 流程引擎 HTTP 层（FlowModule 路由 + 引擎单例 + 定时器 poller，同破环设计）
+cmx-flow-api = { workspace = true }
+# 内部依赖 - 业务单据（DOC）HTTP 层（DocModule 路由，在此合并进主路由，避免 cmx-api⇄cmx-doc 环）
+cmx-doc-api = { workspace = true }
+# 内部依赖 - 数据字典（DCT）HTTP 层（DctModule 路由，同破环设计）
+cmx-dct-api = { workspace = true }
 # 内部依赖 - 审计日志
 cmx-audit = { workspace = true }
 # 内部依赖 - 认证模块

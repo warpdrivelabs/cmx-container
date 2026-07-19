@@ -201,6 +201,10 @@ function getState (ctx) {
       cellMap: {}, // cellRef -> {elementCode,valueType,dataSource,calcFormula,checkFormula,numberFormat,...}
       cellLive: {}, // 当前选中单元格的在屏快照 {addr,value,formula,type,row,col}
       regionDraft: { name: '', type: 'data', range: '' }, // 新建区域表单草稿
+      // 函数目录（GET /report-design/functions，供公式向导）——懒加载一次
+      functions: [],
+      functionsLoaded: false,
+      wizard: null, // 打开中的函数向导状态 {fn, args:[], target, field}
       sheetUi: {
         fontFamily: 'Arial',
         fontSize: '11',
@@ -329,14 +333,22 @@ async function loadElements (st, force = false) {
   }
 }
 
+/** 加载函数目录（GET /report-design/functions）：懒加载一次，供公式向导选函数/逐参渲染。 */
+async function loadFunctions (st, force = false) {
+  if (st.functionsLoaded && !force) return st.functions
+  try {
+    const data = await apiJson('/api/report-design/functions')
+    st.functions = Array.isArray(data?.functions) ? data.functions : []
+    st.functionsLoaded = true
+  } catch (err) {
+    st.functions = []
+    st.functionsLoaded = true // 失败也不反复请求；向导给出提示
+  }
+  return st.functions
+}
+
 /** 加载报表主档详情（属性页用）：/reports/{code}?version= 。已加载则复用。 */
 async function loadReportDetail (st, force = false) {
-  if (st.detailLoading) return
-  if (!force && st.reportDetail) return
-  if (!st.props.reportCode) return
-  st.detailLoading = true
-  st.detailError = ''
-  refreshInstance(st, (view) => view === 'propertyMeta')
   try {
     const url = `/api/report-design/reports/${enc(st.props.reportCode)}${st.props.version ? `?version=${enc(st.props.version)}` : ''}`
     st.reportDetail = await apiJson(url)
@@ -470,6 +482,23 @@ function styleCss () {
     .rd-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.04em;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,var(--rd-cyan) 14%,transparent);color:var(--rd-cyan);vertical-align:middle;margin-left:5px}.rd-badge.default{background:color-mix(in srgb,var(--rd-green) 14%,transparent);color:var(--rd-green)}
     .rd-mini-empty{border:1px dashed var(--rd-border);border-radius:7px;padding:11px;text-align:center;color:var(--sapContent_LabelColor,#6a6d70);font-size:11.5px;background:var(--sapList_HeaderBackground,#f7f9fc)}
     .rd-live{display:flex;align-items:center;gap:7px;margin-bottom:8px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--rd-blue) 22%,var(--rd-border));border-radius:7px;background:color-mix(in srgb,var(--rd-blue) 5%,var(--sapTile_Background,#fff))}.rd-live b{font:800 13px/1 ui-monospace,Menlo,Consolas,monospace;color:var(--rd-blue)}.rd-live span{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70)}
+    .rd-fx-mask{position:fixed;inset:0;background:rgba(20,30,45,.34);display:flex;align-items:center;justify-content:center;z-index:60}
+    .rd-fx-dlg{width:min(560px,92vw);max-height:86vh;overflow:auto;background:var(--sapTile_Background,#fff);border:1px solid var(--rd-border);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.28)}
+    .rd-fx-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--rd-border)}.rd-fx-head b{display:flex;align-items:center;gap:6px;color:var(--rd-blue);font-size:14px}
+    .rd-fx-x{width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:var(--sapContent_LabelColor,#6a6d70);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.rd-fx-x:hover{background:color-mix(in srgb,#bb0000 10%,transparent);color:#bb0000}
+    .rd-fx-body{padding:14px}
+    .rd-fx-group{margin-bottom:12px}.rd-fx-glabel{font-size:10.5px;font-weight:800;letter-spacing:.05em;color:var(--sapContent_LabelColor,#6a6d70);margin-bottom:5px}
+    .rd-fx-pick{display:flex;flex-direction:column;gap:10px}
+    .rd-fx-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;border:1px solid var(--rd-border);border-radius:8px;background:var(--sapList_HeaderBackground,#f7f9fc);padding:8px 10px;cursor:pointer;margin-bottom:5px}.rd-fx-item:hover{border-color:var(--rd-blue);background:color-mix(in srgb,var(--rd-blue) 7%,#fff)}
+    .rd-fx-name{font:800 12.5px/1 ui-monospace,Menlo,Consolas,monospace;color:var(--rd-blue)}.rd-fx-help{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70)}
+    .rd-fx-fn{margin-bottom:10px;font-size:12px}.rd-fx-fn b{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--rd-blue)}.rd-fx-eg{color:var(--sapContent_LabelColor,#6a6d70);font-size:11px}
+    .rd-fx-grid{display:flex;flex-direction:column;gap:9px}
+    .rd-fx-row{display:grid;grid-template-columns:88px minmax(0,1fr);gap:8px;align-items:center}.rd-fx-row>label{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70)}
+    .rd-fx-row select,.rd-fx-row input{height:28px;border:1px solid var(--rd-border);border-radius:6px;background:var(--sapField_Background,#fff);color:inherit;padding:0 8px;min-width:0}
+    .rd-fx-row .rd-fx-abs{margin-top:4px;width:100%}
+    .rd-fx-hint{grid-column:2;font-size:10px;color:var(--sapContent_LabelColor,#8a8d90)}
+    .rd-fx-out{margin:12px 0 10px;display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center}.rd-fx-out label{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70)}.rd-fx-out code{font:700 12.5px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--rd-green);background:color-mix(in srgb,var(--rd-green) 8%,#fff);border:1px solid color-mix(in srgb,var(--rd-green) 24%,var(--rd-border));border-radius:6px;padding:6px 8px;word-break:break-all}
+    .rd-fx-actions{display:flex;justify-content:flex-end;gap:8px}
   `
 }
 
@@ -1000,10 +1029,139 @@ function cellFormulaBody (st, snap) {
         <label class="wide">校验公式 checkFormula</label>
         <textarea class="wide" data-cellmap-field="checkFormula" placeholder="A1 = B1 + C1">${esc(cm.checkFormula || '')}</textarea>
       </div>
-      <div class="rd-actions"><button class="rd-sbtn" type="button" data-cellmap-save><ui5-icon name="save"></ui5-icon>暂存映射</button></div>
-      <div class="rd-note" style="margin-top:8px">取数与校验公式仅登记到映射，随「保存」落库；计算执行按方案另案。</div>
+      <div class="rd-actions">
+        <button class="rd-sbtn primary" type="button" data-fx-wizard="calcFormula"><ui5-icon name="function"></ui5-icon>函数向导</button>
+        <button class="rd-sbtn" type="button" data-cellmap-save><ui5-icon name="save"></ui5-icon>暂存映射</button>
+      </div>
+      <div class="rd-note" style="margin-top:8px">用「函数向导」选函数、逐参填（期间/组织/取数对象），不手写括号引号；随「保存」落库，「计算报表」触发后端真算。</div>
     </section>
+    ${wizardHtml(st)}
   </div>`
+}
+
+// ─────────────────────── 函数向导（选函数 → 逐参填 → 拼串 → 插入） ───────────────────────
+
+/** 向导浮层：未打开则空。分「选函数」与「填参数」两态。 */
+function wizardHtml (st) {
+  const w = st.wizard
+  if (!w) return ''
+  const body = w.fn ? wizardParamsHtml(st, w) : wizardPickHtml(st)
+  return `<div class="rd-fx-mask" data-fx-close-mask>
+    <div class="rd-fx-dlg" role="dialog">
+      <div class="rd-fx-head"><b><ui5-icon name="function"></ui5-icon> 函数向导</b>
+        <button class="rd-fx-x" type="button" data-fx-cancel><ui5-icon name="decline"></ui5-icon></button></div>
+      <div class="rd-fx-body">${body}</div>
+    </div>
+  </div>`
+}
+
+const FX_CAT_LABEL = { fetch: '取数', ref: '引用', agg: '汇总', logic: '逻辑', math: '数学' }
+
+/** 第一步：按分类列函数。 */
+function wizardPickHtml (st) {
+  if (!st.functionsLoaded) return '<div class="rd-loading"><ui5-icon name="synchronize"></ui5-icon>正在加载函数目录…</div>'
+  if (!st.functions.length) return '<div class="rd-empty">函数目录为空或加载失败。</div>'
+  const groups = {}
+  for (const f of st.functions) { (groups[f.category] = groups[f.category] || []).push(f) }
+  const order = ['fetch', 'ref', 'agg', 'logic', 'math']
+  const secs = order.filter((c) => groups[c]).map((c) => {
+    const items = groups[c].map((f) => `<button class="rd-fx-item" type="button" data-fx-pick="${esc(f.name)}">
+      <span class="rd-fx-name">${esc(f.name)}</span><span class="rd-fx-help">${esc(f.help || '')}</span></button>`).join('')
+    return `<div class="rd-fx-group"><div class="rd-fx-glabel">${esc(FX_CAT_LABEL[c] || c)}</div>${items}</div>`
+  }).join('')
+  return `<div class="rd-fx-pick">${secs}</div>`
+}
+
+/** 第二步：按 prototype 逐参渲染控件 + 实时公式串 + 预览。 */
+function wizardParamsHtml (st, w) {
+  const fn = w.fn
+  const params = wizardParamList(fn)
+  const rows = params.map((p, i) => {
+    const val = w.args[i] != null ? w.args[i] : (p.default || '')
+    return `<div class="rd-fx-row"><label>${esc(p.name)}${p.required ? ' *' : ''}</label>
+      ${wizardControl(st, p, i, val)}
+      <div class="rd-fx-hint">${esc(p.hint || '')}</div></div>`
+  }).join('')
+  const formula = buildFormula(fn, w.args)
+  return `<div class="rd-fx-params">
+    <div class="rd-fx-fn"><b>${esc(fn.name)}</b> — ${esc(fn.help || '')} <span class="rd-fx-eg">例：${esc(fn.example || '')}</span></div>
+    <div class="rd-fx-grid">${rows || '<div class="rd-fx-hint">该函数无固定参数</div>'}</div>
+    <div class="rd-fx-out"><label>公式</label><code>${esc(formula || '—')}</code></div>
+    <div class="rd-fx-actions">
+      <button class="rd-sbtn" type="button" data-fx-back><ui5-icon name="nav-back"></ui5-icon>重选函数</button>
+      <button class="rd-sbtn primary" type="button" data-fx-insert><ui5-icon name="accept"></ui5-icon>插入到 ${esc(w.target || '')}</button>
+    </div>
+  </div>`
+}
+
+/** 参数列表（固定参 + 变参展开一格供追加）。 */
+function wizardParamList (fn) {
+  const params = (fn.prototype && fn.prototype.params) ? fn.prototype.params.slice() : []
+  const v = fn.prototype && fn.prototype.variadic
+  if (v) params.push({ ...v, name: (v.name || '值') + '…', variadic: true })
+  return params
+}
+
+/** 参数控件：按 kind 渲染（期间/组织/对象=下拉复用元素与组织；其余=文本框）。 */
+function wizardControl (st, p, i, val) {
+  const attr = `data-fx-arg="${i}"`
+  if (p.kind === 'period') {
+    const opts = [['0', '本期(0)'], ['-1', '上期(-1)'], ['-2', '上两期(-2)'], ['-12', '上年同期(-12)']]
+    const list = opts.map(([v, l]) => `<option value="${v}" ${String(val) === v ? 'selected' : ''}>${l}</option>`).join('')
+    return `<select ${attr}>${list}<option value="__abs" ${!opts.some(([v]) => v === String(val)) && val ? 'selected' : ''}>绝对期间…</option></select>
+      <input ${attr}-abs placeholder="或输入 2026-06" value="${esc(!opts.some(([v]) => v === String(val)) ? val : '')}" class="rd-fx-abs">`
+  }
+  if (p.kind === 'org') {
+    return `<select ${attr}><option value="@current" ${val === '@current' || !val ? 'selected' : ''}>@当前组织</option>
+      <option value="@parent" ${val === '@parent' ? 'selected' : ''}>@上级组织</option>
+      <option value="__code" ${val && val[0] !== '@' ? 'selected' : ''}>指定组织码…</option></select>
+      <input ${attr}-code placeholder="组织码" value="${esc(val && val[0] !== '@' ? val : '')}" class="rd-fx-abs">`
+  }
+  if (p.kind === 'object') {
+    const els = (st.elements || []).slice(0, 200)
+    const opts = els.map((e) => `<option value="${esc(e.code)}" ${val === e.code ? 'selected' : ''}>${esc(e.code)} ${esc(e.name || '')}</option>`).join('')
+    return `<input ${attr} list="rd-fx-obj-${i}" placeholder="科目码/元素码" value="${esc(val)}">
+      <datalist id="rd-fx-obj-${i}">${opts}</datalist>`
+  }
+  if (p.kind === 'direction') {
+    return `<select ${attr}><option value="net" ${val === 'net' || !val ? 'selected' : ''}>净额</option>
+      <option value="debit" ${val === 'debit' ? 'selected' : ''}>借方</option>
+      <option value="credit" ${val === 'credit' ? 'selected' : ''}>贷方</option></select>`
+  }
+  // cellref / report / version / number / text / expr → 文本框
+  return `<input ${attr} placeholder="${esc(p.hint || '')}" value="${esc(val)}">`
+}
+
+/** 由函数 + 参数值拼公式串（引号/括号自动，用户不手写）。 */
+function buildFormula (fn, args) {
+  const params = wizardParamList(fn)
+  const parts = []
+  for (let i = 0; i < params.length; i++) {
+    const p = params[i]
+    let v = args[i]
+    if (v == null || v === '') { if (p.required && p.kind !== 'expr') v = p.default || ''; else continue }
+    if (v == null || v === '') continue
+    parts.push(formatArg(p, v))
+  }
+  // 去掉尾部空缺
+  while (parts.length && (parts[parts.length - 1] === '' || parts[parts.length - 1] == null)) parts.pop()
+  return `${fn.name}(${parts.join(',')})`
+}
+
+/** 单参格式化：对象/科目码/文本加引号，期间/组织/数值/单元格/表达式裸写。 */
+function formatArg (p, v) {
+  const s = String(v)
+  if (p.kind === 'object' || p.kind === 'report' || p.kind === 'version' || p.kind === 'text' || p.kind === 'direction') {
+    return `'${s.replace(/'/g, '')}'`
+  }
+  return s // period(0/-1/2026-06) / org(@current/CODE) / number / cellref / expr
+}
+
+/** 参数改动时只更新公式串预览（不整页重渲染，避免输入焦点丢失）。 */
+function refreshWizardOut (root, st) {
+  if (!st.wizard || !st.wizard.fn) return
+  const out = root.querySelector('.rd-fx-out code')
+  if (out) out.textContent = buildFormula(st.wizard.fn, st.wizard.args) || '—'
 }
 
 function propertyElementHtml (st) {
@@ -1139,6 +1297,53 @@ function bindPropertyPage (root, st, host, view) {
   root.querySelector('[data-cellmap-save]')?.addEventListener('click', () => {
     markDirty(st, true)
     toast(root, `已暂存 ${st.selectedCell} 的公式映射（保存报表时落库）`, 'success')
+  })
+
+  // —— 函数向导 ——
+  root.querySelectorAll('[data-fx-wizard]').forEach((b) => b.addEventListener('click', () => {
+    const field = b.getAttribute('data-fx-wizard')
+    st.wizard = { fn: null, args: [], target: st.selectedCell || 'A1', field }
+    loadFunctions(st).then(() => rerender())
+    rerender()
+  }))
+  root.querySelector('[data-fx-cancel]')?.addEventListener('click', () => { st.wizard = null; rerender() })
+  root.querySelector('[data-fx-close-mask]')?.addEventListener('click', (ev) => {
+    if (ev.target === ev.currentTarget) { st.wizard = null; rerender() }
+  })
+  root.querySelectorAll('[data-fx-pick]').forEach((b) => b.addEventListener('click', () => {
+    const name = b.getAttribute('data-fx-pick')
+    const fn = st.functions.find((f) => f.name === name)
+    if (fn && st.wizard) { st.wizard.fn = fn; st.wizard.args = wizardParamList(fn).map((p) => p.default || '') }
+    rerender()
+  }))
+  root.querySelector('[data-fx-back]')?.addEventListener('click', () => { if (st.wizard) { st.wizard.fn = null; st.wizard.args = [] } rerender() })
+  root.querySelectorAll('[data-fx-arg]').forEach((el) => el.addEventListener('input', () => {
+    if (!st.wizard) return
+    const i = Number(el.getAttribute('data-fx-arg'))
+    // 期间/组织的「绝对/指定」联动：主 select 选 __abs/__code 时取兄弟输入框
+    let v = el.value
+    if (v === '__abs' || v === '__code') {
+      const sib = el.parentElement.querySelector('.rd-fx-abs')
+      v = sib ? sib.value : ''
+    } else if (el.classList.contains('rd-fx-abs')) {
+      // 输入绝对值：直接作为该参值
+      const sel = el.parentElement.querySelector('[data-fx-arg]')
+      if (sel && (sel.value === '__abs' || sel.value === '__code')) { st.wizard.args[i] = v; refreshWizardOut(root, st); return }
+    }
+    st.wizard.args[i] = v
+    refreshWizardOut(root, st)
+  }))
+  root.querySelector('[data-fx-insert]')?.addEventListener('click', () => {
+    if (!st.wizard || !st.wizard.fn) return
+    const formula = buildFormula(st.wizard.fn, st.wizard.args)
+    const addr = st.wizard.target || st.selectedCell || 'A1'
+    const field = st.wizard.field || 'calcFormula'
+    const cm = st.cellMap[addr] = st.cellMap[addr] || {}
+    cm[field] = formula
+    st.wizard = null
+    markDirty(st, true)
+    rerender()
+    toast(root, `已插入公式到 ${addr}：${formula}`, 'success')
   })
 
   // —— 元素绑定 / 填入 ——

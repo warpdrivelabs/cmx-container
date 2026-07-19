@@ -7,3 +7,6 @@
 //! - batch：批量读 + 一次性附带各主元数据引用的 base 字段集文件（去重）。
 
 pub mod store;
+
+// 业务编码 → 定义文件解析（DOC/DCT 共享，供 cmx-api/cmx-doc-api/cmx-dct-api 三方共用，避免环）。
+pub mod resolve;

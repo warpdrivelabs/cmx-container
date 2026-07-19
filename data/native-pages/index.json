@@ -170,6 +170,13 @@
       "relPath": "portal/rpt/designer-workbench.js"
     },
     {
+      "id": "portal.flow.design-workbench",
+      "name": "流程设计工作台",
+      "details": "native_pages 四区流程设计工作台：explorer 流程定义列表、content bpmn-js 画布+工具条、property 选中节点属性；后端 /api/flow/* 由 cmx-flow-api 提供，引擎在 web-server 内单例运行。",
+      "sourceType": "js",
+      "relPath": "portal/flow/design-workbench.js"
+    },
+    {
       "id": "portal.rpt.designer",
       "name": "报表设计器",
       "details": "native_pages 多实例三区报表设计器：explorer 数据元素/多维模型，content SpreadJS 电子表格设计区，property 报表/单元格属性。",

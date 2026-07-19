@@ -3,8 +3,6 @@
 //! 路由路径与 Node 后端保持一致（挂在 `/api` 下），响应统一用 [`crate::ApiResp`] 信封。
 //! 阶段 1：域/菜单/活动、工作区节点、表单页、原生页面、事实数据等简单文件 CRUD。
 
-pub mod dct;
-pub mod doc;
 pub mod handler;
 pub mod model_center;
 
@@ -113,65 +111,9 @@ impl ModuleRoutes for PortalModule {
                     .delete(handler::definitions_delete),
             )
             .route("/definitions/batch", post(handler::definitions_batch))
-            // 业务单据数据装载/回存（方案 Phase 4/5）
-            // 端点命名：/doc/data/<驱动>-<内存模式>-<传输> —— 一眼可辨驱动/内存/传输三维度。
-            //   驱动 sqlx|tokio · 内存 dataset(全拷贝)|zmc(零拷贝) · 传输 json|msgpack
-            // 每个端点 GET(便捷 URL query) + POST(body=DocQuery 富查询：每层条件/排序/分页/游标)。
-            // ① sqlx + 老 DataSet(全拷贝) + JSON（老链路）
-            .route(
-                "/doc/data/sqlx-dataset-json",
-                get(doc::doc_data_sqlx_dataset_json).post(doc::doc_data_sqlx_dataset_json),
-            )
-            // ④ tokio-postgres + ZmcDataSet(零拷贝) + msgpack 二进制
-            .route(
-                "/doc/data/tokio-zmc-msgpack",
-                get(doc::doc_data_tokio_zmc_msgpack).post(doc::doc_data_tokio_zmc_msgpack),
-            )
-            // ③ sqlx + ZmcDataSet(零拷贝) + msgpack 二进制
-            .route(
-                "/doc/data/sqlx-zmc-msgpack",
-                get(doc::doc_data_sqlx_zmc_msgpack).post(doc::doc_data_sqlx_zmc_msgpack),
-            )
-            // ⑤ tokio-postgres + ZmcDataSet(零拷贝) + 纯 JSON 出口
-            .route(
-                "/doc/data/tokio-zmc-json",
-                get(doc::doc_data_tokio_zmc_json).post(doc::doc_data_tokio_zmc_json),
-            )
-            // ⑥ sqlx + ZmcDataSet(零拷贝) + 纯 JSON 出口（补齐驱动×内存×传输最后一种组合）
-            .route(
-                "/doc/data/sqlx-zmc-json",
-                get(doc::doc_data_sqlx_zmc_json).post(doc::doc_data_sqlx_zmc_json),
-            )
-            // 懒下钻：装载某层在给定父 id 下的子树（前端 grid 展开时调用）
-            .route("/doc/data/children", post(doc::doc_children))
-            // 真·流式：超大扁平单层结果零内存 chunked 传输（长度分帧二进制）
-            .route(
-                "/doc/data/tokio-zmc-stream",
-                get(doc::doc_data_stream).post(doc::doc_data_stream),
-            )
-            // 业务单据**显示元数据**(层序/各层列 caption·类型/父子关系)——通用单据前端页动态建表用
-            .route("/doc/meta", get(doc::doc_meta))
-            .route("/doc/save", post(doc::doc_save))
-            .route("/doc/save/batch", post(doc::doc_save_batch))
-            // 业务单据版本化（方案 §6A / Phase 8）
-            .route("/doc/revisions", get(doc::doc_revisions))
-            .route("/doc/revision", get(doc::doc_revision))
-            .route("/doc/restore", post(doc::doc_restore))
-            // 数据字典（DCT）数据服务：tokio-postgres 直读/写 cf_* 物理表
-            .route("/dct/meta", get(dct::dct_meta))
-            .route(
-                "/dct/data/search",
-                get(dct::dct_search).post(dct::dct_search),
-            )
-            // 零拷贝装载：tokio-postgres + ZmcDataSet + 列式 msgpack 二进制（对标 doc）
-            .route(
-                "/dct/data/tokio-zmc-msgpack",
-                get(dct::dct_search_zmc_msgpack).post(dct::dct_search_zmc_msgpack),
-            )
-            .route("/dct/entries", post(dct::dct_upsert))
-            .route("/dct/entries/{id}", axum::routing::delete(dct::dct_delete))
-            // 基于 changeset 的回存（对标 doc ChangeSetCollector/DocSaver）
-            .route("/dct/save", post(dct::dct_save))
+            // 业务单据（DOC，/doc/*）与数据字典（DCT，/dct/*）数据服务已抽出为独立 crate 群
+            // （crates/libs/cmx-doc/*、crates/libs/cmx-dct/*），路由由 web-server 合并
+            // DocModule/DctModule.routes()——cmx-api 不反向依赖它们，避免环（对标 ReportModule/FlowModule）。
             .route(
                 "/definitions/default",
                 post(handler::definitions_set_default),

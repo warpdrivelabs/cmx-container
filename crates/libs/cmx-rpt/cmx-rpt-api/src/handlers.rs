@@ -147,6 +147,31 @@ pub async fn report_design_save_data(
 }
 
 // ============================================================================
+// 计算态：报表函数计算（真算，替换旧 stub）+ 函数目录（供设计器向导）。
+// ============================================================================
+
+/// 计算报表：装载公式 → 递归求值（两遍法取数 + REF 跨表 + 循环检测）→ 落 cr_cell_data。
+/// body: { version?, orgCode, periodCode }。
+pub async fn report_design_compute(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    body: Json<Value>,
+) -> Result<Json<ApiResp<Value>>> {
+    Ok(Json(ApiResp::ok(
+        store::compute_report_service(&code, &body.0).await?,
+    )))
+}
+
+/// 函数目录：枚举已注册报表函数元数据（名/分类/原型/向导/帮助/示例），供设计器向导渲染。
+pub async fn report_design_functions(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+) -> Result<Json<ApiResp<Value>>> {
+    Ok(Json(ApiResp::ok(cmx_rpt_formula::catalog_json())))
+}
+
+// ============================================================================
 // 旧报表设计器兼容计算接口（stub，无 DB）：恢复历史 html 预览入口避免 404。
 // ============================================================================
 

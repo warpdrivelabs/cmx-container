@@ -20,6 +20,9 @@ use cmx_rpt_model::{CreateVersionBody, DEFAULT_REGION, LayoutQuery, RPT_DB_ID, R
 
 pub use cmx_api_types::{Error, Result};
 
+pub mod compute;
+pub use compute::compute_report_service;
+
 /// 构造报表业务错误（BizError → cmx_api_types::Error）。
 pub fn api_err(msg: &str) -> Error {
     cmx_biz::BizError::business(msg.to_string()).into()
@@ -30,7 +33,7 @@ pub fn api_err(msg: &str) -> Error {
 // ============================================================================
 
 /// JSON 参数查询 → 行数组（sqlx/json 链路；报表读取多为小体量关系投影）。
-async fn query_rows(sql: &str, params: Value, label: &str) -> Result<Vec<Value>> {
+pub(crate) async fn query_rows(sql: &str, params: Value, label: &str) -> Result<Vec<Value>> {
     let mm = get_default_pg_db_manager();
     let ds = mm
         .query_sql_with_json(RPT_DB_ID, None, sql, params, label)
@@ -53,7 +56,7 @@ async fn execute(sql: &str, params: Value) -> Result<()> {
 }
 
 /// 强类型执行（事务内），参数按 DataValue 变体精确绑定（String→text, Binary→bytea, Null→NULL…）。
-async fn exec_dv(txn_id: &str, sql: &str, params: Vec<DataValue>) -> Result<()> {
+pub(crate) async fn exec_dv(txn_id: &str, sql: &str, params: Vec<DataValue>) -> Result<()> {
     let mm = get_default_pg_db_manager();
     mm.execute_sql_with_datavalues(RPT_DB_ID, Some(txn_id), sql, params)
         .await
