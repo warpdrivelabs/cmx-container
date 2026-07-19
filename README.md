@@ -2,16 +2,18 @@
 
 > 插件化容器运行时：WebAssembly 插件热插拔、可视化服务编排、统一认证授权（JWT + IAM）、分布式存储、注册/配置中心、gRPC 通信与全链路审计。
 
-[![Version](https://img.shields.io/badge/version-0.1.9-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
 [![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
 [![Workspace](https://img.shields.io/badge/cargo-workspace-lightgrey.svg)]()
 
 ## 项目简介
 
-`cmx-container` 是基于 Rust 构建的 **插件化容器运行时**，以 Cargo Workspace 组织，由 20+ 个 crate 协同组成。核心目标是在单一二进制中提供：
+`cmx-container` 是基于 Rust 构建的 **插件化容器运行时**，以 Cargo Workspace 组织，由 50+ 个 crate 协同组成（`crates/libs/**` + `crates/web/**` + `sdk/**`）。核心目标是在单一二进制中提供：
 
 - **WASM 插件热插拔**（Extism + 自研 SDK，集群级 Redis Pub/Sub 同步）
 - **可视化服务编排**（声明式 JSON 流程 + 事务框 + 分支路由）
+- **BPMN 2.0 流程引擎**（`cmx-flow-*`：自研 XML 编译器 + 令牌执行内核，子流程/会签/定时器/抄送转签）
+- **报表与元数据平台**（`cmx-rpt-*` 报表公式引擎；`cmx-dct-*`/`cmx-doc-*` 数据字典与业务单据数据服务）
 - **统一认证**（JWT 双令牌、Refresh Rotation、OAuth2 + PKCE）
 - **统一授权**（RBAC/权限/角色组/SoD 互斥规则 + 缓存与熔断）
 - **分布式基础设施**（PostgreSQL、Redis、S3/本地存储、Nacos 注册&配置、gRPC）
@@ -26,6 +28,9 @@
 | 认证 | `cmx-auth`：JWT 双令牌 + Refresh Rotation、Argon2id、OAuth2 授权码 + PKCE、API Key、登录失败锁定、Prometheus 指标 |
 | 授权 | `cmx-iam`：用户/角色/权限/角色组 CRUD、临时授权、SoD 互斥规则、缓存+熔断的 `IamChecker` |
 | 审计 | `cmx-audit`：通用 `AuditLogger` trait + `DatabaseAuditStore`，供各模块统一落库 |
+| 流程引擎 | `cmx-flow-*`：BPMN 2.0 XML → ProcessDefinition IR 编译 + 令牌执行内核；子流程/多实例会签/边界定时器/抄送转签/组织路由；可视化设计器（bpmn-js） |
+| 报表平台 | `cmx-rpt-*`：报表设计/应用工作台 + DSL 公式引擎（QM/QC 取数、REF 递归依赖解析）；版式（SpreadJS BLOB）与数据（`cr_cell_data`）分离 |
+| 元数据数据服务 | `cmx-dct-*`（数据字典 `cf_*`）/ `cmx-doc-*`（业务单据 `cv_*`）：定义 JSON 驱动的强类型装载/回存 + ZmcDataSet 零拷贝 + 落库前列级校验 |
 | Web 框架 | 基于 Axum 0.8 + tower-http，统一 `ApiResp`、OpenAPI/Swagger UI、axum 中间件 |
 | RPC | `cmx-rpc`：基于 volo-grpc 的服务端 + 客户端，集成注册中心服务发现 + 负载均衡 |
 | 注册/配置 | `cmx-registry-config`：抽象 `ServiceRegistry` / `ConfigCenter` trait，内置 Mock + Nacos 实现 |
@@ -142,7 +147,7 @@ cmx-container/
 ├── plugins/                         # 插件运行目录（root/backup/temp/uploads）
 ├── storage/                         # 本地文件存储根目录
 ├── logs/                            # 日志输出目录
-├── Cargo.toml                       # Workspace 配置（version 0.1.9）
+├── Cargo.toml                       # Workspace 配置（version 0.1.12）
 ├── Cross.toml                       # 跨平台构建配置
 ├── dev.toml                         # 开发环境配置
 ├── dev-vpn.toml                     # VPN 环境配置

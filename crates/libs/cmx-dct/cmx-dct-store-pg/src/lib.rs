@@ -692,9 +692,9 @@ async fn save_apply(
             params.push(id.clone());
             // 乐观锁：baseline 存在 + 有 update_time 列 → 加 AND update_time = baseline。
             let baseline = row.get("baseline").filter(|b| !b.is_null()).cloned();
-            let lock_clause = if valid_col(view, "update_time") && baseline.is_some() {
+            let lock_clause = if let Some(b) = baseline.filter(|_| valid_col(view, "update_time")) {
                 i += 1;
-                params.push(baseline.unwrap());
+                params.push(b);
                 format!(" AND \"update_time\" = ${}", i)
             } else {
                 String::new()

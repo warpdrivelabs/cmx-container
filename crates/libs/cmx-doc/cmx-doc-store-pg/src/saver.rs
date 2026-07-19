@@ -981,11 +981,11 @@ fn collect_versioned_roots(
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut out: Vec<(String, String)> = Vec::new();
     let mut push = |id: &Value, op: &str, out: &mut Vec<(String, String)>| {
-        if let Some(s) = value_to_id_string(id) {
-            if seen.insert(s.clone()) {
-                let op = sctx.op_override.clone().unwrap_or_else(|| op.to_string());
-                out.push((s, op));
-            }
+        if let Some(s) = value_to_id_string(id)
+            && seen.insert(s.clone())
+        {
+            let op = sctx.op_override.clone().unwrap_or_else(|| op.to_string());
+            out.push((s, op));
         }
     };
 

@@ -148,14 +148,6 @@ pub async fn create_oauth2_client(
         None
     };
 
-    let db_manager = cmx_database::get_default_db_manager();
-    let db_id = db_manager.get_default_db_id().await;
-
-    let sql = r#"
-        INSERT INTO cmx_auth_client (id, client_id, client_name, client_secret, client_type,
-            redirect_uris, grant_types, allowed_scopes, pkce_required, description, status, archived)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1, 0)
-    "#;
     let params = serde_json::Value::Array(vec![
         serde_json::Value::String(id.clone()),
         serde_json::Value::String(req.client_id.clone()),
@@ -173,12 +165,10 @@ pub async fn create_oauth2_client(
             .map(serde_json::Value::String)
             .unwrap_or(serde_json::Value::Null),
     ]);
-    db_manager
-        .execute_sql_with_json(&db_id, None, sql, params)
+    cmx_iam::oauth_client::store::insert_client(params)
         .await
         .map_err(|e| {
-            let msg = format!("{e}");
-            if msg.contains("duplicate") || msg.contains("unique") {
+            if e.contains("duplicate") || e.contains("unique") {
                 Error::BusinessError(format!("client_id 已存在: {}", req.client_id))
             } else {
                 Error::InternalError(format!("创建 OAuth2 客户端失败: {e}"))
@@ -222,25 +212,7 @@ pub async fn list_oauth2_clients(
 ) -> Result<Json<ApiResp<Vec<OAuth2ClientResponse>>>> {
     debug!("{:<12} - handler::list_oauth2_clients", "HANDLER");
 
-    let db_manager = cmx_database::get_default_db_manager();
-    let db_id = db_manager.get_default_db_id().await;
-
-    let mut where_clause = String::from("archived = 0");
-    if let Some(status) = params.status {
-        where_clause.push_str(&format!(" AND status = {}", status));
-    }
-    if let Some(cid) = &params.client_id {
-        where_clause.push_str(&format!(" AND client_id = '{}'", cid.replace('\'', "''")));
-    }
-
-    let sql = format!(
-        "SELECT id, client_id, client_name, client_type, redirect_uris, grant_types, \
-         allowed_scopes, pkce_required, status, description, create_time, update_time \
-         FROM cmx_auth_client WHERE {where_clause} ORDER BY create_time DESC"
-    );
-
-    let dataset = db_manager
-        .query_sql(&db_id, None, &sql, "oauth2_clients_list")
+    let dataset = cmx_iam::oauth_client::store::list_clients(params.status, params.client_id)
         .await
         .map_err(|e| Error::InternalError(format!("查询 OAuth2 客户端列表失败: {e}")))?;
 
@@ -374,9 +346,6 @@ pub async fn update_oauth2_client_by_id(
         "HANDLER", req.client_id
     );
 
-    let db_manager = cmx_database::get_default_db_manager();
-    let db_id = db_manager.get_default_db_id().await;
-
     let mut sets: Vec<String> = Vec::new();
     let mut params: Vec<serde_json::Value> = vec![serde_json::Value::String(req.client_id.clone())];
     let mut idx = 2;
@@ -433,15 +402,12 @@ pub async fn update_oauth2_client_by_id(
     }
 
     sets.push("update_time = NOW()".to_string());
-    let sql = format!(
-        "UPDATE cmx_auth_client SET {} WHERE client_id = $1 AND archived = 0",
-        sets.join(", ")
-    );
-
-    let affected = db_manager
-        .execute_sql_with_json(&db_id, None, &sql, serde_json::Value::Array(params))
-        .await
-        .map_err(|e| Error::InternalError(format!("更新 OAuth2 客户端失败: {e}")))?;
+    let affected = cmx_iam::oauth_client::store::update_client(
+        &sets.join(", "),
+        serde_json::Value::Array(params),
+    )
+    .await
+    .map_err(|e| Error::InternalError(format!("更新 OAuth2 客户端失败: {e}")))?;
 
     if affected == 0 {
         warn!("OAuth2 客户端不存在或已归档: {}", req.client_id);
@@ -479,13 +445,7 @@ pub async fn delete_oauth2_client(
         "HANDLER", client_id
     );
 
-    let db_manager = cmx_database::get_default_db_manager();
-    let db_id = db_manager.get_default_db_id().await;
-
-    let sql = "UPDATE cmx_auth_client SET archived = 1, update_time = NOW() WHERE client_id = $1 AND archived = 0";
-    let params = serde_json::Value::Array(vec![serde_json::Value::String(client_id.to_string())]);
-    let affected = db_manager
-        .execute_sql_with_json(&db_id, None, sql, params)
+    let affected = cmx_iam::oauth_client::store::soft_delete_client(client_id)
         .await
         .map_err(|e| Error::InternalError(format!("删除 OAuth2 客户端失败: {e}")))?;
 

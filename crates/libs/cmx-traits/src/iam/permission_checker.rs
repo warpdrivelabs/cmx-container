@@ -81,7 +81,12 @@ pub trait PermissionChecker: Send + Sync {
 
     /// 获取用户的数据权限范围。
     ///
-    /// 默认实现返回 [`DataScope::All`]（无限制），后续实现时覆盖。
+    /// 获取用户的行级数据权限范围。
+    ///
+    /// 【冻结待办 · 行级数据权限尚未落地】默认实现恒返回 [`DataScope::All`]（**无任何行级过滤**）。
+    /// 这意味着：在没有具体实现覆盖本方法之前，数据权限在语义上等同于「不限制」——
+    /// 调用方**不应**假设返回值已按用户做了行级收敛。真正启用需由 IAM 侧实现覆盖，
+    /// 依据用户/角色/组织维度返回受限的 [`DataScope`]。
     ///
     /// # Arguments
     ///
@@ -89,7 +94,7 @@ pub trait PermissionChecker: Send + Sync {
     ///
     /// # Returns
     ///
-    /// 成功时返回 [`DataScope`]，默认为 [`DataScope::All`]。
+    /// 成功时返回 [`DataScope`]，默认实现固定为 [`DataScope::All`]（未生效占位）。
     ///
     /// # Errors
     ///

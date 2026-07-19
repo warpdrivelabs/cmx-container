@@ -26,6 +26,8 @@ impl DocRevision {
     /// 在保存事务内记录新版本。root_ds 为「保存后重新装配的整单」。
     ///
     /// 步骤：读当前 rev_no → 旧当前版 is_current=0 → INSERT 新版(is_current=1)。
+    // 版本快照落库：DB 句柄/坐标/单据文件/根表/根 id/操作/载荷/操作人一并透传，参数多但内聚，不拆。
+    #[allow(clippy::too_many_arguments)]
     pub async fn record(
         mm: &DatabaseManager,
         db_id: &str,

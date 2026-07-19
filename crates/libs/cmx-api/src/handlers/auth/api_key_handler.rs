@@ -5,13 +5,14 @@
 
 use axum::Json;
 use axum::extract::{Query, State};
-use cmx_core::model::cell::DataValue;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Error, Result};
+
+use cmx_iam::api_key::store;
 
 /// 生成随机 API Key 明文
 fn generate_api_key() -> String {
@@ -25,25 +26,6 @@ fn sha256(input: &str) -> String {
     let mut hasher = DefaultHasher::new();
     input.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
-}
-
-/// 根据 id 查询 API Key 的 key_prefix。
-///
-/// 用于在删除/禁用前获取 key_prefix，以便失效 Redis 缓存。
-async fn query_key_prefix_by_id(id: &str) -> Option<String> {
-    let db_manager = cmx_database::get_default_db_manager();
-    let db_id = db_manager.get_default_db_id().await;
-    let sql = "SELECT key_prefix FROM cmx_auth_api_key WHERE id = $1";
-    let params = vec![DataValue::String(id.to_string())];
-    let dataset = db_manager
-        .query_sql_with_datavalues(&db_id, None, sql, params, "api_key_prefix")
-        .await
-        .ok()?;
-    let schema = dataset.schema.as_ref();
-    dataset
-        .iter()
-        .next()
-        .and_then(|row| row.get_by_name_as(schema, "key_prefix"))
 }
 
 /// 失效 API Key 的 Redis 两层缓存。
@@ -151,35 +133,17 @@ pub async fn create_api_key(
     let id = cmx_utils::snowflake_id_str();
     let scopes_json = serde_json::to_string(&req.scopes).unwrap_or_else(|_| "[]".to_string());
 
-    let db_manager = cmx_database::get_default_db_manager();
-    let db_id = db_manager.get_default_db_id().await;
-
-    let sql = r#"
-        INSERT INTO cmx_auth_api_key (id, key_prefix, key_hash, user_id, service_name, scopes, description, status, archived)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 1, 0)
-    "#;
-    let params = vec![
-        DataValue::String(id.clone()),
-        DataValue::String(key_prefix_str.to_string()),
-        DataValue::String(key_hash),
-        req.user_id
-            .clone()
-            .map(DataValue::String)
-            .unwrap_or(DataValue::Null),
-        req.service_name
-            .clone()
-            .map(DataValue::String)
-            .unwrap_or(DataValue::Null),
-        DataValue::String(scopes_json),
-        req.description
-            .clone()
-            .map(DataValue::String)
-            .unwrap_or(DataValue::Null),
-    ];
-    db_manager
-        .execute_sql_with_datavalues(&db_id, None, sql, params)
-        .await
-        .map_err(|e| Error::InternalError(format!("创建 API Key 失败: {e}")))?;
+    store::insert_api_key(
+        &id,
+        key_prefix_str,
+        &key_hash,
+        req.user_id.clone(),
+        req.service_name.clone(),
+        scopes_json,
+        req.description.clone(),
+    )
+    .await
+    .map_err(|e| Error::InternalError(format!("创建 API Key 失败: {e}")))?;
 
     info!(key_prefix = key_prefix_str, "API Key 创建成功");
 
@@ -215,30 +179,7 @@ pub async fn list_api_keys(
 ) -> Result<Json<ApiResp<Vec<ApiKeyListItem>>>> {
     debug!("{:<12} - handler::list_api_keys", "HANDLER");
 
-    let db_manager = cmx_database::get_default_db_manager();
-    let db_id = db_manager.get_default_db_id().await;
-
-    let mut where_clause = String::from("archived = 0");
-    if let Some(status) = params.status {
-        where_clause.push_str(&format!(" AND status = {}", status));
-    }
-    if let Some(uid) = &params.user_id {
-        where_clause.push_str(&format!(" AND user_id = '{}'", uid.replace('\'', "''")));
-    }
-    if let Some(svc) = &params.service_name {
-        where_clause.push_str(&format!(
-            " AND service_name = '{}'",
-            svc.replace('\'', "''")
-        ));
-    }
-
-    let sql = format!(
-        "SELECT id, key_prefix, user_id, service_name, scopes, description, status, create_time \
-         FROM cmx_auth_api_key WHERE {where_clause} ORDER BY create_time DESC"
-    );
-
-    let dataset = db_manager
-        .query_sql(&db_id, None, &sql, "api_keys_list")
+    let dataset = store::list_api_keys(params.status, params.user_id, params.service_name)
         .await
         .map_err(|e| Error::InternalError(format!("查询 API Key 列表失败: {e}")))?;
 
@@ -287,16 +228,10 @@ pub async fn delete_api_key(
 
     debug!("{:<12} - handler::delete_api_key - id: {}", "HANDLER", id);
 
-    let db_manager = cmx_database::get_default_db_manager();
-    let db_id = db_manager.get_default_db_id().await;
-
     // 删除前查询 key_prefix，用于删除后失效 Redis 缓存
-    let key_prefix = query_key_prefix_by_id(id).await;
+    let key_prefix = store::query_key_prefix_by_id(id).await;
 
-    let sql = "DELETE FROM cmx_auth_api_key WHERE id = $1 AND archived = 0";
-    let params = vec![DataValue::String(id.to_string())];
-    let affected = db_manager
-        .execute_sql_with_datavalues(&db_id, None, sql, params)
+    let affected = store::delete_api_key(id)
         .await
         .map_err(|e| Error::InternalError(format!("删除 API Key 失败: {e}")))?;
 
@@ -333,19 +268,10 @@ pub async fn toggle_api_key_status(
         "HANDLER", req.id, req.status
     );
 
-    let db_manager = cmx_database::get_default_db_manager();
-    let db_id = db_manager.get_default_db_id().await;
-
     // 查询 key_prefix，用于状态切换后失效 Redis 缓存
-    let key_prefix = query_key_prefix_by_id(&req.id).await;
+    let key_prefix = store::query_key_prefix_by_id(&req.id).await;
 
-    let sql = "UPDATE cmx_auth_api_key SET status = $2, update_time = NOW() WHERE id = $1 AND archived = 0";
-    let params = vec![
-        DataValue::String(req.id.clone()),
-        DataValue::Int(req.status),
-    ];
-    let affected = db_manager
-        .execute_sql_with_datavalues(&db_id, None, sql, params)
+    let affected = store::set_api_key_status(&req.id, req.status)
         .await
         .map_err(|e| Error::InternalError(format!("切换 API Key 状态失败: {e}")))?;
 

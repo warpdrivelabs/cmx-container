@@ -222,15 +222,15 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Va
     let mut n = 0usize;
 
     // parentId 过滤（自分级 children）：仅当定义有 parentField 且请求带 parentId 键。
-    if let Some(pf) = &view.parent_field {
-        if let Some(pv) = raw.get("parentId") {
-            if pv.is_null() {
-                wheres.push(format!("\"{}\" IS NULL", pf));
-            } else {
-                n += 1;
-                wheres.push(format!("\"{}\" = ${}", pf, n));
-                params.push(pv.clone());
-            }
+    if let Some(pf) = &view.parent_field
+        && let Some(pv) = raw.get("parentId")
+    {
+        if pv.is_null() {
+            wheres.push(format!("\"{}\" IS NULL", pf));
+        } else {
+            n += 1;
+            wheres.push(format!("\"{}\" = ${}", pf, n));
+            params.push(pv.clone());
         }
     }
 

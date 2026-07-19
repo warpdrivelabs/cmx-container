@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>cmx-container 工程质量评估报告（v4 · 2026-07-19 晚）</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#1a1e33; --card2:#222843; --ink:#e8ebf5; --muted:#9aa3c0;
+    --line:#2c3350; --accent:#6c8cff; --accent2:#9a6cff;
+    --good:#3ecf8e; --warn:#f5a623; --bad:#ff5c7a; --info:#46b1ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c0f1c,#0f1220 240px);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.65;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px 80px}
+  header.hero{padding:54px 22px 40px;background:
+    radial-gradient(900px 380px at 20% -10%,rgba(62,207,142,.16),transparent 60%),
+    radial-gradient(700px 360px at 95% 0%,rgba(108,140,255,.22),transparent 55%);
+    border-bottom:1px solid var(--line)}
+  .hero-inner{max-width:1080px;margin:0 auto;padding:0 22px}
+  .eyebrow{letter-spacing:.32em;text-transform:uppercase;font-size:12px;color:var(--accent);font-weight:700}
+  h1{font-size:40px;margin:10px 0 6px;font-weight:800;letter-spacing:-.5px}
+  .sub{color:var(--muted);font-size:16px;max-width:840px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;color:var(--muted)}
+  .chip b{color:var(--ink)}
+  h2{font-size:26px;margin:54px 0 8px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:12px}
+  h2 .n{font-size:15px;color:var(--accent);background:rgba(108,140,255,.12);border:1px solid rgba(108,140,255,.3);
+    width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;font-weight:700}
+  h3{font-size:18px;margin:28px 0 6px;font-weight:700}
+  p{margin:10px 0}
+  .lead{color:var(--muted);margin-bottom:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin:16px 0}
+  .grid{display:grid;gap:16px}
+  .g5{grid-template-columns:repeat(5,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:920px){.g5{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr}.g2{grid-template-columns:1fr}}
+  .gauge{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;text-align:center}
+  .ring{width:110px;height:110px;border-radius:50%;margin:4px auto 10px;display:grid;place-items:center;position:relative}
+  .ring::before{content:"";position:absolute;inset:11px;background:var(--card);border-radius:50%}
+  .ring span{position:relative;font-size:28px;font-weight:800}
+  .gauge .lab{font-size:14px;color:var(--muted);font-weight:600}
+  .gauge .dl{font-size:12px;font-weight:700;margin-top:2px}
+  .big-score{display:flex;align-items:center;gap:26px;flex-wrap:wrap}
+  .big-ring{width:168px;height:168px;border-radius:50%;display:grid;place-items:center;position:relative;flex:0 0 auto}
+  .big-ring::before{content:"";position:absolute;inset:15px;background:var(--card);border-radius:50%}
+  .big-ring .v{position:relative;font-size:50px;font-weight:850;line-height:1}
+  .big-ring .v small{font-size:18px;color:var(--muted)}
+  .verdict{flex:1;min-width:260px}
+  .verdict .tag{display:inline-block;background:rgba(62,207,142,.14);color:var(--good);border:1px solid rgba(62,207,142,.35);
+    padding:4px 12px;border-radius:999px;font-weight:700;font-size:13px;margin-bottom:8px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+  th{color:var(--muted);font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  code{background:#0c0f1c;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12.5px;
+    font-family:"SF Mono", Menlo,Consolas,monospace;color:#cdd6ff}
+  .badge{display:inline-block;padding:2px 9px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap}
+  .b-good{background:rgba(62,207,142,.15);color:var(--good);border:1px solid rgba(62,207,142,.3)}
+  .b-part{background:rgba(245,166,35,.15);color:var(--warn);border:1px solid rgba(245,166,35,.3)}
+  .b-hi{background:rgba(255,92,122,.15);color:var(--bad);border:1px solid rgba(255,92,122,.3)}
+  .b-mid{background:rgba(245,166,35,.15);color:var(--warn);border:1px solid rgba(245,166,35,.3)}
+  .b-lo{background:rgba(70,177,255,.15);color:var(--info);border:1px solid rgba(70,177,255,.3)}
+  ul.clean{margin:8px 0;padding-left:20px}
+  ul.clean li{margin:6px 0}
+  .callout{border-left:4px solid var(--accent);background:var(--card2);border-radius:0 12px 12px 0;padding:14px 18px;margin:16px 0}
+  .callout.bad{border-color:var(--bad)}
+  .callout.warn{border-color:var(--warn)}
+  .callout.good{border-color:var(--good)}
+  .kpi{font-size:32px;font-weight:800;margin:0}
+  .kpi.s{font-size:26px}
+  .kpi-l{color:var(--muted);font-size:13px;font-weight:600}
+  .delta{font-size:12px;font-weight:700;margin-left:6px}
+  .d-up{color:var(--good)}
+  .d-down{color:var(--bad)}
+  .d-flat{color:var(--muted)}
+  .pri{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .pri:last-child{border-bottom:0}
+  .pri .rank{flex:0 0 auto;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-weight:800;
+    background:rgba(108,140,255,.14);color:var(--accent);border:1px solid rgba(108,140,255,.3)}
+  .pri .rank.hot{background:rgba(255,92,122,.14);color:var(--bad);border-color:rgba(255,92,122,.3)}
+  .muted{color:var(--muted)}
+  .foot{margin-top:50px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+  .arch{background:#0c0f1c;border:1px solid var(--line);border-radius:12px;padding:18px 20px;overflow-x:auto;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;color:#cdd6ff;white-space:pre}
+  .num{font-variant-numeric:tabular-nums;font-weight:700}
+  .spark{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:8px}
+  .spark i{display:block;height:100%}
+  .trend{display:flex;gap:8px;align-items:baseline;font-variant-numeric:tabular-nums}
+  .trend .a{color:var(--muted)}.trend .b{color:var(--ink);font-weight:800}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Rust Workspace · 评估报告 v4（DCT/DOC 重构后复核）</div>
+    <h1>cmx-container 工程质量评估</h1>
+    <p class="sub">对照 <b>v3（2026-07-19 上午，80 分）</b> 与 <b>v2（2026-06-27，91 分）</b>。本轮聚焦一次高质量架构重构落地后的增量变化：DCT/DOC 后端抽出为 6 个独立 crate（对标 cmx-rpt/cmx-flow），<b>直接消解了 v3 两项结构性告警</b>（cmx-api 手写 SQL、cmx-biz/doc 巨型模块），并首次实测 clippy 全量仅 29 处风格告警。但 v3 的两大战略问题——<b>.env 凭据入库</b> 与 <b>无 CI 门禁</b>——原样未动。</p>
+    <div class="meta-row">
+      <span class="chip"><b>215,612</b> 行 Rust <span class="delta d-up">↑3k</span></span>
+      <span class="chip"><b>51</b> 个 crate <span class="delta d-up">↑7</span></span>
+      <span class="chip"><b>1,186</b> 测试函数 <span class="delta d-up">↑10</span></span>
+      <span class="chip"><b>915</b> 次提交</span>
+      <span class="chip">clippy <b>29 告警 / 0 错误</b></span>
+      <span class="chip">cargo check <b>✓ 46s</b></span>
+      <span class="chip">Edition <b>2024</b> · <b>0.1.12</b></span>
+      <span class="chip">评估 <b>2026-07-19 晚</b></span>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+
+<h2><span class="n">★</span>总体结论</h2>
+<div class="card">
+  <div class="big-score">
+    <div class="big-ring" style="background:conic-gradient(var(--good) 0 82%,var(--line) 82% 100%)">
+      <div class="v">82<small>/100</small></div>
+    </div>
+    <div class="verdict">
+      <span class="tag">成熟度：结构改善，战略债未清 <span class="delta d-up">80→82</span></span>
+      <p>相较 v3 <b>小幅回升 2 分</b>。回升来自一次<b>教科书级的架构重构</b>：DCT/DOC 后端从 <code>cmx-api</code>（手写 SQL 违规）与 <code>cmx-biz/doc</code>（巨型模块）中抽出，切成 model/store-pg/api 三层 6 crate，<b>URL 与响应字节级不变、live curl parity 全绿</b>——这正是 v3 建议 3「对新模块做 v2 式质量收尾」的实践，且做法上乘。</p>
+      <p class="muted">但分数没能大涨，因为 <b>v3 的两个红线问题一个没解</b>：<code>.env</code> 含 NACOS 凭据<b>仍在 git 追踪且已推远端</b>；<b>仍无任何 CI 门禁</b>。没有 CI，本次收尾的成果同样会被下一轮冲刺重新稀释——这是分数封顶在 80 出头的根因。</p>
+    </div>
+  </div>
+</div>
+
+<div class="grid g5">
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 89%,var(--line) 89% 100%)"><span>89</span></div>
+    <div class="lab">架构设计</div><div class="dl d-up">88 → 89 ↑</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--warn) 0 80%,var(--line) 80% 100%)"><span>80</span></div>
+    <div class="lab">代码质量</div><div class="dl d-up">78 → 80 ↑</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 83%,var(--line) 83% 100%)"><span>83</span></div>
+    <div class="lab">测试与验证</div><div class="dl d-up">82 → 83 ↑</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--bad) 0 70%,var(--line) 70% 100%)"><span>70</span></div>
+    <div class="lab">安全</div><div class="dl d-flat">70 → 70 —</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--warn) 0 77%,var(--line) 77% 100%)"><span>77</span></div>
+    <div class="lab">工程化</div><div class="dl d-up">76 → 77 ↑</div>
+  </div>
+</div>
+
+<h2><span class="n">1</span>三版趋势对照</h2>
+<p class="lead">v2（91）→ v3（80）是「野蛮生长稀释加固成果」的下跌；v3（80）→ v4（82）是「用一次高质量重构小幅回补」，但战略债封顶了反弹空间。</p>
+<table>
+  <tr><th>维度</th><th>v2 · 06-27</th><th>v3 · 07-19晨</th><th>v4 · 07-19晚</th><th>本轮变化说明</th></tr>
+  <tr><td><b>总分</b></td><td class="num">91</td><td class="num">80</td><td class="num">82 <span class="delta d-up">↑2</span></td><td>结构改善拉动，战略债封顶</td></tr>
+  <tr><td>架构设计</td><td class="num">—</td><td class="num">88</td><td class="num">89 <span class="delta d-up">↑1</span></td><td>DCT/DOC 三层化，破环范式再次落地</td></tr>
+  <tr><td>代码质量</td><td class="num">—</td><td class="num">78</td><td class="num">80 <span class="delta d-up">↑2</span></td><td>手写 SQL 违规 5→3 文件；clippy 实测 29</td></tr>
+  <tr><td>测试与验证</td><td class="num">—</td><td class="num">82</td><td class="num">83 <span class="delta d-up">↑1</span></td><td>+10 测试；重构后 live parity 实测</td></tr>
+  <tr><td>安全</td><td class="num">—</td><td class="num">70</td><td class="num">70 <span class="delta d-flat">—</span></td><td><b>.env 仍入库、且随本轮提交再次推远端</b></td></tr>
+  <tr><td>工程化</td><td class="num">—</td><td class="num">76</td><td class="num">77 <span class="delta d-up">↑1</span></td><td>工作区从 13 脏文件清零；README 仍滞后；无 CI</td></tr>
+</table>
+
+<h2><span class="n">2</span>工程画像</h2>
+<div class="grid g4">
+  <div class="card"><p class="kpi">21.6<span style="font-size:16px">万行</span></p><div class="kpi-l">Rust（v3 21.3 万，+3k）</div></div>
+  <div class="card"><p class="kpi">51</p><div class="kpi-l">workspace crate（v3 44，+7）</div></div>
+  <div class="card"><p class="kpi">1,186</p><div class="kpi-l">测试函数（168 源文件含测试）</div></div>
+  <div class="card"><p class="kpi">856</p><div class="kpi-l">Cargo.lock 包（76 名多版本）</div></div>
+</div>
+<p class="muted">+7 crate 中 6 个是本轮 DCT/DOC 重构产物（<code>cmx-dct-{model,store-pg,api}</code> + <code>cmx-doc-{model,store-pg,api}</code>），另 1 个来自同期 cmx-rpt 抽离。净新增代码有限——多为「搬迁 + 重切」而非新增功能，属健康的结构性增长。</p>
+
+<h2><span class="n">3</span>本轮亮点：DCT/DOC 重构 <span class="badge b-good">范式级</span></h2>
+<p class="lead">这是本次评估周期最有价值的工程动作，直接对冲了 v3 的两条结构性告警。</p>
+<div class="arch">重构前                              重构后
+cmx-api/handlers/portal/            crates/libs/cmx-doc/
+  doc.rs   (1146行, 手写SQL)   ──▶     cmx-doc-model    (meta/query/formula/rule/sql_builder，DB-free)
+  dct.rs   (1419行, 手写SQL)   ──▶     cmx-doc-store-pg (loader/saver/revision/zmc×2/cache)
+cmx-biz/src/doc/ (11文件~5900行)      cmx-doc-api      (DocModule: ModuleRoutes 薄handler)
+                                    crates/libs/cmx-dct/  (对称三层)
+破环: -api → cmx-api，web-server 合并 DocModule/DctModule.routes()（cmx-api 不反向依赖）
+跨切: 定义文件解析器抽到 cmx-model::definitions::resolve（三方共享，避免环）</div>
+<table>
+  <tr><th>成效</th><th>证据</th><th>评级</th></tr>
+  <tr><td><b>消解 v3「cmx-api 手写 SQL」告警</b></td><td>手写 SQL handler 从 <b>5 文件降到 3</b>（<code>dct.rs</code>/<code>doc.rs</code> 已移出，SQL 下沉到 store-pg 服务层）；cmx-api LOC 26K→22K</td><td><span class="badge b-good">已解</span></td></tr>
+  <tr><td><b>消解 v3「cmx-biz/doc 巨型模块」热点</b></td><td><code>cmx-biz/src/doc/</code>（含 v3 点名的 <code>saver.rs</code>/<code>meta.rs</code> 各 21 unwrap）<b>整体移出</b>，cmx-biz 收缩到 6.5K 行，职责更纯</td><td><span class="badge b-good">已迁</span></td></tr>
+  <tr><td><b>延续 rpt/flow 破环范式</b></td><td><code>DocModule</code>/<code>DctModule</code> 由 web-server <code>routes.rs</code> 合并，cmx-api 不反向依赖——与 ReportModule/FlowModule 同构，依赖图无环</td><td><span class="badge b-good">优</span></td></tr>
+  <tr><td><b>零行为变更 + 实测验证</b></td><td>URL/请求/响应字节级不变；重启新旧二进制 <code>curl</code> diff 4 端点（含二进制 msgpack）<b>完全一致</b>；71 测试通过</td><td><span class="badge b-good">优</span></td></tr>
+  <tr><td><b>跨切依赖处理得当</b></td><td>三方共享的定义文件解析器抽到 <code>cmx-model::definitions::resolve</code>（叶子层），而非硬塞进任一 crate 造环——识别并正确处置了「计划外」的耦合</td><td><span class="badge b-good">优</span></td></tr>
+</table>
+<div class="callout warn">
+  <b>🟡 重构自身的小瑕疵：搬迁带入 8 处 clippy 风格告警。</b><br/>
+  <code>cmx-doc-store-pg</code>（8）+ <code>cmx-dct-*</code>（2）的 <code>collapsible_if</code>/<code>too_many_arguments</code> 均为 <b>逐字搬迁的原代码</b>（<code>git show</code> 确认原 <code>dct.rs</code>/<code>loader.rs</code> 同款嵌套 if），非新引入。为严守 parity 未做语义无关的顺手清理——权衡合理，但留了尾巴。参考 crate cmx-rpt/flow-store-pg 也带同类告警，属一致水位。
+</div>
+
+<h2><span class="n">4</span>代码质量实测 <span class="badge b-part">改善中</span></h2>
+<div class="grid g4">
+  <div class="card"><p class="kpi s">29</p><div class="kpi-l">clippy 告警（全 workspace，0 错误）</div></div>
+  <div class="card"><p class="kpi s">1,420</p><div class="kpi-l">.unwrap()（v3 1,388，+32）</div></div>
+  <div class="card"><p class="kpi s">103</p><div class="kpi-l">panic!（v3 103，持平）</div></div>
+  <div class="card"><p class="kpi s">37</p><div class="kpi-l">unsafe（低层 infra 为主）</div></div>
+</div>
+<p class="lead">首次给出 clippy 全量实测：<b>29 告警、0 错误</b>——远好于 v3「已在新代码中回退」的定性描述。构成：<code>collapsible_if</code> 16、<code>too_many_arguments</code> 5、其余零散 8，<b>全部为风格/可读性级别，无一涉及正确性或内存安全</b>。</p>
+<h3>clippy 告警归属（29 处）</h3>
+<table>
+  <tr><th>Crate</th><th class="num">告警</th><th>主要类型</th></tr>
+  <tr><td><code>cmx-doc/cmx-doc-store-pg</code></td><td class="num">8</td><td>collapsible_if / too_many_arguments（搬迁原样）</td></tr>
+  <tr><td><code>cmx-biz/src</code></td><td class="num">7</td><td>collapsible_if / needless clone（存量）</td></tr>
+  <tr><td><code>cmx-api/src</code></td><td class="num">5</td><td>collapsible_if 等（存量）</td></tr>
+  <tr><td><code>cmx-ai/src</code></td><td class="num">3</td><td>零散</td></tr>
+  <tr><td><code>modql/modql-macros</code></td><td class="num">2</td><td>宏内</td></tr>
+  <tr><td>其余（dct/doc-api/flow-def）</td><td class="num">4</td><td>各 1</td></tr>
+</table>
+<div class="callout warn">
+  <b>🟡 unwrap 仍缓升，panic! 未新增。</b><br/>
+  raw <code>.unwrap()</code> 1,420（+32），主因是 rpt/flow/dct-doc 新代码带入；但 <code>panic!</code> 持平 103——说明「硬崩」没有恶化。v3 点名的 <code>cmx-core/model/cell.rs</code>（panic! 20）与 <code>cmx-flow-bpmn/lib.rs</code>（unwrap+panic 27）<b>本轮未触碰</b>，仍是最该优先收敛的生产模型/编译器热点。
+</div>
+
+<h2><span class="n">5</span>安全：红线未解 <span class="badge b-hi">阻断项</span></h2>
+<div class="callout bad">
+  <b>🔴 [严重·未解且加剧] .env 仍被 git 追踪，并随本轮提交再次推送远端。</b><br/>
+  <code>git ls-files</code> 确认 <code>.env</code> 在库内；<code>.gitignore</code> 第 35 行 <code>#.env</code> 仍被注释。文件含 <code>NACOS_PASSWORD</code> / <code>NACOS_USERNAME</code> / <code>TEST_DATABASE_URL</code> 等键。v3 已判定为严重事故，本轮<b>不仅未处置，且因 <code>git add -A</code> 全量提交并 <code>push</code> 到 origin/cmx-rpt-flow，凭据再度进入远端历史</b>。处置刻不容缓：<code>git rm --cached .env</code> + 恢复 gitignore + <b>立即轮换 NACOS 凭据</b> + 评估远端历史清理。
+</div>
+<table>
+  <tr><th>三项冻结待办（v3→v4）</th><th>状态</th><th>证据</th></tr>
+  <tr><td>插件签名 <code>verify_signature</code></td><td><span class="badge b-part">原样</span></td><td><code>validator.rs:83</code> = <code>false</code>，<code>settings.rs:63</code> 默认 <code>true</code>——两处不一致仍在</td></tr>
+  <tr><td>行级数据权限 <code>get_data_scope</code></td><td><span class="badge b-part">原样</span></td><td><code>permission_checker.rs:97</code> 默认仍返回 <code>DataScope::All</code>（无限制）</td></tr>
+  <tr><td>限流中间件 <code>mw_rate_limit</code></td><td><span class="badge b-part">原样</span></td><td><code>middleware/mod.rs:8</code> <code>// pub mod mw_rate_limit;</code> 仍整体注释禁用</td></tr>
+</table>
+
+<h2><span class="n">6</span>工程化：局部改善，门禁仍缺 <span class="badge b-part">半改</span></h2>
+<table>
+  <tr><th>项</th><th>v3</th><th>v4</th><th>说明</th></tr>
+  <tr><td><b>CI 门禁</b></td><td>无</td><td><span class="badge b-hi">仍无</span></td><td>无 <code>.github/workflows</code> / <code>.gitlab-ci.yml</code> / <code>rust-toolchain.toml</code>——本轮质量收尾无机制固化，仍靠人工纪律</td></tr>
+  <tr><td><b>工作区卫生</b></td><td>13 脏文件</td><td><span class="badge b-good">0 未提交</span></td><td>本轮已 commit + push，工作树干净——但把此前会话的 flow/rpt 未完成件一并扫入了同一提交</td></tr>
+  <tr><td><b>依赖重复</b></td><td>76 名多版本</td><td><span class="badge b-mid">76 持平</span></td><td>856 包（+6），hashbrown×5/windows-sys×4 未变；wasmtime+extism 双运行时仍并存</td></tr>
+  <tr><td><b>README 滞后</b></td><td>0.1.9 / 20+ crate</td><td><span class="badge b-lo">仍 0.1.9</span></td><td>实际 0.1.12 / 51 crate；未提 cmx-flow/rpt/dct/doc/ai/portal</td></tr>
+  <tr><td><b>AGENTS.md 规范</b></td><td>18 章</td><td><span class="badge b-good">392 行 / 32 节</span></td><td>规范体系依旧是同级工程一流；破环范式被新模块正确沿用即其成效</td></tr>
+</table>
+
+<h2><span class="n">7</span>建议（按优先级）</h2>
+<div class="card">
+  <div class="pri"><div class="rank hot">1</div><div><b>本周必做（升级为最高优先）：.env 出库 + 轮换凭据。</b><span class="muted"> 已随本轮 push 二次泄露，风险窗口在扩大。<code>git rm --cached .env</code>、恢复 <code>.gitignore</code>、<b>立即轮换 NACOS/DB 凭据</b>、评估远端历史清理（<code>filter-repo</code>）。</span></div></div>
+  <div class="pri"><div class="rank hot">2</div><div><b>立 CI 门禁（本轮成果的护栏）。</b><span class="muted"> 最小集：<code>cargo check --workspace</code> + <code>clippy --workspace --tests -D warnings</code> + <code>cargo test</code> + <code>gitleaks</code>（顺带堵住 .env 类泄露）。没有它，DCT/DOC 这次收尾会像 v2 收尾一样被下轮冲刺稀释。</span></div></div>
+  <div class="pri"><div class="rank">3</div><div><b>顺手清掉重构带入的 8 处 clippy 告警。</b><span class="muted"> parity 已验证完成，现可安全折叠 <code>collapsible_if</code>、给 <code>descend/record</code> 引参数结构体。让 6 个新 crate 达到零告警。</span></div></div>
+  <div class="pri"><div class="rank">4</div><div><b>收敛生产 panic! 热点。</b><span class="muted"> 优先 <code>cmx-core/model/cell.rs</code>（panic! 20，全工程之最，且在核心数据模型）与 <code>cmx-flow-bpmn/lib.rs</code>——这两处 v3、v4 连续未动。</span></div></div>
+  <div class="pri"><div class="rank">5</div><div><b>下沉剩余 3 个手写 SQL handler。</b><span class="muted"> <code>model_center.rs</code>（29 SQL 调用 + 14 unwrap）、<code>auth/api_key_handler.rs</code>、<code>oauth2_client_handler.rs</code>——照 DCT/DOC 的 store-pg 范式抽服务层，收口第 8 章「cmx-api 纯 HTTP」违规。</span></div></div>
+  <div class="pri"><div class="rank">6</div><div><b>提交纪律 + 收尾三项冻结待办 + 刷 README。</b><span class="muted"> 避免 <code>git add -A</code> 混提多主题；签名默认值统一开启、数据权限明确「未生效」语义、README 同步 0.1.12/51 crate/新模块清单。</span></div></div>
+</div>
+
+<h2><span class="n">8</span>结语</h2>
+<div class="callout good">
+  <b>一句话总结：</b> 本轮是「<b>做对了一件难事</b>」——DCT/DOC 重构在架构判断、破环处理、parity 验证上都达到范式水准，值得作为团队重构模板沉淀。但工程成熟度的天花板不由单次重构决定，而由<b>是否有机制守住成果</b>决定。<code>.env</code> 与 CI 这两件「不写代码」的事没做，分数就只能在 80 出头徘徊。<b>把红线清了、门禁立了，下一版回到 88+ 是顺理成章的。</b>
+</div>
+
+<div class="foot">
+  评估方法：实读 workspace 配置 / AGENTS.md / 重构后 crate 结构与依赖方向 / 中间件与冻结待办源码；<code>cargo check --workspace</code>（✓ 46s）+ <code>cargo clippy --workspace</code>（29 告警 / 0 错误）实测；<code>find+grep -oh</code> 精确统计 unwrap/panic/unsafe/测试/依赖重复（规避 grep 代理去重误差）；<code>git ls-files</code> 复核 .env 追踪。<br/>
+  基线对照：<code>评估报告v3-20260719.html</code>（80 分）、<code>评估报告v2.html</code>（91 分）。评估范围仅 cmx-container 后端 workspace。
+</div>
+
+</div>
+</body>
+</html>

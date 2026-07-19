@@ -1,0 +1,85 @@
+# cmx-container CI 门禁（GitLab CI）
+#
+# 目标：把此前靠人工纪律兜底的质量项固化为「每次推送/MR 必跑」的机器门禁，
+# 避免每轮冲刺后都要重做一次质量收尾（见评估报告 v2→v3 的分数回落）。
+#
+# 阶段：secrets（密钥泄露扫描）→ check（编译）→ lint（fmt+clippy）→ test（单测）。
+# 工具链由 rust-toolchain.toml 锁定（1.97.1）；镜像 tag 应与之保持一致。
+
+stages:
+  - secrets
+  - check
+  - lint
+  - test
+
+variables:
+  # 增量编译在 CI 无收益且占缓存；关掉。
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: "always"
+  # 用项目内缓存目录，配合下方 cache 规则复用 registry 与 target。
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+
+# 复用 cargo registry 与编译产物，缩短流水线时长。
+cache:
+  key:
+    files:
+      - Cargo.lock
+  paths:
+    - .cargo/registry/index/
+    - .cargo/registry/cache/
+    - target/
+
+default:
+  image: rust:1.97.1
+  before_script:
+    - rustc --version && cargo --version
+
+# ── 密钥泄露扫描（最先跑，最便宜，专治 .env 类事故复发）────────────────
+# 硬失败：一旦扫到 .env 被追踪或源码里出现疑似凭据，阻断合并。
+secret-scan:
+  stage: secrets
+  image: zricethezav/gitleaks:latest
+  before_script: []
+  script:
+    # --no-git 扫工作树全文件；--redact 不回显命中的明文。
+    - gitleaks detect --source . --no-git --redact --verbose
+    # 额外硬检查：.env 绝不允许进入被追踪集。
+    - |
+      if git ls-files --error-unmatch .env 2>/dev/null; then
+        echo "错误：.env 被 git 追踪，含密钥文件不得入库"; exit 1;
+      fi
+  allow_failure: false
+
+# ── 编译门禁：整个 workspace 必须编过 ─────────────────────────────────
+check:
+  stage: check
+  script:
+    - cargo check --workspace --all-targets
+  allow_failure: false
+
+# ── 格式化门禁 ────────────────────────────────────────────────────────
+# 现存量代码未全量 rustfmt 化；先以 allow_failure 观察，避免引入 CI 当天即全红。
+# 待 `cargo fmt --all` 单独成一个「格式化」提交后，改为 allow_failure: false 硬失败。
+fmt:
+  stage: lint
+  script:
+    - cargo fmt --all -- --check
+  allow_failure: true
+
+# ── clippy 门禁 ───────────────────────────────────────────────────────
+# 现存 29 处风格告警（多为重构逐字搬迁带入）；先以 allow_failure 观察，
+# 待评估报告 v4 建议 3 清零后，改为 -D warnings 硬失败。
+clippy:
+  stage: lint
+  script:
+    - cargo clippy --workspace --all-targets -- -D warnings
+  allow_failure: true
+
+# ── 单元测试门禁 ──────────────────────────────────────────────────────
+# 注：需要 live PG 的集成测试（cmx-biz form/menu、各 *_pg_test）在 CI 无库环境会失败，
+# 故这里跑 --lib（纯单测）为主门禁；有库的 runner 可另设 job 跑全量。
+test:
+  stage: test
+  script:
+    - cargo test --workspace --lib
+  allow_failure: false

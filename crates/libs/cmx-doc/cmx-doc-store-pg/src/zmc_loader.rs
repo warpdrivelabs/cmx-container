@@ -87,6 +87,7 @@ impl ZmcDocLoader {
     }
 
     /// 递归下钻:按 layer_groups 推导父子层,**同父兄弟**并列装载所有子表(与老 DocLoader 同算法)。
+    #[allow(clippy::too_many_arguments)]
     async fn descend(
         mm: &PgManager,
         db_id: &str,

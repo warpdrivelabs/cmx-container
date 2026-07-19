@@ -83,6 +83,8 @@ impl DocLoader {
     /// 故这里**不按 relations 名字匹配层**，而是 `meta.child_layers(parent.id)` 取下一层组
     /// 全部兄弟表（parentTable 声明则精确匹配，否则整组回退）；childKey 由 `child_key_for` 给。
     /// 孙层只从每组**主表**（`is_primary_in_group`）继续下钻。汇总表不装载（不遍历 summaries）。
+    // 递归下钻内部辅助：DB 句柄/坐标/层视图/父行/深度/查询/事务一并透传，参数多但语义内聚，不拆。
+    #[allow(clippy::too_many_arguments)]
     async fn descend(
         mm: &DatabaseManager,
         db_id: &str,
@@ -125,32 +127,26 @@ impl DocLoader {
             // 非主兄弟查询套 SAVEPOINT：失败则 ROLLBACK TO 复活事务再跳过，成功则 RELEASE。
             let use_sp = txn_id.is_some() && !is_primary;
             let sp = "cmx_sibling_sp";
-            if use_sp {
-                if let Some(tx) = txn_id {
-                    let _ = mm.execute_sql(db_id, Some(tx), &format!("SAVEPOINT {sp}")).await;
-                }
+            if use_sp && let Some(tx) = txn_id {
+                let _ = mm.execute_sql(db_id, Some(tx), &format!("SAVEPOINT {sp}")).await;
             }
             let mut child_ds =
                 match Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids, query, txn_id)
                     .await
                 {
                     Ok(ds) => {
-                        if use_sp {
-                            if let Some(tx) = txn_id {
-                                let _ = mm.execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}")).await;
-                            }
+                        if use_sp && let Some(tx) = txn_id {
+                            let _ = mm.execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}")).await;
                         }
                         ds
                     }
                     Err(e) if !is_primary => {
                         // 事务内：回滚到 savepoint 复活事务；非事务：无 savepoint，直接跳过。
-                        if use_sp {
-                            if let Some(tx) = txn_id {
-                                let _ = mm
-                                    .execute_sql(db_id, Some(tx), &format!("ROLLBACK TO SAVEPOINT {sp}"))
-                                    .await;
-                                let _ = mm.execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}")).await;
-                            }
+                        if use_sp && let Some(tx) = txn_id {
+                            let _ = mm
+                                .execute_sql(db_id, Some(tx), &format!("ROLLBACK TO SAVEPOINT {sp}"))
+                                .await;
+                            let _ = mm.execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}")).await;
                         }
                         tracing::warn!(
                             "跳过并列兄弟子表 {}（装载失败，可能未物理部署）: {e}",

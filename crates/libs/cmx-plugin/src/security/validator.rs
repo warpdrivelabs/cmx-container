@@ -79,7 +79,11 @@ pub struct SecurityConfig {
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
-            //fixme 暂时先不验证签名
+            // 【冻结待办 · 已知未生效】插件签名验证当前**默认关闭**。
+            // 注意：本字段与 `config::settings::PluginSettings::verify_signatures`（默认 true）
+            // 目前**互不联动**——运行时以此处 SecurityConfig 为准，即签名验证实际处于关闭状态。
+            // 启用前置条件：① 建立插件签名/公钥分发流程；② 存量插件全部补签；③ 打通 settings → SecurityConfig 的配置注入。
+            // 未满足前保持关闭，避免拒绝未签名的存量插件导致安装失败。
             verify_signature: false,
             check_permissions: true,
             check_package_structure: true,

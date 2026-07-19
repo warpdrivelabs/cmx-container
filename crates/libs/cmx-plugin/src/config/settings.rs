@@ -28,6 +28,10 @@ pub struct PluginManagerSettings {
     /// 最大备份数量
     pub max_backups_per_plugin: usize,
     /// 是否启用签名验证
+    ///
+    /// 注意：本字段目前**未接入**运行时校验路径——实际签名验证由
+    /// `security::validator::SecurityConfig::verify_signature`（默认 false）决定，
+    /// 二者尚未联动。见该处「冻结待办」说明。此处默认 true 表示**目标态**，非当前生效值。
     pub verify_signatures: bool,
     /// 是否启用权限检查
     pub check_permissions: bool,

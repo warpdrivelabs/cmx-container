@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>cmx-container 工程质量评估报告（v6 · 2026-07-19 复核）</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#1a1e33; --card2:#222843; --ink:#e8ebf5; --muted:#9aa3c0;
+    --line:#2c3350; --accent:#6c8cff; --accent2:#9a6cff;
+    --good:#3ecf8e; --warn:#f5a623; --bad:#ff5c7a; --info:#46b1ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c0f1c,#0f1220 240px);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.65;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px 80px}
+  header.hero{padding:54px 22px 40px;background:
+    radial-gradient(900px 380px at 20% -10%,rgba(245,166,35,.22),transparent 60%),
+    radial-gradient(700px 360px at 95% 0%,rgba(108,140,255,.22),transparent 55%);
+    border-bottom:1px solid var(--line)}
+  .hero-inner{max-width:1080px;margin:0 auto;padding:0 22px}
+  .eyebrow{letter-spacing:.32em;text-transform:uppercase;font-size:12px;color:var(--warn);font-weight:700}
+  h1{font-size:40px;margin:10px 0 6px;font-weight:800;letter-spacing:-.5px}
+  .sub{color:var(--muted);font-size:16px;max-width:880px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;color:var(--muted)}
+  .chip b{color:var(--ink)}
+  h2{font-size:26px;margin:54px 0 8px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:12px}
+  h2 .n{font-size:15px;color:var(--accent);background:rgba(108,140,255,.12);border:1px solid rgba(108,140,255,.3);
+    width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;font-weight:700}
+  h3{font-size:18px;margin:28px 0 6px;font-weight:700}
+  p{margin:10px 0}
+  .lead{color:var(--muted);margin-bottom:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin:16px 0}
+  .grid{display:grid;gap:16px}
+  .g5{grid-template-columns:repeat(5,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:920px){.g5{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(2,1fr)}}
+  .gauge{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;text-align:center}
+  .ring{width:110px;height:110px;border-radius:50%;margin:4px auto 10px;display:grid;place-items:center;position:relative}
+  .ring::before{content:"";position:absolute;inset:11px;background:var(--card);border-radius:50%}
+  .ring span{position:relative;font-size:28px;font-weight:800}
+  .gauge .lab{font-size:14px;color:var(--muted);font-weight:600}
+  .gauge .delta{font-size:12px;font-weight:700;margin-top:2px}
+  .big-score{display:flex;align-items:center;gap:26px;flex-wrap:wrap}
+  .big-ring{width:168px;height:168px;border-radius:50%;display:grid;place-items:center;position:relative;flex:0 0 auto}
+  .big-ring::before{content:"";position:absolute;inset:15px;background:var(--card);border-radius:50%}
+  .big-ring .v{position:relative;font-size:50px;font-weight:850;line-height:1}
+  .big-ring .v small{font-size:18px;color:var(--muted)}
+  .verdict{flex:1;min-width:260px}
+  .verdict .tag{display:inline-block;background:rgba(245,166,35,.14);color:var(--warn);border:1px solid rgba(245,166,35,.35);
+    padding:4px 12px;border-radius:999px;font-weight:700;font-size:13px;margin-bottom:8px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+  th{color:var(--muted);font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  code{background:#0c0f1c;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12.5px;
+    font-family:"SF Mono", Menlo,Consolas,monospace;color:#cdd6ff}
+  .badge{display:inline-block;padding:2px 9px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap}
+  .b-good{background:rgba(62,207,142,.14);color:var(--good);border:1px solid rgba(62,207,142,.4)}
+  .b-warn{background:rgba(245,166,35,.14);color:var(--warn);border:1px solid rgba(245,166,35,.4)}
+  .b-bad{background:rgba(255,92,122,.14);color:var(--bad);border:1px solid rgba(255,92,122,.4)}
+  .b-info{background:rgba(70,177,255,.14);color:var(--info);border:1px solid rgba(70,177,255,.4)}
+  .b-mut{background:rgba(154,163,192,.12);color:var(--muted);border:1px solid var(--line)}
+  ul{margin:8px 0;padding-left:22px}
+  li{margin:5px 0}
+  .traj{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:12px 0}
+  .traj .step{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:120px;flex:1}
+  .traj .step .d{font-size:12px;color:var(--muted)}
+  .traj .step .s{font-size:24px;font-weight:800}
+  .traj .arrow{display:flex;align-items:center;color:var(--muted);font-size:20px}
+  .callout{border-left:3px solid var(--warn);background:rgba(245,166,35,.07);padding:14px 18px;border-radius:0 12px 12px 0;margin:16px 0}
+  .callout.bad{border-color:var(--bad);background:rgba(255,92,122,.07)}
+  .callout.good{border-color:var(--good);background:rgba(62,207,142,.07)}
+  .callout .t{font-weight:800;margin-bottom:4px}
+  .kfig{font-variant-numeric:tabular-nums}
+  .foot{color:var(--muted);font-size:13px;margin-top:40px;border-top:1px solid var(--line);padding-top:18px}
+  .mono{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.split{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Rust Workspace · 评估报告 v6（提交前复核 / 口径校正）</div>
+    <h1>cmx-container 工程质量评估</h1>
+    <p class="sub">对照 v5（2026-07-19 深夜，87 分）。本轮复核有两个不寻常的发现：其一，<b>v5 记为「闭环」的全部加固成果，目前仍停留在工作区，尚未提交</b>——HEAD 自 <code>b6729ee8</code> 起未变，从仓库视角看这些成果尚不存在；其二，<b>沿用三轮报告的「cell.rs 生产 panic 热点」是测量口径错误</b>，真实运行时生产 panic 仅 2 处。本轮如实校正评分。</p>
+    <div class="meta-row">
+      <span class="chip"><b>~213,015</b> 行 Rust</span>
+      <span class="chip"><b>54</b> 个 crate</span>
+      <span class="chip"><b>1,176</b> 测试函数</span>
+      <span class="chip"><b>915</b> 次提交</span>
+      <span class="chip">cargo check <b>✓ 通过</b></span>
+      <span class="chip">edition <b>2024</b></span>
+      <span class="chip">工具链 <b>1.97.1</b></span>
+      <span class="chip">HEAD <b>b6729ee8</b>（未变）</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<h2>★ 总体结论</h2>
+<div class="card">
+  <div class="big-score">
+    <div class="big-ring" style="background:conic-gradient(var(--warn) 0 83%,#2a3050 83% 100%)">
+      <div class="v">83<small>/100</small></div>
+    </div>
+    <div class="verdict">
+      <span class="tag">成熟度：成果就绪，但未落到仓库</span>
+      <p style="margin:8px 0 6px"><b>加固工作本身是 87 分水准，但它「做完了却没提交」。</b>从任何一个队友、CI、或干净检出的视角看，仓库仍停在 v3（80 分）状态：<code>.env</code> 连同 NACOS 凭据仍被 HEAD 追踪，没有 CI，没有工具链锁定。更棘手的是，被改动的 auth handler 已 <code>use cmx_iam::api_key::store</code>，而 HEAD 的 <code>cmx-iam/src/lib.rs</code> 并未声明该模块——<b>工作区能编译只因为依赖了未被追踪的新目录</b>。这是一个「悬空」状态：成果好，但既没生效、又有丢失风险。</p>
+      <div class="traj">
+        <div class="step"><div class="d">v2 · 06-27</div><div class="s" style="color:var(--good)">91</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="d">v3 · 07-19 上午</div><div class="s">80</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="d">v4 · 07-19 晚</div><div class="s">82</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="d">v5 · 07-19 深夜</div><div class="s" style="color:var(--good)">87</div></div>
+        <div class="arrow">→</div>
+        <div class="step" style="border-color:var(--warn)"><div class="d">v6 · 复核</div><div class="s" style="color:var(--warn)">83</div></div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-top:6px">v6 不是「工作退步」——是<b>口径校正</b>：v5 评的是磁盘，v6 评的是仓库。一次 <code>git commit</code> 即可把分数拉回 87 甚至更高。</p>
+    </div>
+  </div>
+</div>
+
+<div class="grid g5" style="margin-top:18px">
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 90%,#2a3050 90% 100%)"><span>90</span></div>
+    <div class="lab">架构设计</div><div class="delta" style="color:var(--muted)">90 持平</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 82%,#2a3050 82% 100%)"><span>82</span></div>
+    <div class="lab">代码质量</div><div class="delta" style="color:var(--good)">81→82 口径修正</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 84%,#2a3050 84% 100%)"><span>84</span></div>
+    <div class="lab">测试与验证</div><div class="delta" style="color:var(--muted)">84 持平</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--bad) 0 72%,#2a3050 72% 100%)"><span>72</span></div>
+    <div class="lab">安全</div><div class="delta" style="color:var(--bad)">88→72 未提交回落</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--warn) 0 78%,#2a3050 78% 100%)"><span>78</span></div>
+    <div class="lab">工程化</div><div class="delta" style="color:var(--bad)">91→78 门禁未生效</div>
+  </div>
+</div>
+
+<h2><span class="n">1</span> 头号发现：加固成果全部未提交，HEAD 未动</h2>
+<p class="lead">v5 把 <code>.env</code> 出库、CI 门禁、工具链锁定、IAM store 下沉都记为「闭环」。逐项核对 git 状态：这些改动<b>没有一个进入版本库</b>。</p>
+
+<div class="callout bad">
+  <div class="t">🔴 仓库当前 HEAD = <code>b6729ee8</code>（DCT/DOC 重构），与 v4 评估时同一提交。v5 描述的全部加固都在工作区悬空。</div>
+</div>
+
+<table>
+  <thead><tr><th>v5 记为「闭环」的成果</th><th>实际 git 状态</th><th>后果</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>.env</code> 含 NACOS 凭据出库</td>
+      <td><span class="badge b-warn">仅暂存</span> <code>D .env</code> 已 staged 但<b>未 commit</b>；<code>git ls-tree HEAD</code> 仍列出 <code>.env</code></td>
+      <td>凭据仍在 HEAD 树内与历史中，泄露面未收窄</td>
+    </tr>
+    <tr>
+      <td>CI 门禁 <code>.gitlab-ci.yml</code></td>
+      <td><span class="badge b-bad">未追踪 ??</span></td>
+      <td>GitLab 按提交里的 CI 文件跑流水线——文件不在提交里，<b>门禁跑在虚空</b></td>
+    </tr>
+    <tr>
+      <td>工具链锁定 <code>rust-toolchain.toml</code></td>
+      <td><span class="badge b-bad">未追踪 ??</span></td>
+      <td>他人检出仍用各自本地工具链，锁定不生效</td>
+    </tr>
+    <tr>
+      <td><code>.env.example</code> 模板</td>
+      <td><span class="badge b-bad">未追踪 ??</span></td>
+      <td>新人无占位符模板参照</td>
+    </tr>
+    <tr>
+      <td>IAM store 下沉 <code>api_key/</code> <code>oauth_client/</code></td>
+      <td><span class="badge b-bad">未追踪 ??</span>（整目录新增，未 add）</td>
+      <td>见下方「编译一致性」——这是最危险的一条</td>
+    </tr>
+    <tr>
+      <td>handler 去 SQL、README、四处文档化标注等</td>
+      <td><span class="badge b-warn">已改未暂存</span> 共 <b>19</b> 个 <code>M</code> 文件</td>
+      <td>改动真实存在，但未纳入版本，随时可能被覆盖/丢失</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout bad">
+  <div class="t">🔴 编译一致性缺口（本轮最实质的技术风险）</div>
+  <p style="margin:6px 0">被改的 <code>api_key_handler.rs</code> 第 15 行已经 <code>use cmx_iam::api_key::store;</code>，但 <b>HEAD 版本的 <code>cmx-iam/src/lib.rs</code> 并未声明 <code>pub mod api_key</code></b>。当前工作区之所以能 <code>cargo check ✓</code>，完全依赖两个<b>未被 git 追踪</b>的新目录（<code>api_key/</code>、<code>oauth_client/</code>）+ 工作区版 <code>lib.rs</code> 的模块声明。</p>
+  <p style="margin:6px 0">这意味着：① 任何人干净检出 HEAD 得到的是「.env 仍在、无 CI」的旧仓库；② 若这两个未追踪目录被 <code>git clean</code> 或误删，工作区立刻编译失败，而 git 无法恢复它们（从未纳入版本）。<b>成果的正确性正悬挂在未追踪文件上。</b></p>
+</div>
+
+<div class="callout good">
+  <div class="t">✅ 好消息：这一切一次提交即可闭环</div>
+  <p style="margin:6px 0">工作区里的东西是对的、也通过了构建校验。要做的只是把它<b>真正提交进仓库</b>（<code>git add -A</code> 覆盖新目录 → commit）。提交后，v5 描述的「战略债闭环」才名副其实，安全/工程化两项立刻回到 88/91 区间。<b>这是本报告第一优先级、也是唯一的紧急项。</b></p>
+</div>
+
+<h2><span class="n">2</span> 口径校正：沿用三轮的「panic 热点」是测量错误</h2>
+<p class="lead">v3/v4/v5 连续把 <code>cell.rs</code> 记为「20 处生产 panic，最大单点」、把 <code>model_center.rs</code> 记为「14 处 unwrap」，并据此保留了一条常驻「中」级建议「unwrap/panic 收尾轮」。本轮以 <code>#[cfg(test)]</code> 边界为准重新切分，结论翻转。</p>
+
+<div class="split">
+  <div class="card" style="margin:0">
+    <h3 style="margin-top:0">cell.rs（1,213 行）</h3>
+    <p><code>#[cfg(test)]</code> 起于第 <b>738</b> 行。</p>
+    <ul>
+      <li>生产段 panic!：<span class="badge b-good">0</span></li>
+      <li>生产段 unwrap：<span class="badge b-good">0</span></li>
+      <li>测试段 panic! / unwrap：20 / 18</li>
+    </ul>
+    <p style="color:var(--muted);font-size:13px">全部所谓「生产 panic」都在测试模块内。此文件生产路径零 panic。</p>
+  </div>
+  <div class="card" style="margin:0">
+    <h3 style="margin-top:0">model_center.rs（3,235 行）</h3>
+    <p><code>#[cfg(test)]</code> 起于第 <b>2,750</b> 行。</p>
+    <ul>
+      <li>生产段 unwrap：<span class="badge b-good">0</span></li>
+      <li>测试段 unwrap：15</li>
+    </ul>
+    <p style="color:var(--muted);font-size:13px">v5 的「14 处 unwrap」把测试代码算进了生产计数。</p>
+  </div>
+</div>
+
+<h3>工作区级真实口径（以首个 <code>#[cfg(test)]</code> 为界，排除 <code>tests/</code> 目录与 proc-macro 编译期 panic）</h3>
+<table>
+  <thead><tr><th>指标</th><th>生产路径</th><th>测试代码</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>panic!（运行时生产）</td><td><span class="badge b-good kfig">2</span></td><td class="kfig">~101</td><td>仅 <code>dataset/builder.rs</code>（已文档化的 builder 契约）与 <code>cmx-flow-demo/main.rs</code>（demo 二进制）</td></tr>
+    <tr><td>unwrap（生产段）</td><td><span class="badge b-warn kfig">~857</span></td><td class="kfig">~557</td><td>真实存量，值得治理；但分布在 infra/handler「基本不失败」处，非 panic 炸弹</td></tr>
+    <tr><td>expect（生产段）</td><td class="kfig">~361</td><td>—</td><td>多数带说明，优于裸 unwrap</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <div class="t">校正后的判断</div>
+  <p style="margin:6px 0">生产路径 panic 从「20+ 危险热点」修正为「<b>2 处，均为契约/demo</b>」——<b>代码质量比前几轮报告刻画的更干净</b>，本轮据此把「代码质量」自 81 微升至 82。真正的存量是生产段 ~857 处 unwrap，属「面广但单点低危」，仍建议收尾，但不再是「中」级告警，降为「低」。前三轮那条建议一直在追打测试代码里的幽灵。</p>
+</div>
+
+<h2><span class="n">3</span> 唯一真实的代码存量：model_center.rs</h2>
+<p class="lead">这一条 v5 说对了，本轮实测确认，仍是 cmx-api「纯适配层」目标的最后一块。</p>
+<table>
+  <tbody>
+    <tr><td>体量</td><td><b>3,235 行 / 142.9 KB</b> 单文件（工作区最大源文件）</td></tr>
+    <tr><td>手写 SQL</td><td><b>24</b> 条 SQL 语句；<b>52</b> 处 <code>format!</code> 拼接——字符串拼 SQL 是需要审计的注入面（应确认表/列名来自白名单、值走参数绑定）</td></tr>
+    <tr><td>执行方式</td><td>经 <code>.query_sql()</code>/<code>.query_sql_with_datavalues()</code> 抽象（非裸 tokio-postgres），比 v2 时代好，但 SQL 文本仍手写在 handler 内</td></tr>
+    <tr><td>对照</td><td>rpt / flow / dct / doc 四组已全部落到 <code>model→store-pg→api</code> 三段式；此文件是唯一未迁出者</td></tr>
+  </tbody>
+</table>
+<p style="color:var(--muted);font-size:13px">建议：参照 dct/doc 路径抽出 <code>cmx-meta-*</code> 或并入 <code>cmx-model</code>；抽出时顺带把 52 处 <code>format!</code> SQL 过一遍参数化审计。此项归零后，第 8 章「cmx-api 纯适配层」规范从「有 1 例外」变「无例外」。</p>
+
+<h2><span class="n">4</span> 架构与测试（本轮未变，仍是强项）</h2>
+<div class="split">
+  <div class="card" style="margin:0">
+    <h3 style="margin-top:0">架构 <span class="badge b-good">90</span></h3>
+    <ul>
+      <li>crate 群三段式统一：rpt / flow / dct / doc 四组 <code>model→store-pg→api</code> 完整对齐</li>
+      <li>54 workspace crate，分层归属清晰；cmx-api 向纯适配层收敛（仅剩 model_center 1 例外）</li>
+      <li><code>cargo check --workspace</code> ✓ 通过（增量）</li>
+    </ul>
+  </div>
+  <div class="card" style="margin:0">
+    <h3 style="margin-top:0">测试 <span class="badge b-good">84</span></h3>
+    <ul>
+      <li><b>1,176</b> 测试函数，覆盖引擎/存储/序列化/流程多挂载等硬骨头</li>
+      <li>缺口：CI 主门禁只跑 <code>--lib</code>；需 live PG 的集成测试未进流水线——<b>而且 CI 本身还没提交</b></li>
+    </ul>
+  </div>
+</div>
+
+<h2><span class="n">5</span> 其余存量（低优先，多为未变项）</h2>
+<table>
+  <thead><tr><th>问题</th><th>现状</th><th>等级</th></tr></thead>
+  <tbody>
+    <tr><td>.env 历史凭据轮换</td><td>文件即便提交出库，NACOS 凭据已进 git 历史；轮换/历史重写是人工运维作业，代码侧无法闭环</td><td><span class="badge b-bad">高</span></td></tr>
+    <tr><td>依赖重复版本</td><td><b>76</b> 个 crate 存在多版本（856 lock crate 中）；<code>wasmtime</code> + <code>extism</code> 双 WASM 运行时并存</td><td><span class="badge b-info">低</span></td></tr>
+    <tr><td>clippy 29 / fmt 未全量</td><td>CI 观察态（且 CI 未提交）；存量红灯仍在</td><td><span class="badge b-info">低</span></td></tr>
+    <tr><td>生产段 unwrap ~857</td><td>面广单点低危；配 clippy 观察项防增量</td><td><span class="badge b-info">低</span></td></tr>
+    <tr><td>仓库根目录堆积评估报告</td><td>根目录已有 <b>4</b> 个 <code>评估报告v*.html</code>（且均未追踪）；建议收进 <code>docs/assessments/</code></td><td><span class="badge b-mut">整洁</span></td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">6</span> 建议（按紧迫度）</h2>
+<div class="card">
+  <p><span class="badge b-bad">P0 · 立刻</span> &nbsp;<b>提交加固成果。</b> <code>git add -A</code>（务必覆盖未追踪的 <code>api_key/</code>、<code>oauth_client/</code> 目录与 CI/toolchain 文件）→ commit。这一步同时消除「HEAD 缺模块声明」的编译一致性缺口，并让 .env 出库、CI、工具链锁定<b>真正生效</b>。分数据此回到 87+。</p>
+  <p><span class="badge b-bad">P0 · 本周人工</span> &nbsp;<b>轮换已泄露的 NACOS/测试库凭据。</b> 即便文件出库，历史中的明文仍需作废重发——代码侧唯一无法闭环的事项。</p>
+  <p><span class="badge b-warn">P1</span> &nbsp;<b>一次「清零专项」提交</b>：<code>cargo fmt --all</code> + clippy 29 处清零，随后 CI 两项转 <code>allow_failure: false</code>。</p>
+  <p><span class="badge b-warn">P1</span> &nbsp;<b>model_center.rs 抽出收尾</b>，顺带审计 52 处 <code>format!</code> SQL 参数化。手写 SQL 归零后纯适配层目标达成。</p>
+  <p><span class="badge b-info">P2</span> &nbsp;<b>撤回「panic 收尾轮」的高估。</b> 生产 panic 仅 2 处，无需专项；生产段 unwrap 治理并入日常 clippy 收紧即可。</p>
+  <p><span class="badge b-info">P2</span> &nbsp;集成测试挂 PG service 进流水线；评估报告归档进 <code>docs/</code>。</p>
+</div>
+
+<div class="foot">
+  <p><b>评估方法</b>：直接测量当前工作区与 git 状态——<code>git status/ls-tree/ls-files</code> 核对每一项加固的追踪状态；以 <code>#[cfg(test)]</code> 边界 + 排除 <code>tests/</code>·proc-macro 重新切分 unwrap/panic 的生产/测试归属（Python 逐文件扫描）；<code>cargo check --workspace</code> 验证构建（✓ 通过）；核对 model_center SQL/format! 计数、依赖多版本、acctws 会计修复留存。</p>
+  <p><b>与 v5 的差异本质</b>：v5 评估「磁盘上的成果」，给 87；v6 评估「仓库里的现实」，成果尚未提交故给 83，并校正了沿用三轮的 panic 测量口径。<b>两者不矛盾——提交一次，v6 即等于 v5。</b></p>
+  <p><b>报告谱系</b>：v2（06-27，91）→ v3（80）→ v4（82）→ v5（87）→ <b>v6（复核，83）</b>。</p>
+</div>
+
+</div>
+</body>
+</html>

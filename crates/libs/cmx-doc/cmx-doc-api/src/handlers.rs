@@ -692,14 +692,14 @@ pub async fn doc_save_batch(
         let meta = resolve_doc_meta(domain, app, module, Some(file), None).await?;
         let (mode, changes) = saver::parse_save_body(d);
         // 后端二次校验（同单单路径）：有 error 违规即整批拒（atomic）/该单在 save 阶段无从表达，故这里统一先拒。
-        if !meta.validation_rules.is_empty() {
-            if let Some(vr) = run_validation(&meta, &changes) {
-                return Ok(Json(ApiResp::ok(serde_json::json!({
-                    "atomic": atomic,
-                    "failedIndex": i,
-                    "validation": vr,
-                }))));
-            }
+        if !meta.validation_rules.is_empty()
+            && let Some(vr) = run_validation(&meta, &changes)
+        {
+            return Ok(Json(ApiResp::ok(serde_json::json!({
+                "atomic": atomic,
+                "failedIndex": i,
+                "validation": vr,
+            }))));
         }
         ctxs.push(save_ctx(&ctx, file, None));
         metas.push(meta);
