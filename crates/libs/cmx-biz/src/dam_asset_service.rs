@@ -63,7 +63,11 @@ impl DamAssetService {
     ///
     /// 在 ModuleService::create 时调用。
     pub async fn ensure_module_dirs(domain: &str, app: &str, module: &str) -> Result<()> {
-        let parts = [assert_id("domain", domain)?, assert_id("app", app)?, assert_id("module", module)?];
+        let parts = [
+            assert_id("domain", domain)?,
+            assert_id("app", app)?,
+            assert_id("module", module)?,
+        ];
         Self::ensure_tree_dirs(&parts).await
     }
 
@@ -116,7 +120,7 @@ impl DamAssetService {
         info!("DAM 域改名级联: {} -> {}", old, new);
 
         // 1) 搬文件目录（一级）
-        Self::rename_tree_dirs(&[old.clone()], &[new.clone()]).await?;
+        Self::rename_tree_dirs(std::slice::from_ref(&old), std::slice::from_ref(&new)).await?;
 
         // 2) 重写 DB 列：该域下所有 module 的 resource_root / manifest_path / domain_code
         let sql = format!(
@@ -225,9 +229,8 @@ impl DamAssetService {
         let safe = assert_id("domain", domain_code)?;
 
         // 检查 application
-        let sql_app = format!(
-            "SELECT COUNT(*) AS cnt FROM cmx_application WHERE domain_code = '{safe}'"
-        );
+        let sql_app =
+            format!("SELECT COUNT(*) AS cnt FROM cmx_application WHERE domain_code = '{safe}'");
         let ds = mm
             .query_sql(db_id, None, &sql_app, "cnt")
             .await
@@ -240,9 +243,8 @@ impl DamAssetService {
         }
 
         // 检查 module
-        let sql_mod = format!(
-            "SELECT COUNT(*) AS cnt FROM cmx_module WHERE domain_code = '{safe}'"
-        );
+        let sql_mod =
+            format!("SELECT COUNT(*) AS cnt FROM cmx_module WHERE domain_code = '{safe}'");
         let ds = mm
             .query_sql(db_id, None, &sql_mod, "cnt")
             .await
@@ -270,9 +272,8 @@ impl DamAssetService {
         let a = assert_id("app", app)?;
         let app_code = format!("{d}_{a}");
 
-        let sql = format!(
-            "SELECT COUNT(*) AS cnt FROM cmx_module WHERE application_code = '{app_code}'"
-        );
+        let sql =
+            format!("SELECT COUNT(*) AS cnt FROM cmx_module WHERE application_code = '{app_code}'");
         let ds = mm
             .query_sql(db_id, None, &sql, "cnt")
             .await

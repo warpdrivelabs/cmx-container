@@ -391,15 +391,15 @@ fn summarize(
         "DCT" => {
             obj.insert(
                 "title".into(),
-                json!(
-                    mm.get("metaName")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(file)
-                ),
+                json!(mm.get("metaName").and_then(|v| v.as_str()).unwrap_or(file)),
             );
             obj.insert(
                 "dctGroupCode".into(),
-                json!(mm.get("dctGroupCode").and_then(|v| v.as_str()).unwrap_or("")),
+                json!(
+                    mm.get("dctGroupCode")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                ),
             );
             obj.insert(
                 "remark".into(),
@@ -437,11 +437,7 @@ fn summarize(
             // DOC 业务单据：表数含主表与 summaries/sum 子表
             obj.insert(
                 "title".into(),
-                json!(
-                    mm.get("metaName")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(file)
-                ),
+                json!(mm.get("metaName").and_then(|v| v.as_str()).unwrap_or(file)),
             );
             obj.insert(
                 "docCode".into(),

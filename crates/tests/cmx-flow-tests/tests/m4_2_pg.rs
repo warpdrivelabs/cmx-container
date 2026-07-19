@@ -10,9 +10,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cmx_database_pg::{get_default_pg_db_manager, query_sql, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, get_default_pg_db_manager, query_sql};
 use cmx_flow_bpmn::compile;
-use cmx_flow_engine::{AssigneeResolver, CandidateKind, CandidateRef, Engine, ResolveResult, Variables};
+use cmx_flow_engine::{
+    AssigneeResolver, CandidateKind, CandidateRef, Engine, ResolveResult, Variables,
+};
 use cmx_flow_store_pg::PgRuntimeStore;
 
 /// 直通解析器：user() → 自身；其它 → 空（本 PG 测试只用 user 引用，不碰 IAM）。
@@ -60,7 +62,10 @@ async fn setup_db() -> Option<String> {
         module_code: None,
         source_type: Some("default".to_string()),
     };
-    manager.register_data_source(cfg).await.expect("注册数据源失败");
+    manager
+        .register_data_source(cfg)
+        .await
+        .expect("注册数据源失败");
     Some(db_id)
 }
 
@@ -111,7 +116,10 @@ async fn pg_node_cc_persists_and_queryable() {
     let cc = query_sql(
         &db_id,
         None,
-        &format!("SELECT id, to_user_id, read_at FROM cmx_flow_cc WHERE instance_id = '{}'", started.instance_id),
+        &format!(
+            "SELECT id, to_user_id, read_at FROM cmx_flow_cc WHERE instance_id = '{}'",
+            started.instance_id
+        ),
         "cc",
     )
     .await
@@ -127,7 +135,14 @@ async fn pg_node_cc_persists_and_queryable() {
 
     // 标记已读 → 未读为 0。
     assert!(engine.mark_cc_read(&cc_id).await.unwrap());
-    assert_eq!(engine.cc_for_user("u_boss_a", true, 50).await.unwrap().len(), 0);
+    assert_eq!(
+        engine
+            .cc_for_user("u_boss_a", true, 50)
+            .await
+            .unwrap()
+            .len(),
+        0
+    );
 
     // 库中该记录 read_at 已置位。
     let read = query_sql(

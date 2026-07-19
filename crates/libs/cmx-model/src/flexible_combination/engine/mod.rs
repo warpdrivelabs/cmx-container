@@ -135,7 +135,11 @@ impl<'a> Engine<'a> {
 
     /// 注入 DRN 引用上下文（引用方 DAM + imports 别名表），使字段 refDict 支持
     /// `@别名` / `drn:…` / `DCT/x` 写法归一为有效 dictId。链式调用。
-    pub fn with_ref_context(mut self, from: crate::flexible_combination::drn::FromDam, imports: Option<Value>) -> Self {
+    pub fn with_ref_context(
+        mut self,
+        from: crate::flexible_combination::drn::FromDam,
+        imports: Option<Value>,
+    ) -> Self {
         self.ref_from = from;
         self.ref_imports = imports;
         self
@@ -143,7 +147,11 @@ impl<'a> Engine<'a> {
 
     /// 归一字段 refDict → 有效 dict/维度 code（裸 code 原样，DRN/别名展开取 name）。
     fn effective_ref(&self, raw: &str) -> String {
-        crate::flexible_combination::drn::effective_dict_id(raw, &self.ref_from, self.ref_imports.as_ref())
+        crate::flexible_combination::drn::effective_dict_id(
+            raw,
+            &self.ref_from,
+            self.ref_imports.as_ref(),
+        )
     }
 
     /// 按 code 取维度定义（须为对象才算有效）。

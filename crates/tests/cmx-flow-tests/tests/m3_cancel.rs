@@ -62,7 +62,11 @@ async fn cancel_waiting_instance_terminates_it() {
         .cancel_process(&started.instance_id, Some("申请人撤回".into()))
         .await
         .unwrap();
-    assert_eq!(canceled.state, InstanceState::Terminated, "取消后应为终止态");
+    assert_eq!(
+        canceled.state,
+        InstanceState::Terminated,
+        "取消后应为终止态"
+    );
     assert!(canceled.open_tasks.is_empty(), "无未办结任务");
 
     // 落库校验：实例终止、令牌全 Ended、无未办结任务、原因入库。
@@ -72,7 +76,10 @@ async fn cancel_waiting_instance_terminates_it() {
     assert!(snap.tokens.iter().all(|t| t.state == TokenState::Ended));
     assert_eq!(snap.tasks.iter().filter(|t| !t.completed).count(), 0);
     assert_eq!(
-        snap.instance.variables.get("_cancelReason").and_then(|v| v.as_str()),
+        snap.instance
+            .variables
+            .get("_cancelReason")
+            .and_then(|v| v.as_str()),
         Some("申请人撤回")
     );
 }
@@ -105,10 +112,16 @@ async fn cancel_is_idempotent() {
         .start_process("simple_approve", Variables::new(), None)
         .await
         .unwrap();
-    let first = engine.cancel_process(&started.instance_id, None).await.unwrap();
+    let first = engine
+        .cancel_process(&started.instance_id, None)
+        .await
+        .unwrap();
     assert_eq!(first.state, InstanceState::Terminated);
     // 再次取消：幂等，仍返回终止态，不报错。
-    let second = engine.cancel_process(&started.instance_id, None).await.unwrap();
+    let second = engine
+        .cancel_process(&started.instance_id, None)
+        .await
+        .unwrap();
     assert_eq!(second.state, InstanceState::Terminated);
 }
 
@@ -120,7 +133,10 @@ async fn cannot_complete_task_after_cancel() {
         .await
         .unwrap();
     let task = started.open_tasks[0].clone();
-    engine.cancel_process(&started.instance_id, None).await.unwrap();
+    engine
+        .cancel_process(&started.instance_id, None)
+        .await
+        .unwrap();
 
     // 取消后原任务已作废，办结应失败。
     let err = engine

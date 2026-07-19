@@ -113,7 +113,9 @@ async fn test_sqlx_zmc_roundtrip() -> cmx_database::Result<()> {
     let zmc = dbx
         .db()
         .query_zmc(
-            &format!("SELECT id,name,amount,flag,uid,blob,meta,created,note FROM {table} ORDER BY id"),
+            &format!(
+                "SELECT id,name,amount,flag,uid,blob,meta,created,note FROM {table} ORDER BY id"
+            ),
             "zmc_sqlx",
         )
         .await?;

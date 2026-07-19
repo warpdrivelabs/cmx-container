@@ -374,12 +374,18 @@ pub async fn report_detail(code: &str, version: Option<String>) -> Result<Value>
             versions
                 .iter()
                 .find(|v| v.get("is_current").and_then(|x| x.as_i64()).unwrap_or(0) == 1)
-                .and_then(|v| v.get("code").and_then(|x| x.as_str()).map(ToOwned::to_owned))
+                .and_then(|v| {
+                    v.get("code")
+                        .and_then(|x| x.as_str())
+                        .map(ToOwned::to_owned)
+                })
         })
         .or_else(|| {
-            versions
-                .first()
-                .and_then(|v| v.get("code").and_then(|x| x.as_str()).map(ToOwned::to_owned))
+            versions.first().and_then(|v| {
+                v.get("code")
+                    .and_then(|x| x.as_str())
+                    .map(ToOwned::to_owned)
+            })
         });
 
     let stats = if let Some(ver) = selected_version.as_deref() {
@@ -513,7 +519,11 @@ pub async fn create_version(report_code: &str, body: &CreateVersionBody) -> Resu
         .filter(|s| !s.is_empty())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| format!("版本 {next_no}"));
-    let is_current = if body.is_current.unwrap_or(false) { 1 } else { 0 };
+    let is_current = if body.is_current.unwrap_or(false) {
+        1
+    } else {
+        0
+    };
     if is_current == 1 {
         execute(
             "UPDATE cr_report_version SET is_current = 0, update_time = CURRENT_TIMESTAMP WHERE report_code = $1",
@@ -761,7 +771,12 @@ pub async fn save_layout(code: &str, body: &Value) -> Result<SaveLayoutOutcome> 
             .get("content_hash")
             .and_then(|v| v.as_str())
             .unwrap_or_default();
-        if !db_hash.is_empty() && client_hash.as_deref().map(|h| h != db_hash).unwrap_or(false) {
+        if !db_hash.is_empty()
+            && client_hash
+                .as_deref()
+                .map(|h| h != db_hash)
+                .unwrap_or(false)
+        {
             return Ok(SaveLayoutOutcome::Conflict);
         }
     }
@@ -1133,7 +1148,9 @@ pub async fn query_data(code: &str, body: &Value) -> Result<Value> {
     for row in &ds.rows {
         let gs = |c: Option<usize>| c.and_then(|i| row.get_str(i)).map(str::to_owned);
         let gi = |c: Option<usize>| c.and_then(|i| row.get_i64(i));
-        let num = c_num.and_then(|i| row.get_decimal(i)).map(|d| d.to_string());
+        let num = c_num
+            .and_then(|i| row.get_decimal(i))
+            .map(|d| d.to_string());
         cells.push(json!({
             "sheetCode": gs(c_sheet),
             "regionCode": gs(c_region),
@@ -1208,9 +1225,7 @@ async fn save_data_apply(
             .get("numValue")
             .and_then(|v| match v {
                 Value::String(x) if !x.is_empty() => x.parse::<rust_decimal::Decimal>().ok(),
-                Value::Number(n) => n
-                    .as_f64()
-                    .and_then(rust_decimal::Decimal::from_f64_retain),
+                Value::Number(n) => n.as_f64().and_then(rust_decimal::Decimal::from_f64_retain),
                 _ => None,
             })
             .map(DataValue::Decimal)

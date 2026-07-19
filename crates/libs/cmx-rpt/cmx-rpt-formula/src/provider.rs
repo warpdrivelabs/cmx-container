@@ -85,7 +85,11 @@ impl DataProvider for MockProvider {
     ) -> Result<HashMap<BalanceKey, Decimal>, String> {
         let mut out = HashMap::new();
         for k in keys {
-            let v = self.balances.get(&k.object).copied().unwrap_or(self.default);
+            let v = self
+                .balances
+                .get(&k.object)
+                .copied()
+                .unwrap_or(self.default);
             out.insert(k.clone(), v);
         }
         Ok(out)

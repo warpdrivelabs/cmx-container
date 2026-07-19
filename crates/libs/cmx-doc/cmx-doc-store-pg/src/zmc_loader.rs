@@ -12,12 +12,14 @@
 use std::sync::Arc;
 
 use cmx_core::model::cell::DataValue;
-use cmx_database_pg::{DatabaseManager as PgManager, ZmcChildGroup, ZmcColType, ZmcDataSet, ZmcRowSource, ZmcSchema};
+use cmx_database_pg::{
+    DatabaseManager as PgManager, ZmcChildGroup, ZmcColType, ZmcDataSet, ZmcRowSource, ZmcSchema,
+};
 
+use cmx_biz::{BizError, Result};
 use cmx_doc_model::meta::{DocMetaView, LayerView};
 use cmx_doc_model::query::DocQuery;
 use cmx_doc_model::sql_builder::build_layer_select;
-use cmx_biz::{BizError, Result};
 
 /// 零拷贝单据装载器（tokio-postgres + ZmcDataSet）。SQL 全部由 `build_layer_select` 元数据驱动。
 pub struct ZmcDocLoader;
@@ -62,7 +64,8 @@ impl ZmcDocLoader {
             .ok_or_else(|| BizError::business(format!("层 {layer_id} 是根层，无父，不能懒下钻")))?;
         let parent_ids = typecast_ids(layer, &child_key, parent_ids_json)?;
 
-        let mut ds = Self::query_children_by_key(mm, db_id, layer, &child_key, &parent_ids, query).await?;
+        let mut ds =
+            Self::query_children_by_key(mm, db_id, layer, &child_key, &parent_ids, query).await?;
         let max_depth = query.depth.unwrap_or(usize::MAX);
         if max_depth > 0 {
             Self::descend(mm, db_id, meta, layer, &mut ds, 1, max_depth, query).await?;
@@ -119,20 +122,26 @@ impl ZmcDocLoader {
         // 同父兄弟:下一层组全部子表,各查一次、各挂一个 ZmcChildGroup(各吃自己的 LayerQuery)
         for child_layer in child_layers {
             let is_primary = meta.is_primary_in_group(&child_layer.id);
-            let mut child_ds =
-                match Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids, query)
-                    .await
-                {
-                    Ok(ds) => ds,
-                    Err(e) if !is_primary => {
-                        tracing::warn!(
-                            "跳过并列兄弟子表 {}(装载失败,可能未物理部署): {e}",
-                            child_layer.table_name
-                        );
-                        continue;
-                    }
-                    Err(e) => return Err(e),
-                };
+            let mut child_ds = match Self::query_children_by_key(
+                mm,
+                db_id,
+                child_layer,
+                &child_key,
+                &parent_ids,
+                query,
+            )
+            .await
+            {
+                Ok(ds) => ds,
+                Err(e) if !is_primary => {
+                    tracing::warn!(
+                        "跳过并列兄弟子表 {}(装载失败,可能未物理部署): {e}",
+                        child_layer.table_name
+                    );
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
 
             if is_primary {
                 Box::pin(Self::descend(
@@ -174,7 +183,6 @@ impl ZmcDocLoader {
 }
 
 // ─────────────────────── 组装辅助 ───────────────────────
-
 
 /// 空表兜底:查询推断的 schema 若列数不足(空结果集 → 0 列),用定义 schema 的列名 + 推断
 /// PG 类型覆盖,保证前端拿到正确表头。
@@ -220,9 +228,9 @@ fn typecast_ids(
     child_key: &str,
     ids: &[serde_json::Value],
 ) -> Result<Vec<DataValue>> {
-    let col = layer
-        .column(child_key)
-        .ok_or_else(|| BizError::business(format!("子键 {child_key} 不在层 {}", layer.table_name)))?;
+    let col = layer.column(child_key).ok_or_else(|| {
+        BizError::business(format!("子键 {child_key} 不在层 {}", layer.table_name))
+    })?;
     ids.iter()
         .map(|v| cmx_doc_model::query::json_to_datavalue(col, v))
         .collect()

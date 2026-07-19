@@ -92,7 +92,11 @@ async fn load_snapshot(
     let mut stored: HashMap<String, (Option<FValue>, bool)> = HashMap::new();
     for d in &data_rows {
         let key = jstr(d, "cell_ref").unwrap_or_else(|| {
-            format!("{}|{}", jint(d, "row_id").unwrap_or(0), jint(d, "col_id").unwrap_or(0))
+            format!(
+                "{}|{}",
+                jint(d, "row_id").unwrap_or(0),
+                jint(d, "col_id").unwrap_or(0)
+            )
         });
         let is_manual = jint(d, "is_manual").unwrap_or(0) == 1;
         let val = json_cell_value(d);
@@ -261,8 +265,7 @@ pub async fn compute_report_service(code: &str, body: &Value) -> Result<Value> {
     let org_parent = load_org_parent().await?;
 
     // 3) 递归求值（两遍法取数 + REF 跨表 + 三色环检测）
-    let outcome: ComputeOutcome =
-        compute_report(snapshot, &PgProvider, periods, org_parent).await;
+    let outcome: ComputeOutcome = compute_report(snapshot, &PgProvider, periods, org_parent).await;
 
     // 4) 落库：事务内 UPSERT 算好的格
     persist_outcome(code, &version, &org, &period, &outcome, &coords).await?;
@@ -454,7 +457,9 @@ fn json_cell_value(row: &Value) -> Option<FValue> {
             _ => {}
         }
     }
-    jstr(row, "text_value").filter(|s| !s.is_empty()).map(FValue::Str)
+    jstr(row, "text_value")
+        .filter(|s| !s.is_empty())
+        .map(FValue::Str)
 }
 
 fn fvalue_json(v: &FValue) -> Value {

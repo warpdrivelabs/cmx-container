@@ -130,8 +130,10 @@ async fn complete_at_gateway_can_be_overridden_by_completion_variables() {
         .unwrap();
 
     assert_eq!(after.state, InstanceState::Active);
-    assert_eq!(after.open_tasks[0].node_bpmn_id, "director",
-        "办结时提交的 days=10 应驱动网关走总监分支");
+    assert_eq!(
+        after.open_tasks[0].node_bpmn_id, "director",
+        "办结时提交的 days=10 应驱动网关走总监分支"
+    );
 }
 
 #[tokio::test]
@@ -145,7 +147,10 @@ async fn snapshot_persists_across_reload_from_store() {
 
     let mut vars = Variables::new();
     vars.set("hours", json!(16));
-    let started = engine.start_process("leave_request", vars, None).await.unwrap();
+    let started = engine
+        .start_process("leave_request", vars, None)
+        .await
+        .unwrap();
 
     // 直接从 store 载入，应看到一个 Waiting 令牌停在 review + 一条未办任务。
     use cmx_flow_model::{RuntimeStore, TokenState};
@@ -156,7 +161,10 @@ async fn snapshot_persists_across_reload_from_store() {
     assert_eq!(snap.tasks.iter().filter(|t| !t.completed).count(), 1);
 
     // days 应已由 serviceTask 写入变量并持久化。
-    assert_eq!(snap.instance.variables.get("days").and_then(|v| v.as_i64()), Some(2));
+    assert_eq!(
+        snap.instance.variables.get("days").and_then(|v| v.as_i64()),
+        Some(2)
+    );
 
     // Arc 让编译器别抱怨未用（保持与真实消费一致的共享持有形态）。
     let _shared: Arc<()> = Arc::new(());

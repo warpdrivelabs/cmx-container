@@ -13,7 +13,7 @@
 
 use async_trait::async_trait;
 use cmx_core::model::cell::DataValue;
-use cmx_database_pg::{execute_sql, execute_sql_with_params, query_sql, SqlParams};
+use cmx_database_pg::{SqlParams, execute_sql, execute_sql_with_params, query_sql};
 use cmx_flow_model::{RouteError, RouteResult, SubflowRouter};
 
 /// 子流程组织路由器。持目标 db_id（绑定表 + cmx_org 所在库），所有查询走该库。
@@ -25,7 +25,9 @@ pub struct PgSubflowRouter {
 impl PgSubflowRouter {
     /// 用指定 db_id 构建（须已在 cmx-database-pg 注册数据源）。
     pub fn new(db_id: impl Into<String>) -> Self {
-        Self { db_id: db_id.into() }
+        Self {
+            db_id: db_id.into(),
+        }
     }
 
     /// 执行一条只取首行 target_definition_key 的查询；无行 → None。
@@ -146,7 +148,9 @@ pub struct PgSubflowBindingStore {
 impl PgSubflowBindingStore {
     /// 用指定 db_id 构建（须已注册；同 PgSubflowRouter 的库）。
     pub fn new(db_id: impl Into<String>) -> Self {
-        Self { db_id: db_id.into() }
+        Self {
+            db_id: db_id.into(),
+        }
     }
 
     /// 建表（幂等）。生产库（primary/IAM）不由引擎 ensure_schema 覆盖，故管理面自带 DDL 兜底。

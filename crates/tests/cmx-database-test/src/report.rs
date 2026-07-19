@@ -45,7 +45,12 @@ pub struct Measure {
 }
 
 impl Measure {
-    pub fn new(scenario: impl Into<String>, driver: impl Into<String>, rows: u64, elapsed: Duration) -> Self {
+    pub fn new(
+        scenario: impl Into<String>,
+        driver: impl Into<String>,
+        rows: u64,
+        elapsed: Duration,
+    ) -> Self {
         Self {
             scenario: scenario.into(),
             driver: driver.into(),

@@ -25,9 +25,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::debug;
 
-use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, cache, saver};
 use cmx_core::model::data::dataset::ColumnarCodec;
 use cmx_database::get_default_db_manager;
+use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, cache, saver};
 
 use cmx_api::CmxAppState;
 use cmx_api::middleware::CmxSvrContext;
@@ -99,8 +99,8 @@ async fn run_doc_load(
     dq: &DocQuery,
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
-    use cmx_doc_store_pg::{ZmcDocLoader, ZmcDocLoaderSqlx};
     use cmx_database_pg::get_default_pg_db_manager;
+    use cmx_doc_store_pg::{ZmcDocLoader, ZmcDocLoaderSqlx};
 
     // 装载前校验列名（防注入 + 明确报错）
     dq.validate(meta)?;
@@ -169,7 +169,14 @@ async fn doc_load_entry(
     body: Option<Value>,
 ) -> Result<axum::response::Response> {
     let db_id = get_db_id_from_header(&headers).await;
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref(), q.doc.as_deref()).await?;
+    let meta = resolve_doc_meta(
+        &q.domain,
+        &q.application,
+        &q.module,
+        q.file.as_deref(),
+        q.doc.as_deref(),
+    )
+    .await?;
     let dq = match body {
         Some(b) if !b.is_null() => DocQuery::from_json(&b)?,
         _ => simple_doc_query(&meta, &q),
@@ -187,8 +194,20 @@ pub async fn doc_data_sqlx_dataset_json(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - sqlx-dataset-json {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
-    doc_load_entry(Driver::Sqlx, Exit::DatasetJson, q, headers, body.map(|b| b.0)).await
+    debug!(
+        "{:<12} - sqlx-dataset-json {}/{}",
+        "HANDLER",
+        q.module,
+        q.file.as_deref().unwrap_or("(auto)")
+    );
+    doc_load_entry(
+        Driver::Sqlx,
+        Exit::DatasetJson,
+        q,
+        headers,
+        body.map(|b| b.0),
+    )
+    .await
 }
 
 /// `GET|POST /api/doc/data/tokio-zmc-msgpack` —— tokio + ZmcDataSet + msgpack 二进制。
@@ -199,8 +218,20 @@ pub async fn doc_data_tokio_zmc_msgpack(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - tokio-zmc-msgpack {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
-    doc_load_entry(Driver::Tokio, Exit::ZmcMsgpack, q, headers, body.map(|b| b.0)).await
+    debug!(
+        "{:<12} - tokio-zmc-msgpack {}/{}",
+        "HANDLER",
+        q.module,
+        q.file.as_deref().unwrap_or("(auto)")
+    );
+    doc_load_entry(
+        Driver::Tokio,
+        Exit::ZmcMsgpack,
+        q,
+        headers,
+        body.map(|b| b.0),
+    )
+    .await
 }
 
 /// `GET|POST /api/doc/data/sqlx-zmc-msgpack` —— sqlx + ZmcDataSet + msgpack 二进制。
@@ -211,8 +242,20 @@ pub async fn doc_data_sqlx_zmc_msgpack(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - sqlx-zmc-msgpack {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
-    doc_load_entry(Driver::Sqlx, Exit::ZmcMsgpack, q, headers, body.map(|b| b.0)).await
+    debug!(
+        "{:<12} - sqlx-zmc-msgpack {}/{}",
+        "HANDLER",
+        q.module,
+        q.file.as_deref().unwrap_or("(auto)")
+    );
+    doc_load_entry(
+        Driver::Sqlx,
+        Exit::ZmcMsgpack,
+        q,
+        headers,
+        body.map(|b| b.0),
+    )
+    .await
 }
 
 /// `GET|POST /api/doc/data/tokio-zmc-json` —— tokio + ZmcDataSet + 纯 JSON。
@@ -223,7 +266,12 @@ pub async fn doc_data_tokio_zmc_json(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - tokio-zmc-json {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
+    debug!(
+        "{:<12} - tokio-zmc-json {}/{}",
+        "HANDLER",
+        q.module,
+        q.file.as_deref().unwrap_or("(auto)")
+    );
     doc_load_entry(Driver::Tokio, Exit::ZmcJson, q, headers, body.map(|b| b.0)).await
 }
 
@@ -235,7 +283,12 @@ pub async fn doc_data_sqlx_zmc_json(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - sqlx-zmc-json {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
+    debug!(
+        "{:<12} - sqlx-zmc-json {}/{}",
+        "HANDLER",
+        q.module,
+        q.file.as_deref().unwrap_or("(auto)")
+    );
     doc_load_entry(Driver::Sqlx, Exit::ZmcJson, q, headers, body.map(|b| b.0)).await
 }
 
@@ -275,15 +328,22 @@ pub async fn doc_children(
     headers: HeaderMap,
     Json(req): Json<DocChildrenReq>,
 ) -> Result<Json<ApiResp<Value>>> {
-    use cmx_doc_store_pg::{ZmcDocLoader, ZmcDocLoaderSqlx};
     use cmx_database_pg::get_default_pg_db_manager;
+    use cmx_doc_store_pg::{ZmcDocLoader, ZmcDocLoaderSqlx};
 
     debug!(
         "{:<12} - doc_children {}/{}",
         "HANDLER", req.module, req.layer
     );
     let db_id = get_db_id_from_header(&headers).await;
-    let meta = resolve_doc_meta(&req.domain, &req.application, &req.module, Some(req.file.as_str()), None).await?;
+    let meta = resolve_doc_meta(
+        &req.domain,
+        &req.application,
+        &req.module,
+        Some(req.file.as_str()),
+        None,
+    )
+    .await?;
 
     // 组一个 DocQuery：把该层的查询塞进去 + depth。
     let mut dq = DocQuery {
@@ -336,12 +396,24 @@ pub async fn doc_data_stream(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
-    use cmx_doc_store_pg::{LayerQuery, build_layer_select};
     use cmx_database_pg::get_default_pg_db_manager;
+    use cmx_doc_store_pg::{LayerQuery, build_layer_select};
 
-    debug!("{:<12} - doc_data_stream {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
+    debug!(
+        "{:<12} - doc_data_stream {}/{}",
+        "HANDLER",
+        q.module,
+        q.file.as_deref().unwrap_or("(auto)")
+    );
     let db_id = get_db_id_from_header(&headers).await;
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref(), q.doc.as_deref()).await?;
+    let meta = resolve_doc_meta(
+        &q.domain,
+        &q.application,
+        &q.module,
+        q.file.as_deref(),
+        q.doc.as_deref(),
+    )
+    .await?;
 
     // 目标层：body.layer 指定，否则根层。流式**只装该单层**（扁平大结果，不嵌套）。
     let body_val = body.map(|b| b.0).unwrap_or(Value::Null);
@@ -425,9 +497,21 @@ pub async fn doc_meta(
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     let _ = &headers; // meta 与 db_id 无关(定义读取不走数据源);保留签名一致
-    debug!("{:<12} - doc_meta {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
+    debug!(
+        "{:<12} - doc_meta {}/{}",
+        "HANDLER",
+        q.module,
+        q.file.as_deref().unwrap_or("(auto)")
+    );
 
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref(), q.doc.as_deref()).await?;
+    let meta = resolve_doc_meta(
+        &q.domain,
+        &q.application,
+        &q.module,
+        q.file.as_deref(),
+        q.doc.as_deref(),
+    )
+    .await?;
     Ok(Json(ApiResp::ok(project_doc_meta(&meta))))
 }
 
@@ -576,7 +660,14 @@ pub async fn doc_save(
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, Some(q.file.as_str()), None).await?;
+    let meta = resolve_doc_meta(
+        &q.domain,
+        &q.application,
+        &q.module,
+        Some(q.file.as_str()),
+        None,
+    )
+    .await?;
     let (mode, changes) = saver::parse_save_body(&body);
 
     // §14.2 后端二次校验：对 changeset 各行跑 validationRules，error 阻断保存。
@@ -843,7 +934,14 @@ pub async fn doc_restore(
     }
 
     // 用 replace 模式把快照写回（DocSaver 内部单事务）
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, Some(q.file.as_str()), None).await?;
+    let meta = resolve_doc_meta(
+        &q.domain,
+        &q.application,
+        &q.module,
+        Some(q.file.as_str()),
+        None,
+    )
+    .await?;
     // 快照是列式包 { datasetId, columns, rows, childRows }；replace 期望 { table:{rows:[{id,upper_id,fields}]} }
     // 这里把列式包转成 replace 输入（简化：交给 DocSaver 前先归一）
     let replace_input = columnar_to_replace_input(&snapshot);

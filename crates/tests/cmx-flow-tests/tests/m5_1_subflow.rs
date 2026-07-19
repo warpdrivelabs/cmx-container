@@ -59,8 +59,12 @@ const SUB_INSTANT_BPMN: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 fn engine_with(main: &str, sub: &str) -> (Engine<InMemoryStore>, InMemoryStore) {
     let store = InMemoryStore::new();
     let mut engine = Engine::new(store.clone());
-    engine.deploy(compile(main).expect("主流程编译")).expect("部署主流程");
-    engine.deploy(compile(sub).expect("子流程编译")).expect("部署子流程");
+    engine
+        .deploy(compile(main).expect("主流程编译"))
+        .expect("部署主流程");
+    engine
+        .deploy(compile(sub).expect("子流程编译"))
+        .expect("部署子流程");
     (engine, store)
 }
 
@@ -75,7 +79,10 @@ async fn subflow_runs_and_returns_to_main() {
     let (engine, store) = engine_with(MAIN_BPMN, SUB_BPMN);
     let mut vars = Variables::new();
     vars.set("amount", json!(50000));
-    let started = engine.start_process("expense_main", vars, Some("EXP-1".into())).await.unwrap();
+    let started = engine
+        .start_process("expense_main", vars, Some("EXP-1".into()))
+        .await
+        .unwrap();
     let main_id = started.instance_id.clone();
 
     // 停在部门经理审批。
@@ -84,14 +91,20 @@ async fn subflow_runs_and_returns_to_main() {
 
     // 经理办结 → 令牌到 callActivity → 启子实例，主令牌 WaitingSubflow。
     let mgr_task = started.open_tasks[0].id.clone();
-    let after = engine.complete_task(&main_id, &mgr_task, Variables::new()).await.unwrap();
+    let after = engine
+        .complete_task(&main_id, &mgr_task, Variables::new())
+        .await
+        .unwrap();
     // 主流程没有待办任务了（子流程接手），但也没完成。
     assert_eq!(after.state, InstanceState::Active);
     assert!(after.open_tasks.is_empty(), "主流程任务空，子流程接手");
 
     let main_snap = store.load_snapshot(&main_id).await.unwrap();
     assert!(
-        main_snap.tokens.iter().any(|t| t.state == TokenState::WaitingSubflow),
+        main_snap
+            .tokens
+            .iter()
+            .any(|t| t.state == TokenState::WaitingSubflow),
         "主令牌应 WaitingSubflow"
     );
 
@@ -102,7 +115,10 @@ async fn subflow_runs_and_returns_to_main() {
     assert_eq!(children[0].definition_key, "fin_review");
     // 输入变量映射：amount → reviewAmount。
     let sub_snap = store.load_snapshot(&sub_id).await.unwrap();
-    assert_eq!(sub_snap.instance.variables.get("reviewAmount"), Some(&json!(50000)));
+    assert_eq!(
+        sub_snap.instance.variables.get("reviewAmount"),
+        Some(&json!(50000))
+    );
     // 子流程停在财务复核。
     assert_eq!(sub_snap.tasks.iter().filter(|t| !t.completed).count(), 1);
 
@@ -110,7 +126,10 @@ async fn subflow_runs_and_returns_to_main() {
     let review_task = open_task(&store, &sub_id).await;
     let mut out = Variables::new();
     out.set("finResult", json!("approved"));
-    engine.complete_task(&sub_id, &review_task, out).await.unwrap();
+    engine
+        .complete_task(&sub_id, &review_task, out)
+        .await
+        .unwrap();
 
     // 子实例完成。
     let sub_final = store.load_snapshot(&sub_id).await.unwrap();
@@ -119,13 +138,25 @@ async fn subflow_runs_and_returns_to_main() {
     // 主实例被唤醒，走到出纳打款，且回写了输出变量。
     let main_after = store.load_snapshot(&main_id).await.unwrap();
     assert_eq!(main_after.instance.state, InstanceState::Active);
-    let open: Vec<&str> = main_after.tasks.iter().filter(|t| !t.completed).map(|t| t.node_bpmn_id.as_str()).collect();
+    let open: Vec<&str> = main_after
+        .tasks
+        .iter()
+        .filter(|t| !t.completed)
+        .map(|t| t.node_bpmn_id.as_str())
+        .collect();
     assert_eq!(open, vec!["cashier"], "主流程应推进到出纳打款");
-    assert_eq!(main_after.instance.variables.get("finResult"), Some(&json!("approved")), "输出变量回写主流程");
+    assert_eq!(
+        main_after.instance.variables.get("finResult"),
+        Some(&json!("approved")),
+        "输出变量回写主流程"
+    );
 
     // 出纳办结 → 主流程完成。
     let cashier_task = open_task(&store, &main_id).await;
-    let done = engine.complete_task(&main_id, &cashier_task, Variables::new()).await.unwrap();
+    let done = engine
+        .complete_task(&main_id, &cashier_task, Variables::new())
+        .await
+        .unwrap();
     assert_eq!(done.state, InstanceState::Completed);
 }
 
@@ -133,10 +164,16 @@ async fn subflow_runs_and_returns_to_main() {
 async fn instant_subflow_flows_through() {
     // 子流程无等待态，秒过 → 主流程一口气从 callActivity 走到出纳打款。
     let (engine, store) = engine_with(MAIN_BPMN, SUB_INSTANT_BPMN);
-    let started = engine.start_process("expense_main", Variables::new(), None).await.unwrap();
+    let started = engine
+        .start_process("expense_main", Variables::new(), None)
+        .await
+        .unwrap();
     let main_id = started.instance_id.clone();
     let mgr_task = started.open_tasks[0].id.clone();
-    let after = engine.complete_task(&main_id, &mgr_task, Variables::new()).await.unwrap();
+    let after = engine
+        .complete_task(&main_id, &mgr_task, Variables::new())
+        .await
+        .unwrap();
 
     // 子流程立即完成，主流程直接到出纳打款。
     assert_eq!(after.state, InstanceState::Active);
@@ -181,15 +218,26 @@ async fn subflow_with_countersign() {
     assert_eq!(children.len(), 1);
     let sub_id = children[0].id.clone();
     let sub = store.load_snapshot(&sub_id).await.unwrap();
-    assert_eq!(sub.tasks.iter().filter(|t| !t.completed).count(), 3, "子流程 3 人会签");
+    assert_eq!(
+        sub.tasks.iter().filter(|t| !t.completed).count(),
+        3,
+        "子流程 3 人会签"
+    );
 
     // 办结全部会签 → 子完成 → 主完成。
     for _ in 0..3 {
         let t = open_task(&store, &sub_id).await;
-        engine.complete_task(&sub_id, &t, Variables::new()).await.unwrap();
+        engine
+            .complete_task(&sub_id, &t, Variables::new())
+            .await
+            .unwrap();
     }
     let main_final = store.load_snapshot(&main_id).await.unwrap();
-    assert_eq!(main_final.instance.state, InstanceState::Completed, "会签子流程完成后主流程完成");
+    assert_eq!(
+        main_final.instance.state,
+        InstanceState::Completed,
+        "会签子流程完成后主流程完成"
+    );
 }
 
 #[tokio::test]
@@ -219,7 +267,10 @@ async fn nested_subflows() {
     for xml in [L1, L2, L3] {
         engine.deploy(compile(xml).unwrap()).unwrap();
     }
-    let started = engine.start_process("l1", Variables::new(), None).await.unwrap();
+    let started = engine
+        .start_process("l1", Variables::new(), None)
+        .await
+        .unwrap();
     let l1_id = started.instance_id.clone();
 
     // 逐层下钻到孙流程。
@@ -228,12 +279,35 @@ async fn nested_subflows() {
     let l3 = store.find_child_instances(&l2[0].id).await.unwrap();
     assert_eq!(l3.len(), 1);
     let l3_id = l3[0].id.clone();
-    assert_eq!(store.load_snapshot(&l3_id).await.unwrap().tasks.iter().filter(|t| !t.completed).count(), 1);
+    assert_eq!(
+        store
+            .load_snapshot(&l3_id)
+            .await
+            .unwrap()
+            .tasks
+            .iter()
+            .filter(|t| !t.completed)
+            .count(),
+        1
+    );
 
     // 办结孙审批 → 逐层唤醒 → l1 完成。
     let t = open_task(&store, &l3_id).await;
-    engine.complete_task(&l3_id, &t, Variables::new()).await.unwrap();
-    assert_eq!(store.load_snapshot(&l3_id).await.unwrap().instance.state, InstanceState::Completed);
-    assert_eq!(store.load_snapshot(&l2[0].id).await.unwrap().instance.state, InstanceState::Completed);
-    assert_eq!(store.load_snapshot(&l1_id).await.unwrap().instance.state, InstanceState::Completed, "顶层逐层唤醒后完成");
+    engine
+        .complete_task(&l3_id, &t, Variables::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        store.load_snapshot(&l3_id).await.unwrap().instance.state,
+        InstanceState::Completed
+    );
+    assert_eq!(
+        store.load_snapshot(&l2[0].id).await.unwrap().instance.state,
+        InstanceState::Completed
+    );
+    assert_eq!(
+        store.load_snapshot(&l1_id).await.unwrap().instance.state,
+        InstanceState::Completed,
+        "顶层逐层唤醒后完成"
+    );
 }

@@ -32,7 +32,10 @@ pub async fn insert_client(params: Value) -> Result<(), String> {
 ///
 /// 返回原始 DataSet，行→结构体映射仍由 handler 负责。过滤子句拼接（含 `''` 转义、
 /// ORDER BY create_time DESC）与迁移前**逐字一致**。返回原始 DB 错误串。
-pub async fn list_clients(status: Option<i64>, client_id: Option<String>) -> Result<DataSet, String> {
+pub async fn list_clients(
+    status: Option<i64>,
+    client_id: Option<String>,
+) -> Result<DataSet, String> {
     let db_manager = cmx_database::get_default_db_manager();
     let db_id = db_manager.get_default_db_id().await;
 

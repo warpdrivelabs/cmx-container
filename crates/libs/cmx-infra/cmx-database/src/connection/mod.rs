@@ -159,8 +159,8 @@ impl DbPool {
         dataset_id: &str,
         out: &mut Vec<u8>,
     ) -> crate::Result<u64> {
-        use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_close, encode_stream_open};
         use crate::zmc::SqlxPgRowSource;
+        use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_close, encode_stream_open};
         use futures::TryStreamExt;
 
         match self {

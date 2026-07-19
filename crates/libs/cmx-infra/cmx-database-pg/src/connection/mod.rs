@@ -13,9 +13,7 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::RwLock;
 
-use deadpool_postgres::{
-    Hook, HookError, Manager, ManagerConfig, Pool, RecyclingMethod, Runtime,
-};
+use deadpool_postgres::{Hook, HookError, Manager, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
 use tracing::info;
 
@@ -129,7 +127,10 @@ impl DbPool {
             .into_iter()
             .map(Into::into)
             .collect();
-        Ok(crate::zmcdataset::ZmcDataSet::new(dataset_id.to_string(), rows))
+        Ok(crate::zmcdataset::ZmcDataSet::new(
+            dataset_id.to_string(),
+            rows,
+        ))
     }
 
     /// 带 `DataValue` 参数查询，返回零拷贝 [`ZmcDataSet`]。
@@ -148,7 +149,10 @@ impl DbPool {
             .into_iter()
             .map(Into::into)
             .collect();
-        Ok(crate::zmcdataset::ZmcDataSet::new(dataset_id.to_string(), rows))
+        Ok(crate::zmcdataset::ZmcDataSet::new(
+            dataset_id.to_string(),
+            rows,
+        ))
     }
 
     /// 无参查询，**流式**编码成列式二进制包写入 `out`，返回行数。
@@ -161,8 +165,8 @@ impl DbPool {
         dataset_id: &str,
         out: &mut Vec<u8>,
     ) -> crate::Result<u64> {
-        use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_close, encode_stream_open};
         use crate::zmcdataset::TokioPgRowSource;
+        use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_close, encode_stream_open};
         use futures::TryStreamExt;
 
         let client = self.pool.get().await?;
@@ -212,8 +216,8 @@ impl DbPool {
         col_names: &[String],
         chunk_tx: tokio::sync::mpsc::Sender<bytes::Bytes>,
     ) -> crate::Result<u64> {
-        use crate::zmcdataset::{encode_frame_end, encode_frame_header, encode_frame_row};
         use crate::zmcdataset::TokioPgRowSource;
+        use crate::zmcdataset::{encode_frame_end, encode_frame_header, encode_frame_row};
         use cmx_rowsource::{ZmcColType, ZmcSchema};
         use futures::TryStreamExt;
 
@@ -481,7 +485,10 @@ async fn new_db_pool(config: &DbConfig) -> crate::Result<DbPool> {
     }
 
     let pool_config = &config.pool_config;
-    info!("创建 PostgreSQL 连接池(tokio-postgres)，连接池配置：{:?}", pool_config);
+    info!(
+        "创建 PostgreSQL 连接池(tokio-postgres)，连接池配置：{:?}",
+        pool_config
+    );
 
     // 解析连接串为 tokio_postgres::Config
     let pg_config = tokio_postgres::Config::from_str(&config.db_url).map_err(crate::Error::from)?;
@@ -491,7 +498,10 @@ async fn new_db_pool(config: &DbConfig) -> crate::Result<DbPool> {
     };
     let mgr = Manager::from_config(pg_config, NoTls, mgr_config);
 
-    let schema = config.db_schema.clone().unwrap_or_else(|| "public".to_string());
+    let schema = config
+        .db_schema
+        .clone()
+        .unwrap_or_else(|| "public".to_string());
     let set_search_path = format!("SET search_path TO {}, public", schema);
 
     let pool = Pool::builder(mgr)
@@ -499,9 +509,15 @@ async fn new_db_pool(config: &DbConfig) -> crate::Result<DbPool> {
         // 配置了超时，deadpool 要求显式指定 Runtime（否则 build() 报
         // "Timeouts require a runtime"）。
         .runtime(Runtime::Tokio1)
-        .create_timeout(Some(std::time::Duration::from_secs(pool_config.acquire_timeout)))
-        .wait_timeout(Some(std::time::Duration::from_secs(pool_config.acquire_timeout)))
-        .recycle_timeout(Some(std::time::Duration::from_secs(pool_config.idle_timeout)))
+        .create_timeout(Some(std::time::Duration::from_secs(
+            pool_config.acquire_timeout,
+        )))
+        .wait_timeout(Some(std::time::Duration::from_secs(
+            pool_config.acquire_timeout,
+        )))
+        .recycle_timeout(Some(std::time::Duration::from_secs(
+            pool_config.idle_timeout,
+        )))
         .post_create(Hook::async_fn(move |client, _metrics| {
             let sql = set_search_path.clone();
             Box::pin(async move {

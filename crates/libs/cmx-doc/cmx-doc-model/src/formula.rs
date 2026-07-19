@@ -47,8 +47,7 @@ impl FValue {
         }
     }
     pub fn is_empty(&self) -> bool {
-        matches!(self, FValue::Null)
-            || matches!(self, FValue::Str(s) if s.is_empty())
+        matches!(self, FValue::Null) || matches!(self, FValue::Str(s) if s.is_empty())
     }
 }
 
@@ -305,12 +304,13 @@ impl Parser {
     }
     fn parse_unary(&mut self) -> Result<Node, String> {
         if let Some(Tok::Op(o)) = self.peek()
-            && (o == "-" || o == "!") {
-                let op = o.clone();
-                self.next();
-                let operand = self.parse_unary()?;
-                return Ok(Node::Unary(op, Box::new(operand)));
-            }
+            && (o == "-" || o == "!")
+        {
+            let op = o.clone();
+            self.next();
+            let operand = self.parse_unary()?;
+            return Ok(Node::Unary(op, Box::new(operand)));
+        }
         self.parse_primary()
     }
     fn parse_primary(&mut self) -> Result<Node, String> {
@@ -426,7 +426,12 @@ fn eval_call(name: &str, args: &[Node], scope: &Scope) -> Result<FValue, String>
         "ABS" => Ok(FValue::Num(ev(&args[0])?.as_num().abs())),
         "ROUND" => {
             let x = ev(&args[0])?.as_num();
-            let digits = args.get(1).map(&ev).transpose()?.map(|v| v.as_num() as i32).unwrap_or(0);
+            let digits = args
+                .get(1)
+                .map(&ev)
+                .transpose()?
+                .map(|v| v.as_num() as i32)
+                .unwrap_or(0);
             let f = 10f64.powi(digits);
             Ok(FValue::Num((x * f).round() / f))
         }
@@ -456,7 +461,10 @@ fn eval_call(name: &str, args: &[Node], scope: &Scope) -> Result<FValue, String>
             if cond {
                 ev(&args[1])
             } else {
-                args.get(2).map(ev).transpose()?.ok_or_else(|| "IF 缺少 else".to_string())
+                args.get(2)
+                    .map(ev)
+                    .transpose()?
+                    .ok_or_else(|| "IF 缺少 else".to_string())
             }
         }
         "AND" => {
@@ -519,7 +527,10 @@ mod tests {
     use super::*;
 
     fn scope(pairs: &[(&str, f64)]) -> Scope {
-        pairs.iter().map(|(k, v)| (k.to_string(), FValue::Num(*v))).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), FValue::Num(*v)))
+            .collect()
     }
 
     #[test]
@@ -563,14 +574,23 @@ mod tests {
         assert_eq!(eval_formula("ABS(x)", &s).unwrap(), FValue::Num(7.0));
         assert_eq!(eval_formula("MAX(1, 5, 3)", &s).unwrap(), FValue::Num(5.0));
         assert_eq!(eval_formula("SUM(1, 2, 3)", &s).unwrap(), FValue::Num(6.0));
-        assert_eq!(eval_formula("ROUND(3.14159, 2)", &s).unwrap(), FValue::Num(3.14));
-        assert_eq!(eval_formula("IF(x < 0, 'neg', 'pos')", &s).unwrap(), FValue::Str("neg".into()));
+        assert_eq!(
+            eval_formula("ROUND(3.14159, 2)", &s).unwrap(),
+            FValue::Num(3.14)
+        );
+        assert_eq!(
+            eval_formula("IF(x < 0, 'neg', 'pos')", &s).unwrap(),
+            FValue::Str("neg".into())
+        );
     }
 
     #[test]
     fn string_literals_and_concat() {
         let s = Scope::new();
-        assert_eq!(eval_formula("'a' + 'b'", &s).unwrap(), FValue::Str("ab".into()));
+        assert_eq!(
+            eval_formula("'a' + 'b'", &s).unwrap(),
+            FValue::Str("ab".into())
+        );
         assert!(eval_bool("'posted' == 'posted'", &s, false));
     }
 

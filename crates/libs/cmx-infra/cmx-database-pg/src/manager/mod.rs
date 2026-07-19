@@ -365,7 +365,9 @@ impl DatabaseManager {
         dataset_id: &str,
     ) -> Result<crate::zmcdataset::ZmcDataSet> {
         let dbx = self.get_dbx(db_id).await?;
-        dbx.db().query_zmc_with_datavalues(sql, &params, dataset_id).await
+        dbx.db()
+            .query_zmc_with_datavalues(sql, &params, dataset_id)
+            .await
     }
 
     /// **真·分帧流式**：带 `DataValue` 参数查询，逐行编成长度分帧发到 `chunk_tx`，峰值内存 O(单行)。

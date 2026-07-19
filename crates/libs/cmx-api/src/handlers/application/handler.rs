@@ -19,7 +19,9 @@ use crate::Result;
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
-use cmx_biz::application::{ApplicationFilter, ApplicationForCreate, ApplicationForUpdate, ApplicationService};
+use cmx_biz::application::{
+    ApplicationFilter, ApplicationForCreate, ApplicationForUpdate, ApplicationService,
+};
 
 /// Application 自定义分页查询 Handler
 ///

@@ -418,7 +418,7 @@ impl UserServiceImpl {
                     active_temp_roles: 0,
                     expired_temp_roles: 0,
                     upcoming_expirations: 0,
-                })
+                });
             }
         };
 

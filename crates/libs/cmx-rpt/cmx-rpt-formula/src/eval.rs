@@ -117,9 +117,7 @@ pub fn derive_balance_key(name: &str, args: &[Node], scope: &Scope) -> Option<Ba
         Some(n) => {
             let v = eval_node(n, scope);
             match v {
-                FValue::Num(d) => scope
-                    .ctx
-                    .resolve_period_offset(d.to_i64().unwrap_or(0)),
+                FValue::Num(d) => scope.ctx.resolve_period_offset(d.to_i64().unwrap_or(0)),
                 other => {
                     let t = other.as_text();
                     if t.is_empty() {
@@ -162,7 +160,10 @@ pub fn derive_balance_key(name: &str, args: &[Node], scope: &Scope) -> Option<Ba
 
 /// REF 目标地址派生：REF(报表, 版本, 单元格 [,组织,期间])。
 /// 返回 (report, version, org, period, cell)，org/period 缺省随当前上下文。
-pub fn derive_ref_addr(args: &[Node], scope: &Scope) -> Option<(String, String, String, String, String)> {
+pub fn derive_ref_addr(
+    args: &[Node],
+    scope: &Scope,
+) -> Option<(String, String, String, String, String)> {
     let report = args.first().map(|a| eval_node(a, scope).as_text())?;
     let version = args
         .get(1)
@@ -210,7 +211,11 @@ pub fn eval_node(node: &Node, scope: &Scope) -> FValue {
             .cloned()
             .unwrap_or(FValue::Num(Decimal::ZERO)),
         Node::OrgRef(name) => FValue::Str(scope.ctx.resolve_org_ref(name)),
-        Node::Cell(c) => scope.cells.get(c).cloned().unwrap_or(FValue::Num(Decimal::ZERO)),
+        Node::Cell(c) => scope
+            .cells
+            .get(c)
+            .cloned()
+            .unwrap_or(FValue::Num(Decimal::ZERO)),
         // 裸区间在标量上下文非法；仅在 SUM 等聚合里被 eval_call 特殊展开。
         Node::Range(_, _) => FValue::Error("#RANGE!".into()),
         Node::Unary(op, operand) => {
@@ -300,7 +305,11 @@ fn arg_nums(arg: &Node, scope: &Scope) -> Result<Vec<Decimal>, FValue> {
         Node::Range(a, b) => {
             let mut out = Vec::new();
             for c in expand_range(a, b) {
-                let v = scope.cells.get(&c).cloned().unwrap_or(FValue::Num(Decimal::ZERO));
+                let v = scope
+                    .cells
+                    .get(&c)
+                    .cloned()
+                    .unwrap_or(FValue::Num(Decimal::ZERO));
                 if v.is_error() {
                     return Err(v);
                 }
@@ -396,7 +405,9 @@ fn eval_call(name: &str, args: &[Node], scope: &Scope) -> FValue {
             if cond.as_bool() {
                 eval_node(&args[1], scope)
             } else {
-                args.get(2).map(|a| eval_node(a, scope)).unwrap_or(FValue::Null)
+                args.get(2)
+                    .map(|a| eval_node(a, scope))
+                    .unwrap_or(FValue::Null)
             }
         }
         "AND" => {

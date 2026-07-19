@@ -21,10 +21,10 @@ use cmx_core::model::data::dataset::Schema;
 use cmx_database::DatabaseManager;
 
 use super::loader::DocLoader;
-use cmx_doc_model::meta::{DocMetaView, LayerView};
-use cmx_doc_model::query::DocQuery;
 use super::revision::DocRevision;
 use cmx_biz::{BizError, Result};
+use cmx_doc_model::meta::{DocMetaView, LayerView};
+use cmx_doc_model::query::DocQuery;
 
 /// 审计上下文（方案 C）：由服务端权威填充审计列，覆盖前端传值。
 ///
@@ -198,7 +198,16 @@ impl DocSaver {
         } else {
             let mut outcomes = Vec::with_capacity(items.len());
             for (index, item) in items.iter().enumerate() {
-                let outcome = match Self::save(mm, db_id, item.meta, item.mode, item.changes, item.sctx).await {
+                let outcome = match Self::save(
+                    mm,
+                    db_id,
+                    item.meta,
+                    item.mode,
+                    item.changes,
+                    item.sctx,
+                )
+                .await
+                {
                     Ok(r) => BatchOutcome {
                         index,
                         ok: true,
@@ -240,8 +249,16 @@ impl DocSaver {
         let mut outcomes = Vec::with_capacity(items.len());
         let mut failed: Option<BizError> = None;
         for (index, item) in items.iter().enumerate() {
-            match Self::apply_and_version(mm, db_id, &txn_id, item.meta, item.mode, item.changes, item.sctx)
-                .await
+            match Self::apply_and_version(
+                mm,
+                db_id,
+                &txn_id,
+                item.meta,
+                item.mode,
+                item.changes,
+                item.sctx,
+            )
+            .await
             {
                 Ok((affected, updated_at, id_map)) => outcomes.push(BatchOutcome {
                     index,
@@ -359,25 +376,25 @@ impl DocSaver {
             let Some(layer) = meta.layer(layer_id) else {
                 continue;
             };
-            let Some(layer_changes) = layer_changes_for(changes, meta, idx, layer)
-            else {
+            let Some(layer_changes) = layer_changes_for(changes, meta, idx, layer) else {
                 continue;
             };
 
             if let Some(rows) = layer_changes.get("inserted").and_then(|v| v.as_array())
-                && !rows.is_empty() {
-                    write_expected += rows.len() as u64;
-                    write_affected +=
-                        Self::upsert_rows(mm, db_id, txn_id, layer, rows, audit).await?;
-                }
+                && !rows.is_empty()
+            {
+                write_expected += rows.len() as u64;
+                write_affected += Self::upsert_rows(mm, db_id, txn_id, layer, rows, audit).await?;
+            }
             if let Some(rows) = layer_changes.get("updated").and_then(|v| v.as_array())
-                && !rows.is_empty() {
-                    write_expected += rows.len() as u64;
-                    // B2 乐观锁仅根层（idx==0）：带前端回传的 update_time 基线做并发冲突检测。
-                    let oplock = idx == 0;
-                    write_affected +=
-                        Self::update_rows(mm, db_id, txn_id, layer, rows, audit, oplock).await?;
-                }
+                && !rows.is_empty()
+            {
+                write_expected += rows.len() as u64;
+                // B2 乐观锁仅根层（idx==0）：带前端回传的 update_time 基线做并发冲突检测。
+                let oplock = idx == 0;
+                write_affected +=
+                    Self::update_rows(mm, db_id, txn_id, layer, rows, audit, oplock).await?;
+            }
         }
         affected += write_affected;
 
@@ -386,14 +403,14 @@ impl DocSaver {
             let Some(layer) = meta.layer(layer_id) else {
                 continue;
             };
-            let Some(layer_changes) = layer_changes_for(changes, meta, idx, layer)
-            else {
+            let Some(layer_changes) = layer_changes_for(changes, meta, idx, layer) else {
                 continue;
             };
             if let Some(ids) = layer_changes.get("deleted").and_then(|v| v.as_array())
-                && !ids.is_empty() {
-                    affected += Self::delete_ids(mm, db_id, txn_id, layer, ids).await?;
-                }
+                && !ids.is_empty()
+            {
+                affected += Self::delete_ids(mm, db_id, txn_id, layer, ids).await?;
+            }
         }
 
         // 对账（H1/H2）：INSERT+UPDATE 每行必须精确落地。实际 < 期望 = 有行未写
@@ -433,15 +450,13 @@ impl DocSaver {
             .or_else(|| obj.get(&root.id))
             .and_then(|l| l.get("rows"))
             .and_then(|v| v.as_array())
-            .map(|rows| {
-                rows.iter()
-                    .filter_map(|r| r.get("id").cloned())
-                    .collect()
-            })
+            .map(|rows| rows.iter().filter_map(|r| r.get("id").cloned()).collect())
             .unwrap_or_default();
 
         if root_ids.is_empty() {
-            return Err(BizError::business("replace 模式必须提供根层 rows 以界定覆盖范围"));
+            return Err(BizError::business(
+                "replace 模式必须提供根层 rows 以界定覆盖范围",
+            ));
         }
 
         // 先删：子先父后，沿 upper_id 链圈定 rootId 子树（方案 E）。
@@ -452,7 +467,8 @@ impl DocSaver {
             let Some(layer) = meta.layer(layer_id) else {
                 continue;
             };
-            affected += Self::delete_subtree_layer(mm, db_id, txn_id, meta, layer, &root_ids).await?;
+            affected +=
+                Self::delete_subtree_layer(mm, db_id, txn_id, meta, layer, &root_ids).await?;
         }
 
         // 再插：父先，按 snapshot 各层 rows 批量 INSERT
@@ -805,7 +821,10 @@ impl DocSaver {
         ids: &[Value],
     ) -> Result<u64> {
         let dv_ids: Vec<DataValue> = ids.iter().map(|v| dv_for_col(v, layer, "id")).collect();
-        let sql = format!("DELETE FROM {} WHERE id = ANY($1)", quote_ident(&layer.table_name));
+        let sql = format!(
+            "DELETE FROM {} WHERE id = ANY($1)",
+            quote_ident(&layer.table_name)
+        );
         Self::exec(mm, db_id, txn_id, &sql, vec![DataValue::Array(dv_ids)]).await
     }
 
@@ -816,10 +835,11 @@ impl DocSaver {
         // 顶层 id / upper_id / line_no（若在 schema）
         for top in ["id", "upper_id", "line_no"] {
             if layer.schema.get_index(top).is_some()
-                && let Some(v) = row.get(top) {
-                    cols.push(top.to_string());
-                    vals.push(dv_for_col(v, layer, top));
-                }
+                && let Some(v) = row.get(top)
+            {
+                cols.push(top.to_string());
+                vals.push(dv_for_col(v, layer, top));
+            }
         }
         // fields 里的业务列
         if let Some(fields) = row.get("fields").and_then(|v| v.as_object()) {
@@ -849,10 +869,7 @@ impl DocSaver {
 
     /// 静默零写防护（H1）：changes 里每个 key 必须能对上某一层，否则报错。
     /// 防前端 path 约定漂移（表名 vs 嵌套路径）导致「保存成功却一行没写」。
-    fn assert_all_keys_matched(
-        changes: &Map<String, Value>,
-        meta: &DocMetaView,
-    ) -> Result<()> {
+    fn assert_all_keys_matched(changes: &Map<String, Value>, meta: &DocMetaView) -> Result<()> {
         // 构造所有合法 key：每层的 表名 / 层 id / 嵌套全路径
         let mut valid: std::collections::HashSet<String> = std::collections::HashSet::new();
         for (idx, layer_id) in meta.layer_order.iter().enumerate() {
@@ -878,7 +895,7 @@ impl DocSaver {
         changes: &Map<String, Value>,
         meta: &DocMetaView,
     ) -> Vec<cmx_biz::errcode::Violation> {
-        use cmx_biz::validation::{validate_insert_row, validate_update_fields, ValidateOptions};
+        use cmx_biz::validation::{ValidateOptions, validate_insert_row, validate_update_fields};
         let vopts_insert = ValidateOptions {
             server_filled: DOC_SERVER_FILLED_COLS,
             server_replaced: DOC_SERVER_REPLACED_COLS,
@@ -893,20 +910,34 @@ impl DocSaver {
         };
         let mut out = Vec::new();
         for (idx, layer_id) in meta.layer_order.iter().enumerate() {
-            let Some(layer) = meta.layer(layer_id) else { continue };
-            let Some(lc) = layer_changes_for(changes, meta, idx, layer) else { continue };
+            let Some(layer) = meta.layer(layer_id) else {
+                continue;
+            };
+            let Some(lc) = layer_changes_for(changes, meta, idx, layer) else {
+                continue;
+            };
             // inserted：{ id, upper_id?, fields:{...} } → 铺平成整行对象再校验（含顶层 id/upper_id）。
             if let Some(rows) = lc.get("inserted").and_then(|v| v.as_array()) {
                 for (i, row) in rows.iter().enumerate() {
                     let flat = flatten_insert_row(row);
-                    out.extend(validate_insert_row(&layer.spec, &flat, Some(i), &vopts_insert));
+                    out.extend(validate_insert_row(
+                        &layer.spec,
+                        &flat,
+                        Some(i),
+                        &vopts_insert,
+                    ));
                 }
             }
             // updated：只校验 fields。
             if let Some(rows) = lc.get("updated").and_then(|v| v.as_array()) {
                 for (i, row) in rows.iter().enumerate() {
                     if let Some(fields) = row.get("fields").and_then(|v| v.as_object()) {
-                        out.extend(validate_update_fields(&layer.spec, fields, Some(i), &vopts_update));
+                        out.extend(validate_update_fields(
+                            &layer.spec,
+                            fields,
+                            Some(i),
+                            &vopts_update,
+                        ));
                     }
                 }
             }
@@ -952,7 +983,10 @@ fn layer_changes_for<'a>(
     layer: &LayerView,
 ) -> Option<&'a Value> {
     // ① 表名 / 层 id
-    if let Some(v) = changes.get(&layer.table_name).or_else(|| changes.get(&layer.id)) {
+    if let Some(v) = changes
+        .get(&layer.table_name)
+        .or_else(|| changes.get(&layer.id))
+    {
         return Some(v);
     }
     // ② 嵌套全路径：layer_order[0..=layer_idx].join(".")
@@ -1120,7 +1154,9 @@ fn mint_ids_for_changeset(changes: &Value, child_keys: &[String]) -> (Value, Map
             continue;
         };
         for row in ins.iter_mut() {
-            let Some(r) = row.as_object_mut() else { continue };
+            let Some(r) = row.as_object_mut() else {
+                continue;
+            };
             let cur = r.get("id");
             if !is_temp_id(cur) {
                 continue; // 已是真号 → 不重铸。
@@ -1144,7 +1180,9 @@ fn mint_ids_for_changeset(changes: &Value, child_keys: &[String]) -> (Value, Map
             continue;
         };
         for row in ins.iter_mut() {
-            let Some(r) = row.as_object_mut() else { continue };
+            let Some(r) = row.as_object_mut() else {
+                continue;
+            };
             for ck in child_keys {
                 // ① 顶层外键（collector 规范化的 upper_id）。
                 if let Some(uv) = r.get(ck).cloned()
@@ -1300,7 +1338,10 @@ fn build_multi_insert_sql(table: &str, cols: &[String], nrows: usize, upsert: bo
         if updates.is_empty() {
             sql.push_str(" ON CONFLICT (id) DO NOTHING");
         } else {
-            sql.push_str(&format!(" ON CONFLICT (id) DO UPDATE SET {}", updates.join(", ")));
+            sql.push_str(&format!(
+                " ON CONFLICT (id) DO UPDATE SET {}",
+                updates.join(", ")
+            ));
         }
     }
     sql
@@ -1313,7 +1354,12 @@ fn build_multi_insert_sql(table: &str, cols: &[String], nrows: usize, upsert: bo
 /// alias 加 `__oplock` 列，WHERE 加 `AND t.col = v.__oplock` —— 基线陈旧的行不匹配 → 不更新 →
 /// affected 减少（由调用方对账判为冲突）。None 时退化为原始无锁 UPDATE。
 /// 注意参数序：Some 时每行为 (id, col1..colN, baseline)，即末位是基线。
-fn build_multi_update_sql(table: &str, cols: &[String], nrows: usize, oplock: Option<&str>) -> String {
+fn build_multi_update_sql(
+    table: &str,
+    cols: &[String],
+    nrows: usize,
+    oplock: Option<&str>,
+) -> String {
     let extra = if oplock.is_some() { 2 } else { 1 }; // id (+ baseline)
     let ncol = cols.len() + extra;
     let t = quote_ident(table);
@@ -1341,7 +1387,11 @@ fn build_multi_update_sql(table: &str, cols: &[String], nrows: usize, oplock: Op
         })
         .collect();
     let where_sql = match oplock {
-        Some(col) => format!("{t}.id = v.id AND {t}.{q} = v.\"__oplock\"", t = t, q = quote_ident(col)),
+        Some(col) => format!(
+            "{t}.id = v.id AND {t}.{q} = v.\"__oplock\"",
+            t = t,
+            q = quote_ident(col)
+        ),
         None => format!("{t}.id = v.id", t = t),
     };
     format!(
@@ -1355,7 +1405,8 @@ fn build_multi_update_sql(table: &str, cols: &[String], nrows: usize, oplock: Op
 }
 
 /// JSON 值 → DataValue（回存参数绑定）。
-fn json_to_dv(v: &Value) -> DataValue {    match v {
+fn json_to_dv(v: &Value) -> DataValue {
+    match v {
         Value::Null => DataValue::Null,
         Value::Bool(b) => DataValue::Bool(*b),
         Value::Number(n) => {
@@ -1388,12 +1439,24 @@ fn dv_for_col(v: &Value, layer: &LayerView, col: &str) -> DataValue {
             .trim()
             .parse::<i64>()
             .map(DataValue::Int)
-            .unwrap_or_else(|_| if s.is_empty() { DataValue::Null } else { DataValue::String(s.clone()) }),
+            .unwrap_or_else(|_| {
+                if s.is_empty() {
+                    DataValue::Null
+                } else {
+                    DataValue::String(s.clone())
+                }
+            }),
         (Value::String(s), Some(FieldType::Float)) => s
             .trim()
             .parse::<f64>()
             .map(DataValue::Float)
-            .unwrap_or_else(|_| if s.is_empty() { DataValue::Null } else { DataValue::String(s.clone()) }),
+            .unwrap_or_else(|_| {
+                if s.is_empty() {
+                    DataValue::Null
+                } else {
+                    DataValue::String(s.clone())
+                }
+            }),
         // 目标是 Decimal/日期列的空字符串 → NULL
         (Value::String(s), Some(FieldType::Decimal | FieldType::Date | FieldType::DateTime))
             if s.trim().is_empty() =>
@@ -1435,7 +1498,11 @@ fn parse_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
         return Some(dt.with_timezone(&Utc));
     }
-    for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S%.f"] {
+    for fmt in [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S%.f",
+    ] {
         if let Ok(ndt) = NaiveDateTime::parse_from_str(s, fmt) {
             return Some(DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc));
         }
@@ -1714,10 +1781,7 @@ mod tests {
         // 前端若传了 update_by/update_time，覆盖为服务端值且不重复。
         let schema = schema_with_audit();
         let mut cols = vec!["update_by".to_string(), "update_time".to_string()];
-        let mut vals = vec![
-            DataValue::Int(999),
-            DataValue::DateTime(audit_at(0).now),
-        ];
+        let mut vals = vec![DataValue::Int(999), DataValue::DateTime(audit_at(0).now)];
         apply_audit_update(&mut cols, &mut vals, &schema, &audit_at(42));
         assert_eq!(cols.iter().filter(|c| *c == "update_by").count(), 1);
         assert_eq!(cols.iter().filter(|c| *c == "update_time").count(), 1);
@@ -1782,7 +1846,12 @@ mod tests {
     }
 
     fn ctx_no_override() -> SaveCtx {
-        SaveCtx { actor_id: 7, actor_name: "张三".into(), doc_file: "f.json".into(), op_override: None }
+        SaveCtx {
+            actor_id: 7,
+            actor_name: "张三".into(),
+            doc_file: "f.json".into(),
+            op_override: None,
+        }
     }
 
     #[test]
@@ -1796,11 +1865,15 @@ mod tests {
             }
         });
         let mut roots =
-            collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override()).unwrap();
+            collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override())
+                .unwrap();
         roots.sort();
         assert_eq!(
             roots,
-            vec![("1001".to_string(), "create".to_string()), ("1002".to_string(), "update".to_string())]
+            vec![
+                ("1001".to_string(), "create".to_string()),
+                ("1002".to_string(), "update".to_string())
+            ]
         );
     }
 
@@ -1813,7 +1886,8 @@ mod tests {
             "cv_header": { "updated": [ { "id": "2001", "fields": { "x": 1 } } ] }
         });
         let roots =
-            collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override()).unwrap();
+            collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override())
+                .unwrap();
         assert!(roots.is_empty());
     }
 
@@ -1824,12 +1898,21 @@ mod tests {
         let snapshot = json!({
             "cv_batch": { "rows": [ { "id": "3001" }, { "id": "3002" } ] }
         });
-        let mut roots =
-            collect_versioned_roots(&snapshot, &meta, SaveMode::Replace, root, &ctx_no_override()).unwrap();
+        let mut roots = collect_versioned_roots(
+            &snapshot,
+            &meta,
+            SaveMode::Replace,
+            root,
+            &ctx_no_override(),
+        )
+        .unwrap();
         roots.sort();
         assert_eq!(
             roots,
-            vec![("3001".to_string(), "update".to_string()), ("3002".to_string(), "update".to_string())]
+            vec![
+                ("3001".to_string(), "update".to_string()),
+                ("3002".to_string(), "update".to_string())
+            ]
         );
     }
 
@@ -1845,7 +1928,8 @@ mod tests {
             op_override: Some("restore".into()),
         };
         let snapshot = json!({ "cv_batch": { "rows": [ { "id": "4001" } ] } });
-        let roots = collect_versioned_roots(&snapshot, &meta, SaveMode::Replace, root, &ctx).unwrap();
+        let roots =
+            collect_versioned_roots(&snapshot, &meta, SaveMode::Replace, root, &ctx).unwrap();
         assert_eq!(roots, vec![("4001".to_string(), "restore".to_string())]);
     }
 
@@ -1861,7 +1945,8 @@ mod tests {
             }
         });
         let roots =
-            collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override()).unwrap();
+            collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override())
+                .unwrap();
         assert_eq!(roots, vec![("5001".to_string(), "create".to_string())]);
     }
 
@@ -1888,7 +1973,10 @@ mod tests {
         });
         let (out, id_map) = mint_ids_for_changeset(&changes, &["upper_id".to_string()]);
         let new_id = out["cv_batch"]["inserted"][0]["id"].as_i64().unwrap();
-        assert!(new_id > 0 && new_id <= 9_007_199_254_740_991, "id 必须 JS 安全");
+        assert!(
+            new_id > 0 && new_id <= 9_007_199_254_740_991,
+            "id 必须 JS 安全"
+        );
         assert_eq!(id_map.get("t1").and_then(|v| v.as_i64()), Some(new_id));
     }
 
@@ -1912,7 +2000,9 @@ mod tests {
         });
         let (out, id_map) = mint_ids_for_changeset(&changes, &["upper_id".to_string()]);
         let parent_real = id_map.get("t1").unwrap().as_i64().unwrap();
-        let child_upper = out["cv_header"]["inserted"][0]["upper_id"].as_i64().unwrap();
+        let child_upper = out["cv_header"]["inserted"][0]["upper_id"]
+            .as_i64()
+            .unwrap();
         assert_eq!(child_upper, parent_real, "子 upper_id 应指向父真号");
         // 子自身也铸了真号。
         assert!(id_map.contains_key("t2"));
@@ -1927,7 +2017,9 @@ mod tests {
         });
         let (out, id_map) = mint_ids_for_changeset(&changes, &["header_id".to_string()]);
         let parent_real = id_map.get("h1").unwrap().as_i64().unwrap();
-        let child_fk = out["cv_acc_line"]["inserted"][0]["fields"]["header_id"].as_i64().unwrap();
+        let child_fk = out["cv_acc_line"]["inserted"][0]["fields"]["header_id"]
+            .as_i64()
+            .unwrap();
         assert_eq!(child_fk, parent_real, "fields 里的 header_id 应指向父真号");
     }
 
@@ -1981,4 +2073,3 @@ mod tests {
         assert_eq!(ids.len(), 3, "3 个临时 id 应铸出 3 个互异真号");
     }
 }
-

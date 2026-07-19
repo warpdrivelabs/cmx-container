@@ -172,7 +172,11 @@ mod tests {
             "plugins":[]
         }"#;
         let m: ModuleManifest = serde_json::from_str(json).expect("反序列化应成功");
-        assert_eq!(m.package_version.len(), 14, "package_version 应为14位时间戳");
+        assert_eq!(
+            m.package_version.len(),
+            14,
+            "package_version 应为14位时间戳"
+        );
         assert!(
             m.package_version.chars().all(|c| c.is_ascii_digit()),
             "package_version 应全为数字"

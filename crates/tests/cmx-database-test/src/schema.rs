@@ -23,13 +23,13 @@ pub const DATA_COLS: usize = 49;
 /// 所有行内容相同（符合“插入相同数据”要求），仅主键 id 递增。
 #[derive(Debug, Clone)]
 pub struct RowTemplate {
-    pub ints: Vec<i64>,          // 15 个整数列
-    pub texts: Vec<String>,      // 15 个文本列
-    pub nums: Vec<rust_decimal::Decimal>, // 8 个金额列
+    pub ints: Vec<i64>,                            // 15 个整数列
+    pub texts: Vec<String>,                        // 15 个文本列
+    pub nums: Vec<rust_decimal::Decimal>,          // 8 个金额列
     pub times: Vec<chrono::DateTime<chrono::Utc>>, // 5 个时间列
-    pub flags: Vec<bool>,        // 3 个布尔列
-    pub uuids: Vec<uuid::Uuid>,  // 2 个 UUID 列
-    pub json: serde_json::Value, // 1 个 JSONB 列
+    pub flags: Vec<bool>,                          // 3 个布尔列
+    pub uuids: Vec<uuid::Uuid>,                    // 2 个 UUID 列
+    pub json: serde_json::Value,                   // 1 个 JSONB 列
 }
 
 impl RowTemplate {
@@ -97,5 +97,8 @@ pub fn create_table_ddl(table: &str) -> String {
 
 /// 占位符列表 `$1..$N`（N = 列数，含 id）。
 pub fn placeholders(n: usize) -> String {
-    (1..=n).map(|i| format!("${i}")).collect::<Vec<_>>().join(",")
+    (1..=n)
+        .map(|i| format!("${i}"))
+        .collect::<Vec<_>>()
+        .join(",")
 }

@@ -116,10 +116,7 @@ impl DomainService {
         id: Value,
         data: DomainForUpdate,
     ) -> Result<DataSet> {
-        info!(
-            "{:<12} - DomainService::update - id: {}",
-            "SERVICE", id
-        );
+        info!("{:<12} - DomainService::update - id: {}", "SERVICE", id);
 
         let tx = mm
             .get_transaction_context()
@@ -128,30 +125,22 @@ impl DomainService {
             .map_err(|e| BizError::internal(format!("开启事务失败: {}", e)))?;
 
         // 读取旧 code
-        let old_ds = GenericCrudService::<DomainBmc>::get(
-            mm,
-            db_id,
-            Some(tx.txn_id()),
-            id.clone(),
-        )
-        .await?;
+        let old_ds =
+            GenericCrudService::<DomainBmc>::get(mm, db_id, Some(tx.txn_id()), id.clone()).await?;
         let old_code = Self::get_field(&old_ds, "code").unwrap_or_default();
 
-        let result = GenericCrudService::<DomainBmc>::update(
-            mm,
-            db_id,
-            Some(tx.txn_id()),
-            id.clone(),
-            data,
-        )
-        .await?;
+        let result =
+            GenericCrudService::<DomainBmc>::update(mm, db_id, Some(tx.txn_id()), id.clone(), data)
+                .await?;
 
         // 检查 code 是否变更（注意：code 不可改，DomainForUpdate 无 code 字段，
         // 但为防御性编程仍检查——若 id 与 code 不同则触发级联）
         let new_code = Self::get_field(&result, "code").unwrap_or_else(|| old_code.clone());
 
-        if old_code != new_code && !old_code.is_empty() && !new_code.is_empty() {
-            if let Err(e) = DamAssetService::on_domain_renamed(
+        if old_code != new_code
+            && !old_code.is_empty()
+            && !new_code.is_empty()
+            && let Err(e) = DamAssetService::on_domain_renamed(
                 mm,
                 db_id,
                 Some(tx.txn_id()),
@@ -159,12 +148,11 @@ impl DomainService {
                 &new_code,
             )
             .await
-            {
-                tx.rollback()
-                    .await
-                    .map_err(|e| BizError::internal(format!("回滚事务失败: {}", e)))?;
-                return Err(e);
-            }
+        {
+            tx.rollback()
+                .await
+                .map_err(|e| BizError::internal(format!("回滚事务失败: {}", e)))?;
+            return Err(e);
         }
 
         tx.commit()
@@ -187,14 +175,9 @@ impl DomainService {
         // 逐个校验引用完整性
         for id in &ids {
             // 先查 code（id 即 code，但防御性查询）
-            let ds = GenericCrudService::<DomainBmc>::get(
-                mm,
-                db_id,
-                None,
-                id.clone(),
-            )
-            .await?;
-            let code = Self::get_field(&ds, "code").unwrap_or_else(|| id.as_str().unwrap_or("").to_string());
+            let ds = GenericCrudService::<DomainBmc>::get(mm, db_id, None, id.clone()).await?;
+            let code = Self::get_field(&ds, "code")
+                .unwrap_or_else(|| id.as_str().unwrap_or("").to_string());
             DamAssetService::check_domain_deletable(mm, db_id, &code).await?;
         }
 

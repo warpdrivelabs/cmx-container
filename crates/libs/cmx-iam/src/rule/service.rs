@@ -833,21 +833,14 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
 
         // 检测是否含跨表 subject_id 过滤（取首个 filter 组中首个 subject_id 等值操作符值）。
         let cross_subject_id: Option<String> = filters.as_ref().and_then(|fs| {
-            fs.iter().find_map(|f| {
-                f.subject_id.as_ref().and_then(Self::first_string_opval)
-            })
+            fs.iter()
+                .find_map(|f| f.subject_id.as_ref().and_then(Self::first_string_opval))
         });
 
         if let Some(subject_id) = cross_subject_id {
             // 路径 B：跨表 raw SQL（JOIN items + DISTINCT + 走 subject_id 索引）
-            Self::page_rules_cross_table(
-                &self.mm,
-                &self.db_id,
-                filters,
-                list_options,
-                subject_id,
-            )
-            .await
+            Self::page_rules_cross_table(&self.mm, &self.db_id, filters, list_options, subject_id)
+                .await
         } else {
             // 路径 A：标准 GenericCrudService（与 role/role_group 一致，单表索引）
             // 注入默认 archived=0，并将 subject_id 置 None（避免生成无效列谓词）
@@ -875,9 +868,7 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
                     list_options,
                 )
                 .await
-                .map_err(|e| {
-                    TraitError::from(IamError::Business(format!("规则分页失败: {e}")))
-                })?;
+                .map_err(|e| TraitError::from(IamError::Business(format!("规则分页失败: {e}"))))?;
             Ok((Self::extract_rules(dataset), total))
         }
     }

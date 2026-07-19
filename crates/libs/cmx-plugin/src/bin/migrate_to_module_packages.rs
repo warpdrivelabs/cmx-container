@@ -42,7 +42,10 @@ async fn main() -> anyhow::Result<()> {
     let mut failed = 0usize;
 
     for ((domain, app, module), plugin_list) in &groups {
-        println!("\n--- 模块: {domain}/{app}/{module} ({} 个插件) ---", plugin_list.len());
+        println!(
+            "\n--- 模块: {domain}/{app}/{module} ({} 个插件) ---",
+            plugin_list.len()
+        );
         match migrate_module(&mm, domain, app, module, plugin_list, dry_run).await {
             Ok(count) => {
                 println!("  ✓ 迁移完成,处理资源 {} 项", count);
@@ -119,10 +122,22 @@ async fn list_installed_plugins(mm: &DatabaseManager) -> anyhow::Result<Vec<Plug
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string(),
-                domain_code: row.get("domain_code").and_then(|v| v.as_str()).map(String::from),
-                application_code: row.get("application_code").and_then(|v| v.as_str()).map(String::from),
-                module_code: row.get("module_code").and_then(|v| v.as_str()).map(String::from),
-                install_path: row.get("install_path").and_then(|v| v.as_str()).map(String::from),
+                domain_code: row
+                    .get("domain_code")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                application_code: row
+                    .get("application_code")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                module_code: row
+                    .get("module_code")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                install_path: row
+                    .get("install_path")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
             });
         }
     }
@@ -135,8 +150,11 @@ fn group_by_module(
 ) -> HashMap<(String, String, String), Vec<PluginRecord>> {
     let mut groups: HashMap<(String, String, String), Vec<PluginRecord>> = HashMap::new();
     for p in plugins {
-        let (Some(d), Some(a), Some(m)) = (p.domain_code.clone(), p.application_code.clone(), p.module_code.clone())
-        else {
+        let (Some(d), Some(a), Some(m)) = (
+            p.domain_code.clone(),
+            p.application_code.clone(),
+            p.module_code.clone(),
+        ) else {
             continue; // 无完整归属的插件跳过
         };
         groups.entry((d, a, m)).or_default().push(p);
@@ -222,7 +240,7 @@ async fn migrate_module(
                             open_type: 0,
                             fun_code: None,
                             definition: None,
-                ext_attributes: None,
+                            ext_attributes: None,
                             domain_code: domain.to_string(),
                             application_code: app.to_string(),
                             module_code: module.to_string(),
@@ -252,7 +270,8 @@ async fn migrate_module(
             imported_by: Some("migration_script".to_string()),
             source: Some("legacy_migration".to_string()),
         };
-        let _ = cmx_biz::module::version::ModuleVersionService::record_import(mm, db_id, record).await;
+        let _ =
+            cmx_biz::module::version::ModuleVersionService::record_import(mm, db_id, record).await;
     }
 
     Ok(count)

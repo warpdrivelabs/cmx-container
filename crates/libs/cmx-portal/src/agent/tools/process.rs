@@ -351,16 +351,17 @@ fn parse_lint_diagnostics(cmd: &str, output: &str) -> Vec<Value> {
             continue;
         }
         if let Some(c) = re.captures(line)
-            && !current_file.is_empty() {
-                diagnostics.push(json!({
-                    "file": current_file,
-                    "line": c[1].parse::<i64>().unwrap_or(0),
-                    "column": c[2].parse::<i64>().unwrap_or(0),
-                    "severity": &c[3],
-                    "message": c[4].trim(),
-                    "rule": &c[5],
-                }));
-            }
+            && !current_file.is_empty()
+        {
+            diagnostics.push(json!({
+                "file": current_file,
+                "line": c[1].parse::<i64>().unwrap_or(0),
+                "column": c[2].parse::<i64>().unwrap_or(0),
+                "severity": &c[3],
+                "message": c[4].trim(),
+                "rule": &c[5],
+            }));
+        }
     }
     diagnostics
 }

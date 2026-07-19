@@ -250,8 +250,14 @@ mod tests {
     fn http_code_mapping() {
         use cmx_api_types::ErrCode;
         // 用 as u16 比较，不依赖 ErrCode 派生 PartialEq。
-        assert_eq!(CmxErrCode::ValueTooLong.http_code() as u16, ErrCode::ValidationError as u16);
-        assert_eq!(CmxErrCode::UniqueViolation.http_code() as u16, ErrCode::BadRequest as u16);
+        assert_eq!(
+            CmxErrCode::ValueTooLong.http_code() as u16,
+            ErrCode::ValidationError as u16
+        );
+        assert_eq!(
+            CmxErrCode::UniqueViolation.http_code() as u16,
+            ErrCode::BadRequest as u16
+        );
         assert_eq!(
             CmxErrCode::OptimisticLockConflict.http_code() as u16,
             ErrCode::Conflict as u16
@@ -279,7 +285,11 @@ mod tests {
             Some("name".into()),
             Some("科目名称".into()),
             Some(0),
-            &[("caption", "科目名称".into()), ("max", "128".into()), ("actual", "200".into())],
+            &[
+                ("caption", "科目名称".into()),
+                ("max", "128".into()),
+                ("actual", "200".into()),
+            ],
         );
         assert_eq!(v.code, "VALUE_TOO_LONG");
         assert_eq!(v.code_num, 1002);
@@ -291,11 +301,20 @@ mod tests {
     fn code_num_stable_and_unique() {
         use std::collections::HashSet;
         let all = [
-            CmxErrCode::TypeMismatch, CmxErrCode::ValueTooLong, CmxErrCode::NotNullViolation,
-            CmxErrCode::NumericOutOfRange, CmxErrCode::DecimalScaleExceeded, CmxErrCode::InvalidDate,
-            CmxErrCode::UnknownColumn, CmxErrCode::UniqueViolation, CmxErrCode::ForeignKeyViolation,
-            CmxErrCode::CheckViolation, CmxErrCode::NotNullDbViolation, CmxErrCode::OptimisticLockConflict,
-            CmxErrCode::DbError, CmxErrCode::Internal,
+            CmxErrCode::TypeMismatch,
+            CmxErrCode::ValueTooLong,
+            CmxErrCode::NotNullViolation,
+            CmxErrCode::NumericOutOfRange,
+            CmxErrCode::DecimalScaleExceeded,
+            CmxErrCode::InvalidDate,
+            CmxErrCode::UnknownColumn,
+            CmxErrCode::UniqueViolation,
+            CmxErrCode::ForeignKeyViolation,
+            CmxErrCode::CheckViolation,
+            CmxErrCode::NotNullDbViolation,
+            CmxErrCode::OptimisticLockConflict,
+            CmxErrCode::DbError,
+            CmxErrCode::Internal,
         ];
         // 整数码互不重复
         let nums: HashSet<u32> = all.iter().map(|c| c.code_num()).collect();
@@ -308,7 +327,9 @@ mod tests {
     #[test]
     fn classify_db_error_variants() {
         assert_eq!(
-            classify_db_error("db error: ERROR: duplicate key value violates unique constraint \"cf_currency_pkey\""),
+            classify_db_error(
+                "db error: ERROR: duplicate key value violates unique constraint \"cf_currency_pkey\""
+            ),
             CmxErrCode::UniqueViolation
         );
         assert_eq!(
@@ -319,7 +340,10 @@ mod tests {
             classify_db_error("insert or update on table violates foreign key constraint \"fk_x\""),
             CmxErrCode::ForeignKeyViolation
         );
-        assert_eq!(classify_db_error("some other db error"), CmxErrCode::DbError);
+        assert_eq!(
+            classify_db_error("some other db error"),
+            CmxErrCode::DbError
+        );
     }
 
     #[test]

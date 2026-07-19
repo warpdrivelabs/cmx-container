@@ -4,8 +4,8 @@ use std::collections::HashSet;
 
 use serde_json::{Map, Value};
 
-use super::{Diag, FIELD_KINDS, check_formula, field_id};
 use super::props::{has_dimension_attribute, validate_column_props};
+use super::{Diag, FIELD_KINDS, check_formula, field_id};
 
 /// 校验规则字段集合：id 唯一性、维度引用、source/defaultFrom、公式良构、依赖存在性、列属性。
 pub(super) fn validate_fields(

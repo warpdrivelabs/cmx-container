@@ -35,7 +35,8 @@ pub fn ensure_data_file(path: &Path) -> Result<()> {
         "json":  {"k": "v", "n": 1, "arr": [1, 2, 3], "nested": {"a": "b"}}
     });
     let pretty = serde_json::to_string_pretty(&json)?;
-    std::fs::write(path, pretty).with_context(|| format!("写入数据文件失败: {}", path.display()))?;
+    std::fs::write(path, pretty)
+        .with_context(|| format!("写入数据文件失败: {}", path.display()))?;
     Ok(())
 }
 
@@ -61,7 +62,9 @@ pub fn load_template(path: &Path) -> Result<RowTemplate> {
         .as_array()
         .context("nums 缺失")?
         .iter()
-        .map(|x| rust_decimal::Decimal::from_str(x.as_str().unwrap_or("0")).context("nums 解析失败"))
+        .map(|x| {
+            rust_decimal::Decimal::from_str(x.as_str().unwrap_or("0")).context("nums 解析失败")
+        })
         .collect::<Result<_>>()?;
     let times: Vec<chrono::DateTime<chrono::Utc>> = v["times"]
         .as_array()

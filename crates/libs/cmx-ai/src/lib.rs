@@ -24,7 +24,7 @@ pub mod session_registry;
 pub mod sse_relay;
 pub mod types;
 
-pub use config::{load_config, OpenCodeConfig};
+pub use config::{OpenCodeConfig, load_config};
 pub use error::{AiError, AiResult};
 pub use opencode_client::OpenCodeClient;
 pub use session_registry::{AiSseEvent, SessionRegistry};

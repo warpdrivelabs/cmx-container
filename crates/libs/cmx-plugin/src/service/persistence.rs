@@ -313,7 +313,12 @@ impl PluginPersistence {
         )
         .await
         {
-            tracing::warn!("插件 {} 种子数据初始化失败(不阻断{}): {}", plugin_id, action_label, e);
+            tracing::warn!(
+                "插件 {} 种子数据初始化失败(不阻断{}): {}",
+                plugin_id,
+                action_label,
+                e
+            );
         }
 
         // 3. 构建数据库记录

@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::error::{PortalError, PortalResult};
 
@@ -370,7 +370,9 @@ pub(crate) async fn run_tool(root: &Path, name: &str, args: &Value) -> PortalRes
         "service_catalog_get" => meta_query::service_catalog_get_tool(args).await,
         "flexible_combination_list" => meta_query::flexible_combination_list_tool(args).await,
         "flexible_combination_get" => meta_query::flexible_combination_get_tool(args).await,
-        "flexible_combination_validate" => meta_query::flexible_combination_validate_tool(args).await,
+        "flexible_combination_validate" => {
+            meta_query::flexible_combination_validate_tool(args).await
+        }
         "flexible_combination_preview" => meta_query::flexible_combination_preview_tool(args).await,
         "flexible_combination_resolve" => meta_query::flexible_combination_resolve_tool(args).await,
         "flexible_combination_rule" => meta_query::flexible_combination_rule_tool(args).await,

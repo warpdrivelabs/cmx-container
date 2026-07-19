@@ -190,9 +190,10 @@ async fn find_full_node(menu_ref: &str, id: &str) -> PortalResult<Option<Value>>
                 return Some(it.clone());
             }
             if let Some(ch) = it.get("children").and_then(|v| v.as_array())
-                && let Some(found) = dfs(ch, id) {
-                    return Some(found);
-                }
+                && let Some(found) = dfs(ch, id)
+            {
+                return Some(found);
+            }
         }
         None
     }
@@ -330,11 +331,12 @@ pub async fn resolve(input: ResolveInput) -> PortalResult<Value> {
     }
     // 2) 规则兜底
     if hit.is_none()
-        && let Some((item, score)) = rule_match(&query, &catalog) {
-            // 把分数归一到 0~1 的粗略置信
-            let conf = (score / 8.0).min(0.95);
-            hit = Some((item.id.clone(), conf, "关键词匹配".to_string(), "rule"));
-        }
+        && let Some((item, score)) = rule_match(&query, &catalog)
+    {
+        // 把分数归一到 0~1 的粗略置信
+        let conf = (score / 8.0).min(0.95);
+        hit = Some((item.id.clone(), conf, "关键词匹配".to_string(), "rule"));
+    }
 
     let Some((id, confidence, reason, source)) = hit else {
         // 未命中：返回少量候选给前端做提示

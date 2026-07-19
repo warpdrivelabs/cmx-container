@@ -131,7 +131,11 @@ async fn non_interrupting_timer_spawns_reminder_without_canceling() {
         .complete_task(&started.instance_id, &approve_task.id, Variables::new())
         .await
         .unwrap();
-    assert_eq!(done.state, InstanceState::Active, "催办任务未办结，实例仍活动");
+    assert_eq!(
+        done.state,
+        InstanceState::Active,
+        "催办任务未办结，实例仍活动"
+    );
 }
 
 #[tokio::test]
@@ -148,7 +152,11 @@ async fn completing_before_timeout_cancels_the_timer() {
         .complete_task(&started.instance_id, &manager_task.id, Variables::new())
         .await
         .unwrap();
-    assert_eq!(done.state, InstanceState::Completed, "经理审批完成 → 流程结束");
+    assert_eq!(
+        done.state,
+        InstanceState::Completed,
+        "经理审批完成 → 流程结束"
+    );
     let snap = store.load_snapshot(&started.instance_id).await.unwrap();
     assert!(snap.jobs.is_empty(), "办结后定时器作业应撤销");
 

@@ -10,15 +10,15 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::common::package::PackageUtils;
+use crate::domain::plugin::PluginSource;
+use crate::error::{PluginError, PluginResult};
+use crate::service::deploy::{DeployRequest, DeployService};
 use cmx_core::model::module::manifest::ModuleManifest;
 use cmx_database::get_default_db_manager;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use tracing::{error, info, warn};
-use crate::common::package::PackageUtils;
-use crate::domain::plugin::PluginSource;
-use crate::error::{PluginError, PluginResult};
-use crate::service::deploy::{DeployRequest, DeployService};
 
 /// 模块包来源
 #[derive(Debug, Clone)]
@@ -119,8 +119,7 @@ impl ModuleInstallService {
         let mm = get_default_db_manager();
         let default_db_id = mm.get_default_db_id().await;
         let biz_db_id = mm.get_biz_db_id().await;
-        let action =
-            Self::validate_import(mm, &default_db_id, &manifest, force).await?;
+        let action = Self::validate_import(mm, &default_db_id, &manifest, force).await?;
         match action {
             ImportAction::SkipSame => {
                 return Ok(ModuleInstallResult {
@@ -149,7 +148,10 @@ impl ModuleInstallService {
         }
 
         // 5. 版本登记(current_version upsert + version_history insert)
-        if let Err(e) = self.record_version(mm, &default_db_id, &manifest, &operator).await {
+        if let Err(e) = self
+            .record_version(mm, &default_db_id, &manifest, &operator)
+            .await
+        {
             error!(error = %e, "版本登记失败,继续安装插件");
         }
 
@@ -252,10 +254,13 @@ impl ModuleInstallService {
         manifest: &ModuleManifest,
         force: bool,
     ) -> PluginResult<ImportAction> {
-        let current =
-            cmx_biz::module::version::ModuleVersionService::get_current(mm, db_id, &manifest.module.code)
-                .await
-                .map_err(|e| PluginError::Database(format!("查询当前版本失败: {e}")))?;
+        let current = cmx_biz::module::version::ModuleVersionService::get_current(
+            mm,
+            db_id,
+            &manifest.module.code,
+        )
+        .await
+        .map_err(|e| PluginError::Database(format!("查询当前版本失败: {e}")))?;
 
         let Some(cur) = current else {
             return Ok(ImportAction::AllowUpgrade); // 新模块直接放行
@@ -369,15 +374,17 @@ impl ModuleInstallService {
     ) -> Vec<cmx_core::model::module::FormDefinition> {
         Self::read_definition_files(module_dir, "forms")
             .into_iter()
-            .map(|(stem, name, definition)| cmx_core::model::module::FormDefinition {
-                code: format!("{module}:{stem}"),
-                name,
-                description: None,
-                definition,
-                domain_code: domain.to_string(),
-                application_code: app.to_string(),
-                module_code: module.to_string(),
-            })
+            .map(
+                |(stem, name, definition)| cmx_core::model::module::FormDefinition {
+                    code: format!("{module}:{stem}"),
+                    name,
+                    description: None,
+                    definition,
+                    domain_code: domain.to_string(),
+                    application_code: app.to_string(),
+                    module_code: module.to_string(),
+                },
+            )
             .collect()
     }
 
@@ -477,9 +484,7 @@ impl ModuleInstallService {
     /// 读取 metadata/tables/*.json,解析为 TableDefine 列表。
     ///
     /// 文件格式:`{ "tables": [TableDefine, ...] }`,合并所有文件的表定义。
-    fn read_table_definitions(
-        module_dir: &Path,
-    ) -> Vec<cmx_core::model::meta::table::TableDefine> {
+    fn read_table_definitions(module_dir: &Path) -> Vec<cmx_core::model::meta::table::TableDefine> {
         let tables_dir = module_dir.join("metadata").join("tables");
         if !tables_dir.exists() {
             return Vec::new();
@@ -605,8 +610,7 @@ impl ModuleInstallService {
                     continue;
                 }
             };
-            let definition: serde_json::Value =
-                serde_json::from_str(&content).unwrap_or_default();
+            let definition: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
             let name = definition
                 .get("name")
                 .and_then(|v| v.as_str())
@@ -633,8 +637,7 @@ impl ModuleInstallService {
             module_code: manifest.module.code.clone(),
             package_version: manifest.package_version.clone(),
             checksum: manifest.checksum.clone(),
-            manifest_snapshot: serde_json::to_value(manifest)
-                .unwrap_or(serde_json::Value::Null),
+            manifest_snapshot: serde_json::to_value(manifest).unwrap_or(serde_json::Value::Null),
             imported_by: operator.clone(),
             source: Some("module_package_import".to_string()),
         };

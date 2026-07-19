@@ -8,17 +8,17 @@
  * 响应 JSON 形状与 demo 完全一致（前端依赖 key/name/state/activeVersion/bpmnXml/instances/tasks…）。
  */
 
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use cmx_api::middleware::CmxSvrContext;
 use cmx_api::{ApiResp, CmxAppState, Result};
 
 use cmx_flow_engine::{RuntimeStore, Variables};
 
-use crate::engine::{flow, FlowRuntime, IAM_DB_ID};
+use crate::engine::{FlowRuntime, IAM_DB_ID, flow};
 use crate::views::{definition_view, instance_state_str, instance_view, summary_view};
 
 // ————————————————————— 错误桥 —————————————————————
@@ -52,7 +52,13 @@ pub async fn get_definitions(
     CmxSvrContext(_ctx): CmxSvrContext,
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
-    let defs: Vec<Value> = rt.definitions.read().await.iter().map(definition_view).collect();
+    let defs: Vec<Value> = rt
+        .definitions
+        .read()
+        .await
+        .iter()
+        .map(definition_view)
+        .collect();
     Ok(Json(ApiResp::ok(json!({ "definitions": defs }))))
 }
 
@@ -272,7 +278,10 @@ pub async fn activate_definition_version(
     Path((key, version)): Path<(String, i32)>,
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
-    rt.def_svc.activate_version(&key, version).await.map_err(def_err)?;
+    rt.def_svc
+        .activate_version(&key, version)
+        .await
+        .map_err(def_err)?;
     Ok(Json(ApiResp::ok(json!({
         "key": key,
         "activeVersion": version,
@@ -287,8 +296,13 @@ pub async fn delete_definition_version(
     Path((key, version)): Path<(String, i32)>,
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
-    rt.def_svc.delete_version(&key, version).await.map_err(def_err)?;
-    Ok(Json(ApiResp::ok(json!({ "key": key, "deletedVersion": version }))))
+    rt.def_svc
+        .delete_version(&key, version)
+        .await
+        .map_err(def_err)?;
+    Ok(Json(ApiResp::ok(
+        json!({ "key": key, "deletedVersion": version }),
+    )))
 }
 
 // ————————————————————— 实例 —————————————————————
@@ -403,7 +417,10 @@ pub async fn cancel_instance(
     Json(req): Json<CancelReq>,
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
-    rt.engine.cancel_process(&id, req.reason).await.map_err(engine_err)?;
+    rt.engine
+        .cancel_process(&id, req.reason)
+        .await
+        .map_err(engine_err)?;
     load_view(rt, &id).await
 }
 
@@ -474,7 +491,13 @@ pub async fn transfer_task(
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
     rt.engine
-        .transfer_task(&req.instance_id, &task_id, &req.from_user, &req.to_user, req.reason.as_deref())
+        .transfer_task(
+            &req.instance_id,
+            &task_id,
+            &req.from_user,
+            &req.to_user,
+            req.reason.as_deref(),
+        )
         .await
         .map_err(engine_err)?;
     load_view(rt, &req.instance_id).await
@@ -489,7 +512,13 @@ pub async fn delegate_task(
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
     rt.engine
-        .delegate_task(&req.instance_id, &task_id, &req.from_user, &req.to_user, req.reason.as_deref())
+        .delegate_task(
+            &req.instance_id,
+            &task_id,
+            &req.from_user,
+            &req.to_user,
+            req.reason.as_deref(),
+        )
         .await
         .map_err(engine_err)?;
     load_view(rt, &req.instance_id).await
@@ -518,7 +547,14 @@ pub async fn add_sign_task(
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
     rt.engine
-        .add_sign(&req.instance_id, &task_id, &req.from_user, &req.to_user, req.before, req.reason.as_deref())
+        .add_sign(
+            &req.instance_id,
+            &task_id,
+            &req.from_user,
+            &req.to_user,
+            req.before,
+            req.reason.as_deref(),
+        )
         .await
         .map_err(engine_err)?;
     load_view(rt, &req.instance_id).await
@@ -532,7 +568,11 @@ pub async fn trigger_timers(
     CmxSvrContext(_ctx): CmxSvrContext,
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
-    let fired = rt.engine.trigger_due_timers(100).await.map_err(engine_err)?;
+    let fired = rt
+        .engine
+        .trigger_due_timers(100)
+        .await
+        .map_err(engine_err)?;
     let items: Vec<Value> = fired
         .iter()
         .map(|f| {
@@ -544,7 +584,9 @@ pub async fn trigger_timers(
             })
         })
         .collect();
-    Ok(Json(ApiResp::ok(json!({ "firedCount": fired.len(), "fired": items }))))
+    Ok(Json(ApiResp::ok(
+        json!({ "firedCount": fired.len(), "fired": items }),
+    )))
 }
 
 /// 列出 IAM 库用户（id → 昵称/用户名），供前端把候选人 id 显示成友好名字。
@@ -595,7 +637,11 @@ pub async fn list_cc(
     Query(q): Query<CcQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
-    let items = rt.engine.cc_for_user(&q.user, q.unread, 100).await.map_err(engine_err)?;
+    let items = rt
+        .engine
+        .cc_for_user(&q.user, q.unread, 100)
+        .await
+        .map_err(engine_err)?;
     let cc: Vec<Value> = items
         .iter()
         .map(|c| {
@@ -633,11 +679,7 @@ pub async fn list_orgs(
     CmxSvrContext(_ctx): CmxSvrContext,
 ) -> Result<Json<ApiResp<Value>>> {
     let rt = flow().await?;
-    let orgs = rt
-        .binding_store
-        .list_orgs()
-        .await
-        .map_err(msg_err)?;
+    let orgs = rt.binding_store.list_orgs().await.map_err(msg_err)?;
     let items: Vec<Value> = orgs
         .iter()
         .map(|o| {
@@ -665,7 +707,9 @@ pub async fn list_subflow_bindings(
         .await
         .map_err(msg_err)?;
     let items: Vec<Value> = list.iter().map(binding_view).collect();
-    Ok(Json(ApiResp::ok(json!({ "calledKey": called_key, "bindings": items }))))
+    Ok(Json(ApiResp::ok(
+        json!({ "calledKey": called_key, "bindings": items }),
+    )))
 }
 
 fn binding_view(b: &cmx_flow_store_pg::SubflowBinding) -> Value {

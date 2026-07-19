@@ -24,7 +24,8 @@ struct FakeResolver {
 }
 impl FakeResolver {
     fn with(mut self, key: &str, users: &[&str]) -> Self {
-        self.map.insert(key.into(), users.iter().map(|s| s.to_string()).collect());
+        self.map
+            .insert(key.into(), users.iter().map(|s| s.to_string()).collect());
         self
     }
 }
@@ -67,7 +68,10 @@ async fn node_cc_generated_on_complete_without_blocking() {
     // dept_head 角色两人：办结经理审批 → 对这两人抄送，流程照常完成。
     let resolver = FakeResolver::default().with("Role:dept_head", &["u_boss1", "u_boss2"]);
     let (engine, store) = engine_for(CC_BPMN, resolver);
-    let started = engine.start_process("cc_approve", Variables::new(), None).await.unwrap();
+    let started = engine
+        .start_process("cc_approve", Variables::new(), None)
+        .await
+        .unwrap();
     let task_id = started.open_tasks[0].id.clone();
 
     // 办结（无抄送记录之前）。
@@ -81,20 +85,42 @@ async fn node_cc_generated_on_complete_without_blocking() {
     // 落库：两条抄送记录，被抄送人正确，均未读。
     let snap = store.load_snapshot(&started.instance_id).await.unwrap();
     assert_eq!(snap.cc_records.len(), 2, "应对 dept_head 两人各抄送一条");
-    let tos: Vec<&str> = snap.cc_records.iter().map(|c| c.to_user_id.as_str()).collect();
+    let tos: Vec<&str> = snap
+        .cc_records
+        .iter()
+        .map(|c| c.to_user_id.as_str())
+        .collect();
     assert!(tos.contains(&"u_boss1") && tos.contains(&"u_boss2"));
-    assert!(snap.cc_records.iter().all(|c| c.read_at.is_none()), "初始都未读");
-    assert!(snap.cc_records.iter().all(|c| c.node_bpmn_id.as_deref() == Some("review")));
-    assert!(snap.cc_records.iter().all(|c| c.from_user_id.as_deref() == Some("mgr")), "发起人=办理人");
+    assert!(
+        snap.cc_records.iter().all(|c| c.read_at.is_none()),
+        "初始都未读"
+    );
+    assert!(
+        snap.cc_records
+            .iter()
+            .all(|c| c.node_bpmn_id.as_deref() == Some("review"))
+    );
+    assert!(
+        snap.cc_records
+            .iter()
+            .all(|c| c.from_user_id.as_deref() == Some("mgr")),
+        "发起人=办理人"
+    );
 }
 
 #[tokio::test]
 async fn find_cc_for_user_and_mark_read() {
     let resolver = FakeResolver::default().with("Role:dept_head", &["u_boss1", "u_boss2"]);
     let (engine, _store) = engine_for(CC_BPMN, resolver);
-    let started = engine.start_process("cc_approve", Variables::new(), None).await.unwrap();
+    let started = engine
+        .start_process("cc_approve", Variables::new(), None)
+        .await
+        .unwrap();
     let task_id = started.open_tasks[0].id.clone();
-    engine.complete_task(&started.instance_id, &task_id, Variables::new()).await.unwrap();
+    engine
+        .complete_task(&started.instance_id, &task_id, Variables::new())
+        .await
+        .unwrap();
 
     // 「抄送我的」：u_boss1 有 1 条未读。
     let inbox = engine.cc_for_user("u_boss1", false, 50).await.unwrap();
@@ -108,7 +134,11 @@ async fn find_cc_for_user_and_mark_read() {
 
     // 标记已读 → 再查 unread 为 0，全量仍 1 且 read=true。
     assert!(engine.mark_cc_read(&cc_id).await.unwrap());
-    assert_eq!(engine.cc_for_user("u_boss1", true, 50).await.unwrap().len(), 0, "已读后无未读");
+    assert_eq!(
+        engine.cc_for_user("u_boss1", true, 50).await.unwrap().len(),
+        0,
+        "已读后无未读"
+    );
     let all = engine.cc_for_user("u_boss1", false, 50).await.unwrap();
     assert_eq!(all.len(), 1);
     assert!(all[0].read, "应已读");
@@ -122,11 +152,20 @@ async fn manual_cc_notify() {
     // 手动抄送：不依赖节点配置，办理人主动知会 user(u_x)+role。
     let resolver = FakeResolver::default().with("Role:audit", &["u_a1", "u_a2"]);
     let (engine, _store) = engine_for(CC_BPMN, resolver);
-    let started = engine.start_process("cc_approve", Variables::new(), None).await.unwrap();
+    let started = engine
+        .start_process("cc_approve", Variables::new(), None)
+        .await
+        .unwrap();
 
     let refs = vec![
-        CandidateRef { kind: CandidateKind::User, value: "u_x".into() },
-        CandidateRef { kind: CandidateKind::Role, value: "audit".into() },
+        CandidateRef {
+            kind: CandidateKind::User,
+            value: "u_x".into(),
+        },
+        CandidateRef {
+            kind: CandidateKind::Role,
+            value: "audit".into(),
+        },
     ];
     let added = engine
         .notify_cc(&started.instance_id, &refs, Some("mgr"), Some("请知悉"))
@@ -145,17 +184,39 @@ async fn cc_dedup_same_node_same_user() {
     // 同节点对同一人重复抄送应去重（防重复触发）。手动对已抄送人再抄一次不新增。
     let resolver = FakeResolver::default().with("Role:dept_head", &["u_boss1"]);
     let (engine, _store) = engine_for(CC_BPMN, resolver);
-    let started = engine.start_process("cc_approve", Variables::new(), None).await.unwrap();
+    let started = engine
+        .start_process("cc_approve", Variables::new(), None)
+        .await
+        .unwrap();
     let task_id = started.open_tasks[0].id.clone();
-    engine.complete_task(&started.instance_id, &task_id, Variables::new()).await.unwrap();
+    engine
+        .complete_task(&started.instance_id, &task_id, Variables::new())
+        .await
+        .unwrap();
 
     // 节点已抄送 u_boss1（node_bpmn=review）。手动再抄 u_boss1（node=None）→ 不同节点键，会新增。
-    let refs = vec![CandidateRef { kind: CandidateKind::User, value: "u_boss1".into() }];
-    let added = engine.notify_cc(&started.instance_id, &refs, None, None).await.unwrap();
-    assert_eq!(added, 1, "手动抄送 node=None 与节点抄送 node=review 键不同，新增一条");
+    let refs = vec![CandidateRef {
+        kind: CandidateKind::User,
+        value: "u_boss1".into(),
+    }];
+    let added = engine
+        .notify_cc(&started.instance_id, &refs, None, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        added, 1,
+        "手动抄送 node=None 与节点抄送 node=review 键不同，新增一条"
+    );
 
     // u_boss1 现在有 2 条（节点 1 + 手动 1）。
-    assert_eq!(engine.cc_for_user("u_boss1", false, 50).await.unwrap().len(), 2);
+    assert_eq!(
+        engine
+            .cc_for_user("u_boss1", false, 50)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
 }
 
 #[tokio::test]
@@ -171,9 +232,15 @@ async fn no_cc_when_node_has_no_cc_expr() {
         <endEvent id="done"/>
       </process></definitions>"#;
     let (engine, store) = engine_for(PLAIN, FakeResolver::default());
-    let started = engine.start_process("plain", Variables::new(), None).await.unwrap();
+    let started = engine
+        .start_process("plain", Variables::new(), None)
+        .await
+        .unwrap();
     let task_id = started.open_tasks[0].id.clone();
-    engine.complete_task(&started.instance_id, &task_id, Variables::new()).await.unwrap();
+    engine
+        .complete_task(&started.instance_id, &task_id, Variables::new())
+        .await
+        .unwrap();
     let snap = store.load_snapshot(&started.instance_id).await.unwrap();
     assert!(snap.cc_records.is_empty(), "无 cc 表达式不产生抄送");
 }

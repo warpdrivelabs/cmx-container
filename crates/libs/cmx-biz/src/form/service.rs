@@ -3,8 +3,8 @@
 //! 封装表单的 CRUD 与列表/分页查询逻辑，复用 GenericCrudService
 
 use cmx_core::model::data::dataset::DataSet;
-use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
+use cmx_database::crud::GenericCrudService;
 use modql::filter::ListOptions;
 use serde_json::Value;
 
@@ -108,8 +108,12 @@ impl FormService {
         let schema = ds.schema.as_ref();
         let mut result = Vec::new();
         for row in ds.iter() {
-            let code = row.get_by_name_as::<String>(schema, "code").unwrap_or_default();
-            let name = row.get_by_name_as::<String>(schema, "name").unwrap_or_default();
+            let code = row
+                .get_by_name_as::<String>(schema, "code")
+                .unwrap_or_default();
+            let name = row
+                .get_by_name_as::<String>(schema, "name")
+                .unwrap_or_default();
             let description = row.get_by_name_as::<String>(schema, "description");
             // definition 是 JSONB,可能以 Value 或 String 形式返回,统一归一化
             let definition = row

@@ -66,7 +66,9 @@ mod tests {
     fn registry_has_first_batch() {
         let fns = all_functions();
         let names: Vec<_> = fns.iter().map(|f| f.name).collect();
-        for want in ["QM", "QC", "FS", "JE", "REF", "SUM", "IF", "ROUND", "ABS", "MIN", "MAX"] {
+        for want in [
+            "QM", "QC", "FS", "JE", "REF", "SUM", "IF", "ROUND", "ABS", "MIN", "MAX",
+        ] {
             assert!(names.contains(&want), "缺函数 {want}");
         }
     }
@@ -83,7 +85,10 @@ mod tests {
     #[tokio::test]
     async fn two_pass_fetch_qm() {
         // C5 = QM(0,@current,'1001') → Mock 返 1234
-        let snap = snapshot(vec![cell("C5", Some("QM(0,@current,'1001')"), None)], HashMap::new());
+        let snap = snapshot(
+            vec![cell("C5", Some("QM(0,@current,'1001')"), None)],
+            HashMap::new(),
+        );
         let out = compute_report(snap, &MockProvider::default(), vec![], HashMap::new()).await;
         assert_eq!(out.computed, 1);
         assert_eq!(out.cells[0].value, FValue::Num(Decimal::from(1234)));
@@ -123,7 +128,11 @@ mod tests {
             HashMap::new(),
         );
         let out = compute_report(snap, &MockProvider::default(), vec![], HashMap::new()).await;
-        let by_ref: HashMap<_, _> = out.cells.iter().map(|c| (c.cell_ref.as_str(), &c.value)).collect();
+        let by_ref: HashMap<_, _> = out
+            .cells
+            .iter()
+            .map(|c| (c.cell_ref.as_str(), &c.value))
+            .collect();
         assert_eq!(by_ref["C5"], &FValue::Num(Decimal::from(10)));
         assert_eq!(by_ref["C6"], &FValue::Num(Decimal::from(15)));
         assert_eq!(by_ref["C7"], &FValue::Num(Decimal::from(25)));
@@ -159,7 +168,13 @@ mod tests {
                 // 返回：值=期间末两位数字，便于断言解析出的期间
                 let mut m = HashMap::new();
                 for k in keys {
-                    let tail: Decimal = k.period.rsplit('-').next().unwrap_or("0").parse().unwrap_or(Decimal::ZERO);
+                    let tail: Decimal = k
+                        .period
+                        .rsplit('-')
+                        .next()
+                        .unwrap_or("0")
+                        .parse()
+                        .unwrap_or(Decimal::ZERO);
                     m.insert(k.clone(), tail);
                 }
                 Ok(m)
@@ -174,7 +189,10 @@ mod tests {
                 Ok(None)
             }
         }
-        let snap = snapshot(vec![cell("C5", Some("QM(-1,@current,'1001')"), None)], HashMap::new());
+        let snap = snapshot(
+            vec![cell("C5", Some("QM(-1,@current,'1001')"), None)],
+            HashMap::new(),
+        );
         let periods = vec![
             "2026-03".to_string(),
             "2026-04".to_string(),

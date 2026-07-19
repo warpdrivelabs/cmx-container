@@ -11,10 +11,10 @@
  */
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 use cmx_core::model::data::dataset::{Row, Schema};
-use cmx_database_pg::{execute_sql, execute_sql_with_params, query_sql, SqlParams};
-use chrono::{DateTime, Utc};
+use cmx_database_pg::{SqlParams, execute_sql, execute_sql_with_params, query_sql};
 
 use crate::{
     DefError, DefResult, DefinitionRecord, DefinitionState, DefinitionStore, PublishedEntry,
@@ -68,7 +68,9 @@ pub struct PgDefinitionStore {
 impl PgDefinitionStore {
     /// 用指定 db_id 构建（须已在 cmx-database-pg 注册数据源）。
     pub fn new(db_id: impl Into<String>) -> Self {
-        Self { db_id: db_id.into() }
+        Self {
+            db_id: db_id.into(),
+        }
     }
 }
 
@@ -336,7 +338,9 @@ fn get_string(row: &Row, schema: &Schema, col: &str) -> DefResult<String> {
     match row.get_by_name(schema, col) {
         Some(DataValue::String(s)) => Ok(s.clone()),
         Some(DataValue::ShortStr(s)) | Some(DataValue::LongStr(s)) => Ok(s.to_string()),
-        other => Err(DefError::Backend(format!("列 {col} 期望文本，实际 {other:?}"))),
+        other => Err(DefError::Backend(format!(
+            "列 {col} 期望文本，实际 {other:?}"
+        ))),
     }
 }
 

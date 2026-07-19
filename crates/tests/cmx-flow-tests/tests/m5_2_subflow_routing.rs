@@ -11,7 +11,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use cmx_flow_bpmn::compile;
-use cmx_flow_engine::{Engine, InMemoryStore, InstanceState, RouteError, RouteResult, RuntimeStore, SubflowRouter, Variables};
+use cmx_flow_engine::{
+    Engine, InMemoryStore, InstanceState, RouteError, RouteResult, RuntimeStore, SubflowRouter,
+    Variables,
+};
 
 /// 假路由器：按 (called_key, org) → 具体子流程 key 的固定映射；缺省回退 (called_key, "*")。
 #[derive(Default)]
@@ -31,15 +34,18 @@ impl FakeRouter {
 #[async_trait]
 impl SubflowRouter for FakeRouter {
     async fn resolve(&self, called_key: &str, org_id: Option<&str>) -> RouteResult<String> {
-        if let Some(org) = org_id {
-            if let Some(t) = self.map.get(&format!("{called_key}@{org}")) {
-                return Ok(t.clone());
-            }
+        if let Some(org) = org_id
+            && let Some(t) = self.map.get(&format!("{called_key}@{org}"))
+        {
+            return Ok(t.clone());
         }
         if let Some(t) = self.map.get(&format!("{called_key}@*")) {
             return Ok(t.clone());
         }
-        Err(RouteError::NoBinding { called_key: called_key.into(), org: org_id.map(|s| s.into()) })
+        Err(RouteError::NoBinding {
+            called_key: called_key.into(),
+            org: org_id.map(|s| s.into()),
+        })
     }
 }
 
@@ -89,7 +95,12 @@ async fn child_of(store: &InMemoryStore, main_id: &str) -> (String, String) {
     let children = store.find_child_instances(main_id).await.unwrap();
     assert_eq!(children.len(), 1, "应有一个子实例");
     let sub = store.load_snapshot(&children[0].id).await.unwrap();
-    let task = sub.tasks.iter().find(|t| !t.completed).map(|t| t.name.clone().unwrap_or_default()).unwrap_or_default();
+    let task = sub
+        .tasks
+        .iter()
+        .find(|t| !t.completed)
+        .map(|t| t.name.clone().unwrap_or_default())
+        .unwrap_or_default();
     (sub.instance.definition_key.clone(), task)
 }
 
@@ -102,13 +113,29 @@ async fn same_main_different_org_runs_different_subflow() {
     let (engine, store) = engine_with_router(router);
 
     // 总部发起。
-    let hq = engine.start_process_org("routed_main", Variables::new(), Some("HQ-1".into()), Some("hq".into())).await.unwrap();
+    let hq = engine
+        .start_process_org(
+            "routed_main",
+            Variables::new(),
+            Some("HQ-1".into()),
+            Some("hq".into()),
+        )
+        .await
+        .unwrap();
     let (hq_sub, hq_task) = child_of(&store, &hq.instance_id).await;
     assert_eq!(hq_sub, "fin_review_hq", "总部应路由到总部子流程");
     assert_eq!(hq_task, "总部三级复核");
 
     // 分公司发起——同一份主流程定义 routed_main，不同子流程。
-    let bj = engine.start_process_org("routed_main", Variables::new(), Some("BJ-1".into()), Some("bj".into())).await.unwrap();
+    let bj = engine
+        .start_process_org(
+            "routed_main",
+            Variables::new(),
+            Some("BJ-1".into()),
+            Some("bj".into()),
+        )
+        .await
+        .unwrap();
     let (bj_sub, bj_task) = child_of(&store, &bj.instance_id).await;
     assert_eq!(bj_sub, "fin_review_branch", "分公司应路由到分公司子流程");
     assert_eq!(bj_task, "分公司经理单签");
@@ -120,7 +147,15 @@ async fn falls_back_to_default_binding() {
     let router = FakeRouter::default().default_bind("fin_review", "fin_review_hq");
     let (engine, store) = engine_with_router(router);
     // org=未知，走默认。
-    let inst = engine.start_process_org("routed_main", Variables::new(), None, Some("unknown_org".into())).await.unwrap();
+    let inst = engine
+        .start_process_org(
+            "routed_main",
+            Variables::new(),
+            None,
+            Some("unknown_org".into()),
+        )
+        .await
+        .unwrap();
     let (sub, _) = child_of(&store, &inst.instance_id).await;
     assert_eq!(sub, "fin_review_hq", "无精确绑定应回退默认");
 }
@@ -130,16 +165,31 @@ async fn routed_subflow_completes_and_returns_to_main() {
     // 完整链路：路由 → 子跑完 → 回主 → 主完成。
     let router = FakeRouter::default().bind("fin_review", "bj", "fin_review_branch");
     let (engine, store) = engine_with_router(router);
-    let started = engine.start_process_org("routed_main", Variables::new(), None, Some("bj".into())).await.unwrap();
+    let started = engine
+        .start_process_org("routed_main", Variables::new(), None, Some("bj".into()))
+        .await
+        .unwrap();
     let main_id = started.instance_id.clone();
 
     let children = store.find_child_instances(&main_id).await.unwrap();
     let sub_id = children[0].id.clone();
-    let task = store.load_snapshot(&sub_id).await.unwrap().tasks[0].id.clone();
-    engine.complete_task(&sub_id, &task, Variables::new()).await.unwrap();
+    let task = store.load_snapshot(&sub_id).await.unwrap().tasks[0]
+        .id
+        .clone();
+    engine
+        .complete_task(&sub_id, &task, Variables::new())
+        .await
+        .unwrap();
 
-    assert_eq!(store.load_snapshot(&sub_id).await.unwrap().instance.state, InstanceState::Completed);
-    assert_eq!(store.load_snapshot(&main_id).await.unwrap().instance.state, InstanceState::Completed, "子完成后主流程完成");
+    assert_eq!(
+        store.load_snapshot(&sub_id).await.unwrap().instance.state,
+        InstanceState::Completed
+    );
+    assert_eq!(
+        store.load_snapshot(&main_id).await.unwrap().instance.state,
+        InstanceState::Completed,
+        "子完成后主流程完成"
+    );
 }
 
 #[tokio::test]
@@ -151,7 +201,9 @@ async fn logical_key_without_router_errors() {
         engine.deploy(compile(xml).unwrap()).unwrap();
     }
     // 不 set_subflow_router
-    let r = engine.start_process_org("routed_main", Variables::new(), None, Some("hq".into())).await;
+    let r = engine
+        .start_process_org("routed_main", Variables::new(), None, Some("hq".into()))
+        .await;
     assert!(r.is_err(), "逻辑 key 无路由器应报错");
 }
 
@@ -161,6 +213,8 @@ async fn no_binding_errors() {
     let router = FakeRouter::default().bind("fin_review", "hq", "fin_review_hq");
     let (engine, _store) = engine_with_router(router);
     // org=sh 无绑定，也无默认。
-    let r = engine.start_process_org("routed_main", Variables::new(), None, Some("sh".into())).await;
+    let r = engine
+        .start_process_org("routed_main", Variables::new(), None, Some("sh".into()))
+        .await;
     assert!(r.is_err(), "无绑定应报错");
 }

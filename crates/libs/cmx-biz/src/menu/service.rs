@@ -6,8 +6,8 @@
 
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::DataSet;
-use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
+use cmx_database::crud::GenericCrudService;
 use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
 use serde_json::Value;
 use tracing::{debug, instrument};
@@ -104,8 +104,15 @@ impl MenuService {
             Self::resolve_parent_id(mm, db_id, Some(txn_id), &data.parent_id, &data.parent_code)
                 .await?;
         // 计算分级字段(用真实 id 拼 id_path)
-        let tree = Self::compute_tree_fields(mm, db_id, Some(txn_id), &id, &data.code, parent_id.as_deref())
-            .await?;
+        let tree = Self::compute_tree_fields(
+            mm,
+            db_id,
+            Some(txn_id),
+            &id,
+            &data.code,
+            parent_id.as_deref(),
+        )
+        .await?;
 
         let definition_str = data
             .definition
@@ -292,8 +299,7 @@ impl MenuService {
         let txn_id = guard.txn_id();
 
         // 查询当前节点 meta: parent_id / code_path / id_path / depth / code
-        let meta_sql =
-            "SELECT parent_id, code_path, id_path, depth, code FROM cmx_menu WHERE id = $1 AND archived = 0";
+        let meta_sql = "SELECT parent_id, code_path, id_path, depth, code FROM cmx_menu WHERE id = $1 AND archived = 0";
         let meta_ds = mm
             .query_sql_with_datavalues(
                 db_id,
@@ -305,21 +311,19 @@ impl MenuService {
             .await
             .map_err(|e| BizError::internal(format!("查询菜单元数据失败: {e}")))?;
         let schema = meta_ds.schema.as_ref();
-        let meta_row = meta_ds.iter().next().ok_or_else(|| {
-            BizError::business(format!("菜单不存在: {menu_id}"))
-        })?;
+        let meta_row = meta_ds
+            .iter()
+            .next()
+            .ok_or_else(|| BizError::business(format!("菜单不存在: {menu_id}")))?;
 
-        let old_parent_id =
-            meta_row.get_by_name_as::<String>(schema, "parent_id");
+        let old_parent_id = meta_row.get_by_name_as::<String>(schema, "parent_id");
         let old_code_path = meta_row
             .get_by_name_as::<String>(schema, "code_path")
             .unwrap_or_default();
         let old_id_path = meta_row
             .get_by_name_as::<String>(schema, "id_path")
             .unwrap_or_default();
-        let old_depth = meta_row
-            .get_by_name_as::<i64>(schema, "depth")
-            .unwrap_or(1) as i32;
+        let old_depth = meta_row.get_by_name_as::<i64>(schema, "depth").unwrap_or(1) as i32;
         let menu_code = meta_row
             .get_by_name_as::<String>(schema, "code")
             .unwrap_or_default();
@@ -344,25 +348,19 @@ impl MenuService {
         let dataset = if parent_changed {
             // ---- parent_id 变更:级联重算 ----
             // 查新父 meta,计算新 id_path / code_path / depth / parent_code
-            let (new_parent_code, new_id_path, new_code_path, new_depth) = if let Some(new_pid) =
-                new_parent_norm
-            {
-                let p_meta = Self::query_parent_meta(mm, db_id, Some(txn_id), new_pid).await?;
-                let (p_code, p_id_path, p_code_path, p_depth) = p_meta;
-                (
-                    Some(p_code),
-                    format!("{p_id_path}/{menu_id}"),
-                    format!("{p_code_path}/{menu_code}"),
-                    p_depth + 1,
-                )
-            } else {
-                (
-                    None,
-                    format!("/{menu_id}"),
-                    format!("/{menu_code}"),
-                    1,
-                )
-            };
+            let (new_parent_code, new_id_path, new_code_path, new_depth) =
+                if let Some(new_pid) = new_parent_norm {
+                    let p_meta = Self::query_parent_meta(mm, db_id, Some(txn_id), new_pid).await?;
+                    let (p_code, p_id_path, p_code_path, p_depth) = p_meta;
+                    (
+                        Some(p_code),
+                        format!("{p_id_path}/{menu_id}"),
+                        format!("{p_code_path}/{menu_code}"),
+                        p_depth + 1,
+                    )
+                } else {
+                    (None, format!("/{menu_id}"), format!("/{menu_code}"), 1)
+                };
 
             // 级联更新该节点及其后代:code_path/id_path 前缀替换 + depth 增量
             // (旧前缀 old_code_path/old_id_path → 新前缀 new_code_path/new_id_path)
@@ -370,8 +368,7 @@ impl MenuService {
             //     code_path 仅由 UUID/菜单编码(ASCII)与 '/' 组成,字节数 == 字符数,故安全。
             //     $3 显式 ::integer cast:DataValue::Int 是 i64,PG 的 substring(varchar, bigint)
             //     无此重载,须 cast 为 integer。
-            let code_cascade =
-                "UPDATE cmx_menu SET code_path = $2 || SUBSTRING(code_path FROM ($3)::integer) \
+            let code_cascade = "UPDATE cmx_menu SET code_path = $2 || SUBSTRING(code_path FROM ($3)::integer) \
                  WHERE code_path = $1 OR code_path LIKE ($1 || '/%')";
             mm.execute_sql_with_datavalues(
                 db_id,
@@ -386,8 +383,7 @@ impl MenuService {
             .await
             .map_err(|e| BizError::business(format!("级联更新 code_path 失败: {e}")))?;
 
-            let id_cascade =
-                "UPDATE cmx_menu SET id_path = $2 || SUBSTRING(id_path FROM ($3)::integer) \
+            let id_cascade = "UPDATE cmx_menu SET id_path = $2 || SUBSTRING(id_path FROM ($3)::integer) \
                  WHERE id_path = $1 OR id_path LIKE ($1 || '/%')";
             mm.execute_sql_with_datavalues(
                 db_id,
@@ -403,8 +399,7 @@ impl MenuService {
             .map_err(|e| BizError::business(format!("级联更新 id_path 失败: {e}")))?;
 
             // 后代 depth 增量(自身 + 后代 depth 同步偏移)
-            let depth_cascade =
-                "UPDATE cmx_menu SET depth = depth + ($2 - $3) \
+            let depth_cascade = "UPDATE cmx_menu SET depth = depth + ($2 - $3) \
                  WHERE id_path = $1 OR id_path LIKE ($1 || '/%')";
             mm.execute_sql_with_datavalues(
                 db_id,
@@ -575,7 +570,13 @@ impl MenuService {
             id_placeholders.join(", ")
         );
         let meta_ds = mm
-            .query_sql_with_datavalues(db_id, Some(txn_id), &meta_sql, id_params, "menu_delete_meta")
+            .query_sql_with_datavalues(
+                db_id,
+                Some(txn_id),
+                &meta_sql,
+                id_params,
+                "menu_delete_meta",
+            )
             .await
             .map_err(|e| BizError::internal(format!("查询待删菜单元数据失败: {e}")))?;
         let m_schema = meta_ds.schema.as_ref();
@@ -686,9 +687,10 @@ impl MenuService {
             .await
             .map_err(|e| BizError::internal(format!("查询父菜单元数据失败: {e}")))?;
         let schema = ds.schema.as_ref();
-        let row = ds.iter().next().ok_or_else(|| {
-            BizError::business(format!("父菜单不存在: {parent_id}"))
-        })?;
+        let row = ds
+            .iter()
+            .next()
+            .ok_or_else(|| BizError::business(format!("父菜单不存在: {parent_id}")))?;
         Ok((
             row.get_by_name_as::<String>(schema, "code")
                 .unwrap_or_default(),
@@ -824,7 +826,9 @@ impl MenuService {
         for row in ds.iter() {
             let get = |name: &str| -> Option<String> { row.get_by_name_as(schema, name) };
             let get_i32 = |name: &str, default: i32| {
-                row.get_by_name_as::<i64>(schema, name).map(|v| v as i32).unwrap_or(default)
+                row.get_by_name_as::<i64>(schema, name)
+                    .map(|v| v as i32)
+                    .unwrap_or(default)
             };
             // definition:节点自身额外自定义数据(JSONB),整体透传
             let definition = row
@@ -866,7 +870,10 @@ impl MenuService {
         list_options: Option<ListOptions>,
     ) -> Result<DataSet> {
         let filters = Some(match filters {
-            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            Some(fs) => fs
+                .into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>(),
             None => vec![Self::with_default_archived(MenuFilter::default())],
         });
         GenericCrudService::<MenuBmc, MenuFilter>::list(mm, db_id, None, filters, list_options)
@@ -882,7 +889,10 @@ impl MenuService {
         list_options: ListOptions,
     ) -> Result<(DataSet, i64)> {
         let filters = Some(match filters {
-            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            Some(fs) => fs
+                .into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>(),
             None => vec![Self::with_default_archived(MenuFilter::default())],
         });
         GenericCrudService::<MenuBmc, MenuFilter>::page(mm, db_id, None, filters, list_options)
@@ -975,10 +985,7 @@ impl MenuService {
             module_code: get_str("module_code").unwrap_or_default(),
             definition: row
                 .get_by_name_as::<serde_json::Value>(schema, "definition")
-                .or_else(|| {
-                    get_str("definition")
-                        .and_then(|s| serde_json::from_str(&s).ok())
-                }),
+                .or_else(|| get_str("definition").and_then(|s| serde_json::from_str(&s).ok())),
             ext_attributes: get_str("ext_attributes"),
         })
     }

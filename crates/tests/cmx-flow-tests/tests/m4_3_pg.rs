@@ -7,7 +7,7 @@
 //! 验证：task 补列 owner/parent/delegation_state 落库、cmx_flow_task_delegation 台账落库、
 //! 加签临时任务重启后可恢复并办结。
 
-use cmx_database_pg::{get_default_pg_db_manager, query_sql, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, get_default_pg_db_manager, query_sql};
 use cmx_flow_bpmn::compile;
 use cmx_flow_engine::{Engine, InstanceState, RuntimeStore, Variables};
 use cmx_flow_store_pg::PgRuntimeStore;
@@ -43,7 +43,10 @@ async fn setup_db() -> Option<String> {
         module_code: None,
         source_type: Some("default".to_string()),
     };
-    manager.register_data_source(cfg).await.expect("注册数据源失败");
+    manager
+        .register_data_source(cfg)
+        .await
+        .expect("注册数据源失败");
     Some(db_id)
 }
 
@@ -79,14 +82,34 @@ async fn pg_add_sign_persists_and_resumes_after_restart() {
     let (iid, task_id, temp_id) = {
         let mut e1 = Engine::new(store.clone());
         e1.deploy(def.clone()).unwrap();
-        let s = e1.start_process("pg_transfer", Variables::new(), Some("PG-TR-001".into())).await.unwrap();
+        let s = e1
+            .start_process("pg_transfer", Variables::new(), Some("PG-TR-001".into()))
+            .await
+            .unwrap();
         let task_id = s.open_tasks[0].id.clone();
-        e1.add_sign(&s.instance_id, &task_id, "张三", "王五", true, Some("请先审")).await.unwrap();
+        e1.add_sign(
+            &s.instance_id,
+            &task_id,
+            "张三",
+            "王五",
+            true,
+            Some("请先审"),
+        )
+        .await
+        .unwrap();
 
         // 台账落库校验。
-        let d = query_sql(&db_id, None,
-            &format!("SELECT kind, temp_task_id FROM cmx_flow_task_delegation WHERE instance_id = '{}'", s.instance_id),
-            "deleg").await.expect("查台账失败");
+        let d = query_sql(
+            &db_id,
+            None,
+            &format!(
+                "SELECT kind, temp_task_id FROM cmx_flow_task_delegation WHERE instance_id = '{}'",
+                s.instance_id
+            ),
+            "deleg",
+        )
+        .await
+        .expect("查台账失败");
         assert_eq!(d.row_count(), 1, "应落一条转签台账");
 
         // 原任务 SUSPENDED 落库校验。
@@ -96,7 +119,13 @@ async fn pg_add_sign_persists_and_resumes_after_restart() {
         assert_eq!(susp.row_count(), 1, "原任务应 SUSPENDED 落库");
 
         let snap = e1.store().load_snapshot(&s.instance_id).await.unwrap();
-        let temp_id = snap.tasks.iter().find(|t| t.parent_task_id.is_some()).unwrap().id.clone();
+        let temp_id = snap
+            .tasks
+            .iter()
+            .find(|t| t.parent_task_id.is_some())
+            .unwrap()
+            .id
+            .clone();
         (s.instance_id, task_id, temp_id)
     };
 
@@ -105,17 +134,38 @@ async fn pg_add_sign_persists_and_resumes_after_restart() {
     e2.deploy(def).unwrap();
     // 恢复的加签结构完整。
     let snap = e2.store().load_snapshot(&iid).await.unwrap();
-    assert_eq!(snap.tasks.iter().filter(|t| !t.completed).count(), 2, "重启后恢复原+临时两任务");
     assert_eq!(
-        snap.tasks.iter().find(|t| t.id == task_id).unwrap().delegation_state.as_deref(),
+        snap.tasks.iter().filter(|t| !t.completed).count(),
+        2,
+        "重启后恢复原+临时两任务"
+    );
+    assert_eq!(
+        snap.tasks
+            .iter()
+            .find(|t| t.id == task_id)
+            .unwrap()
+            .delegation_state
+            .as_deref(),
         Some("SUSPENDED")
     );
 
-    e2.complete_task(&iid, &temp_id, Variables::new()).await.unwrap();
+    e2.complete_task(&iid, &temp_id, Variables::new())
+        .await
+        .unwrap();
     // 原任务恢复。
     let s2 = e2.store().load_snapshot(&iid).await.unwrap();
-    assert!(s2.tasks.iter().find(|t| t.id == task_id).unwrap().delegation_state.is_none());
-    let done = e2.complete_task(&iid, &task_id, Variables::new()).await.unwrap();
+    assert!(
+        s2.tasks
+            .iter()
+            .find(|t| t.id == task_id)
+            .unwrap()
+            .delegation_state
+            .is_none()
+    );
+    let done = e2
+        .complete_task(&iid, &task_id, Variables::new())
+        .await
+        .unwrap();
     assert_eq!(done.state, InstanceState::Completed);
 
     cleanup(&db_id, &iid).await;

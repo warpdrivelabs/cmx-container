@@ -16,7 +16,7 @@ use cmx_core::model::cell::{
 };
 use cmx_database::get_default_db_manager;
 use cmx_metadata::{
-    ColumnChange, DdlDiff, DdlDialect, IndexChange, PgTableDefineExecutor, PostgresDdlDialect,
+    ColumnChange, DdlDialect, DdlDiff, IndexChange, PgTableDefineExecutor, PostgresDdlDialect,
     TableChange, TableDefineDbExecutor,
 };
 use cmx_utils::snowflake_id_str;
@@ -149,7 +149,11 @@ fn field_to_column(f: &Value, id_field: &str, ordinal: u32) -> Option<ColumnDefi
     // 长度 / 精度：VARCHAR 用 length；DECIMAL 用 precision(=fieldLength)+scale(=decimalDigits)。
     // VARCHAR 未指定 fieldLength 时默认 255（避免被建表逻辑当成 TEXT，导致与期望不一致时无法 ALTER 修正）。
     let (length, precision, scale) = match ft {
-        FieldType::String => (Some(field_len.unwrap_or(VARCHAR_DEFAULT_LENGTH)), None, None),
+        FieldType::String => (
+            Some(field_len.unwrap_or(VARCHAR_DEFAULT_LENGTH)),
+            None,
+            None,
+        ),
         FieldType::Decimal => (None, field_len, dec.or(Some(0))),
         _ => (None, None, None),
     };
@@ -1086,7 +1090,16 @@ fn diff_table_to_report(current: &TableDefine, desired: &TableDefine) -> Value {
             "modifiedColumnComments": [],
         }),
         // 仅可能是 AlterTable（CreateTable/DropTable 不会出现，因为表已存在且两边表名相同）
-        [TableChange::AlterTable { column_changes, index_changes, comment_change, column_comment_changes, .. }, ..] => {
+        [
+            TableChange::AlterTable {
+                column_changes,
+                index_changes,
+                comment_change,
+                column_comment_changes,
+                ..
+            },
+            ..,
+        ] => {
             let mut added = Vec::new();
             let mut modified = Vec::new();
             for cc in column_changes {
@@ -1121,22 +1134,25 @@ fn diff_table_to_report(current: &TableDefine, desired: &TableDefine) -> Value {
                 }
             }
             // 表注释变更：DdlDiff 的 comment_change 只存新值，from 需从 current 取。
-            let comment_change_json = if comment_change.is_some() || current.comment != desired.comment {
-                Some(json!({
-                    "from": current.comment.clone().unwrap_or_default(),
-                    "to": desired.comment.clone().unwrap_or_default(),
-                }))
-            } else {
-                None
-            };
+            let comment_change_json =
+                if comment_change.is_some() || current.comment != desired.comment {
+                    Some(json!({
+                        "from": current.comment.clone().unwrap_or_default(),
+                        "to": desired.comment.clone().unwrap_or_default(),
+                    }))
+                } else {
+                    None
+                };
             // 列注释变更：label 不一致的列（old 来自 DB col_description，new 来自设计期 caption）。
             let modified_col_comments: Vec<Value> = column_comment_changes
                 .iter()
-                .map(|cc| json!({
-                    "name": cc.column,
-                    "from": cc.old_label,
-                    "to": cc.new_label,
-                }))
+                .map(|cc| {
+                    json!({
+                        "name": cc.column,
+                        "from": cc.old_label,
+                        "to": cc.new_label,
+                    })
+                })
                 .collect();
             // 已变更列名集合（新增 + 修改）
             let changed_names: std::collections::HashSet<&str> = added
@@ -1205,15 +1221,27 @@ async fn table_change_plan(db_id: &str, def: &TableDefine) -> Result<Value> {
     // 排查日志（debug 级）：判定为升级表时，打印 DB vs 设计期的逐列差异字段，
     // 便于定位「列注释/结构看似一致却报升级」的真实来源（length/db_type/label 等）。
     if report.get("action").and_then(|v| v.as_str()) == Some("upgrade_table") {
-        let cur_map: std::collections::HashMap<&str, &ColumnDefine> =
-            current.columns.iter().map(|c| (c.name.as_str(), c)).collect();
+        let cur_map: std::collections::HashMap<&str, &ColumnDefine> = current
+            .columns
+            .iter()
+            .map(|c| (c.name.as_str(), c))
+            .collect();
         for d in &def.columns {
             if let Some(c) = cur_map.get(d.name.as_str()) {
                 let diff = (pg_display_type(c) != pg_display_type(d))
                     .then(|| format!("dataType({}→{})", pg_display_type(c), pg_display_type(d)))
-                    .or_else(|| (c.is_nullable != d.is_nullable).then(|| format!("nullable({}→{})", c.is_nullable, d.is_nullable)))
-                    .or_else(|| (c.label != d.label).then(|| format!("label({:?}→{:?})", c.label, d.label)))
-                    .or_else(|| (c.default_value != d.default_value).then(|| format!("default({:?}→{:?})", c.default_value, d.default_value)));
+                    .or_else(|| {
+                        (c.is_nullable != d.is_nullable)
+                            .then(|| format!("nullable({}→{})", c.is_nullable, d.is_nullable))
+                    })
+                    .or_else(|| {
+                        (c.label != d.label).then(|| format!("label({:?}→{:?})", c.label, d.label))
+                    })
+                    .or_else(|| {
+                        (c.default_value != d.default_value).then(|| {
+                            format!("default({:?}→{:?})", c.default_value, d.default_value)
+                        })
+                    });
                 if let Some(what) = diff {
                     debug!(
                         "[table_change_plan] {} 列 {} 差异: {}",
@@ -2916,10 +2944,7 @@ mod tests {
         let mut db_create_time = mk_col("create_time", FieldType::DateTime, true);
         db_create_time.db_type = Some("TIMESTAMP WITH TIME ZONE".to_string());
 
-        let current = mk_table(
-            "cf_client",
-            vec![db_sort_no, db_create_time],
-        );
+        let current = mk_table("cf_client", vec![db_sort_no, db_create_time]);
         // 设计期定义：同类型，但 precision/scale/db_type 未设置
         let desired = mk_table(
             "cf_client",
@@ -3001,10 +3026,7 @@ mod tests {
         let report = diff_table_to_report(&current, &desired);
         assert_eq!(report["action"].as_str(), Some("upgrade_table"));
         assert!(
-            !report["modifiedColumns"]
-                .as_array()
-                .unwrap()
-                .is_empty(),
+            !report["modifiedColumns"].as_array().unwrap().is_empty(),
             "nullable 变更应报修改列: {report}"
         );
     }
@@ -3013,8 +3035,14 @@ mod tests {
     /// 应报 upgrade_table，且 commentChange 透出 from=∅→to=注释，让用户看到「为什么要升级」。
     #[test]
     fn diff_table_report_shows_comment_change() {
-        let current = mk_table("cf_fs_version", vec![mk_col("code", FieldType::String, false)]);
-        let mut desired = mk_table("cf_fs_version", vec![mk_col("code", FieldType::String, false)]);
+        let current = mk_table(
+            "cf_fs_version",
+            vec![mk_col("code", FieldType::String, false)],
+        );
+        let mut desired = mk_table(
+            "cf_fs_version",
+            vec![mk_col("code", FieldType::String, false)],
+        );
         desired.comment = Some("报表上滚结构".to_string());
         let report = diff_table_to_report(&current, &desired);
         // 列一致但因注释差异仍报升级表（保留同步语义）
@@ -3120,7 +3148,8 @@ mod tests {
             .find(|c| c.name == "country_code")
             .expect("应有 country_code 列");
         assert_eq!(
-            cc.length, Some(255),
+            cc.length,
+            Some(255),
             "无 fieldLength 的 VARCHAR 应默认 255: country_code length={:?}",
             cc.length
         );
@@ -3146,18 +3175,22 @@ mod tests {
             .expect("应报 country_code 修改");
         let changes = cc_mod["changes"].as_array().unwrap();
         assert!(
-            changes.iter().any(|d| d["field"].as_str() == Some("dataType")
-                && d["from"].as_str() == Some("TEXT")
-                && d["to"].as_str() == Some("VARCHAR(255)")),
+            changes
+                .iter()
+                .any(|d| d["field"].as_str() == Some("dataType")
+                    && d["from"].as_str() == Some("TEXT")
+                    && d["to"].as_str() == Some("VARCHAR(255)")),
             "应报 dataType TEXT→VARCHAR(255): {changes:?}"
         );
 
         // 3) 执行路径应生成 ALTER COLUMN TYPE VARCHAR(255)
         let dialect = PostgresDdlDialect::default();
-        let stmts = DdlDiff::diff_to_ddl(&dialect, &[current], std::slice::from_ref(&desired))
-            .unwrap();
+        let stmts =
+            DdlDiff::diff_to_ddl(&dialect, &[current], std::slice::from_ref(&desired)).unwrap();
         assert!(
-            stmts.iter().any(|s| s.contains("ALTER COLUMN \"country_code\" TYPE VARCHAR(255)")),
+            stmts
+                .iter()
+                .any(|s| s.contains("ALTER COLUMN \"country_code\" TYPE VARCHAR(255)")),
             "应生成 ALTER COLUMN TYPE VARCHAR(255): {stmts:?}"
         );
     }

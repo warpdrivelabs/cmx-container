@@ -21,7 +21,9 @@ use tokio::sync::{OnceCell, RwLock};
 
 use cmx_flow_def::{DefinitionService, PgDefinitionStore};
 use cmx_flow_engine::{DelegateContext, Engine, JavaDelegate, ProcessDefinition};
-use cmx_flow_store_pg::{PgIamAssigneeResolver, PgRuntimeStore, PgSubflowBindingStore, PgSubflowRouter};
+use cmx_flow_store_pg::{
+    PgIamAssigneeResolver, PgRuntimeStore, PgSubflowBindingStore, PgSubflowRouter,
+};
 
 /// 运行态 store + 定义所在库（cmx_flow_* 表）。
 pub const FLOW_DB_ID: &str = "fico-db";
@@ -135,7 +137,11 @@ struct RiskDelegate;
 #[async_trait]
 impl JavaDelegate for RiskDelegate {
     async fn execute(&self, ctx: &mut DelegateContext<'_>) -> Result<(), String> {
-        let amount = ctx.variables.get("amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let amount = ctx
+            .variables
+            .get("amount")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         let level = if amount > 50000.0 {
             "高"
         } else if amount > 10000.0 {

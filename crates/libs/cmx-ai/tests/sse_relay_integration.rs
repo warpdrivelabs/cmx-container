@@ -82,10 +82,13 @@ async fn relay_translates_and_dispatches_events() {
 
     while tokio::time::Instant::now() < deadline {
         match tokio::time::timeout_at(deadline, rx.recv()).await {
-            Err(_) => break, // 整体超时
+            Err(_) => break,   // 整体超时
             Ok(None) => break, // 通道关闭（relay 异常）
             Ok(Some(ev)) => {
-                println!("[test] 收到 cmx-ai 事件: {} -> {}", ev.event_name, ev.payload);
+                println!(
+                    "[test] 收到 cmx-ai 事件: {} -> {}",
+                    ev.event_name, ev.payload
+                );
                 let payload: serde_json::Value =
                     serde_json::from_str(&ev.payload).unwrap_or(json!(null));
                 event_names.push(ev.event_name.to_string());
@@ -107,7 +110,11 @@ async fn relay_translates_and_dispatches_events() {
         !received_events.is_empty(),
         "前端订阅应至少收到 1 个 cmx-ai 事件，但 0 个。relay 链路可能未工作"
     );
-    println!("[test] ✅ 共收到 {} 个 cmx-ai 事件: {:?}", received_events.len(), event_names);
+    println!(
+        "[test] ✅ 共收到 {} 个 cmx-ai 事件: {:?}",
+        received_events.len(),
+        event_names
+    );
 
     // 进一步：若收到 done，说明 relay 的 session.status:idle 翻译正确。
     let has_done = event_names.iter().any(|n| n == "done");
@@ -145,19 +152,16 @@ async fn session_lock_released_after_generation() {
     let sid = session["id"].as_str().unwrap().to_string();
 
     // 模拟 handler: acquire → prompt_async → 订阅等 idle → release
-    assert!(
-        registry.try_acquire_session(&sid),
-        "首次 acquire 应成功"
-    );
-    assert!(
-        registry.is_session_active(&sid),
-        "acquire 后应标记为活跃"
-    );
+    assert!(registry.try_acquire_session(&sid), "首次 acquire 应成功");
+    assert!(registry.is_session_active(&sid), "acquire 后应标记为活跃");
 
     // 触发生成并等待 relay 处理 idle（release 由 relay 在 session.status:idle 时执行）。
     let mut rx = registry.subscribe(&sid);
     let body = json!({"parts": [{"type": "text", "text": "只回复：好"}]});
-    client.prompt_async(&sid, &body).await.expect("prompt_async");
+    client
+        .prompt_async(&sid, &body)
+        .await
+        .expect("prompt_async");
 
     // 等待 done（relay 在 session.status:idle 翻译出 result+done 时会 release_session）。
     // 注：retry 是非终态（不下发前端），只有真正完成才发 done。
@@ -170,7 +174,7 @@ async fn session_lock_released_after_generation() {
                 break;
             }
             Ok(Some(_)) => continue, // 其它事件（text_delta/tool_call 等）继续等
-            _ => break, // 超时或通道关闭
+            _ => break,              // 超时或通道关闭
         }
     }
 

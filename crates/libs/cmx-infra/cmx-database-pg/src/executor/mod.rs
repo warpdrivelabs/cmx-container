@@ -32,13 +32,13 @@ impl ToSql for PgInt {
     ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
         match *ty {
             Type::INT2 => {
-                let v = i16::try_from(self.0)
-                    .map_err(|_| format!("值 {} 超出 INT2 范围", self.0))?;
+                let v =
+                    i16::try_from(self.0).map_err(|_| format!("值 {} 超出 INT2 范围", self.0))?;
                 v.to_sql(ty, out)
             }
             Type::INT4 => {
-                let v = i32::try_from(self.0)
-                    .map_err(|_| format!("值 {} 超出 INT4 范围", self.0))?;
+                let v =
+                    i32::try_from(self.0).map_err(|_| format!("值 {} 超出 INT4 范围", self.0))?;
                 v.to_sql(ty, out)
             }
             // INT8 及其它默认按 i64
@@ -221,8 +221,11 @@ impl ParamValue {
                     }
                 });
                 if is_binary {
-                    let bytes: Vec<u8> =
-                        arr.iter().filter_map(|v| v.as_u64()).map(|n| n as u8).collect();
+                    let bytes: Vec<u8> = arr
+                        .iter()
+                        .filter_map(|v| v.as_u64())
+                        .map(|n| n as u8)
+                        .collect();
                     return ParamValue::Binary(bytes);
                 }
                 ParamValue::Json(serde_json::Value::Array(arr))
@@ -286,7 +289,7 @@ fn bind_one(param: &DataValue) -> Box<dyn ToSql + Sync + Send> {
         },
         DataValue::Bool(v) => Box::new(*v),
         DataValue::Int(v) => Box::new(PgInt(*v)), // 宽度自适应 INT2/INT4/INT8
-        DataValue::Float(v) => Box::new(*v), // f64 → FLOAT8
+        DataValue::Float(v) => Box::new(*v),      // f64 → FLOAT8
         DataValue::String(v) => Box::new(v.clone()),
         DataValue::Decimal(v) => Box::new(*v),
         DataValue::DateTime(v) => Box::new(PgDateTime(*v)), // 自适应 TIMESTAMP/TIMESTAMPTZ
@@ -422,7 +425,9 @@ impl PgResultConverter {
             Type::UUID => col!(Uuid, DataValue::Uuid),
             Type::BYTEA => col!(Vec<u8>, DataValue::Binary),
             Type::JSON | Type::JSONB => {
-                col!(serde_json::Value, |v: serde_json::Value| DataValue::Json(v.to_string()))
+                col!(serde_json::Value, |v: serde_json::Value| DataValue::Json(
+                    v.to_string()
+                ))
             }
             Type::DATE => col!(chrono::NaiveDate, DataValue::Date),
             Type::TIMESTAMP => col!(chrono::NaiveDateTime, |ndt| DataValue::DateTime(
@@ -434,9 +439,7 @@ impl PgResultConverter {
             // 数组类型：还原为 DataValue::Array（元素按标量类型）
             Type::TEXT_ARRAY | Type::VARCHAR_ARRAY | Type::NAME_ARRAY => {
                 match row.try_get::<usize, Option<Vec<String>>>(index) {
-                    Ok(Some(v)) => {
-                        DataValue::Array(v.into_iter().map(DataValue::String).collect())
-                    }
+                    Ok(Some(v)) => DataValue::Array(v.into_iter().map(DataValue::String).collect()),
                     _ => DataValue::Null,
                 }
             }
@@ -522,7 +525,7 @@ fn sea_value_to_tosql(v: sea_query::Value) -> crate::Result<Box<dyn ToSql + Sync
         V::Double(o) => Box::new(o),
         V::String(o) => Box::new(o), // Option<String>，未装箱
         V::Char(o) => Box::new(o.map(|c| c.to_string())),
-        V::Bytes(o) => Box::new(o), // Option<Vec<u8>>，未装箱
+        V::Bytes(o) => Box::new(o),            // Option<Vec<u8>>，未装箱
         V::Json(o) => Box::new(o.map(|b| *b)), // Option<Box<Json>>
         V::ChronoDate(o) => Box::new(o),
         V::ChronoTime(o) => Box::new(o),

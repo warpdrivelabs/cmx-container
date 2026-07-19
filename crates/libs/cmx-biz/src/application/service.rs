@@ -43,20 +43,24 @@ impl ApplicationService {
             .await
             .map_err(|e| BizError::internal(format!("开启事务失败: {}", e)))?;
 
-        let result =
-            GenericCrudService::<ApplicationBmc>::create(mm, db_id, Some(tx.txn_id()), data.clone())
-                .await?;
+        let result = GenericCrudService::<ApplicationBmc>::create(
+            mm,
+            db_id,
+            Some(tx.txn_id()),
+            data.clone(),
+        )
+        .await?;
 
         // 文件副作用：确保应用级目录存在
         // application code = {domain}_{app_id}，拆出 domain 和 app_id
         let parts: Vec<&str> = data.code.splitn(2, '_').collect();
-        if parts.len() == 2 {
-            if let Err(e) = DamAssetService::ensure_app_dirs(parts[0], parts[1]).await {
-                tx.rollback()
-                    .await
-                    .map_err(|e| BizError::internal(format!("回滚事务失败: {}", e)))?;
-                return Err(e);
-            }
+        if parts.len() == 2
+            && let Err(e) = DamAssetService::ensure_app_dirs(parts[0], parts[1]).await
+        {
+            tx.rollback()
+                .await
+                .map_err(|e| BizError::internal(format!("回滚事务失败: {}", e)))?;
+            return Err(e);
         }
 
         tx.commit()
@@ -92,13 +96,9 @@ impl ApplicationService {
             .map_err(|e| BizError::internal(format!("开启事务失败: {}", e)))?;
 
         // 读取旧 code
-        let old_ds = GenericCrudService::<ApplicationBmc>::get(
-            mm,
-            db_id,
-            Some(tx.txn_id()),
-            id.clone(),
-        )
-        .await?;
+        let old_ds =
+            GenericCrudService::<ApplicationBmc>::get(mm, db_id, Some(tx.txn_id()), id.clone())
+                .await?;
         let old_code = Self::get_field(&old_ds, "code").unwrap_or_default();
 
         let result = GenericCrudService::<ApplicationBmc>::update(
@@ -155,14 +155,9 @@ impl ApplicationService {
         );
 
         for id in &ids {
-            let ds = GenericCrudService::<ApplicationBmc>::get(
-                mm,
-                db_id,
-                None,
-                id.clone(),
-            )
-            .await?;
-            let code = Self::get_field(&ds, "code").unwrap_or_else(|| id.as_str().unwrap_or("").to_string());
+            let ds = GenericCrudService::<ApplicationBmc>::get(mm, db_id, None, id.clone()).await?;
+            let code = Self::get_field(&ds, "code")
+                .unwrap_or_else(|| id.as_str().unwrap_or("").to_string());
             // code = {domain}_{app_id}
             let parts: Vec<&str> = code.splitn(2, '_').collect();
             if parts.len() == 2 {

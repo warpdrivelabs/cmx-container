@@ -9,15 +9,15 @@
 //!
 //! SQL 全部来自 cmx-dct-model；本层接 cmx-database-pg 全局 manager 执行 + 事务编排。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use cmx_api_types::Result;
-use cmx_database_pg::{get_default_pg_db_manager, DatabaseManager};
+use cmx_database_pg::{DatabaseManager, get_default_pg_db_manager};
 
 use cmx_dct_model::{
-    base_fieldset, build_search_sql, build_upsert_sql, is_server_managed_col, json_to_datavalue,
-    mint_ids_for_inserts, pk_is_generated, row_fields, valid_col, DctQuery, DictColumn, DictView,
-    SERVER_FILLED_COLS, SERVER_REPLACED_COLS,
+    DctQuery, DictColumn, DictView, SERVER_FILLED_COLS, SERVER_REPLACED_COLS, base_fieldset,
+    build_search_sql, build_upsert_sql, is_server_managed_col, json_to_datavalue,
+    mint_ids_for_inserts, pk_is_generated, row_fields, valid_col,
 };
 
 // ============================================================================
@@ -237,7 +237,12 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
         .or_else(|| doc.get("version").and_then(|v| v.as_u64()))
         .unwrap_or(0);
     let spec_key = cmx_biz::validation::spec_key(
-        &q.domain, &q.application, &q.module, &file, &table_name, version,
+        &q.domain,
+        &q.application,
+        &q.module,
+        &file,
+        &table_name,
+        version,
     );
     let spec = match cmx_biz::validation::get_spec(&spec_key) {
         Some(s) => s,

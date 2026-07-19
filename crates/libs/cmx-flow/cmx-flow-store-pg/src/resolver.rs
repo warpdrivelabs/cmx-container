@@ -26,7 +26,9 @@ pub struct PgIamAssigneeResolver {
 impl PgIamAssigneeResolver {
     /// 用指定 db_id 构建（须已在 cmx-database-pg 注册数据源）。
     pub fn new(db_id: impl Into<String>) -> Self {
-        Self { db_id: db_id.into() }
+        Self {
+            db_id: db_id.into(),
+        }
     }
 
     /// 执行一条只返回单列 user_id 的查询，收集成 Vec<String>。

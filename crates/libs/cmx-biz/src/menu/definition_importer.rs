@@ -60,8 +60,8 @@ impl MenuDefinitionImporter for LocalMenuDefinitionImporter {
         let txn_id = guard.txn_id();
 
         // 幂等:先删整个模块的旧菜单(含子节点),再整体重建
-        let _ = MenuService::delete_by_module(&self.mm, &self.db_id, Some(txn_id), module_code)
-            .await;
+        let _ =
+            MenuService::delete_by_module(&self.mm, &self.db_id, Some(txn_id), module_code).await;
 
         // 拓扑排序:parent_code 为 None/空串(根)或父已在 done 集合的节点先建(父先于子)
         let mut pending: Vec<&MenuDefinition> = definitions.iter().collect();
@@ -95,7 +95,8 @@ impl MenuDefinitionImporter for LocalMenuDefinitionImporter {
         }
 
         // 逐节点建行,记录 code → 真实 id,供子节点用 parent_id 直传(避免重复查父)
-        let mut code_to_id: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let mut code_to_id: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
         let mut count = 0usize;
         for def in sorted {
             // 父优先用已知真实 id(已建),否则留 None(根节点或父缺失)

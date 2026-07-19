@@ -99,7 +99,10 @@ impl PluginOperationExecutor {
         .with_new_value(persist_result.install_path.to_string_lossy().to_string())
         .with_completed(duration_ms);
         // 审计日志失败不阻塞主流程，仅输出警告
-        let _ = self.audit_logger.log(audit_record).await
+        let _ = self
+            .audit_logger
+            .log(audit_record)
+            .await
             .map_err(|e| {
                 tracing::warn!("审计日志写入失败: {}", e);
                 e
@@ -107,7 +110,9 @@ impl PluginOperationExecutor {
             .ok();
 
         // 4. 事件发布：GlobalEventBus 进程内事件 + Redis 跨实例通知
-        self.event_publisher.publish_installed(&persist_result).await;
+        self.event_publisher
+            .publish_installed(&persist_result)
+            .await;
 
         Ok(crate::service::install::InstallResponse {
             plugin_id: persist_result.plugin_id,
@@ -148,7 +153,10 @@ impl PluginOperationExecutor {
         .with_old_value(persist_result.old_version.clone().unwrap_or_default())
         .with_new_value(persist_result.version.clone())
         .with_completed(duration_ms);
-        let _ = self.audit_logger.log(audit_record).await
+        let _ = self
+            .audit_logger
+            .log(audit_record)
+            .await
             .map_err(|e| {
                 tracing::warn!("审计日志写入失败: {}", e);
                 e
@@ -197,7 +205,10 @@ impl PluginOperationExecutor {
         .with_old_value(persist_result.old_version.clone().unwrap_or_default())
         .with_new_value(persist_result.version.clone())
         .with_completed(duration_ms);
-        let _ = self.audit_logger.log(audit_record).await
+        let _ = self
+            .audit_logger
+            .log(audit_record)
+            .await
             .map_err(|e| {
                 tracing::warn!("审计日志写入失败: {}", e);
                 e
@@ -205,7 +216,9 @@ impl PluginOperationExecutor {
             .ok();
 
         // 4. 事件发布
-        self.event_publisher.publish_downgraded(&persist_result).await;
+        self.event_publisher
+            .publish_downgraded(&persist_result)
+            .await;
 
         Ok(crate::service::downgrade::DowngradeResponse {
             plugin_id: persist_result.plugin_id,
@@ -231,7 +244,9 @@ impl PluginOperationExecutor {
         let persist_result = self.persistence.uninstall_persist(request).await?;
 
         // 2. 运行时注销：从 Registry + Contexts + Cache 中移除
-        self.runtime.unregister_plugin(&persist_result.plugin_id).await?;
+        self.runtime
+            .unregister_plugin(&persist_result.plugin_id)
+            .await?;
 
         // 3. 审计日志
         let duration_ms = start_time.elapsed().as_millis() as i64;
@@ -244,7 +259,10 @@ impl PluginOperationExecutor {
         }))
         .with_old_value(persist_result.version.clone())
         .with_completed(duration_ms);
-        let _ = self.audit_logger.log(audit_record).await
+        let _ = self
+            .audit_logger
+            .log(audit_record)
+            .await
             .map_err(|e| {
                 tracing::warn!("审计日志写入失败: {}", e);
                 e
@@ -252,7 +270,9 @@ impl PluginOperationExecutor {
             .ok();
 
         // 4. 事件发布
-        self.event_publisher.publish_uninstalled(&persist_result).await;
+        self.event_publisher
+            .publish_uninstalled(&persist_result)
+            .await;
 
         Ok(crate::service::uninstall::UninstallResponse {
             plugin_id: persist_result.plugin_id,
@@ -302,7 +322,10 @@ impl PluginOperationExecutor {
             "new_version": persist_result.version,
         }))
         .with_completed(duration_ms);
-        let _ = self.audit_logger.log(audit_record).await
+        let _ = self
+            .audit_logger
+            .log(audit_record)
+            .await
             .map_err(|e| {
                 tracing::warn!("审计日志写入失败: {}", e);
                 e
@@ -310,7 +333,9 @@ impl PluginOperationExecutor {
             .ok();
 
         // 4. 事件发布
-        self.event_publisher.publish_reinstalled(&persist_result).await;
+        self.event_publisher
+            .publish_reinstalled(&persist_result)
+            .await;
 
         Ok(crate::service::deploy::DeployResponse {
             plugin_id: persist_result.plugin_id,

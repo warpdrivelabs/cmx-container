@@ -237,9 +237,8 @@ pub fn normalize_drn(
         let hit = imports
             .and_then(|v| v.as_array())
             .and_then(|arr| {
-                arr.iter().find(|x| {
-                    x.get("alias").and_then(|a| a.as_str()) == Some(alias.as_str())
-                })
+                arr.iter()
+                    .find(|x| x.get("alias").and_then(|a| a.as_str()) == Some(alias.as_str()))
             })
             .and_then(|x| x.get("drn").and_then(|d| d.as_str()));
         let target = hit.ok_or_else(|| format!("DRN 别名未在 imports 声明：@{alias}"))?;
@@ -340,11 +339,7 @@ pub fn drn_to_path(abs: &AbsDrn, with_version: bool) -> String {
 /// 可见性：目标 visibility 是否允许 from 引用。缺省(None)按 public 放行。
 ///
 /// 四级可见性：private（同模块）/ app（同应用）/ domain（同域）/ public（全局）。
-pub fn drn_visible_from(
-    target_visibility: Option<&str>,
-    target: &AbsDrn,
-    from: &FromDam,
-) -> bool {
+pub fn drn_visible_from(target_visibility: Option<&str>, target: &AbsDrn, from: &FromDam) -> bool {
     let fd = from.domain.as_deref().unwrap_or("");
     let fa = from.app.as_deref().unwrap_or("");
     let fm = from.module.as_deref().unwrap_or("");
@@ -392,7 +387,8 @@ mod tests {
 
     #[test]
     fn parse_full_with_version_and_deeplink() {
-        let p = parse_drn("drn:fi/cmxfico/gl/DOC/gl_md_doc_meta@2#voucher_detail.cashflow_item_id").unwrap();
+        let p = parse_drn("drn:fi/cmxfico/gl/DOC/gl_md_doc_meta@2#voucher_detail.cashflow_item_id")
+            .unwrap();
         assert_eq!(p.domain.as_deref(), Some("fi"));
         assert_eq!(p.kind.as_deref(), Some("DOC"));
         assert_eq!(p.version, Some(2));
@@ -402,7 +398,10 @@ mod tests {
 
     #[test]
     fn bare_and_two_seg() {
-        assert_eq!(parse_drn("cost_center").unwrap().name.as_deref(), Some("cost_center"));
+        assert_eq!(
+            parse_drn("cost_center").unwrap().name.as_deref(),
+            Some("cost_center")
+        );
         let p = parse_drn("DCT/cost_center").unwrap();
         assert_eq!(p.kind.as_deref(), Some("DCT"));
     }
@@ -429,7 +428,13 @@ mod tests {
         let abs = normalize_drn("cost_center", &from(), Some("DCT"), None).unwrap();
         assert_eq!(abs.app, "cmxfico");
         assert_eq!(abs.kind, "DCT");
-        let abs = normalize_drn("drn:fi/shared-md/masterdata/DCT/cost_center@1", &from(), None, None).unwrap();
+        let abs = normalize_drn(
+            "drn:fi/shared-md/masterdata/DCT/cost_center@1",
+            &from(),
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(abs.app, "shared-md");
         assert_eq!(abs.version, Some(1));
     }
@@ -460,18 +465,38 @@ mod tests {
         let s = "drn:fi/shared-md/masterdata/DCT/cost_center@1";
         let abs = normalize_drn(s, &from(), None, None).unwrap();
         assert_eq!(format_drn(&abs), s);
-        assert_eq!(drn_to_path(&abs, false), "fi/shared-md/masterdata/DCT/cost_center.json");
-        assert_eq!(drn_to_path(&abs, true), "fi/shared-md/masterdata/DCT/cost_center_v1.json");
+        assert_eq!(
+            drn_to_path(&abs, false),
+            "fi/shared-md/masterdata/DCT/cost_center.json"
+        );
+        assert_eq!(
+            drn_to_path(&abs, true),
+            "fi/shared-md/masterdata/DCT/cost_center_v1.json"
+        );
     }
 
     #[test]
     fn visibility_levels() {
         let target = AbsDrn {
-            domain: "fi".into(), app: "shared-md".into(), module: "masterdata".into(),
-            kind: "DCT".into(), name: "x".into(), version: None, table: None, field: None,
+            domain: "fi".into(),
+            app: "shared-md".into(),
+            module: "masterdata".into(),
+            kind: "DCT".into(),
+            name: "x".into(),
+            version: None,
+            table: None,
+            field: None,
         };
-        let same_app = FromDam { domain: Some("fi".into()), app: Some("shared-md".into()), module: Some("other".into()) };
-        let other_domain = FromDam { domain: Some("hr".into()), app: Some("x".into()), module: Some("y".into()) };
+        let same_app = FromDam {
+            domain: Some("fi".into()),
+            app: Some("shared-md".into()),
+            module: Some("other".into()),
+        };
+        let other_domain = FromDam {
+            domain: Some("hr".into()),
+            app: Some("x".into()),
+            module: Some("y".into()),
+        };
         assert!(drn_visible_from(Some("app"), &target, &same_app));
         assert!(!drn_visible_from(Some("app"), &target, &other_domain));
         assert!(drn_visible_from(Some("public"), &target, &other_domain));
@@ -481,18 +506,31 @@ mod tests {
     #[test]
     fn effective_dict_id_bare_and_drn() {
         // 裸 code 原样（向后兼容，无需 from）
-        assert_eq!(effective_dict_id("cost_center", &FromDam::default(), None), "cost_center");
+        assert_eq!(
+            effective_dict_id("cost_center", &FromDam::default(), None),
+            "cost_center"
+        );
         // 绝对 DRN → name 段
         assert_eq!(
-            effective_dict_id("drn:fi/shared-md/masterdata/DCT/cost_center@1", &from(), None),
+            effective_dict_id(
+                "drn:fi/shared-md/masterdata/DCT/cost_center@1",
+                &from(),
+                None
+            ),
             "cost_center"
         );
         // 别名 → 展开后 name 段
         let imports = json!([{"alias":"cc","drn":"drn:fi/shared-md/masterdata/DCT/currency"}]);
-        assert_eq!(effective_dict_id("@cc", &from(), Some(&imports)), "currency");
+        assert_eq!(
+            effective_dict_id("@cc", &from(), Some(&imports)),
+            "currency"
+        );
         // 两段简写 DCT/x → name 段
         assert_eq!(effective_dict_id("DCT/partner", &from(), None), "partner");
         // 无法归一（未声明别名）→ 退回原值，不阻断
-        assert_eq!(effective_dict_id("@nope", &from(), Some(&json!([]))), "@nope");
+        assert_eq!(
+            effective_dict_id("@nope", &from(), Some(&json!([]))),
+            "@nope"
+        );
     }
 }

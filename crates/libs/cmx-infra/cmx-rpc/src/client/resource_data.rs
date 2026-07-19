@@ -297,7 +297,8 @@ impl RpcServiceBundle for ResourceDataBundle {
         let data_importer = deps.data_importer.clone();
         let auth_verifier = deps.auth_verifier.clone();
         ServerRegistration::new(move |server| {
-            let mut impl_ = crate::server::resource_data::CmxResourceDataServerImpl::new(data_importer);
+            let mut impl_ =
+                crate::server::resource_data::CmxResourceDataServerImpl::new(data_importer);
             if let Some(verifier) = auth_verifier.clone() {
                 impl_ = impl_.with_auth_verifier(verifier);
             }

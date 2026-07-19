@@ -25,7 +25,10 @@ use report::{AggMeasure, LatencyStats, Measure};
 use std::path::PathBuf;
 
 fn env_u64(key: &str, default: u64) -> u64 {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 fn crate_dir() -> PathBuf {
@@ -82,20 +85,40 @@ async fn main() -> Result<()> {
     );
 
     // 策略 A：逐行
-    aggs.push(agg_rounds(rounds_insert, || {
-        run_sqlx_insert(&url, &tpl, insert_rows, "row", batch)
-    }, "sqlx 逐行").await?);
-    aggs.push(agg_rounds(rounds_insert, || {
-        run_tokio_insert(&url, &tpl, insert_rows, "row", batch)
-    }, "tokio 逐行").await?);
+    aggs.push(
+        agg_rounds(
+            rounds_insert,
+            || run_sqlx_insert(&url, &tpl, insert_rows, "row", batch),
+            "sqlx 逐行",
+        )
+        .await?,
+    );
+    aggs.push(
+        agg_rounds(
+            rounds_insert,
+            || run_tokio_insert(&url, &tpl, insert_rows, "row", batch),
+            "tokio 逐行",
+        )
+        .await?,
+    );
 
     // 策略 B：批量
-    aggs.push(agg_rounds(rounds_insert, || {
-        run_sqlx_insert(&url, &tpl, insert_rows, "batch", batch)
-    }, "sqlx 批量").await?);
-    aggs.push(agg_rounds(rounds_insert, || {
-        run_tokio_insert(&url, &tpl, insert_rows, "batch", batch)
-    }, "tokio 批量").await?);
+    aggs.push(
+        agg_rounds(
+            rounds_insert,
+            || run_sqlx_insert(&url, &tpl, insert_rows, "batch", batch),
+            "sqlx 批量",
+        )
+        .await?,
+    );
+    aggs.push(
+        agg_rounds(
+            rounds_insert,
+            || run_tokio_insert(&url, &tpl, insert_rows, "batch", batch),
+            "tokio 批量",
+        )
+        .await?,
+    );
 
     // 策略 C：COPY（每轮重建表；最后一轮的表保留给查询用）
     let sqlx_table = format!("{}_sqlx_copy", schema::TABLE);
@@ -139,21 +162,33 @@ async fn main() -> Result<()> {
     for &size in &query_sizes {
         // sqlx（一个连接复用多轮，避免连接建立噪声）
         let pool = bench_sqlx::connect(&url, 4).await?;
-        aggs.push(agg_rounds_async(rounds_query, || {
-            bench_sqlx::query_fetch_all(&pool, &sqlx_table, size)
-        }).await?);
-        aggs.push(agg_rounds_async(rounds_query, || {
-            bench_sqlx::query_stream(&pool, &sqlx_table, size)
-        }).await?);
+        aggs.push(
+            agg_rounds_async(rounds_query, || {
+                bench_sqlx::query_fetch_all(&pool, &sqlx_table, size)
+            })
+            .await?,
+        );
+        aggs.push(
+            agg_rounds_async(rounds_query, || {
+                bench_sqlx::query_stream(&pool, &sqlx_table, size)
+            })
+            .await?,
+        );
         pool.close().await;
         // tokio-postgres
         let client = bench_tokio_pg::connect(&url).await?;
-        aggs.push(agg_rounds_async(rounds_query, || {
-            bench_tokio_pg::query_fetch_all(&client, &pg_table, size)
-        }).await?);
-        aggs.push(agg_rounds_async(rounds_query, || {
-            bench_tokio_pg::query_stream(&client, &pg_table, size)
-        }).await?);
+        aggs.push(
+            agg_rounds_async(rounds_query, || {
+                bench_tokio_pg::query_fetch_all(&client, &pg_table, size)
+            })
+            .await?,
+        );
+        aggs.push(
+            agg_rounds_async(rounds_query, || {
+                bench_tokio_pg::query_stream(&client, &pg_table, size)
+            })
+            .await?,
+        );
     }
 
     // ============================ 点查延迟（多轮合并样本） ============================
@@ -166,8 +201,13 @@ async fn main() -> Result<()> {
         let mut all = Vec::new();
         for _ in 0..rounds_lat {
             all.extend(
-                bench_sqlx::point_query_latency_raw(&pool, &sqlx_table, insert_rows as i64, lat_samples)
-                    .await?,
+                bench_sqlx::point_query_latency_raw(
+                    &pool,
+                    &sqlx_table,
+                    insert_rows as i64,
+                    lat_samples,
+                )
+                .await?,
             );
         }
         latencies.push(LatencyStats::from_micros("point-query", "sqlx", all));
@@ -186,7 +226,11 @@ async fn main() -> Result<()> {
                 .await?,
             );
         }
-        latencies.push(LatencyStats::from_micros("point-query", "tokio-postgres", all));
+        latencies.push(LatencyStats::from_micros(
+            "point-query",
+            "tokio-postgres",
+            all,
+        ));
     }
 
     // ============================ pipelining（多轮取中位加速比） ============================
@@ -239,7 +283,9 @@ async fn main() -> Result<()> {
         insert_rows, query_sizes, rounds_insert, rounds_query, rounds_lat, rounds_pipe
     ));
     md.push_str(&report::print_throughput_table(&aggs));
-    md.push_str("\n> **波动CV** = 多轮吞吐的变异系数（标准差/均值）；越小越稳定，个位数%说明数字可信。\n");
+    md.push_str(
+        "\n> **波动CV** = 多轮吞吐的变异系数（标准差/均值）；越小越稳定，个位数%说明数字可信。\n",
+    );
     md.push_str(&report::print_latency_table(&latencies));
     md.push_str(&pipe_lines);
     md.push_str(
@@ -296,7 +342,6 @@ where
     Ok(AggMeasure::from_runs(&runs))
 }
 
-
 /// 运行一种 sqlx 插入策略，返回 (pool 保持句柄, Measure)。
 async fn run_sqlx_insert(
     url: &str,
@@ -345,7 +390,9 @@ async fn top_up_copy(
     let cols = schema::column_names().join(",");
     let mut conn = pool.acquire().await?;
     let mut copy = conn
-        .copy_in_raw(&format!("COPY {table} ({cols}) FROM STDIN WITH (FORMAT text)"))
+        .copy_in_raw(&format!(
+            "COPY {table} ({cols}) FROM STDIN WITH (FORMAT text)"
+        ))
         .await?;
     let mut buf = String::with_capacity(1 << 20);
     for id in from as i64..to as i64 {
@@ -374,7 +421,9 @@ async fn top_up_copy_pg(
     use futures::{SinkExt, pin_mut};
     let cols = schema::column_names().join(",");
     let sink = client
-        .copy_in::<_, Bytes>(&format!("COPY {table} ({cols}) FROM STDIN WITH (FORMAT text)"))
+        .copy_in::<_, Bytes>(&format!(
+            "COPY {table} ({cols}) FROM STDIN WITH (FORMAT text)"
+        ))
         .await?;
     pin_mut!(sink);
     let mut buf = String::with_capacity(1 << 20);

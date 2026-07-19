@@ -363,7 +363,11 @@ impl Config {
             return v;
         }
         // 2-4. 环境变量
-        for key in ["APP_ID", "SERVICE_REGISTRY_NAME", "NACOS_NAMING_SERVICE_NAME"] {
+        for key in [
+            "APP_ID",
+            "SERVICE_REGISTRY_NAME",
+            "NACOS_NAMING_SERVICE_NAME",
+        ] {
             if let Ok(v) = std::env::var(key)
                 && !v.is_empty()
             {

@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use serde_json::Value;
 
 use super::{
-    Diag, COLUMN_AGGS, COLUMN_ALIGNS, COLUMN_TYPES, DISPLAY_MODES, EDIT_MODES, check_formula,
+    COLUMN_AGGS, COLUMN_ALIGNS, COLUMN_TYPES, DISPLAY_MODES, Diag, EDIT_MODES, check_formula,
 };
 
 /// 校验 match 对象：键须在合法键集合内，操作符与属性条件不可混用。
@@ -22,9 +22,7 @@ pub(super) fn check_match_object(
         d.error(path, "MATCH_OBJECT_REQUIRED", "anchor.match 必须是对象");
         return;
     }
-    let m = m
-        .as_object()
-        .expect("invariant: m checked is_object above");
+    let m = m.as_object().expect("invariant: m checked is_object above");
     for (dim, cond) in m {
         // 匹配键须在锚点列/维度/属性列中
         if !valid_keys.is_empty() && !valid_keys.contains(dim) {

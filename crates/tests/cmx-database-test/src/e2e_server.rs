@@ -122,7 +122,9 @@ async fn seed_rows(client: &tokio_postgres::Client, n: u64) -> anyhow::Result<()
     use futures::{SinkExt, pin_mut};
     let cols = columns().join(",");
     let sink = client
-        .copy_in::<_, Bytes>(&format!("COPY {TABLE} ({cols}) FROM STDIN WITH (FORMAT text)"))
+        .copy_in::<_, Bytes>(&format!(
+            "COPY {TABLE} ({cols}) FROM STDIN WITH (FORMAT text)"
+        ))
         .await?;
     pin_mut!(sink);
     let mut buf = String::with_capacity(1 << 20);
@@ -258,7 +260,8 @@ async fn old_json(
     // 环节 2:列式 JSON 编码(ColumnarCodec → serde_json 字节)
     let t1 = Instant::now();
     let pkg = ColumnarCodec::encode(&ds);
-    let body = serde_json::to_vec(&serde_json::json!({"code":0,"msg":"success","data":pkg})).unwrap();
+    let body =
+        serde_json::to_vec(&serde_json::json!({"code":0,"msg":"success","data":pkg})).unwrap();
     let encode_ms = t1.elapsed().as_secs_f64() * 1000.0;
     let mem_total = live().saturating_sub(base);
     let mem_peak = peak().saturating_sub(base);
@@ -350,7 +353,10 @@ async fn tokio_zmc_bin(
 
     let t0 = Instant::now();
     let qparams: Vec<i32> = Vec::new();
-    let stream = client.query_raw(app.select.as_str(), qparams).await.unwrap();
+    let stream = client
+        .query_raw(app.select.as_str(), qparams)
+        .await
+        .unwrap();
     futures::pin_mut!(stream);
     let first = stream.try_next().await.unwrap().map(TokioPgRowSource::from);
     let schema = match &first {
@@ -423,15 +429,23 @@ fn main() -> anyhow::Result<()> {
 async fn run() -> anyhow::Result<()> {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@127.0.0.1:5432/cmx".to_string());
-    let rows: u64 = std::env::var("ROWS").ok().and_then(|v| v.parse().ok()).unwrap_or(100_000);
-    let port: u16 = std::env::var("PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(18099);
+    let rows: u64 = std::env::var("ROWS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100_000);
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(18099);
 
     // 建表 + 装载
     let (client, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls).await?;
     tokio::spawn(async move {
         let _ = conn.await;
     });
-    client.batch_execute(&format!("DROP TABLE IF EXISTS {TABLE}")).await?;
+    client
+        .batch_execute(&format!("DROP TABLE IF EXISTS {TABLE}"))
+        .await?;
     client.batch_execute(&create_ddl()).await?;
     eprintln!(">> 装载 {rows} 行...");
     seed_rows(&client, rows).await?;

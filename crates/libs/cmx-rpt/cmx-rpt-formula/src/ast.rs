@@ -101,7 +101,9 @@ fn lex(s: &str) -> Result<Vec<Tok>, String> {
                         | Some(Tok::Comma)
                         | Some(Tok::Colon)
                 );
-                if prev_allows_unary && i + 1 < cs.len() && (cs[i + 1].is_ascii_digit() || cs[i + 1] == '.')
+                if prev_allows_unary
+                    && i + 1 < cs.len()
+                    && (cs[i + 1].is_ascii_digit() || cs[i + 1] == '.')
                 {
                     let mut buf = String::from("-");
                     i += 1;
@@ -326,9 +328,10 @@ impl Parser {
                     if matches!(self.peek(), Some(Tok::Colon)) {
                         self.next(); // :
                         match self.next() {
-                            Some(Tok::Ident(end)) if is_cell_ref(&end) => {
-                                Ok(Node::Range(name.to_ascii_uppercase(), end.to_ascii_uppercase()))
-                            }
+                            Some(Tok::Ident(end)) if is_cell_ref(&end) => Ok(Node::Range(
+                                name.to_ascii_uppercase(),
+                                end.to_ascii_uppercase(),
+                            )),
                             other => Err(format!("区间右端非法单元格: {other:?}")),
                         }
                     } else {

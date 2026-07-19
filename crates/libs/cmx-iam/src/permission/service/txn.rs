@@ -97,7 +97,8 @@ impl PermissionServiceImpl {
         txn_id: &str,
         parent_id: &str,
     ) -> Result<Option<(String, String, i64)>, TraitError> {
-        let sql = "SELECT code, full_code_path, level FROM cmx_permission WHERE id = $1 AND archived = 0";
+        let sql =
+            "SELECT code, full_code_path, level FROM cmx_permission WHERE id = $1 AND archived = 0";
         let params = vec![DataValue::String(parent_id.to_string())];
         let dataset = self
             .mm

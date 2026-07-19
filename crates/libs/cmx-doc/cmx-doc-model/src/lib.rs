@@ -14,8 +14,8 @@ pub mod query;
 pub mod rule;
 pub mod sql_builder;
 
-pub use formula::{eval_bool, eval_formula, scope_from_json, FValue, Scope};
+pub use formula::{FValue, Scope, eval_bool, eval_formula, scope_from_json};
 pub use meta::{ColumnView, DocMetaView, LayerView, LevelGroup, RelationView, SummaryView};
-pub use query::{json_to_datavalue, Cond, Cursor, DocQuery, Filter, LayerQuery, Op, OrderBy};
-pub use rule::{validate, ValidateResult, Violation};
+pub use query::{Cond, Cursor, DocQuery, Filter, LayerQuery, Op, OrderBy, json_to_datavalue};
+pub use rule::{ValidateResult, Violation, validate};
 pub use sql_builder::build_layer_select;

@@ -82,68 +82,70 @@ impl CmxServiceOrchestrator for CmxOrchestratorServerImpl {
                 request_id.unwrap_or_default(),
                 None,
                 async {
-                let input: serde_json::Value = serde_json::from_str(&req.input).map_err(|e| {
-                    volo_grpc::Status::new(
-                        volo_grpc::Code::InvalidArgument,
-                        format!("输入 JSON 解析失败: {e}"),
-                    )
-                })?;
+                    let input: serde_json::Value =
+                        serde_json::from_str(&req.input).map_err(|e| {
+                            volo_grpc::Status::new(
+                                volo_grpc::Code::InvalidArgument,
+                                format!("输入 JSON 解析失败: {e}"),
+                            )
+                        })?;
 
-                let options = cmx_traits::service::ServiceInvokeOptions {
-                    include_steps: req.include_steps,
-                    debug: req.debug,
-                    debug_node_id: req.debug_node_id.map(|s| s.to_string()),
-                    debug_params: if req.debug_params.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            req.debug_params
-                                .into_iter()
-                                .map(|(k, v)| (k.to_string(), v.to_string()))
-                                .collect(),
-                        )
-                    },
-                };
+                    let options = cmx_traits::service::ServiceInvokeOptions {
+                        include_steps: req.include_steps,
+                        debug: req.debug,
+                        debug_node_id: req.debug_node_id.map(|s| s.to_string()),
+                        debug_params: if req.debug_params.is_empty() {
+                            None
+                        } else {
+                            Some(
+                                req.debug_params
+                                    .into_iter()
+                                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                                    .collect(),
+                            )
+                        },
+                    };
 
-                match service_invoker
-                    .invoke_service(&req.service_key, input, options)
-                    .await
-                {
-                    Ok(resp) => {
-                        let pb_resp = ExecuteServiceResponse {
-                            success: resp.success,
-                            output: resp.output.map(|v| v.to_string().into()),
-                            steps: resp
-                                .steps
-                                .into_iter()
-                                .map(execution_step_to_proto)
-                                .collect(),
-                            total_elapsed_us: resp.total_elapsed_us.unwrap_or(0),
-                            error: resp.error.map(|e| OrchestrationError {
-                                message: e.message.into(),
-                            }),
-                        };
-                        Ok(volo_grpc::Response::new(pb_resp))
+                    match service_invoker
+                        .invoke_service(&req.service_key, input, options)
+                        .await
+                    {
+                        Ok(resp) => {
+                            let pb_resp = ExecuteServiceResponse {
+                                success: resp.success,
+                                output: resp.output.map(|v| v.to_string().into()),
+                                steps: resp
+                                    .steps
+                                    .into_iter()
+                                    .map(execution_step_to_proto)
+                                    .collect(),
+                                total_elapsed_us: resp.total_elapsed_us.unwrap_or(0),
+                                error: resp.error.map(|e| OrchestrationError {
+                                    message: e.message.into(),
+                                }),
+                            };
+                            Ok(volo_grpc::Response::new(pb_resp))
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                target: "cmx_rpc",
+                                error = %e,
+                                "服务编排执行失败"
+                            );
+                            let pb_resp = ExecuteServiceResponse {
+                                success: false,
+                                output: None,
+                                steps: Vec::new(),
+                                total_elapsed_us: 0,
+                                error: Some(OrchestrationError {
+                                    message: e.to_string().into(),
+                                }),
+                            };
+                            Ok(volo_grpc::Response::new(pb_resp))
+                        }
                     }
-                    Err(e) => {
-                        tracing::error!(
-                            target: "cmx_rpc",
-                            error = %e,
-                            "服务编排执行失败"
-                        );
-                        let pb_resp = ExecuteServiceResponse {
-                            success: false,
-                            output: None,
-                            steps: Vec::new(),
-                            total_elapsed_us: 0,
-                            error: Some(OrchestrationError {
-                                message: e.to_string().into(),
-                            }),
-                        };
-                        Ok(volo_grpc::Response::new(pb_resp))
-                    }
-                }
-            })
+                },
+            )
             .await
         }
     }
@@ -175,67 +177,68 @@ impl CmxServiceOrchestrator for CmxOrchestratorServerImpl {
                 request_id.unwrap_or_default(),
                 None,
                 async {
-                // ==================== 参数解析 ====================
+                    // ==================== 参数解析 ====================
 
-                let input_value: serde_json::Value =
-                    serde_json::from_str(&req.input).unwrap_or(serde_json::Value::Null);
+                    let input_value: serde_json::Value =
+                        serde_json::from_str(&req.input).unwrap_or(serde_json::Value::Null);
 
-                let initial_input = req
-                    .initial_input
-                    .as_ref()
-                    .and_then(|s| serde_json::from_str(s).ok());
+                    let initial_input = req
+                        .initial_input
+                        .as_ref()
+                        .and_then(|s| serde_json::from_str(s).ok());
 
-                let svr_ctx = SVRContext::new(
-                    input_value.clone(),
-                    std::collections::HashMap::new(),
-                    chrono::Utc::now(),
-                    format!("rpc-{}", uuid::Uuid::new_v4()),
-                );
-
-                // ==================== 调用核心逻辑（通过 FunctionInvoker trait） ====================
-
-                match function_invoker
-                    .invoke_plugin_function(
-                        &plugin_id,
-                        &function_name,
-                        input_value,
-                        initial_input,
-                        svr_ctx,
-                        req.debug,
-                    )
-                    .await
-                {
-                Ok(result) => {
-                    let pb_resp = CallFunctionResponse {
-                        success: result.success,
-                        result: if result.success {
-                            Some(result.result.to_string().into())
-                        } else {
-                            None
-                        },
-                        elapsed_us: result.elapsed_us,
-                        error: result.error.map(|s| s.into()),
-                    };
-                    Ok(volo_grpc::Response::new(pb_resp))
-                }
-                Err(e) => {
-                    tracing::error!(
-                        target: "cmx_rpc",
-                        plugin_id = %plugin_id,
-                        function_name = %function_name,
-                        error = %e,
-                        "插件函数调用失败"
+                    let svr_ctx = SVRContext::new(
+                        input_value.clone(),
+                        std::collections::HashMap::new(),
+                        chrono::Utc::now(),
+                        format!("rpc-{}", uuid::Uuid::new_v4()),
                     );
-                    let pb_resp = CallFunctionResponse {
-                        success: false,
-                        result: None,
-                        elapsed_us: 0,
-                        error: Some(e.to_string().into()),
-                    };
-                    Ok(volo_grpc::Response::new(pb_resp))
-                }
-                }
-            })
+
+                    // ==================== 调用核心逻辑（通过 FunctionInvoker trait） ====================
+
+                    match function_invoker
+                        .invoke_plugin_function(
+                            &plugin_id,
+                            &function_name,
+                            input_value,
+                            initial_input,
+                            svr_ctx,
+                            req.debug,
+                        )
+                        .await
+                    {
+                        Ok(result) => {
+                            let pb_resp = CallFunctionResponse {
+                                success: result.success,
+                                result: if result.success {
+                                    Some(result.result.to_string().into())
+                                } else {
+                                    None
+                                },
+                                elapsed_us: result.elapsed_us,
+                                error: result.error.map(|s| s.into()),
+                            };
+                            Ok(volo_grpc::Response::new(pb_resp))
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                target: "cmx_rpc",
+                                plugin_id = %plugin_id,
+                                function_name = %function_name,
+                                error = %e,
+                                "插件函数调用失败"
+                            );
+                            let pb_resp = CallFunctionResponse {
+                                success: false,
+                                result: None,
+                                elapsed_us: 0,
+                                error: Some(e.to_string().into()),
+                            };
+                            Ok(volo_grpc::Response::new(pb_resp))
+                        }
+                    }
+                },
+            )
             .await
         }
     }

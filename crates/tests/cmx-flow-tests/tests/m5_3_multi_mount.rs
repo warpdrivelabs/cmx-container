@@ -12,6 +12,8 @@
 //!
 //! 关键不变量：父子链按「令牌」而非「实例」挂钩，故同一实例内多个挂载点互不串扰。
 //! 断言一律按子实例 definition_key 归位（find_child_instances 返回顺序不保证）。
+// 上方文档含 ASCII 流程图，缩进为示意对齐，非 Markdown 列表；放行 rustdoc 缩进 lint。
+#![allow(clippy::doc_overindented_list_items)]
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -136,7 +138,11 @@ async fn serial_multi_mount_runs_two_different_subflows_in_order() {
     assert_eq!(c2.len(), 2, "串行：挂载 A 完成后挂载 B 的子实例出现");
     assert_eq!(c2["order_review"].state, InstanceState::Completed);
     assert_eq!(c2["legal_review"].state, InstanceState::Active);
-    assert_eq!(waiting_subflow_count(&store, &main_id).await, 1, "此刻挂在 B");
+    assert_eq!(
+        waiting_subflow_count(&store, &main_id).await,
+        1,
+        "此刻挂在 B"
+    );
 
     // 挂载 A 的输出已按 A 的映射独立回写主流程。
     let main_mid = store.load_snapshot(&main_id).await.unwrap();
@@ -165,8 +171,14 @@ async fn serial_multi_mount_runs_two_different_subflows_in_order() {
         "两挂载依次跑完 → 主流程完成"
     );
     // 两个挂载点的输出互不覆盖，各自归位。
-    assert_eq!(main_final.instance.variables.get("orderResult"), Some(&json!("order-ok")));
-    assert_eq!(main_final.instance.variables.get("legalResult"), Some(&json!("legal-ok")));
+    assert_eq!(
+        main_final.instance.variables.get("orderResult"),
+        Some(&json!("order-ok"))
+    );
+    assert_eq!(
+        main_final.instance.variables.get("legalResult"),
+        Some(&json!("legal-ok"))
+    );
 }
 
 // ───────────────────────── 模式二：并行多挂载 ─────────────────────────
@@ -237,7 +249,10 @@ async fn parallel_multi_mount_runs_two_different_subflows_concurrently() {
     // 先办结财务子流程 → finance_sub 完成，其令牌到 join 等待；主流程仍 Active（风控分支未到）。
     let fin_sub = c["finance_sub"].id.clone();
     let fin_task = open_task(&store, &fin_sub).await;
-    engine.complete_task(&fin_sub, &fin_task, Variables::new()).await.unwrap();
+    engine
+        .complete_task(&fin_sub, &fin_task, Variables::new())
+        .await
+        .unwrap();
 
     assert_eq!(
         store.load_snapshot(&fin_sub).await.unwrap().instance.state,
@@ -251,7 +266,12 @@ async fn parallel_multi_mount_runs_two_different_subflows_concurrently() {
     );
     // 风控子流程不受影响，仍在办理。
     assert_eq!(
-        store.load_snapshot(&c["risk_sub"].id).await.unwrap().instance.state,
+        store
+            .load_snapshot(&c["risk_sub"].id)
+            .await
+            .unwrap()
+            .instance
+            .state,
         InstanceState::Active,
         "另一挂载子流程互不串扰，继续办理"
     );
@@ -259,10 +279,18 @@ async fn parallel_multi_mount_runs_two_different_subflows_concurrently() {
     // 再办结风控子流程 → risk_sub 完成 → 两分支到齐 join → 主流程完成。
     let risk_sub_id = c["risk_sub"].id.clone();
     let risk_task = open_task(&store, &risk_sub_id).await;
-    engine.complete_task(&risk_sub_id, &risk_task, Variables::new()).await.unwrap();
+    engine
+        .complete_task(&risk_sub_id, &risk_task, Variables::new())
+        .await
+        .unwrap();
 
     assert_eq!(
-        store.load_snapshot(&risk_sub_id).await.unwrap().instance.state,
+        store
+            .load_snapshot(&risk_sub_id)
+            .await
+            .unwrap()
+            .instance
+            .state,
         InstanceState::Completed
     );
     assert_eq!(
@@ -288,10 +316,10 @@ impl FakeRouter {
 #[async_trait]
 impl SubflowRouter for FakeRouter {
     async fn resolve(&self, called_key: &str, org_id: Option<&str>) -> RouteResult<String> {
-        if let Some(org) = org_id {
-            if let Some(t) = self.map.get(&format!("{called_key}@{org}")) {
-                return Ok(t.clone());
-            }
+        if let Some(org) = org_id
+            && let Some(t) = self.map.get(&format!("{called_key}@{org}"))
+        {
+            return Ok(t.clone());
         }
         Err(RouteError::NoBinding {
             called_key: called_key.into(),
@@ -340,7 +368,9 @@ async fn routed_multi_mount_resolves_two_types_by_org() {
         ("bj_tier1", "北京一级复核", "bj_l1"),
         ("bj_tier2", "北京二级复核", "bj_l2"),
     ] {
-        engine.deploy(compile(&concrete_sub(id, name, who)).unwrap()).unwrap();
+        engine
+            .deploy(compile(&concrete_sub(id, name, who)).unwrap())
+            .unwrap();
     }
 
     // 同一份主流程、两个挂载点逻辑 key；组织 shanghai 各自解析到上海的两个不同子流程类型。
@@ -353,7 +383,12 @@ async fn routed_multi_mount_resolves_two_types_by_org() {
 
     // —— 上海发起 ——
     let sh = engine
-        .start_process_org("routed_multi_main", Variables::new(), Some("SH-1".into()), Some("shanghai".into()))
+        .start_process_org(
+            "routed_multi_main",
+            Variables::new(),
+            Some("SH-1".into()),
+            Some("shanghai".into()),
+        )
         .await
         .unwrap();
     let sh_id = sh.instance_id.clone();
@@ -365,7 +400,10 @@ async fn routed_multi_mount_resolves_two_types_by_org() {
 
     // 办结一级 → 主推进到挂载点 B → 按上海组织路由到 sh_tier2（另一个具体类型）。
     let a_task = open_task(&store, &a["sh_tier1"].id).await;
-    engine.complete_task(&a["sh_tier1"].id, &a_task, Variables::new()).await.unwrap();
+    engine
+        .complete_task(&a["sh_tier1"].id, &a_task, Variables::new())
+        .await
+        .unwrap();
 
     let b = children_by_key(&store, &sh_id).await;
     assert_eq!(b.len(), 2, "挂载 A 完成后挂载 B 子实例出现");
@@ -376,7 +414,10 @@ async fn routed_multi_mount_resolves_two_types_by_org() {
     // 同一主流程实例、两个挂载点，按同一组织解析到两个不同类型子流程——诉求成立。
     // 办结二级 → 上海主流程完成。
     let b_task = open_task(&store, &b["sh_tier2"].id).await;
-    engine.complete_task(&b["sh_tier2"].id, &b_task, Variables::new()).await.unwrap();
+    engine
+        .complete_task(&b["sh_tier2"].id, &b_task, Variables::new())
+        .await
+        .unwrap();
     assert_eq!(
         store.load_snapshot(&sh_id).await.unwrap().instance.state,
         InstanceState::Completed,
@@ -385,11 +426,19 @@ async fn routed_multi_mount_resolves_two_types_by_org() {
 
     // —— 北京发起：同一份主流程定义，两挂载解析到北京自己的两个子流程类型 ——
     let bj = engine
-        .start_process_org("routed_multi_main", Variables::new(), Some("BJ-1".into()), Some("beijing".into()))
+        .start_process_org(
+            "routed_multi_main",
+            Variables::new(),
+            Some("BJ-1".into()),
+            Some("beijing".into()),
+        )
         .await
         .unwrap();
     let bj_id = bj.instance_id.clone();
     let bja = children_by_key(&store, &bj_id).await;
-    assert!(bja.contains_key("bj_tier1"), "挂载 A(tier1)@北京 → bj_tier1（与上海不同类型）");
+    assert!(
+        bja.contains_key("bj_tier1"),
+        "挂载 A(tier1)@北京 → bj_tier1（与上海不同类型）"
+    );
     assert!(!bja.contains_key("sh_tier1"), "北京实例不应出现上海子流程");
 }

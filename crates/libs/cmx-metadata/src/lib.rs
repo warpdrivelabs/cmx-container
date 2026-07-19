@@ -13,11 +13,11 @@ pub mod loader;
 pub mod parser;
 pub mod seed;
 
+pub use ddl::DdlDialect;
+pub use ddl::diff::{ColumnChange, ColumnCommentChange, DdlDiff, IndexChange, TableChange};
+pub use ddl::postgres::PostgresDdlDialect;
 pub use error::MetadataError;
 pub use executor::{
     BaseError, PgTableDefineExecutor, TableDefineDbExecutor, execute_ddl_by_ids,
     execute_ddl_statement_by_ids,
 };
-pub use ddl::DdlDialect;
-pub use ddl::diff::{ColumnChange, ColumnCommentChange, DdlDiff, IndexChange, TableChange};
-pub use ddl::postgres::PostgresDdlDialect;

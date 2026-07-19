@@ -57,11 +57,11 @@ fn parse_loose_value(raw: &str) -> Value {
     if lower == "null" {
         return Value::Null;
     }
-    if cached_re!(NUM, r"^-?\d+(\.\d+)?$")
-        .is_match(text)
-        && let Ok(n) = text.parse::<f64>() {
-            return json!(n);
-        }
+    if cached_re!(NUM, r"^-?\d+(\.\d+)?$").is_match(text)
+        && let Ok(n) = text.parse::<f64>()
+    {
+        return json!(n);
+    }
     json!(text.trim_matches(|c| "\"'“”‘’".contains(c)))
 }
 
@@ -75,14 +75,20 @@ pub(super) fn extract_json_patch_request(text: &str) -> Option<Value> {
     let file = cached_re!(JSON_FILE, r"([a-zA-Z0-9_.@/-]+\.json)")
         .captures(text)
         .map(|c| strip_portal_prefix(&c[1]))?;
-    let pointer = cached_re!(PTR, r"(?i)(?:pointer|路径|字段|json\s*pointer)\s*[:：]?\s*(/[^\s，。；]+)")
+    let pointer = cached_re!(
+        PTR,
+        r"(?i)(?:pointer|路径|字段|json\s*pointer)\s*[:：]?\s*(/[^\s，。；]+)"
+    )
+    .captures(text)
+    .map(|c| c[1].to_string())
+    .or_else(|| {
+        cached_re!(
+            PTR2,
+            r"(?i)(/[a-zA-Z0-9_~/-]+)\s*(?:改为|设置为|set\s+to)\s*"
+        )
         .captures(text)
         .map(|c| c[1].to_string())
-        .or_else(|| {
-            cached_re!(PTR2, r"(?i)(/[a-zA-Z0-9_~/-]+)\s*(?:改为|设置为|set\s+to)\s*")
-                .captures(text)
-                .map(|c| c[1].to_string())
-        })?;
+    })?;
     let value_str = cached_re!(VAL, r"(?i)(?:值|value)\s*[:：]\s*([\s\S]+)$")
         .captures(text)
         .map(|c| c[1].to_string())
@@ -168,7 +174,11 @@ pub(super) fn infer_command_approval(text: &str) -> Option<Value> {
 
 /// 判断用户消息是否涉及自定义 HTML 页面上下文。
 pub(super) fn wants_html_page_context(text: &str) -> bool {
-    cached_re!(HTML_CTX, r"(?i)自定义页面|html\s*page|html页面|页面设计|设计器|html_pages|页面资产").is_match(text)
+    cached_re!(
+        HTML_CTX,
+        r"(?i)自定义页面|html\s*page|html页面|页面设计|设计器|html_pages|页面资产"
+    )
+    .is_match(text)
 }
 
 /// 从用户消息中抽取 HTML 页面 ID。
@@ -181,9 +191,12 @@ pub(super) fn extract_html_page_id(text: &str) -> String {
     {
         return c[1].to_string();
     }
-    let stop = cached_re!(STOP_ID, r"(?i)^(json|html|css|js|ts|md|lint|build|agent|deepseek)$");
-    for c in cached_re!(TOKEN_ID, r"\b([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){0,5})\b")
-        .captures_iter(text)
+    let stop = cached_re!(
+        STOP_ID,
+        r"(?i)^(json|html|css|js|ts|md|lint|build|agent|deepseek)$"
+    );
+    for c in
+        cached_re!(TOKEN_ID, r"\b([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){0,5})\b").captures_iter(text)
     {
         let s = c[1].to_string();
         if stop.is_match(&s) {
@@ -289,4 +302,3 @@ mod tests {
         assert_eq!(guess_search_query("查找 \"登录逻辑\" 相关代码"), "登录逻辑");
     }
 }
-

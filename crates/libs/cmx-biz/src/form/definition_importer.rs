@@ -53,8 +53,8 @@ impl FormDefinitionImporter for LocalFormDefinitionImporter {
         let mut count = 0usize;
         for def in definitions {
             // 幂等:先删同 code 记录,再创建
-            let _ = FormService::delete_by_code(&self.mm, &self.db_id, Some(txn_id), &def.code)
-                .await;
+            let _ =
+                FormService::delete_by_code(&self.mm, &self.db_id, Some(txn_id), &def.code).await;
             let dto = FormForCreate {
                 code: def.code.clone(),
                 name: def.name.clone(),

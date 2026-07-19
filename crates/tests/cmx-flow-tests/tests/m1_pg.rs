@@ -7,7 +7,7 @@
 //! 验证：引擎 + PgRuntimeStore 组合下，start/complete 的每个等待态提交点都真实落库，
 //! 跨「重新 load」后仍能恢复推进，最终实例 Completed。
 
-use cmx_database_pg::{get_default_pg_db_manager, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, get_default_pg_db_manager};
 use cmx_flow_bpmn::compile;
 use cmx_flow_engine::{DelegateContext, Engine, InstanceState, JavaDelegate, Variables};
 use cmx_flow_store_pg::PgRuntimeStore;
@@ -19,8 +19,13 @@ struct CalcDaysDelegate;
 #[async_trait::async_trait]
 impl JavaDelegate for CalcDaysDelegate {
     async fn execute(&self, ctx: &mut DelegateContext<'_>) -> Result<(), String> {
-        let hours = ctx.variables.get("hours").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        ctx.variables.set("days", json!((hours / 8.0).ceil() as i64));
+        let hours = ctx
+            .variables
+            .get("hours")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        ctx.variables
+            .set("days", json!((hours / 8.0).ceil() as i64));
         Ok(())
     }
 }
@@ -105,5 +110,8 @@ async fn pg_full_lifecycle_long_leave() {
         .expect("最终快照应可载入");
     assert_eq!(snap.instance.state, InstanceState::Completed);
     assert!(snap.tokens.iter().all(|t| t.state == TokenState::Ended));
-    assert_eq!(snap.instance.variables.get("days").and_then(|v| v.as_i64()), Some(5));
+    assert_eq!(
+        snap.instance.variables.get("days").and_then(|v| v.as_i64()),
+        Some(5)
+    );
 }

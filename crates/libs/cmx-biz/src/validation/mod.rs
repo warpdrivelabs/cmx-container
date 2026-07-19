@@ -103,11 +103,22 @@ pub fn field_to_spec(f: &Value, id_field: &str) -> Option<ColumnSpec> {
         .to_string();
     let ft = map_field_type(&raw_type);
     let nullable = f.get("nullable").and_then(|v| v.as_bool()).unwrap_or(true);
-    let field_len = f.get("fieldLength").and_then(|v| v.as_u64()).map(|n| n as u32);
-    let dec = f.get("decimalDigits").and_then(|v| v.as_u64()).map(|n| n as u32);
+    let field_len = f
+        .get("fieldLength")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u32);
+    let dec = f
+        .get("decimalDigits")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u32);
     let is_pk = (!id_field.is_empty() && name == id_field)
-        || f.get("isPrimaryKey").and_then(|v| v.as_i64()).map(|n| n != 0).unwrap_or(false)
-        || f.get("isPrimaryKey").and_then(|v| v.as_bool()).unwrap_or(false);
+        || f.get("isPrimaryKey")
+            .and_then(|v| v.as_i64())
+            .map(|n| n != 0)
+            .unwrap_or(false)
+        || f.get("isPrimaryKey")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
     // 与 field_to_column 一致：String 用 length；Decimal 用 precision(=fieldLength)+scale(=decimalDigits)。
     let (length, precision, scale) = match ft {
@@ -141,7 +152,11 @@ fn field_caption(f: &Value) -> String {
             .unwrap_or("")
             .to_string(),
         Some(Value::String(s)) => s.clone(),
-        _ => f.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        _ => f
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
     }
 }
 
@@ -152,14 +167,18 @@ pub fn build_table_spec(table: impl Into<String>, id_field: &str, fields: &[Valu
     let mut columns = HashMap::new();
     let mut order = Vec::new();
     for f in fields {
-        if let Some(spec) = field_to_spec(f, id_field) {
-            if !columns.contains_key(&spec.name) {
-                order.push(spec.name.clone());
-                columns.insert(spec.name.clone(), spec);
-            }
+        if let Some(spec) = field_to_spec(f, id_field)
+            && !columns.contains_key(&spec.name)
+        {
+            order.push(spec.name.clone());
+            columns.insert(spec.name.clone(), spec);
         }
     }
-    TableSpec { table, columns, order }
+    TableSpec {
+        table,
+        columns,
+        order,
+    }
 }
 
 // ============================================================================
@@ -173,7 +192,14 @@ fn cache() -> &'static Mutex<HashMap<String, Arc<TableSpec>>> {
 }
 
 /// 构造缓存键：坐标 + 表 + 版本（版本变即键变，天然免失效）。
-pub fn spec_key(domain: &str, app: &str, module: &str, file: &str, table: &str, version: u64) -> String {
+pub fn spec_key(
+    domain: &str,
+    app: &str,
+    module: &str,
+    file: &str,
+    table: &str,
+    version: u64,
+) -> String {
     format!("{domain}/{app}/{module}/{file}/{table}@{version}")
 }
 
@@ -362,7 +388,11 @@ fn validate_value(
                         Some(cs.name.clone()),
                         Some(cs.caption.clone()),
                         row_idx,
-                        &[("caption", cap.clone()), ("max", max.to_string()), ("actual", len.to_string())],
+                        &[
+                            ("caption", cap.clone()),
+                            ("max", max.to_string()),
+                            ("actual", len.to_string()),
+                        ],
                     ));
                 }
             }
@@ -381,7 +411,11 @@ fn validate_value(
                             Some(cs.name.clone()),
                             Some(cs.caption.clone()),
                             row_idx,
-                            &[("caption", cap.clone()), ("type", cs.raw_type.clone()), ("actual", n.to_string())],
+                            &[
+                                ("caption", cap.clone()),
+                                ("type", cs.raw_type.clone()),
+                                ("actual", n.to_string()),
+                            ],
                         ));
                     }
                 }
@@ -391,7 +425,11 @@ fn validate_value(
                     Some(cs.name.clone()),
                     Some(cs.caption.clone()),
                     row_idx,
-                    &[("caption", cap.clone()), ("type", "整数".into()), ("actual", value_preview(val))],
+                    &[
+                        ("caption", cap.clone()),
+                        ("type", "整数".into()),
+                        ("actual", value_preview(val)),
+                    ],
                 )),
             }
         }
@@ -403,47 +441,61 @@ fn validate_value(
                     Some(cs.name.clone()),
                     Some(cs.caption.clone()),
                     row_idx,
-                    &[("caption", cap.clone()), ("type", "小数".into()), ("actual", value_preview(val))],
+                    &[
+                        ("caption", cap.clone()),
+                        ("type", "小数".into()),
+                        ("actual", value_preview(val)),
+                    ],
                 ));
             }
         }
-        FieldType::Decimal => {
-            match decimal_digits(val) {
-                Some((int_digits, frac_digits)) => {
-                    if let (Some(prec), Some(scale)) = (cs.precision, cs.scale) {
-                        let max_int = prec.saturating_sub(scale);
-                        if frac_digits > scale {
-                            out.push(Violation::new(
-                                CmxErrCode::DecimalScaleExceeded,
-                                table,
-                                Some(cs.name.clone()),
-                                Some(cs.caption.clone()),
-                                row_idx,
-                                &[("caption", cap.clone()), ("max", format!("{scale} 位小数")), ("actual", format!("{frac_digits} 位小数"))],
-                            ));
-                        }
-                        if int_digits > max_int {
-                            out.push(Violation::new(
-                                CmxErrCode::NumericOutOfRange,
-                                table,
-                                Some(cs.name.clone()),
-                                Some(cs.caption.clone()),
-                                row_idx,
-                                &[("caption", cap.clone()), ("type", format!("整数位 ≤ {max_int}")), ("actual", format!("{int_digits} 位整数"))],
-                            ));
-                        }
+        FieldType::Decimal => match decimal_digits(val) {
+            Some((int_digits, frac_digits)) => {
+                if let (Some(prec), Some(scale)) = (cs.precision, cs.scale) {
+                    let max_int = prec.saturating_sub(scale);
+                    if frac_digits > scale {
+                        out.push(Violation::new(
+                            CmxErrCode::DecimalScaleExceeded,
+                            table,
+                            Some(cs.name.clone()),
+                            Some(cs.caption.clone()),
+                            row_idx,
+                            &[
+                                ("caption", cap.clone()),
+                                ("max", format!("{scale} 位小数")),
+                                ("actual", format!("{frac_digits} 位小数")),
+                            ],
+                        ));
+                    }
+                    if int_digits > max_int {
+                        out.push(Violation::new(
+                            CmxErrCode::NumericOutOfRange,
+                            table,
+                            Some(cs.name.clone()),
+                            Some(cs.caption.clone()),
+                            row_idx,
+                            &[
+                                ("caption", cap.clone()),
+                                ("type", format!("整数位 ≤ {max_int}")),
+                                ("actual", format!("{int_digits} 位整数")),
+                            ],
+                        ));
                     }
                 }
-                None => out.push(Violation::new(
-                    CmxErrCode::TypeMismatch,
-                    table,
-                    Some(cs.name.clone()),
-                    Some(cs.caption.clone()),
-                    row_idx,
-                    &[("caption", cap.clone()), ("type", "数值".into()), ("actual", value_preview(val))],
-                )),
             }
-        }
+            None => out.push(Violation::new(
+                CmxErrCode::TypeMismatch,
+                table,
+                Some(cs.name.clone()),
+                Some(cs.caption.clone()),
+                row_idx,
+                &[
+                    ("caption", cap.clone()),
+                    ("type", "数值".into()),
+                    ("actual", value_preview(val)),
+                ],
+            )),
+        },
         FieldType::Date => {
             if let Some(s) = val.as_str()
                 && !s.is_empty()
@@ -482,7 +534,11 @@ fn validate_value(
 // ── 值形态工具 ──────────────────────────────────────────────────────────
 
 fn disp(caption: &str, name: &str) -> String {
-    if caption.is_empty() { name.to_string() } else { caption.to_string() }
+    if caption.is_empty() {
+        name.to_string()
+    } else {
+        caption.to_string()
+    }
 }
 
 /// 取值的字符串形态（用于长度度量）。数字/布尔转成其文本表示。
@@ -530,7 +586,9 @@ fn decimal_digits(v: &Value) -> Option<(u32, u32)> {
     if int_part.is_empty() && frac_part.is_empty() {
         return None;
     }
-    if !int_part.chars().all(|c| c.is_ascii_digit()) || !frac_part.chars().all(|c| c.is_ascii_digit()) {
+    if !int_part.chars().all(|c| c.is_ascii_digit())
+        || !frac_part.chars().all(|c| c.is_ascii_digit())
+    {
         return None;
     }
     // 整数位：去前导 0（但 "0" 记 0 位有效整数——用于 0.xx，int digits 视为 0）。
@@ -567,7 +625,11 @@ fn parseable_datetime(s: &str) -> bool {
     if chrono::DateTime::parse_from_rfc3339(s).is_ok() {
         return true;
     }
-    for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S%.f"] {
+    for fmt in [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S%.f",
+    ] {
         if chrono::NaiveDateTime::parse_from_str(s, fmt).is_ok() {
             return true;
         }
@@ -594,7 +656,12 @@ mod tests {
     }
 
     fn opts() -> ValidateOptions<'static> {
-        ValidateOptions { server_filled: &[], server_replaced: &[], check_unknown: false, check_not_null: true }
+        ValidateOptions {
+            server_filled: &[],
+            server_replaced: &[],
+            check_unknown: false,
+            check_not_null: true,
+        }
     }
 
     #[test]
@@ -630,35 +697,58 @@ mod tests {
         // 缺 name（非空非主键）→ 报 NOT_NULL。
         let row = json!({"code":"1001"}).as_object().unwrap().clone();
         let v = validate_insert_row(&spec(), &row, Some(0), &opts());
-        assert!(v.iter().any(|x| x.code == "NOT_NULL_VIOLATION" && x.column.as_deref() == Some("name")));
+        assert!(
+            v.iter()
+                .any(|x| x.code == "NOT_NULL_VIOLATION" && x.column.as_deref() == Some("name"))
+        );
     }
 
     #[test]
     fn not_null_skips_server_filled() {
         // name 若在 server_filled 里则不报（模拟服务端 backfill）。
         let row = json!({"code":"1001"}).as_object().unwrap().clone();
-        let o = ValidateOptions { server_filled: &["name"], server_replaced: &[], check_unknown: false, check_not_null: true };
+        let o = ValidateOptions {
+            server_filled: &["name"],
+            server_replaced: &[],
+            check_unknown: false,
+            check_not_null: true,
+        };
         let v = validate_insert_row(&spec(), &row, Some(0), &o);
         assert!(!v.iter().any(|x| x.column.as_deref() == Some("name")));
     }
 
     #[test]
     fn int_type_mismatch() {
-        let row = json!({"code":"c","name":"n","sort_no":"abc"}).as_object().unwrap().clone();
+        let row = json!({"code":"c","name":"n","sort_no":"abc"})
+            .as_object()
+            .unwrap()
+            .clone();
         let v = validate_insert_row(&spec(), &row, Some(0), &opts());
-        assert!(v.iter().any(|x| x.code == "TYPE_MISMATCH" && x.column.as_deref() == Some("sort_no")));
+        assert!(
+            v.iter()
+                .any(|x| x.code == "TYPE_MISMATCH" && x.column.as_deref() == Some("sort_no"))
+        );
     }
 
     #[test]
     fn tinyint_out_of_range() {
-        let row = json!({"code":"c","name":"n","flag":999}).as_object().unwrap().clone();
+        let row = json!({"code":"c","name":"n","flag":999})
+            .as_object()
+            .unwrap()
+            .clone();
         let v = validate_insert_row(&spec(), &row, Some(0), &opts());
-        assert!(v.iter().any(|x| x.code == "NUMERIC_OUT_OF_RANGE" && x.column.as_deref() == Some("flag")));
+        assert!(
+            v.iter()
+                .any(|x| x.code == "NUMERIC_OUT_OF_RANGE" && x.column.as_deref() == Some("flag"))
+        );
     }
 
     #[test]
     fn decimal_scale_exceeded() {
-        let row = json!({"code":"c","name":"n","amount":"1.234"}).as_object().unwrap().clone();
+        let row = json!({"code":"c","name":"n","amount":"1.234"})
+            .as_object()
+            .unwrap()
+            .clone();
         let v = validate_insert_row(&spec(), &row, Some(0), &opts());
         assert!(v.iter().any(|x| x.code == "DECIMAL_SCALE_EXCEEDED"));
     }
@@ -666,14 +756,23 @@ mod tests {
     #[test]
     fn decimal_int_part_too_big() {
         // precision=10 scale=2 → 整数位最多 8。给 9 位整数。
-        let row = json!({"code":"c","name":"n","amount":"123456789.00"}).as_object().unwrap().clone();
+        let row = json!({"code":"c","name":"n","amount":"123456789.00"})
+            .as_object()
+            .unwrap()
+            .clone();
         let v = validate_insert_row(&spec(), &row, Some(0), &opts());
-        assert!(v.iter().any(|x| x.code == "NUMERIC_OUT_OF_RANGE" && x.column.as_deref() == Some("amount")));
+        assert!(
+            v.iter()
+                .any(|x| x.code == "NUMERIC_OUT_OF_RANGE" && x.column.as_deref() == Some("amount"))
+        );
     }
 
     #[test]
     fn invalid_date() {
-        let row = json!({"code":"c","name":"n","biz_date":"not-a-date"}).as_object().unwrap().clone();
+        let row = json!({"code":"c","name":"n","biz_date":"not-a-date"})
+            .as_object()
+            .unwrap()
+            .clone();
         let v = validate_insert_row(&spec(), &row, Some(0), &opts());
         assert!(v.iter().any(|x| x.code == "INVALID_DATE"));
     }
@@ -682,7 +781,10 @@ mod tests {
     fn collects_all_violations() {
         // 同时超长 + 类型错 → 一次回报 2 条。
         let long = "x".repeat(65);
-        let row = json!({"code":long,"name":"n","sort_no":"bad"}).as_object().unwrap().clone();
+        let row = json!({"code":long,"name":"n","sort_no":"bad"})
+            .as_object()
+            .unwrap()
+            .clone();
         let v = validate_insert_row(&spec(), &row, Some(0), &opts());
         assert!(v.len() >= 2);
     }

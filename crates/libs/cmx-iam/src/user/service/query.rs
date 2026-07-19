@@ -28,7 +28,10 @@ impl UserServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0（filters=None 时构造默认 filter，确保归档数据不泄露）
         let filters = Some(match filters {
-            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            Some(fs) => fs
+                .into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>(),
             None => vec![Self::with_default_archived(UserFilter::default())],
         });
 
@@ -58,7 +61,10 @@ impl UserServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0（filters=None 时构造默认 filter，确保归档数据不泄露）
         let filters = Some(match filters {
-            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            Some(fs) => fs
+                .into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>(),
             None => vec![Self::with_default_archived(UserFilter::default())],
         });
 
@@ -116,8 +122,7 @@ impl UserServiceImpl {
             "IAM", user_id, status_filter
         );
 
-        let mut where_clause =
-            String::from("a.user_id = $1 AND a.archived = 0 AND r.archived = 0");
+        let mut where_clause = String::from("a.user_id = $1 AND a.archived = 0 AND r.archived = 0");
         match status_filter {
             TempAssignmentStatusFilter::All => {}
             TempAssignmentStatusFilter::Active => {
@@ -170,8 +175,7 @@ impl UserServiceImpl {
             "IAM", role_id, status_filter
         );
 
-        let mut where_clause =
-            String::from("a.role_id = $1 AND a.archived = 0 AND r.archived = 0");
+        let mut where_clause = String::from("a.role_id = $1 AND a.archived = 0 AND r.archived = 0");
         match status_filter {
             TempAssignmentStatusFilter::All => {}
             TempAssignmentStatusFilter::Active => {

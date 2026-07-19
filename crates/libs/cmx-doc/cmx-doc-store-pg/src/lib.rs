@@ -25,7 +25,7 @@ pub use zmc_loader_sqlx::ZmcDocLoaderSqlx;
 // 只需 `use cmx_doc_store_pg::{...}` 即可拿到 meta/query/formula/rule 全套（对标
 // 迁移前 `cmx_biz::doc::*` 单一入口）。
 pub use cmx_doc_model::{
-    build_layer_select, eval_bool, eval_formula, json_to_datavalue, scope_from_json, validate,
     ColumnView, Cond, Cursor, DocMetaView, DocQuery, FValue, Filter, LayerQuery, LayerView,
     LevelGroup, Op, OrderBy, RelationView, Scope, SummaryView, ValidateResult, Violation,
+    build_layer_select, eval_bool, eval_formula, json_to_datavalue, scope_from_json, validate,
 };

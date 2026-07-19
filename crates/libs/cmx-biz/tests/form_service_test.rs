@@ -1,8 +1,8 @@
 //! Form Service CRUD 集成测试(需真实 PG + cmx_form 表)
 mod common;
 
-use common::{ensure_tables, setup_db_manager};
 use cmx_biz::form::{FormFilter, FormForCreate, FormForUpdate, FormService};
+use common::{ensure_tables, setup_db_manager};
 use modql::filter::{ListOptions, OpValsString};
 use serde_json::Value as JsonValue;
 
@@ -80,14 +80,9 @@ async fn test_form_crud_lifecycle() {
         name: Some("TDD测试表单-改".to_string()),
         ..Default::default()
     };
-    let _ = FormService::update(
-        &mm,
-        db_id,
-        JsonValue::String(id.clone()),
-        update_dto,
-    )
-    .await
-    .expect("更新应成功");
+    let _ = FormService::update(&mm, db_id, JsonValue::String(id.clone()), update_dto)
+        .await
+        .expect("更新应成功");
     let updated = FormService::get(&mm, db_id, &id).await.expect("更新后查询");
     let updated_json = dataset_to_json(&updated);
     let updated_name = first_row_field(&updated_json, "name").expect("应返回 name");

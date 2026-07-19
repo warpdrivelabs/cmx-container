@@ -12,8 +12,8 @@ use serde_json::{Value, json};
 
 use crate::definitions::store::{DefRef, get_definition, list_definitions};
 use crate::error::{PortalError, PortalResult};
-use crate::flexible_combination::drn::{normalize_drn, AbsDrn, FromDam};
-use crate::flexible_combination::store::{get_flexible_combination, FcRef};
+use crate::flexible_combination::drn::{AbsDrn, FromDam, normalize_drn};
+use crate::flexible_combination::store::{FcRef, get_flexible_combination};
 
 /// 解析一个 DRN 字符串（引用方 DAM 由 `from` 提供）→ 定义全文 JSON。
 ///
@@ -95,10 +95,12 @@ fn split_name_version(stem: &str) -> (&str, Option<u64>) {
     // 定位最后一个 _v，其后须全部为数字才视为版本后缀
     if let Some(idx) = stem.rfind("_v") {
         let ver = &stem[idx + 2..];
-        if !ver.is_empty() && ver.bytes().all(|b| b.is_ascii_digit())
-            && let Ok(n) = ver.parse::<u64>() {
-                return (&stem[..idx], Some(n));
-            }
+        if !ver.is_empty()
+            && ver.bytes().all(|b| b.is_ascii_digit())
+            && let Ok(n) = ver.parse::<u64>()
+        {
+            return (&stem[..idx], Some(n));
+        }
     }
     (stem, None)
 }
@@ -132,7 +134,9 @@ pub async fn list(
     }
     // FLC 来自 flexible-combination，补 kind 标记后追加
     if want.is_empty() || want == "FLC" {
-        let fcs = crate::flexible_combination::store::list_flexible_combinations(domain, app, module).await?;
+        let fcs =
+            crate::flexible_combination::store::list_flexible_combinations(domain, app, module)
+                .await?;
         for mut it in fcs {
             if let Some(obj) = it.as_object_mut() {
                 obj.insert("kind".to_string(), json!("FLC"));
@@ -171,22 +175,23 @@ pub fn dependencies_of(def: &Value, from: &FromDam) -> Vec<Value> {
     }
     // 依赖来源二：docRef（构造绝对 DRN，默认 kind=DOC）
     if let Some(dr) = def.get("docRef").filter(|v| v.is_object())
-        && let Some(file) = dr.get("file").and_then(|v| v.as_str()) {
-            let (name, ver) = split_name_version(file.trim_end_matches(".json"));
-            let domain = dr.get("domain").and_then(|v| v.as_str()).unwrap_or("");
-            let app = dr
-                .get("app")
-                .or_else(|| dr.get("application"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let module = dr.get("module").and_then(|v| v.as_str()).unwrap_or("");
-            let ver_suffix = ver.map(|v| format!("@{v}")).unwrap_or_default();
-            raw.push((
-                format!("drn:{domain}/{app}/{module}/DOC/{name}{ver_suffix}"),
-                Some("DOC"),
-                "docRef",
-            ));
-        }
+        && let Some(file) = dr.get("file").and_then(|v| v.as_str())
+    {
+        let (name, ver) = split_name_version(file.trim_end_matches(".json"));
+        let domain = dr.get("domain").and_then(|v| v.as_str()).unwrap_or("");
+        let app = dr
+            .get("app")
+            .or_else(|| dr.get("application"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let module = dr.get("module").and_then(|v| v.as_str()).unwrap_or("");
+        let ver_suffix = ver.map(|v| format!("@{v}")).unwrap_or_default();
+        raw.push((
+            format!("drn:{domain}/{app}/{module}/DOC/{name}{ver_suffix}"),
+            Some("DOC"),
+            "docRef",
+        ));
+    }
     // 依赖来源三：refDict（voucherTables 字段引用 + dimensions 字典引用，默认 kind=DCT）
     let mut dicts = std::collections::BTreeSet::new();
     if let Some(tables) = def.get("voucherTables").and_then(|v| v.as_array()) {
@@ -237,7 +242,11 @@ mod tests {
     use serde_json::json;
 
     fn from() -> FromDam {
-        FromDam { domain: Some("fi".into()), app: Some("cmxfico".into()), module: Some("gl".into()) }
+        FromDam {
+            domain: Some("fi".into()),
+            app: Some("cmxfico".into()),
+            module: Some("gl".into()),
+        }
     }
 
     #[test]
@@ -271,6 +280,9 @@ mod tests {
         });
         let deps = dependencies_of(&def, &from());
         let imp = deps.iter().find(|d| d["via"] == json!("imports")).unwrap();
-        assert_eq!(imp["drn"], json!("drn:fi/shared-md/masterdata/DCT/cost_center"));
+        assert_eq!(
+            imp["drn"],
+            json!("drn:fi/shared-md/masterdata/DCT/cost_center")
+        );
     }
 }

@@ -11,8 +11,8 @@ use tokio::sync::Mutex;
 use crate::config::data_path;
 use crate::error::{PortalError, PortalResult};
 use crate::fsutil::{read_json, write_json_atomic};
-use crate::now_millis;
 use crate::notify::hub::{self, NotifyEvent};
+use crate::now_millis;
 use crate::util::{is_safe_segment, write_lock};
 
 /// 三个中心。值即落盘目录名；label 为前端默认显示名。
@@ -327,7 +327,10 @@ pub async fn counts(user_id: &str) -> PortalResult<NotifyCounts> {
             .count() as i64;
         set_center_unread(&mut c, center, unread);
     }
-    unread_cache().lock().await.insert(u.clone(), Some(c.clone()));
+    unread_cache()
+        .lock()
+        .await
+        .insert(u.clone(), Some(c.clone()));
     Ok(c)
 }
 

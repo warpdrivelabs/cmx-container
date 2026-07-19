@@ -147,7 +147,11 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
     let mut d = Diag::new();
     // 顶层必须是对象
     if !combination.is_object() {
-        d.error("", "COMBINATION_OBJECT_REQUIRED", "FlexibleCombination 必须是对象");
+        d.error(
+            "",
+            "COMBINATION_OBJECT_REQUIRED",
+            "FlexibleCombination 必须是对象",
+        );
         return d.finish();
     }
     let dimensions = combination.get("dimensions");

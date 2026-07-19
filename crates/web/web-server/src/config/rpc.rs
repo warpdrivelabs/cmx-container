@@ -7,7 +7,7 @@ use std::sync::Arc;
 use cmx_registry_config::GlobalServiceInstanceCache;
 use cmx_rpc::bundle::ServerDeps;
 use cmx_rpc::config::RpcConfig;
-use cmx_rpc::{init_rpc_clients, start_grpc_server, AuthVerifier};
+use cmx_rpc::{AuthVerifier, init_rpc_clients, start_grpc_server};
 use cmx_traits::auth::AuthService;
 use cmx_traits::function_invoker::FunctionInvoker;
 use cmx_traits::resource::ResourceDataImporter;
@@ -179,7 +179,8 @@ pub(crate) fn load_service_auth_config() -> ServiceAuthConfig {
 ///
 /// 返回 `Credential`（服务级 API Key，统一走 `X-API-Key`）；
 /// 未配置时返回 `None`。
-pub(crate) fn load_outgoing_credential() -> Option<cmx_plugin::service::remote_importers::Credential> {
+pub(crate) fn load_outgoing_credential() -> Option<cmx_plugin::service::remote_importers::Credential>
+{
     let cfg = load_service_auth_config();
     if cfg.outgoing_api_key.is_empty() {
         None

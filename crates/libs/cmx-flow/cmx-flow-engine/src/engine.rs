@@ -20,12 +20,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use cmx_flow_model::{
-    expr::eval_condition, AssigneeResolver, CandidateKind, CcRecord, InstanceSnapshot,
-    InstanceState, MiScope, NodeKind, ProcessDefinition, ProcessInstance, RuntimeStore,
-    SequenceFlow, Task, TaskCandidate, TaskDelegation, TimerJob, Token, TokenState, UserTask,
-    Variables,
+    AssigneeResolver, CandidateKind, CcRecord, InstanceSnapshot, InstanceState, MiScope, NodeKind,
+    ProcessDefinition, ProcessInstance, RuntimeStore, SequenceFlow, Task, TaskCandidate,
+    TaskDelegation, TimerJob, Token, TokenState, UserTask, Variables, expr::eval_condition,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::clock::{Clock, SystemClock};
@@ -147,7 +146,11 @@ impl<S: RuntimeStore> Engine<S> {
     }
 
     /// 注册一个 serviceTask delegate。
-    pub fn register_delegate(&mut self, key: impl Into<String>, delegate: impl JavaDelegate + 'static) {
+    pub fn register_delegate(
+        &mut self,
+        key: impl Into<String>,
+        delegate: impl JavaDelegate + 'static,
+    ) {
         self.delegates.register_delegate(key, delegate);
     }
 
@@ -210,7 +213,15 @@ impl<S: RuntimeStore> Engine<S> {
         org_id: Option<String>,
     ) -> Result<ExecutionResult> {
         let snap = self
-            .start_process_inner(definition_key, variables, business_key, org_id, None, None, None)
+            .start_process_inner(
+                definition_key,
+                variables,
+                business_key,
+                org_id,
+                None,
+                None,
+                None,
+            )
             .await?;
         // 若起始段就走到 callActivity，挂起了 WaitingSubflow 令牌，启动其子实例。
         let snap = self.launch_subflows_for(&snap.instance.id).await?;
@@ -317,7 +328,8 @@ impl<S: RuntimeStore> Engine<S> {
                     return Ok(snapshot);
                 }
                 // 启动这一个子实例。
-                self.launch_one_subflow(&snapshot, &token_id, &node_bpmn).await?;
+                self.launch_one_subflow(&snapshot, &token_id, &node_bpmn)
+                    .await?;
                 // 循环：可能子实例立即完成已唤醒父令牌，或还有别的待启动令牌。
             }
         })
@@ -355,7 +367,9 @@ impl<S: RuntimeStore> Engine<S> {
         let def = self
             .definitions
             .get(&parent_snap.instance.definition_key)
-            .ok_or_else(|| Error::DefinitionNotFound(parent_snap.instance.definition_key.clone()))?;
+            .ok_or_else(|| {
+                Error::DefinitionNotFound(parent_snap.instance.definition_key.clone())
+            })?;
         let node = def
             .node_by_bpmn(node_bpmn)
             .ok_or_else(|| Error::IllegalTokenState(format!("节点 {node_bpmn} 不在定义中")))?;
@@ -604,8 +618,7 @@ impl<S: RuntimeStore> Engine<S> {
                 .ok_or_else(|| Error::IllegalTokenState(format!("节点 {node_bpmn} 不在定义中")))?;
             let outgoing = node.outgoing.clone();
             let kind = node.kind.clone();
-            let target =
-                choose_target(&node_bpmn, &kind, &outgoing, &snapshot.instance.variables)?;
+            let target = choose_target(&node_bpmn, &kind, &outgoing, &snapshot.instance.variables)?;
             let tok = &mut snapshot.tokens[token_idx];
             tok.node_bpmn_id = target;
             tok.state = TokenState::Active;
@@ -697,7 +710,17 @@ impl<S: RuntimeStore> Engine<S> {
             t.delegation_state = None;
         }
         snapshot.candidates.retain(|c| c.task_id != task_id);
-        push_delegation(&mut snapshot.delegations, instance_id, task_id, "TRANSFER", from_user, to_user, None, reason, now);
+        push_delegation(
+            &mut snapshot.delegations,
+            instance_id,
+            task_id,
+            "TRANSFER",
+            from_user,
+            to_user,
+            None,
+            reason,
+            now,
+        );
         snapshot.instance.updated_at = now;
         self.store.save_snapshot(&snapshot).await?;
         Ok(Self::result_of(&snapshot))
@@ -728,7 +751,17 @@ impl<S: RuntimeStore> Engine<S> {
             t.delegation_state = Some("DELEGATED".to_string());
         }
         snapshot.candidates.retain(|c| c.task_id != task_id);
-        push_delegation(&mut snapshot.delegations, instance_id, task_id, "DELEGATE", from_user, to_user, None, reason, now);
+        push_delegation(
+            &mut snapshot.delegations,
+            instance_id,
+            task_id,
+            "DELEGATE",
+            from_user,
+            to_user,
+            None,
+            reason,
+            now,
+        );
         snapshot.instance.updated_at = now;
         self.store.save_snapshot(&snapshot).await?;
         Ok(Self::result_of(&snapshot))
@@ -783,8 +816,22 @@ impl<S: RuntimeStore> Engine<S> {
             completed_at: None,
         });
 
-        let kind = if before { "ADDSIGN_BEFORE" } else { "ADDSIGN_AFTER" };
-        push_delegation(&mut snapshot.delegations, instance_id, task_id, kind, from_user, to_user, Some(&temp_id), reason, now);
+        let kind = if before {
+            "ADDSIGN_BEFORE"
+        } else {
+            "ADDSIGN_AFTER"
+        };
+        push_delegation(
+            &mut snapshot.delegations,
+            instance_id,
+            task_id,
+            kind,
+            from_user,
+            to_user,
+            Some(&temp_id),
+            reason,
+            now,
+        );
         snapshot.instance.updated_at = now;
         self.store.save_snapshot(&snapshot).await?;
         Ok(Self::result_of(&snapshot))
@@ -838,7 +885,10 @@ impl<S: RuntimeStore> Engine<S> {
     /// 标记一条抄送记录为已读（M4.2）。直通存储层，幂等。
     pub async fn mark_cc_read(&self, cc_id: &str) -> Result<bool> {
         let now = self.clock.now();
-        self.store.mark_cc_read(cc_id, now).await.map_err(Error::from)
+        self.store
+            .mark_cc_read(cc_id, now)
+            .await
+            .map_err(Error::from)
     }
 
     /// 查询抄送给某用户的记录（M4.2）。unread_only=true 只返回未读。
@@ -928,9 +978,7 @@ impl<S: RuntimeStore> Engine<S> {
             let def = self
                 .definitions
                 .get(&snapshot.instance.definition_key)
-                .ok_or_else(|| {
-                    Error::DefinitionNotFound(snapshot.instance.definition_key.clone())
-                })?
+                .ok_or_else(|| Error::DefinitionNotFound(snapshot.instance.definition_key.clone()))?
                 .clone();
 
             let mut any_fired = false;
@@ -1068,9 +1116,7 @@ impl<S: RuntimeStore> Engine<S> {
                         let survivor_id = snapshot
                             .tokens
                             .iter()
-                            .find(|t| {
-                                t.state == TokenState::Joining && t.node_bpmn_id == node_bpmn
-                            })
+                            .find(|t| t.state == TokenState::Joining && t.node_bpmn_id == node_bpmn)
                             .map(|t| t.id.clone())
                             .ok_or_else(|| {
                                 Error::IllegalTokenState(format!(
@@ -1086,13 +1132,25 @@ impl<S: RuntimeStore> Engine<S> {
                             .tokens
                             .iter()
                             .position(|t| t.id == survivor_id)
-                            .ok_or_else(|| {
-                                Error::IllegalTokenState("幸存令牌意外丢失".into())
-                            })?;
-                        fork_token(&mut snapshot.tokens, sidx, &node_bpmn, &outgoing, &instance_id, now)?;
+                            .ok_or_else(|| Error::IllegalTokenState("幸存令牌意外丢失".into()))?;
+                        fork_token(
+                            &mut snapshot.tokens,
+                            sidx,
+                            &node_bpmn,
+                            &outgoing,
+                            &instance_id,
+                            now,
+                        )?;
                     } else {
                         // —— 纯 fork / 直通 —— //
-                        fork_token(&mut snapshot.tokens, idx, &node_bpmn, &outgoing, &instance_id, now)?;
+                        fork_token(
+                            &mut snapshot.tokens,
+                            idx,
+                            &node_bpmn,
+                            &outgoing,
+                            &instance_id,
+                            now,
+                        )?;
                     }
                 }
 
@@ -1278,9 +1336,17 @@ fn move_token(token: &mut Token, target_bpmn_id: String, now: DateTime<Utc>) {
 ///
 /// `full_if_empty=true` 且 mappings 为空 → 全量拷贝 src（默认行为）。否则只拷映射命中的，
 /// source 缺失则跳过该条。
-fn map_vars(src: &Variables, mappings: &[cmx_flow_model::VarMapping], full_if_empty: bool) -> Variables {
+fn map_vars(
+    src: &Variables,
+    mappings: &[cmx_flow_model::VarMapping],
+    full_if_empty: bool,
+) -> Variables {
     if mappings.is_empty() {
-        return if full_if_empty { src.clone() } else { Variables::new() };
+        return if full_if_empty {
+            src.clone()
+        } else {
+            Variables::new()
+        };
     }
     let mut out = Variables::new();
     for m in mappings {
@@ -1319,10 +1385,7 @@ fn decide_assignment(
         return (Some(resolved[0].clone()), Vec::new());
     }
     // 多人候选：落候选池待认领。来源类型取首条引用 kind 作代表。
-    let candidate_type = refs
-        .first()
-        .map(|r| r.kind)
-        .unwrap_or(CandidateKind::User);
+    let candidate_type = refs.first().map(|r| r.kind).unwrap_or(CandidateKind::User);
     let candidate_ref = refs.first().map(|r| r.value.clone()).unwrap_or_default();
     let pool = resolved
         .iter()
@@ -1351,9 +1414,9 @@ fn append_cc_records(
 ) {
     for uid in to_users {
         // 去重：本节点已抄送过该人则跳过（幂等，防重复办结/重复触发生成多条）。
-        let dup = cc_records.iter().any(|c| {
-            c.to_user_id == *uid && c.node_bpmn_id.as_deref() == node_bpmn
-        });
+        let dup = cc_records
+            .iter()
+            .any(|c| c.to_user_id == *uid && c.node_bpmn_id.as_deref() == node_bpmn);
         if dup {
             continue;
         }
@@ -1646,9 +1709,7 @@ fn complete_mi_task(
         let scope = &snapshot.mi_scopes[scope_idx];
         // 求值 completionCondition（实例变量 + 注入 nrOf* 计数）。
         let hit = match &scope.completion_condition {
-            Some(cond) => {
-                eval_completion_condition(cond, scope, &snapshot.instance.variables)?
-            }
+            Some(cond) => eval_completion_condition(cond, scope, &snapshot.instance.variables)?,
             None => false,
         };
         // 自然完成：全部子实例办结。
@@ -1682,16 +1743,16 @@ fn complete_mi_task(
     } else if sequential {
         // —— 顺序或签：展开下一个子实例 —— //
         if let Some(element) = next_element {
-            let node = def.node_by_bpmn(node_bpmn).ok_or_else(|| {
-                Error::IllegalTokenState(format!("节点 {node_bpmn} 不在定义中"))
-            })?;
+            let node = def
+                .node_by_bpmn(node_bpmn)
+                .ok_or_else(|| Error::IllegalTokenState(format!("节点 {node_bpmn} 不在定义中")))?;
             let node_name = node.name.clone();
             let ut = match &node.kind {
                 NodeKind::UserTask(ut) => ut.clone(),
                 other => {
                     return Err(Error::MultiInstance(format!(
                         "节点 {node_bpmn} 非 userTask，实际 {other:?}"
-                    )))
+                    )));
                 }
             };
             let _ = element_var; // 元素随 Task.element_value 承载，见 push_mi_sub_instance
@@ -1735,9 +1796,7 @@ fn finish_mi_scope(
         .outgoing
         .first()
         .map(|f| f.target_bpmn_id.clone())
-        .ok_or_else(|| {
-            Error::IllegalTokenState(format!("多实例节点 {node_bpmn} 无出边可离开"))
-        })?;
+        .ok_or_else(|| Error::IllegalTokenState(format!("多实例节点 {node_bpmn} 无出边可离开")))?;
 
     let instance_id = snapshot.instance.id.clone();
     snapshot.tokens.push(Token {

@@ -91,9 +91,8 @@ pub fn pack_definitions_to_zip<T: Serialize>(
         .compression_level(Some(DEFAULT_COMPRESSION_LEVEL as i64));
 
     for (i, def) in definitions.iter().enumerate() {
-        let json = serde_json::to_string_pretty(def).map_err(|e| {
-            PluginError::CenterData(format!("序列化定义 {prefix}_{i} 失败: {e}"))
-        })?;
+        let json = serde_json::to_string_pretty(def)
+            .map_err(|e| PluginError::CenterData(format!("序列化定义 {prefix}_{i} 失败: {e}")))?;
         let file_name = format!("{prefix}_{i}.json");
         zip.start_file(&file_name, options)
             .map_err(|e| PluginError::CenterData(format!("ZIP 写入 {file_name} 失败: {e}")))?;
@@ -134,4 +133,3 @@ pub fn pack_payload_to_zip<T: Serialize>(payload: &T, file_name: &str) -> Plugin
         .map_err(|e| PluginError::CenterData(format!("ZIP 完成失败: {e}")))?;
     Ok(cursor.into_inner())
 }
-

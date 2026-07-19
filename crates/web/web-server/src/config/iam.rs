@@ -133,9 +133,8 @@ pub async fn init_iam_services(
     let definition_importers: Arc<cmx_traits::resource::DefinitionImporterBundle> = if is_remote {
         tracing::info!("模块资源导入器: 远程模式({})", center_config.mode);
         let remote_ctx = {
-            let ctx = cmx_plugin::service::remote_importers::RemoteImporterContext::new(
-                center_config,
-            );
+            let ctx =
+                cmx_plugin::service::remote_importers::RemoteImporterContext::new(center_config);
             // 注入服务级凭证（来自 [service_auth].outgoing_api_key）
             match crate::config::rpc::load_outgoing_credential() {
                 Some(cred) => ctx.with_credential(cred),

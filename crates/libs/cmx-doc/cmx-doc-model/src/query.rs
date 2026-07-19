@@ -203,7 +203,7 @@ pub struct Cursor {
 
 impl Cursor {
     pub fn decode(s: &str) -> Result<Cursor> {
-        use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+        use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
         let bytes = B64
             .decode(s)
             .map_err(|e| BizError::business(format!("游标 base64 解码失败: {e}")))?;
@@ -219,7 +219,7 @@ impl Cursor {
     }
 
     pub fn encode(vals: Vec<Value>, id: Value) -> String {
-        use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+        use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
         let v = serde_json::json!({ "vals": vals, "id": id });
         B64.encode(serde_json::to_vec(&v).unwrap_or_default())
     }
@@ -247,9 +247,10 @@ impl LayerQuery {
         lq.limit = v.get("limit").and_then(|x| x.as_u64());
         lq.offset = v.get("offset").and_then(|x| x.as_u64());
         if let Some(c) = v.get("cursor").and_then(|x| x.as_str())
-            && !c.is_empty() {
-                lq.cursor = Some(Cursor::decode(c)?);
-            }
+            && !c.is_empty()
+        {
+            lq.cursor = Some(Cursor::decode(c)?);
+        }
         Ok(lq)
     }
 
@@ -325,7 +326,10 @@ impl DocQuery {
         let obj = v
             .as_object()
             .ok_or_else(|| BizError::business("DocQuery 必须是 JSON 对象"))?;
-        dq.depth = obj.get("depth").and_then(|x| x.as_u64()).map(|n| n as usize);
+        dq.depth = obj
+            .get("depth")
+            .and_then(|x| x.as_u64())
+            .map(|n| n as usize);
         if let Some(b) = obj.get("includeSiblings").and_then(|x| x.as_bool()) {
             dq.include_siblings = b;
         }
@@ -390,9 +394,9 @@ pub fn json_to_datavalue(col: &ColumnView, v: &Value) -> Result<DataValue> {
             _ => return Err(bad("整数")),
         },
         "DECIMAL" | "NUMERIC" => match v {
-            Value::Number(n) => DataValue::Decimal(
-                n.to_string().parse().map_err(|_| bad("十进制数"))?,
-            ),
+            Value::Number(n) => {
+                DataValue::Decimal(n.to_string().parse().map_err(|_| bad("十进制数"))?)
+            }
             Value::String(s) => DataValue::Decimal(s.parse().map_err(|_| bad("十进制数"))?),
             Value::Null => DataValue::Null,
             _ => return Err(bad("十进制数")),
@@ -409,9 +413,7 @@ pub fn json_to_datavalue(col: &ColumnView, v: &Value) -> Result<DataValue> {
             _ => return Err(bad("布尔")),
         },
         "DATE" => match v {
-            Value::String(s) => {
-                DataValue::Date(s.parse().map_err(|_| bad("日期 YYYY-MM-DD"))?)
-            }
+            Value::String(s) => DataValue::Date(s.parse().map_err(|_| bad("日期 YYYY-MM-DD"))?),
             Value::Null => DataValue::Null,
             _ => return Err(bad("日期字符串")),
         },

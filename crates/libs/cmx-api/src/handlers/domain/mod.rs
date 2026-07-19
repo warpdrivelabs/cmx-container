@@ -31,8 +31,14 @@ impl ModuleRoutes for DomainModule {
             .route("/domains/delete", post(handler::delete_domain))
             // 读操作：复用 rest::handler 泛型函数（无副作用）
             .route("/domains/get", get(rest_handler::get_by_id::<DomainBmc>))
-            .route("/domains/list", post(rest_handler::list::<DomainBmc, DomainFilter>))
-            .route("/domains/page", post(rest_handler::page::<DomainBmc, DomainFilter>))
+            .route(
+                "/domains/list",
+                post(rest_handler::list::<DomainBmc, DomainFilter>),
+            )
+            .route(
+                "/domains/page",
+                post(rest_handler::page::<DomainBmc, DomainFilter>),
+            )
             // 自定义：域-应用-模块树
             .route("/domains/tree", post(handler::get_tree))
     }

@@ -78,7 +78,9 @@ pub async fn init_datasources() -> crate::Result<()> {
 
     crate::config::init_database_migrations().await?;
 
-    if let Err(e) = persist_datasource_configs(db_manager, &default_db_id, &app_identity, &configs).await {
+    if let Err(e) =
+        persist_datasource_configs(db_manager, &default_db_id, &app_identity, &configs).await
+    {
         return Err(Error::DatasourceInit(format!(
             "持久化数据源配置失败: {}",
             e
@@ -96,7 +98,10 @@ pub async fn init_datasources() -> crate::Result<()> {
         }
     }
 
-    info!("从数据库加载到 {} 个有效数据源(已过滤配置文件中的)", filtered_datasources.len());
+    info!(
+        "从数据库加载到 {} 个有效数据源(已过滤配置文件中的)",
+        filtered_datasources.len()
+    );
 
     if let Err(e) = register_datasources(db_manager, filtered_datasources).await {
         warn!("注册数据库中的数据源失败: {}", e);
@@ -192,9 +197,15 @@ async fn persist_datasource_configs(
 
     let cleanup_filter = SysDatasourceFilter {
         source: Some(OpValsString(vec![OpValString::Eq("config".to_string())])),
-        domain_code: Some(OpValsString(vec![OpValString::Eq(app_identity.domain_code.clone())])),
-        application_code: Some(OpValsString(vec![OpValString::Eq(app_identity.application_code.clone())])),
-        module_code: Some(OpValsString(vec![OpValString::Eq(app_identity.module_code.clone())])),
+        domain_code: Some(OpValsString(vec![OpValString::Eq(
+            app_identity.domain_code.clone(),
+        )])),
+        application_code: Some(OpValsString(vec![OpValString::Eq(
+            app_identity.application_code.clone(),
+        )])),
+        module_code: Some(OpValsString(vec![OpValString::Eq(
+            app_identity.module_code.clone(),
+        )])),
         ..Default::default()
     };
 
@@ -205,8 +216,8 @@ async fn persist_datasource_configs(
         Some(vec![cleanup_filter]),
         None,
     )
-        .await
-        .map_err(|e| Error::DatasourceInit(format!("查询待清理数据源失败: {}", e)))?;
+    .await
+    .map_err(|e| Error::DatasourceInit(format!("查询待清理数据源失败: {}", e)))?;
 
     let schema = &existing_configs.schema;
     for row in existing_configs.iter() {
@@ -220,10 +231,10 @@ async fn persist_datasource_configs(
                     None,
                     vec![serde_json::Value::String(id)],
                 )
-                    .await
-                    .map_err(|e| Error::DatasourceInit(format!(
-                        "清理已删除数据源 {} 失败: {}", row_db_id, e
-                    )))?;
+                .await
+                .map_err(|e| {
+                    Error::DatasourceInit(format!("清理已删除数据源 {} 失败: {}", row_db_id, e))
+                })?;
                 info!("已清理配置文件中已移除的数据源: {}", row_db_id);
             }
         }

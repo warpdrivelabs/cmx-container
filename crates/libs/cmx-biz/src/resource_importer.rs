@@ -123,8 +123,9 @@ impl ResourceDataImporter for ResourceDataImporterImpl {
                 let files = Self::extract_json_files_from_zip(&request.zip_data)?;
                 let mut defs = Vec::new();
                 for (_name, content) in files {
-                    let def: FormDefinition = serde_json::from_slice(&content)
-                        .map_err(|e| TraitError::Business(format!("解析表单定义 JSON 失败: {e}")))?;
+                    let def: FormDefinition = serde_json::from_slice(&content).map_err(|e| {
+                        TraitError::Business(format!("解析表单定义 JSON 失败: {e}"))
+                    })?;
                     defs.push(def);
                 }
                 let count = importer
@@ -152,8 +153,9 @@ impl ResourceDataImporter for ResourceDataImporterImpl {
                 let files = Self::extract_json_files_from_zip(&request.zip_data)?;
                 let mut defs = Vec::new();
                 for (_name, content) in files {
-                    let def: MenuDefinition = serde_json::from_slice(&content)
-                        .map_err(|e| TraitError::Business(format!("解析菜单定义 JSON 失败: {e}")))?;
+                    let def: MenuDefinition = serde_json::from_slice(&content).map_err(|e| {
+                        TraitError::Business(format!("解析菜单定义 JSON 失败: {e}"))
+                    })?;
                     defs.push(def);
                 }
                 let count = importer

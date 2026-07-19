@@ -25,8 +25,10 @@ struct FakeResolver {
 
 impl FakeResolver {
     fn with(mut self, key: &str, users: &[&str]) -> Self {
-        self.map
-            .insert(key.to_string(), users.iter().map(|s| s.to_string()).collect());
+        self.map.insert(
+            key.to_string(),
+            users.iter().map(|s| s.to_string()).collect(),
+        );
         self
     }
     fn key(kind: CandidateKind, value: &str) -> String {
@@ -68,7 +70,10 @@ const ROLE_BPMN: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
   </process>
 </definitions>"#;
 
-fn engine_with_resolver(bpmn: &str, resolver: FakeResolver) -> (Engine<InMemoryStore>, InMemoryStore) {
+fn engine_with_resolver(
+    bpmn: &str,
+    resolver: FakeResolver,
+) -> (Engine<InMemoryStore>, InMemoryStore) {
     let store = InMemoryStore::new();
     let def = compile(bpmn).expect("应能编译");
     let mut engine = Engine::new(store.clone());
@@ -87,7 +92,11 @@ async fn single_resolved_user_is_directly_assigned() {
         .await
         .unwrap();
     assert_eq!(started.open_tasks.len(), 1);
-    assert_eq!(started.open_tasks[0].assignee.as_deref(), Some("u_cfo"), "单人应直派");
+    assert_eq!(
+        started.open_tasks[0].assignee.as_deref(),
+        Some("u_cfo"),
+        "单人应直派"
+    );
 
     let snap = store.load_snapshot(&started.instance_id).await.unwrap();
     assert!(snap.candidates.is_empty(), "单人直派不产生候选池");
@@ -103,13 +112,24 @@ async fn multiple_resolved_users_go_to_candidate_pool() {
         .await
         .unwrap();
     assert_eq!(started.open_tasks.len(), 1);
-    assert!(started.open_tasks[0].assignee.is_none(), "多人应待认领，assignee 空");
+    assert!(
+        started.open_tasks[0].assignee.is_none(),
+        "多人应待认领，assignee 空"
+    );
 
     let snap = store.load_snapshot(&started.instance_id).await.unwrap();
     assert_eq!(snap.candidates.len(), 3, "三人候选池");
-    let users: Vec<&str> = snap.candidates.iter().map(|c| c.resolved_user_id.as_str()).collect();
+    let users: Vec<&str> = snap
+        .candidates
+        .iter()
+        .map(|c| c.resolved_user_id.as_str())
+        .collect();
     assert!(users.contains(&"u_a") && users.contains(&"u_b") && users.contains(&"u_c"));
-    assert!(snap.candidates.iter().all(|c| c.candidate_type == CandidateKind::Role));
+    assert!(
+        snap.candidates
+            .iter()
+            .all(|c| c.candidate_type == CandidateKind::Role)
+    );
 }
 
 #[tokio::test]
@@ -150,7 +170,9 @@ async fn non_candidate_cannot_claim() {
     let task_id = started.open_tasks[0].id.clone();
 
     // u_x 不在候选池，认领应失败。
-    let err = engine.claim_task(&started.instance_id, &task_id, "u_x").await;
+    let err = engine
+        .claim_task(&started.instance_id, &task_id, "u_x")
+        .await;
     assert!(err.is_err(), "非候选人不能认领");
 }
 
@@ -164,11 +186,24 @@ async fn claimed_task_cannot_be_stolen() {
         .unwrap();
     let task_id = started.open_tasks[0].id.clone();
 
-    engine.claim_task(&started.instance_id, &task_id, "u_a").await.unwrap();
+    engine
+        .claim_task(&started.instance_id, &task_id, "u_a")
+        .await
+        .unwrap();
     // u_a 幂等再认领 OK。
-    assert!(engine.claim_task(&started.instance_id, &task_id, "u_a").await.is_ok());
+    assert!(
+        engine
+            .claim_task(&started.instance_id, &task_id, "u_a")
+            .await
+            .is_ok()
+    );
     // u_b 想抢 → 失败。
-    assert!(engine.claim_task(&started.instance_id, &task_id, "u_b").await.is_err());
+    assert!(
+        engine
+            .claim_task(&started.instance_id, &task_id, "u_b")
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -204,10 +239,17 @@ async fn mixed_expression_positions_and_users() {
       </process></definitions>"#;
     let resolver = FakeResolver::default().with("POSITION:cfo", &["u_cfo"]);
     let (engine, store) = engine_with_resolver(MIX_BPMN, resolver);
-    let started = engine.start_process("mix", Variables::new(), None).await.unwrap();
+    let started = engine
+        .start_process("mix", Variables::new(), None)
+        .await
+        .unwrap();
     let snap = store.load_snapshot(&started.instance_id).await.unwrap();
     // u_cfo（岗位）+ u_fixed（指定）= 2 人候选。
     assert_eq!(snap.candidates.len(), 2);
-    let users: Vec<&str> = snap.candidates.iter().map(|c| c.resolved_user_id.as_str()).collect();
+    let users: Vec<&str> = snap
+        .candidates
+        .iter()
+        .map(|c| c.resolved_user_id.as_str())
+        .collect();
     assert!(users.contains(&"u_cfo") && users.contains(&"u_fixed"));
 }

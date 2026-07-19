@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 
-use cmx_database_pg::{execute_sql, get_default_pg_db_manager, query_sql, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, execute_sql, get_default_pg_db_manager, query_sql};
 use cmx_flow_bpmn::compile;
 use cmx_flow_engine::{Engine, InstanceState, Variables};
 use cmx_flow_store_pg::{PgIamAssigneeResolver, PgRuntimeStore};
@@ -49,7 +49,10 @@ async fn setup_db() -> Option<String> {
         module_code: None,
         source_type: Some("default".to_string()),
     };
-    manager.register_data_source(cfg).await.expect("注册数据源失败");
+    manager
+        .register_data_source(cfg)
+        .await
+        .expect("注册数据源失败");
     Some(db_id)
 }
 
@@ -98,7 +101,12 @@ async fn cleanup(db_id: &str, instance_id: &str) {
         let _ = execute_sql(db_id, None, &sql).await;
     }
     // 清理 IAM 种子。
-    let _ = execute_sql(db_id, None, "DELETE FROM cmx_user_role WHERE role_id = 'm4_role_fin'").await;
+    let _ = execute_sql(
+        db_id,
+        None,
+        "DELETE FROM cmx_user_role WHERE role_id = 'm4_role_fin'",
+    )
+    .await;
     let _ = execute_sql(db_id, None, "DELETE FROM cmx_role WHERE id = 'm4_role_fin'").await;
 }
 
@@ -120,7 +128,11 @@ async fn pg_role_resolves_to_candidate_pool_and_claim() {
 
     // 启动 → role(m4_finance) 解析出 2 人 → 候选池。
     let started = engine
-        .start_process("pg_role_approve", Variables::new(), Some("PG-M41-001".into()))
+        .start_process(
+            "pg_role_approve",
+            Variables::new(),
+            Some("PG-M41-001".into()),
+        )
         .await
         .expect("启动应成功");
     assert_eq!(started.open_tasks.len(), 1);

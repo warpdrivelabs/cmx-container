@@ -68,7 +68,10 @@ impl ZmcRowSource for TokioPgRowSource {
         self.0.try_get::<usize, Option<&[u8]>>(i).ok().flatten()
     }
     fn get_uuid(&self, i: usize) -> Option<uuid::Uuid> {
-        self.0.try_get::<usize, Option<uuid::Uuid>>(i).ok().flatten()
+        self.0
+            .try_get::<usize, Option<uuid::Uuid>>(i)
+            .ok()
+            .flatten()
     }
     fn get_date(&self, i: usize) -> Option<chrono::NaiveDate> {
         self.0
@@ -122,5 +125,5 @@ fn map_type(ty: &Type) -> ZmcColType {
 pub type ZmcDataSet = cmx_rowsource::ZmcDataSet<TokioPgRowSource>;
 pub type ZmcChildGroup = cmx_rowsource::ZmcChildGroup<TokioPgRowSource>;
 pub use cmx_rowsource::ZmcSchema;
-pub use cmx_rowsource::{encode_row_into, encode_stream_close, encode_stream_open};
 pub use cmx_rowsource::{encode_frame_end, encode_frame_header, encode_frame_row};
+pub use cmx_rowsource::{encode_row_into, encode_stream_close, encode_stream_open};

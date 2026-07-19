@@ -6,7 +6,7 @@
 //!
 //! 验证真机：建表 → 存草稿 → 发布 v1 → 再发布 v2 → load_published 取到 v2 → 清理。
 
-use cmx_database_pg::{execute_sql, get_default_pg_db_manager, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, execute_sql, get_default_pg_db_manager};
 use cmx_flow_def::{DefinitionService, PgDefinitionStore};
 
 const KEY: &str = "pgtest_leave_request";
@@ -42,7 +42,10 @@ async fn setup_db() -> Option<String> {
         module_code: None,
         source_type: Some("default".to_string()),
     };
-    manager.register_data_source(cfg).await.expect("注册数据源失败");
+    manager
+        .register_data_source(cfg)
+        .await
+        .expect("注册数据源失败");
     Some(db_id)
 }
 
@@ -74,17 +77,30 @@ async fn pg_draft_publish_load_roundtrip() {
 
     // 存草稿 → key 取自 process id。
     let rec = svc
-        .save_draft("请假申请", Some("fi".into()), Some("cmxfico".into()), Some("hr".into()), None, BPMN, Some("tester".into()))
+        .save_draft(
+            "请假申请",
+            Some("fi".into()),
+            Some("cmxfico".into()),
+            Some("hr".into()),
+            None,
+            BPMN,
+            Some("tester".into()),
+        )
         .await
         .expect("存草稿应成功");
     assert_eq!(rec.key, KEY);
 
     // 发布 v1。
-    let v1 = svc.publish(KEY, None, Some("tester".into())).await.expect("发布应成功");
+    let v1 = svc
+        .publish(KEY, None, Some("tester".into()))
+        .await
+        .expect("发布应成功");
     assert_eq!(v1, 1);
 
     // 再存草稿 + 再发布 v2。
-    svc.save_draft("请假申请v2", None, None, None, None, BPMN, None).await.unwrap();
+    svc.save_draft("请假申请v2", None, None, None, None, BPMN, None)
+        .await
+        .unwrap();
     let v2 = svc.publish(KEY, None, None).await.unwrap();
     assert_eq!(v2, 2);
 
@@ -99,7 +115,10 @@ async fn pg_draft_publish_load_roundtrip() {
     assert_eq!(mine.key, KEY);
 
     // 历史版本 v1 仍在。
-    assert!(svc.get_version(KEY, 1).await.unwrap().is_some(), "旧版本保留");
+    assert!(
+        svc.get_version(KEY, 1).await.unwrap().is_some(),
+        "旧版本保留"
+    );
 
     cleanup(&db_id).await;
 }

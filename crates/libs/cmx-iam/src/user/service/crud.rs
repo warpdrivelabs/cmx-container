@@ -223,9 +223,7 @@ impl UserServiceImpl {
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
-                .map_err(|e| {
-                    TraitError::from(IamError::Business(format!("删除用户失败: {e}")))
-                })?;
+                .map_err(|e| TraitError::from(IamError::Business(format!("删除用户失败: {e}"))))?;
         }
 
         // 2. 物理删除 cmx_user_role 关联

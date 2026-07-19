@@ -1,7 +1,7 @@
 //! 测试基础设施冒烟测试
 mod common;
 
-use common::{setup_db_manager, TEST_DB_KEY};
+use common::{TEST_DB_KEY, setup_db_manager};
 
 #[tokio::test]
 async fn test_db_manager_setup() {

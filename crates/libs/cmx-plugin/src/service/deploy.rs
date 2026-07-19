@@ -11,8 +11,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
-use cmx_database::get_default_db_manager;
 use crate::common::{DefinitionUtils, PackageUtils, PackageUtilsDeps};
 use crate::domain::plugin::PluginSource;
 use crate::error::{PluginError, PluginResult};
@@ -21,6 +19,8 @@ use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::storage::TempDirCleanup;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::security::validator::SecurityValidator;
+use cmx_database::get_default_db_manager;
+use serde::{Deserialize, Serialize};
 
 /// 部署操作类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -46,7 +46,7 @@ pub struct DeployRequest {
     #[serde(default)]
     pub force_reinstall: bool,
     /// 构建类型 debug release
-    pub  build_type : Option<String>,
+    pub build_type: Option<String>,
     /// 是否发布到插件市场
     #[serde(default)]
     pub publish_to_marketplace: bool,
@@ -120,7 +120,10 @@ impl DeployService {
             temp_root: deps.temp_root.clone(),
             storage: Some(deps.storage.clone()),
         });
-        Self { deps, package_utils }
+        Self {
+            deps,
+            package_utils,
+        }
     }
 
     /// 执行部署操作
@@ -151,9 +154,9 @@ impl DeployService {
             .deps
             .temp_root
             .join(format!("plugin_deploy_{}", uuid::Uuid::new_v4()));
-        let (extract_path, needs_cleanup) = self
-            .package_utils
-            .prepare_package_for_validation(&package_path, &temp_dir, "部署")?;
+        let (extract_path, needs_cleanup) =
+            self.package_utils
+                .prepare_package_for_validation(&package_path, &temp_dir, "部署")?;
 
         let _cleanup = TempDirCleanup::new(needs_cleanup.then_some(temp_dir.clone()));
 
@@ -211,16 +214,25 @@ impl DeployService {
             }
         }
 
-        let existing_plugin = self.deps.repository.find_plugin(&plugin_id, request.app_id.as_deref().unwrap_or(&self.deps.app_id)).await?;
+        let existing_plugin = self
+            .deps
+            .repository
+            .find_plugin(
+                &plugin_id,
+                request.app_id.as_deref().unwrap_or(&self.deps.app_id),
+            )
+            .await?;
 
         match existing_plugin {
             None => {
-                let mut resp = self.execute_install(
-                    &request,
-                    &plugin_id,
-                    &new_version,
-                    request.marketplace_source_id.as_deref(),
-                ).await?;
+                let mut resp = self
+                    .execute_install(
+                        &request,
+                        &plugin_id,
+                        &new_version,
+                        request.marketplace_source_id.as_deref(),
+                    )
+                    .await?;
                 resp.marketplace_publish = request.marketplace_publish_info.clone();
                 Ok(resp)
             }
@@ -228,25 +240,29 @@ impl DeployService {
                 let old_version = record.version.clone();
                 match new_version.cmp(&old_version) {
                     std::cmp::Ordering::Greater => {
-                        let mut resp = self.execute_upgrade(
-                            &request,
-                            &plugin_id,
-                            &old_version,
-                            &new_version,
-                            request.marketplace_source_id.as_deref(),
-                        ).await?;
-                        resp.marketplace_publish = request.marketplace_publish_info.clone();
-                        Ok(resp)
-                    }
-                    std::cmp::Ordering::Equal => {
-                        if request.force_reinstall {
-                            let mut resp = self.execute_reinstall(
+                        let mut resp = self
+                            .execute_upgrade(
                                 &request,
                                 &plugin_id,
                                 &old_version,
                                 &new_version,
                                 request.marketplace_source_id.as_deref(),
-                            ).await?;
+                            )
+                            .await?;
+                        resp.marketplace_publish = request.marketplace_publish_info.clone();
+                        Ok(resp)
+                    }
+                    std::cmp::Ordering::Equal => {
+                        if request.force_reinstall {
+                            let mut resp = self
+                                .execute_reinstall(
+                                    &request,
+                                    &plugin_id,
+                                    &old_version,
+                                    &new_version,
+                                    request.marketplace_source_id.as_deref(),
+                                )
+                                .await?;
                             resp.marketplace_publish = request.marketplace_publish_info.clone();
                             Ok(resp)
                         } else {
@@ -262,12 +278,10 @@ impl DeployService {
                             })
                         }
                     }
-                    std::cmp::Ordering::Less => {
-                        Err(PluginError::Deploy(format!(
-                            "待安装版本 {} 低于已安装版本 {}，请使用降级接口",
-                            new_version, old_version
-                        )))
-                    }
+                    std::cmp::Ordering::Less => Err(PluginError::Deploy(format!(
+                        "待安装版本 {} 低于已安装版本 {}，请使用降级接口",
+                        new_version, old_version
+                    ))),
                 }
             }
         }

@@ -21,7 +21,7 @@
 use std::collections::HashMap;
 
 use futures::StreamExt;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 use crate::opencode_client::OpenCodeClient;
 use crate::session_registry::{AiSseEvent, SessionRegistry};
@@ -42,7 +42,9 @@ pub async fn start_global_relay(client: OpenCodeClient) {
     let registry = match crate::registry() {
         Some(r) => r,
         None => {
-            tracing::error!("启动 SSE relay 失败：SessionRegistry 尚未初始化（请先调 init_ai_subsystem）");
+            tracing::error!(
+                "启动 SSE relay 失败：SessionRegistry 尚未初始化（请先调 init_ai_subsystem）"
+            );
             return;
         }
     };
@@ -124,7 +126,10 @@ fn process_sse_frame(
     part_types: &mut HashMap<String, String>,
 ) {
     // 提取 data: 行内容（OpenCode 每帧只有一行 data）。
-    let data_line = match frame.lines().find_map(|line| line.strip_prefix("data:").map(|s| s.trim())) {
+    let data_line = match frame
+        .lines()
+        .find_map(|line| line.strip_prefix("data:").map(|s| s.trim()))
+    {
         Some(d) => d,
         None => return, // 非 data 帧（如注释）忽略。
     };
@@ -141,8 +146,14 @@ fn process_sse_frame(
     };
 
     let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
-    let props = event.get("properties").cloned().unwrap_or(serde_json::Value::Null);
-    let session_id = props.get("sessionID").and_then(|v| v.as_str()).unwrap_or("");
+    let props = event
+        .get("properties")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let session_id = props
+        .get("sessionID")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
     match event_type {
         // ── 文本流式增量（真正的打字机效果来源 + json_chunk 切分）──
@@ -185,7 +196,10 @@ fn process_sse_frame(
             // discriminator 为 name，data 大多含 message。原英文名/message 直接透传给用户不友好，
             // 这里按 name 归类为中文文案；细节 message 仅作为辅助信息附在括号里。
             let err = props.get("error");
-            let name = err.and_then(|e| e.get("name")).and_then(|n| n.as_str()).unwrap_or("");
+            let name = err
+                .and_then(|e| e.get("name"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("");
             let detail = err
                 .and_then(|e| e.get("data"))
                 .and_then(|d| d.get("message"))
@@ -272,9 +286,7 @@ fn handle_part_delta(
 
             // 2. JSON 边界检测：识别 ```json 围栏或裸 JSON（连续 {/[ 起始），
             //    切分为 json_chunk 事件供前端渐进预览；同时仍下发 text_delta。
-            let state = json_streams
-                .entry(session_id.to_string())
-                .or_default();
+            let state = json_streams.entry(session_id.to_string()).or_default();
             if let Some(chunk_event) = state.feed(delta) {
                 registry.broadcast(session_id, AiSseEvent::json_chunk(chunk_event));
             }
@@ -301,7 +313,11 @@ fn handle_part_updated(
         None => return,
     };
     let part_type = part.get("type").and_then(|v| v.as_str()).unwrap_or("");
-    let part_id = part.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let part_id = part
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     // 登记 partID → part.type，供后续 message.part.delta 查表区分 text/reasoning。
     // （OpenCode delta.field 恒为 "text"，无法直接区分，必须靠此处登记。）
     if !part_id.is_empty() {
@@ -320,7 +336,10 @@ fn handle_part_updated(
             }
         }
         "tool" => {
-            let tool = part.get("tool").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let tool = part
+                .get("tool")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
             let state_obj = part.get("state").unwrap_or(&serde_json::Value::Null);
             let state = state_obj
                 .get("status")
@@ -339,10 +358,11 @@ fn handle_part_updated(
             // question/permission 工具：pending/running 时走专用通道（ask_user / require_approval 弹层），
             // 不下发 tool_call；completed/error 时下发完整 tool_call（带 input/metadata），
             // 让前端把"已回答"作为工具卡片留在消息流里（对齐 opencode）。
-            if tool == "question" || tool == "permission" {
-                if state != "completed" && state != "error" {
-                    return;
-                }
+            if (tool == "question" || tool == "permission")
+                && state != "completed"
+                && state != "error"
+            {
+                return;
             }
             registry.broadcast(
                 session_id,
@@ -383,7 +403,7 @@ fn handle_question_asked(
     // 遍历整个 questions 数组（对齐 OpenCode：一次 ask 携带多问，前端统一呈现）。
     let questions: Vec<AskUserQuestion> = raw_questions
         .iter()
-        .filter_map(|q| {
+        .map(|q| {
             let multiple = q.get("multiple").and_then(|v| v.as_bool()).unwrap_or(false);
             // custom 默认 true（OpenCode V1 语义：默认允许自定义文本答案，与选项并存）。
             let custom = q.get("custom").and_then(|v| v.as_bool()).unwrap_or(true);
@@ -413,14 +433,22 @@ fn handle_question_asked(
             } else {
                 "single_choice".to_string()
             };
-            Some(AskUserQuestion {
+            AskUserQuestion {
                 question_type,
-                title: q.get("header").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                message: q.get("question").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                title: q
+                    .get("header")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                message: q
+                    .get("question")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 multiple,
                 custom,
                 options,
-            })
+            }
         })
         .collect();
     if questions.is_empty() {
@@ -538,7 +566,12 @@ fn handle_session_status(
                 .get("status")
                 .and_then(|s| s.get("attempt"))
                 .and_then(|v| v.as_u64());
-            tracing::warn!(session_id, attempt, msg, "OpenCode 上游重试中（非终态，不下发前端）");
+            tracing::warn!(
+                session_id,
+                attempt,
+                msg,
+                "OpenCode 上游重试中（非终态，不下发前端）"
+            );
         }
         "busy" => {
             tracing::trace!(session_id, "session 进入 busy");
@@ -740,7 +773,8 @@ fn humanize_action(action: &str) -> String {
 fn friendly_error_message(name: &str, detail: &str) -> String {
     let detail = detail.trim();
     let has_detail = !detail.is_empty();
-    let base = match name {
+
+    match name {
         // 鉴权类
         "ProviderAuthError" => "AI 服务鉴权失败，请检查 API Key 配置".to_string(),
         "AuthError" => "AI 服务鉴权失败，请检查 API Key 配置".to_string(),
@@ -761,8 +795,7 @@ fn friendly_error_message(name: &str, detail: &str) -> String {
         "UnknownError" if has_detail => format!("生成失败：{detail}"),
         _ if has_detail => format!("生成失败：{detail}"),
         _ => "生成失败，请重试".to_string(),
-    };
-    base
+    }
 }
 
 #[cfg(test)]
@@ -814,7 +847,9 @@ mod tests {
     fn json_stream_detects_fenced_json_open() {
         let mut s = JsonStreamState::default();
         // 围栏起始：```json 后跟内容。
-        let chunk = s.feed("```json\n{\"name\":\"员工表\"").expect("应产生首个 chunk");
+        let chunk = s
+            .feed("```json\n{\"name\":\"员工表\"")
+            .expect("应产生首个 chunk");
         assert_eq!(s.mode, JsonMode::Fenced);
         assert_eq!(chunk.chunk_index, 0);
         assert_eq!(chunk.content, "{\"name\":\"员工表\"");
@@ -841,7 +876,9 @@ mod tests {
     fn json_stream_detects_bare_json() {
         let mut s = JsonStreamState::default();
         // 裸 JSON（以 { 起始）。
-        let chunk = s.feed("{\"dictId\":\"customer\"").expect("裸 JSON 应产生 chunk");
+        let chunk = s
+            .feed("{\"dictId\":\"customer\"")
+            .expect("裸 JSON 应产生 chunk");
         assert_eq!(s.mode, JsonMode::Bare);
         assert_eq!(chunk.chunk_index, 0);
         assert!(chunk.content.starts_with('{'));
@@ -917,7 +954,10 @@ mod tests {
             &mut part_types,
             &reg,
         );
-        assert_eq!(part_types.get("prt_text1").map(|s| s.as_str()), Some("text"));
+        assert_eq!(
+            part_types.get("prt_text1").map(|s| s.as_str()),
+            Some("text")
+        );
 
         // 订阅 + 发 delta，应收到 text_delta（而非 reasoning_delta）。
         let mut rx = reg.subscribe("ses_test");
@@ -950,7 +990,10 @@ mod tests {
             &mut part_types,
             &reg,
         );
-        assert_eq!(part_types.get("prt_reason1").map(|s| s.as_str()), Some("reasoning"));
+        assert_eq!(
+            part_types.get("prt_reason1").map(|s| s.as_str()),
+            Some("reasoning")
+        );
 
         let mut rx = reg.subscribe("ses_test");
         let mut bufs = HashMap::new();

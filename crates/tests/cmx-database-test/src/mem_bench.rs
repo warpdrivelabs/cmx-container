@@ -122,7 +122,9 @@ async fn seed_rows(client: &tokio_postgres::Client, n: u64) -> anyhow::Result<()
     use futures::{SinkExt, pin_mut};
     let cols = columns().join(",");
     let sink = client
-        .copy_in::<_, Bytes>(&format!("COPY {TABLE} ({cols}) FROM STDIN WITH (FORMAT text)"))
+        .copy_in::<_, Bytes>(&format!(
+            "COPY {TABLE} ({cols}) FROM STDIN WITH (FORMAT text)"
+        ))
         .await?;
     pin_mut!(sink);
     let mut buf = String::with_capacity(1 << 20);
@@ -167,12 +169,12 @@ async fn seed_rows(client: &tokio_postgres::Client, n: u64) -> anyhow::Result<()
 struct PathMem {
     path: String,
     // 各阶段"持有该结构时的活跃内存增量"(相对基线)
-    stage_a_rows: usize,      // 原始行集
-    stage_b_struct: usize,    // 最终数据结构(sqlx:DataSet 已消费行;pg:ZmcDataSet 持有行)
-    stage_c_output: usize,    // 输出字节(JSON / msgpack)大小
+    stage_a_rows: usize,       // 原始行集
+    stage_b_struct: usize,     // 最终数据结构(sqlx:DataSet 已消费行;pg:ZmcDataSet 持有行)
+    stage_c_output: usize,     // 输出字节(JSON / msgpack)大小
     stage_c_total_live: usize, // C 阶段"结构+输出"同时活跃的总内存
-    path_peak: usize,         // 全程峰值(相对基线)
-    output_bytes: usize,      // 输出体积
+    path_peak: usize,          // 全程峰值(相对基线)
+    output_bytes: usize,       // 输出体积
 }
 
 fn main() -> anyhow::Result<()> {
@@ -185,7 +187,10 @@ fn main() -> anyhow::Result<()> {
 async fn run() -> anyhow::Result<()> {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@127.0.0.1:5432/cmx".to_string());
-    let rows: u64 = std::env::var("ROWS").ok().and_then(|v| v.parse().ok()).unwrap_or(100_000);
+    let rows: u64 = std::env::var("ROWS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100_000);
 
     println!("== 内存对标配置 ==");
     println!("URL: {}", mask(&url));
@@ -196,7 +201,9 @@ async fn run() -> anyhow::Result<()> {
     tokio::spawn(async move {
         let _ = conn.await;
     });
-    client.batch_execute(&format!("DROP TABLE IF EXISTS {TABLE}")).await?;
+    client
+        .batch_execute(&format!("DROP TABLE IF EXISTS {TABLE}"))
+        .await?;
     client.batch_execute(&create_ddl()).await?;
     println!(">> 装载 {} 行测试数据...", rows);
     seed_rows(&client, rows).await?;
@@ -224,7 +231,9 @@ async fn run() -> anyhow::Result<()> {
     let sqlx_mem = measure_sqlx(&url, &select).await?;
 
     // 清理
-    client.batch_execute(&format!("DROP TABLE {TABLE} CASCADE")).await?;
+    client
+        .batch_execute(&format!("DROP TABLE {TABLE} CASCADE"))
+        .await?;
 
     // 报告
     let report = build_report(
@@ -462,19 +471,15 @@ async fn measure_sqlx(url: &str, select: &str) -> anyhow::Result<PathMem> {
     use cmx_database::executor::ResultConverter;
     use sqlx::postgres::PgPoolOptions;
 
-    let pool = PgPoolOptions::new()
-        .max_connections(2)
-        .connect(url)
-        .await?;
+    let pool = PgPoolOptions::new().max_connections(2).connect(url).await?;
 
     let base = live();
     reset_peak();
 
     // A:取数 → Vec<PgRow>
-    let raw_rows: Vec<sqlx::postgres::PgRow> =
-        sqlx::query(sqlx::AssertSqlSafe(select.to_string()))
-            .fetch_all(&pool)
-            .await?;
+    let raw_rows: Vec<sqlx::postgres::PgRow> = sqlx::query(sqlx::AssertSqlSafe(select.to_string()))
+        .fetch_all(&pool)
+        .await?;
     let after_a = live();
     let stage_a = after_a.saturating_sub(base);
 
@@ -526,12 +531,46 @@ fn build_report(
     ));
 
     s.push_str("## 各阶段活跃内存(MB,相对取数前基线)\n\n");
-    s.push_str("| 阶段 | sqlx/DataSet | sqlx/Zmc全量 | sqlx/Zmc流式 | tokio/Zmc全量 | tokio/Zmc流式 |\n");
+    s.push_str(
+        "| 阶段 | sqlx/DataSet | sqlx/Zmc全量 | sqlx/Zmc流式 | tokio/Zmc全量 | tokio/Zmc流式 |\n",
+    );
     s.push_str("|------|--------------|---------------|---------------|----------------|----------------|\n");
-    row5(&mut s, "A 取数(原始行集)", sqlx_ds.stage_a_rows, Some(sqlx_zmc.stage_a_rows), None, Some(tokio_zmc.stage_a_rows), None);
-    row5(&mut s, "B 结构就绪", sqlx_ds.stage_b_struct, Some(sqlx_zmc.stage_b_struct), None, Some(tokio_zmc.stage_b_struct), None);
-    row5(&mut s, "C 结构+输出同时活跃", sqlx_ds.stage_c_total_live, Some(sqlx_zmc.stage_c_total_live), Some(sqlx_zmc_s.stage_c_total_live), Some(tokio_zmc.stage_c_total_live), Some(tokio_zmc_s.stage_c_total_live));
-    row5(&mut s, "峰值水位", sqlx_ds.path_peak, Some(sqlx_zmc.path_peak), Some(sqlx_zmc_s.path_peak), Some(tokio_zmc.path_peak), Some(tokio_zmc_s.path_peak));
+    row5(
+        &mut s,
+        "A 取数(原始行集)",
+        sqlx_ds.stage_a_rows,
+        Some(sqlx_zmc.stage_a_rows),
+        None,
+        Some(tokio_zmc.stage_a_rows),
+        None,
+    );
+    row5(
+        &mut s,
+        "B 结构就绪",
+        sqlx_ds.stage_b_struct,
+        Some(sqlx_zmc.stage_b_struct),
+        None,
+        Some(tokio_zmc.stage_b_struct),
+        None,
+    );
+    row5(
+        &mut s,
+        "C 结构+输出同时活跃",
+        sqlx_ds.stage_c_total_live,
+        Some(sqlx_zmc.stage_c_total_live),
+        Some(sqlx_zmc_s.stage_c_total_live),
+        Some(tokio_zmc.stage_c_total_live),
+        Some(tokio_zmc_s.stage_c_total_live),
+    );
+    row5(
+        &mut s,
+        "峰值水位",
+        sqlx_ds.path_peak,
+        Some(sqlx_zmc.path_peak),
+        Some(sqlx_zmc_s.path_peak),
+        Some(tokio_zmc.path_peak),
+        Some(tokio_zmc_s.path_peak),
+    );
 
     s.push_str(&format!(
         "\n> 峰值(相对 sqlx/DataSet {:.0} MB):sqlx/Zmc全量 **{:.0} MB**({}) · sqlx/Zmc流式 **{:.0} MB**({}) · tokio/Zmc全量 **{:.0} MB**({}) · tokio/Zmc流式 **{:.0} MB**({})\n",
@@ -633,8 +672,9 @@ fn pct_save(base: usize, v: usize) -> String {
 
 fn mask(url: &str) -> String {
     if let Some(at) = url.rfind('@')
-        && let Some(scheme) = url.find("://") {
-            return format!("{}://***@{}", &url[..scheme], &url[at + 1..]);
-        }
+        && let Some(scheme) = url.find("://")
+    {
+        return format!("{}://***@{}", &url[..scheme], &url[at + 1..]);
+    }
     url.to_string()
 }

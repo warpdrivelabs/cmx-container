@@ -1027,7 +1027,8 @@ impl TableMetadataService {
             .map_err(|e| PluginError::Config(format!("序列化表定义失败: {e}")))?;
 
         // 主表:先查 table_name 是否存在(cmx_meta_table_define 无 table_name 唯一约束)
-        let check_sql = "SELECT id FROM cmx_meta_table_define WHERE table_name = $1 AND archived = 0";
+        let check_sql =
+            "SELECT id FROM cmx_meta_table_define WHERE table_name = $1 AND archived = 0";
         let check_ds = mm
             .query_sql_with_datavalues(
                 default_db_id,

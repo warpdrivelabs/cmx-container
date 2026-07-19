@@ -736,7 +736,10 @@ impl ResultConverter {
     }
 
     /// 将 SQL 类型映射为 FieldType
-    pub(crate) fn map_sql_type_to_field_type(type_info: &impl sqlx::TypeInfo, column_name: &str) -> FieldType {
+    pub(crate) fn map_sql_type_to_field_type(
+        type_info: &impl sqlx::TypeInfo,
+        column_name: &str,
+    ) -> FieldType {
         let type_name = format!("{}", type_info);
         let type_name_lower = type_name.to_lowercase();
 
@@ -779,7 +782,11 @@ impl ResultConverter {
         } else if type_name_lower.contains("array") {
             FieldType::Array
         } else {
-            tracing::warn!("未处理的数据库字段类型: column={}, type={}", column_name, type_name);
+            tracing::warn!(
+                "未处理的数据库字段类型: column={}, type={}",
+                column_name,
+                type_name
+            );
             FieldType::Unknown
         }
     }

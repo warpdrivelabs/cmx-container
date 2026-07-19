@@ -20,10 +20,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::rds::{DataSet, Row};
 use super::Schema;
+use super::rds::{DataSet, Row};
 use crate::model::cell::{DataValue, Field, FieldType};
 
 /// 列式包字段名常量，避免拼写漂移。
@@ -283,7 +283,10 @@ mod tests {
 
         let pkg = ColumnarCodec::encode(&ds);
         assert_eq!(pkg["datasetId"], json!("cv_batch"));
-        assert_eq!(pkg["columns"], json!(["id", "upper_id", "doc_no", "total_dr"]));
+        assert_eq!(
+            pkg["columns"],
+            json!(["id", "upper_id", "doc_no", "total_dr"])
+        );
         // 行是纯值数组，键名不重复
         assert_eq!(pkg["rows"][0][0], json!("20260003"));
         assert_eq!(pkg["rows"][0][1], Value::Null);

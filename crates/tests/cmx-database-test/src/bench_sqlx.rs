@@ -23,10 +23,14 @@ pub async fn connect(url: &str, max_conn: u32) -> Result<sqlx::PgPool> {
 
 /// 重建表（DROP + CREATE）。
 pub async fn recreate_table(pool: &sqlx::PgPool, table: &str) -> Result<()> {
-    pool.execute(sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE IF EXISTS {table}"))))
-        .await?;
-    pool.execute(sqlx::query(sqlx::AssertSqlSafe(schema::create_table_ddl(table))))
-        .await?;
+    pool.execute(sqlx::query(sqlx::AssertSqlSafe(format!(
+        "DROP TABLE IF EXISTS {table}"
+    ))))
+    .await?;
+    pool.execute(sqlx::query(sqlx::AssertSqlSafe(schema::create_table_ddl(
+        table,
+    ))))
+    .await?;
     Ok(())
 }
 
@@ -164,7 +168,9 @@ pub async fn insert_copy(
 pub async fn query_fetch_all(pool: &sqlx::PgPool, table: &str, limit: u64) -> Result<Measure> {
     let sql = format!("SELECT * FROM {table} LIMIT {limit}");
     let start = Instant::now();
-    let rows = sqlx::query(sqlx::AssertSqlSafe(sql.clone())).fetch_all(pool).await?;
+    let rows = sqlx::query(sqlx::AssertSqlSafe(sql.clone()))
+        .fetch_all(pool)
+        .await?;
     // 触碰每行第一列，防止编译器/驱动优化掉解码
     let mut sink: i64 = 0;
     for r in &rows {

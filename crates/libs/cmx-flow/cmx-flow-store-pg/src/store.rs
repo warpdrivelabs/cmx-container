@@ -17,10 +17,12 @@
 use async_trait::async_trait;
 use cmx_core::model::cell::DataValue;
 use cmx_database_pg::{
-    execute_sql, execute_sql_with_params, get_default_pg_db_manager, query_sql,
-    query_sql_with_params, SqlParams,
+    SqlParams, execute_sql, execute_sql_with_params, get_default_pg_db_manager, query_sql,
+    query_sql_with_params,
 };
-use cmx_flow_model::{DueJob, InstanceSnapshot, InstanceSummary, RuntimeStore, StoreError, StoreResult};
+use cmx_flow_model::{
+    DueJob, InstanceSnapshot, InstanceSummary, RuntimeStore, StoreError, StoreResult,
+};
 
 use crate::mapping;
 
@@ -35,7 +37,9 @@ pub struct PgRuntimeStore {
 impl PgRuntimeStore {
     /// 用指定 db_id 构建。db_id 须已通过 cmx-database-pg 的 manager 注册数据源。
     pub fn new(db_id: impl Into<String>) -> Self {
-        Self { db_id: db_id.into() }
+        Self {
+            db_id: db_id.into(),
+        }
     }
 
     /// 建表（幂等）。测试/自举时调用；生产走 docs/sql 迁移。
@@ -62,8 +66,7 @@ impl PgRuntimeStore {
 
         // 逐条执行；出错则回滚并返回。
         for (sql, params) in ops {
-            if let Err(e) =
-                execute_sql_with_params(&self.db_id, Some(&txn_id), &sql, params).await
+            if let Err(e) = execute_sql_with_params(&self.db_id, Some(&txn_id), &sql, params).await
             {
                 let _ = txn_ctx.rollback(&txn_id).await;
                 return Err(StoreError::Backend(format!("事务内执行失败: {e}")));
@@ -317,7 +320,11 @@ impl RuntimeStore for PgRuntimeStore {
         limit: usize,
     ) -> StoreResult<Vec<cmx_flow_model::CcSummary>> {
         // JOIN 实例取 def_key/biz_key。参数化绑 user_id。
-        let unread_clause = if unread_only { " AND c.read_at IS NULL" } else { "" };
+        let unread_clause = if unread_only {
+            " AND c.read_at IS NULL"
+        } else {
+            ""
+        };
         let sql = format!(
             "SELECT c.id, c.instance_id, c.node_bpmn_id, c.reason, c.read_at, c.created_at, \
                     i.business_key, i.definition_key \
@@ -375,4 +382,3 @@ impl RuntimeStore for PgRuntimeStore {
 fn escape(s: &str) -> String {
     s.replace('\'', "''")
 }
-

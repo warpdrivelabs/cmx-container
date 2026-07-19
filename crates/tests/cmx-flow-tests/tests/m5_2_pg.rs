@@ -7,7 +7,7 @@
 //! 验证 PgSubflowRouter 三层解析：精确绑定 / 沿 cmx_org.path 向上继承 / 默认兜底。
 //! 组织树：df_root(/df_root) → df_bj(/df_root/df_bj)；总部绑 fin_review_hq，北京不绑（应继承总部）。
 
-use cmx_database_pg::{execute_sql, get_default_pg_db_manager, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, execute_sql, get_default_pg_db_manager};
 use cmx_flow_engine::SubflowRouter;
 use cmx_flow_store_pg::{PgRuntimeStore, PgSubflowRouter};
 
@@ -30,7 +30,10 @@ async fn setup_db() -> Option<String> {
         module_code: None,
         source_type: Some("default".to_string()),
     };
-    manager.register_data_source(cfg).await.expect("注册数据源失败");
+    manager
+        .register_data_source(cfg)
+        .await
+        .expect("注册数据源失败");
     Some(db_id)
 }
 
@@ -69,7 +72,10 @@ async fn pg_router_exact_inherit_default() {
         return;
     };
     // ensure_schema 建 cmx_flow_subflow_binding（与 cmx_org 同库）。
-    PgRuntimeStore::new(&db_id).ensure_schema().await.expect("建表应成功");
+    PgRuntimeStore::new(&db_id)
+        .ensure_schema()
+        .await
+        .expect("建表应成功");
     seed(&db_id).await;
 
     let router = PgSubflowRouter::new(&db_id);
@@ -87,7 +93,10 @@ async fn pg_router_exact_inherit_default() {
     assert_eq!(hq, "fin_review_hq", "总部精确绑定");
 
     // 4) 兜底：未知组织（不在树里）→ 默认绑定 fin_review_default。
-    let unknown = router.resolve("fin_review", Some("no_such_org")).await.unwrap();
+    let unknown = router
+        .resolve("fin_review", Some("no_such_org"))
+        .await
+        .unwrap();
     assert_eq!(unknown, "fin_review_default", "未知组织回退默认");
 
     // 5) 无组织 → 默认。

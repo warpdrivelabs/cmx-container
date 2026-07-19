@@ -5,7 +5,7 @@
  * （key/name/nodes/edges/startable、id/state/tokens/tasks/activeNodes/openTasks 等），保持一致。
  */
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use cmx_flow_model::{
     CandidateKind, InstanceSnapshot, InstanceState, InstanceSummary, NodeKind, ProcessDefinition,

@@ -28,7 +28,9 @@ pub async fn recreate_table(client: &Client, table: &str) -> Result<()> {
     client
         .batch_execute(&format!("DROP TABLE IF EXISTS {table}"))
         .await?;
-    client.batch_execute(&schema::create_table_ddl(table)).await?;
+    client
+        .batch_execute(&schema::create_table_ddl(table))
+        .await?;
     Ok(())
 }
 
@@ -111,7 +113,8 @@ pub async fn insert_batch(
             groups.push(format!("({})", ph.join(",")));
         }
         let sql = format!("INSERT INTO {table} ({cols}) VALUES {}", groups.join(","));
-        let mut boxed: Vec<Box<dyn ToSql + Sync + Send>> = Vec::with_capacity(this_batch as usize * 50);
+        let mut boxed: Vec<Box<dyn ToSql + Sync + Send>> =
+            Vec::with_capacity(this_batch as usize * 50);
         for row in 0..this_batch {
             boxed.extend(row_params(tpl, id + row));
         }

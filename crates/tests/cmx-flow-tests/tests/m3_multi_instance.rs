@@ -217,7 +217,11 @@ async fn empty_collection_skips_multi_instance_node() {
         .await
         .unwrap();
     // 空集合 → MI 节点直接跳过 → 直达结束。
-    assert_eq!(started.state, InstanceState::Completed, "空集合应跳过并完成");
+    assert_eq!(
+        started.state,
+        InstanceState::Completed,
+        "空集合应跳过并完成"
+    );
     assert!(started.open_tasks.is_empty());
 }
 
@@ -235,7 +239,12 @@ async fn element_value_carried_on_each_countersign_task() {
     let elems: Vec<String> = snap
         .tasks
         .iter()
-        .filter_map(|t| t.element_value.as_ref().and_then(|v| v.as_str()).map(String::from))
+        .filter_map(|t| {
+            t.element_value
+                .as_ref()
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        })
         .collect();
     assert!(elems.contains(&"cfo".to_string()));
     assert!(elems.contains(&"counsel".to_string()));

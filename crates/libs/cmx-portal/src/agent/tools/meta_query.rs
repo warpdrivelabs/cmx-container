@@ -298,7 +298,10 @@ pub(crate) async fn flexible_combination_get_tool(args: &Value) -> PortalResult<
 ///
 /// 当底层校验失败时返回 `PortalError`。
 pub(crate) async fn flexible_combination_validate_tool(args: &Value) -> PortalResult<Value> {
-    let body = args.get("combination").cloned().unwrap_or_else(|| json!({}));
+    let body = args
+        .get("combination")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     crate::flexible_combination::api::validate(&body, &fc_ref_from_args(args)).await
 }
 
@@ -316,7 +319,10 @@ pub(crate) async fn flexible_combination_validate_tool(args: &Value) -> PortalRe
 ///
 /// 当底层预览失败时返回 `PortalError`。
 pub(crate) async fn flexible_combination_preview_tool(args: &Value) -> PortalResult<Value> {
-    let mut body = args.get("combination").cloned().unwrap_or_else(|| json!({}));
+    let mut body = args
+        .get("combination")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     if let Some(anchor) = args.get("anchor").filter(|v| v.is_object()) {
         if !body.is_object() {
             body = json!({});
@@ -342,7 +348,8 @@ pub(crate) async fn flexible_combination_preview_tool(args: &Value) -> PortalRes
 ///
 /// 当底层解析失败时返回 `PortalError`。
 pub(crate) async fn flexible_combination_resolve_tool(args: &Value) -> PortalResult<Value> {
-    crate::flexible_combination::api::resolve(&fc_ref_from_args(args), &anchor_from_args(args)).await
+    crate::flexible_combination::api::resolve(&fc_ref_from_args(args), &anchor_from_args(args))
+        .await
 }
 
 /// 按锚点获取命中的上下文规则。
@@ -413,11 +420,11 @@ pub(crate) async fn validate_metadata(root: &Path, args: &Value) -> PortalResult
     let mut diagnostics: Vec<Value> = Vec::new();
     for file in files.iter().take(200) {
         if let Ok(content) = tokio::fs::read_to_string(file).await
-            && let Err(e) = serde_json::from_str::<Value>(&content) {
-                diagnostics.push(
-                    json!({ "file": relative_from_root(root, file), "error": e.to_string() }),
-                );
-            }
+            && let Err(e) = serde_json::from_str::<Value>(&content)
+        {
+            diagnostics
+                .push(json!({ "file": relative_from_root(root, file), "error": e.to_string() }));
+        }
     }
     Ok(json!({ "checked": files.len(), "errors": diagnostics }))
 }

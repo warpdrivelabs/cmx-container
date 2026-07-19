@@ -299,7 +299,10 @@ pub fn insert_delegation(d: &TaskDelegation) -> (String, SqlParams) {
 // ============================ 写：历史归档（RU → HI） ============================
 
 /// 历史实例 upsert（幂等：同 id 再归档则更新）。archived_at 由调用方传入统一时刻。
-pub fn upsert_hi_instance(inst: &ProcessInstance, archived_at: DateTime<Utc>) -> (String, SqlParams) {
+pub fn upsert_hi_instance(
+    inst: &ProcessInstance,
+    archived_at: DateTime<Utc>,
+) -> (String, SqlParams) {
     let duration_ms: DataValue = match inst.ended_at {
         Some(end) => DataValue::Int((end - inst.created_at).num_milliseconds()),
         None => DataValue::NullTyped(SqlTypeMarker::Int),

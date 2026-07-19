@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use chrono::{Duration, TimeZone, Utc};
-use cmx_database_pg::{get_default_pg_db_manager, query_sql, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, get_default_pg_db_manager, query_sql};
 use cmx_flow_bpmn::compile;
 use cmx_flow_engine::{Engine, InstanceState, TestClock, Variables};
 use cmx_flow_model::RuntimeStore;
@@ -57,7 +57,10 @@ async fn setup_db() -> Option<String> {
         module_code: None,
         source_type: Some("default".to_string()),
     };
-    manager.register_data_source(cfg).await.expect("注册数据源失败");
+    manager
+        .register_data_source(cfg)
+        .await
+        .expect("注册数据源失败");
     Some(db_id)
 }
 
@@ -92,7 +95,11 @@ async fn pg_boundary_timer_persists_and_fires_after_restart() {
         let mut e1 = Engine::with_clock(store.clone(), Arc::new(clock.clone()));
         e1.deploy(def.clone()).unwrap();
         let started = e1
-            .start_process("pg_timed_approve", Variables::new(), Some("PG-TIMER-001".into()))
+            .start_process(
+                "pg_timed_approve",
+                Variables::new(),
+                Some("PG-TIMER-001".into()),
+            )
             .await
             .expect("启动应成功");
         assert_eq!(started.open_tasks.len(), 1);
@@ -161,7 +168,11 @@ async fn pg_complete_before_timeout_removes_job_from_db() {
     engine.deploy(def).unwrap();
 
     let started = engine
-        .start_process("pg_timed_approve", Variables::new(), Some("PG-TIMER-002".into()))
+        .start_process(
+            "pg_timed_approve",
+            Variables::new(),
+            Some("PG-TIMER-002".into()),
+        )
         .await
         .unwrap();
     let task = started.open_tasks[0].clone();
@@ -174,7 +185,10 @@ async fn pg_complete_before_timeout_removes_job_from_db() {
     let jobs = query_sql(
         &db_id,
         None,
-        &format!("SELECT id FROM cmx_flow_job WHERE instance_id = '{}'", started.instance_id),
+        &format!(
+            "SELECT id FROM cmx_flow_job WHERE instance_id = '{}'",
+            started.instance_id
+        ),
         "jobs",
     )
     .await
@@ -190,7 +204,11 @@ async fn pg_complete_before_timeout_removes_job_from_db() {
     );
 
     // 完成实例应归档。
-    let snap = engine.store().load_snapshot(&started.instance_id).await.unwrap();
+    let snap = engine
+        .store()
+        .load_snapshot(&started.instance_id)
+        .await
+        .unwrap();
     assert_eq!(snap.instance.state, InstanceState::Completed);
 
     cleanup(&db_id, &started.instance_id).await;

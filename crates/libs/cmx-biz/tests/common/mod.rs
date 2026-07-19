@@ -127,4 +127,3 @@ pub async fn ensure_tables(manager: &DatabaseManager) {
             .expect("执行建表/索引 DDL 失败");
     }
 }
-

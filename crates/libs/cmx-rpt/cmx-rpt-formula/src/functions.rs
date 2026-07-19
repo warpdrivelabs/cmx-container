@@ -19,8 +19,18 @@ fn qm() -> RptFunction {
         is_fetch: true,
         prototype: Prototype {
             params: vec![
-                p_opt("期间", ParamKind::Period, Some("0"), "0本期/-1上期/-12上年同期，或绝对期间码"),
-                p_opt("组织机构", ParamKind::Org, Some("@current"), "@current 当前组织，或组织码"),
+                p_opt(
+                    "期间",
+                    ParamKind::Period,
+                    Some("0"),
+                    "0本期/-1上期/-12上年同期，或绝对期间码",
+                ),
+                p_opt(
+                    "组织机构",
+                    ParamKind::Org,
+                    Some("@current"),
+                    "@current 当前组织，或组织码",
+                ),
                 p("取数对象", ParamKind::Object, "科目码或元素码"),
             ],
             variadic: None,
@@ -39,8 +49,18 @@ fn qc() -> RptFunction {
         is_fetch: true,
         prototype: Prototype {
             params: vec![
-                p_opt("期间", ParamKind::Period, Some("0"), "0本期/-1上期/-12上年同期，或绝对期间码"),
-                p_opt("组织机构", ParamKind::Org, Some("@current"), "@current 当前组织，或组织码"),
+                p_opt(
+                    "期间",
+                    ParamKind::Period,
+                    Some("0"),
+                    "0本期/-1上期/-12上年同期，或绝对期间码",
+                ),
+                p_opt(
+                    "组织机构",
+                    ParamKind::Org,
+                    Some("@current"),
+                    "@current 当前组织，或组织码",
+                ),
                 p("取数对象", ParamKind::Object, "科目码或元素码"),
             ],
             variadic: None,
@@ -59,10 +79,25 @@ fn fs() -> RptFunction {
         is_fetch: true,
         prototype: Prototype {
             params: vec![
-                p_opt("期间", ParamKind::Period, Some("0"), "0本期/-1上期，或绝对期间码"),
-                p_opt("组织机构", ParamKind::Org, Some("@current"), "@current 当前组织，或组织码"),
+                p_opt(
+                    "期间",
+                    ParamKind::Period,
+                    Some("0"),
+                    "0本期/-1上期，或绝对期间码",
+                ),
+                p_opt(
+                    "组织机构",
+                    ParamKind::Org,
+                    Some("@current"),
+                    "@current 当前组织，或组织码",
+                ),
                 p("取数对象", ParamKind::Object, "科目码或元素码"),
-                p_opt("方向", ParamKind::Direction, Some("net"), "debit借方/credit贷方/net净额"),
+                p_opt(
+                    "方向",
+                    ParamKind::Direction,
+                    Some("net"),
+                    "debit借方/credit贷方/net净额",
+                ),
             ],
             variadic: None,
         },
@@ -80,8 +115,18 @@ fn je() -> RptFunction {
         is_fetch: true,
         prototype: Prototype {
             params: vec![
-                p_opt("期间", ParamKind::Period, Some("0"), "0本期/-1上期，或绝对期间码"),
-                p_opt("组织机构", ParamKind::Org, Some("@current"), "@current 当前组织，或组织码"),
+                p_opt(
+                    "期间",
+                    ParamKind::Period,
+                    Some("0"),
+                    "0本期/-1上期，或绝对期间码",
+                ),
+                p_opt(
+                    "组织机构",
+                    ParamKind::Org,
+                    Some("@current"),
+                    "@current 当前组织，或组织码",
+                ),
                 p("取数对象", ParamKind::Object, "科目码或元素码"),
             ],
             variadic: None,
@@ -103,7 +148,12 @@ fn ref_fn() -> RptFunction {
                 p("报表", ParamKind::Report, "目标报表编码（本表或他表）"),
                 p("版本", ParamKind::Version, "目标报表版本编码"),
                 p("单元格", ParamKind::CellRef, "目标单元格 A1 引用，如 C5"),
-                p_opt("组织机构", ParamKind::Org, Some("@current"), "缺省随当前组织"),
+                p_opt(
+                    "组织机构",
+                    ParamKind::Org,
+                    Some("@current"),
+                    "缺省随当前组织",
+                ),
                 p_opt("期间", ParamKind::Period, Some("0"), "缺省随当前期间"),
             ],
             variadic: None,
@@ -148,7 +198,12 @@ fn if_fn() -> RptFunction {
             params: vec![
                 p("条件", ParamKind::Expr, "布尔表达式"),
                 p("真值", ParamKind::Expr, "条件成立时取值"),
-                p_opt("假值", ParamKind::Expr, None, "条件不成立时取值（缺省 null）"),
+                p_opt(
+                    "假值",
+                    ParamKind::Expr,
+                    None,
+                    "条件不成立时取值（缺省 null）",
+                ),
             ],
             variadic: None,
         },

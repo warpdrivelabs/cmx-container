@@ -45,9 +45,10 @@ pub fn apply_auth_metadata<T>(req: &mut Request<T>, service_key: &str) {
 
     // ① 服务身份：X-API-Key: <cmx_sk_xxx>（不占用 Authorization，保持 Bearer 专用于 JWT）
     if !service_key.is_empty()
-        && let Ok(v) = volo_grpc::metadata::MetadataValue::from_str(service_key) {
-            meta.insert("x-api-key", v);
-        }
+        && let Ok(v) = volo_grpc::metadata::MetadataValue::from_str(service_key)
+    {
+        meta.insert("x-api-key", v);
+    }
 
     // ② 委托用户：X-Delegated-User-Token: Bearer <jwt>（从 task_local 取）
     if let Some(user_jwt) = context_scope::current_original_token() {
@@ -59,8 +60,8 @@ pub fn apply_auth_metadata<T>(req: &mut Request<T>, service_key: &str) {
 
     // ③ 追踪：X-Request-Id（从 task_local 取）
     if let Some(request_id) = context_scope::current_request_id()
-        && let Ok(v) = volo_grpc::metadata::MetadataValue::from_str(&request_id) {
-            meta.insert("x-request-id", v);
-        }
+        && let Ok(v) = volo_grpc::metadata::MetadataValue::from_str(&request_id)
+    {
+        meta.insert("x-request-id", v);
+    }
 }
-

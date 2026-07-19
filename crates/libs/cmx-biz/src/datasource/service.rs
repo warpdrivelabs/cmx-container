@@ -202,7 +202,9 @@ impl SysDatasourceService {
 
         let filter = SysDatasourceFilter {
             id: None,
-            db_id: Some(OpValsString(vec![OpValString::Eq(target_db_id.to_string())])),
+            db_id: Some(OpValsString(vec![OpValString::Eq(
+                target_db_id.to_string(),
+            )])),
             db_name: None,
             db_type: None,
             default_flag: None,
@@ -344,7 +346,8 @@ impl SysDatasourceService {
         let source_type = row
             .get_by_name(schema, "source_type")
             .and_then(|v| String::try_from(v.clone()).ok());
-        let db_name = row.get_by_name(schema, "db_name")
+        let db_name = row
+            .get_by_name(schema, "db_name")
             .and_then(|v| String::try_from(v.clone()).ok());
 
         Some(DbConfig {

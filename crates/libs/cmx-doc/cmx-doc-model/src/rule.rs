@@ -13,7 +13,7 @@
 
 use serde_json::Value;
 
-use super::formula::{eval_formula, Scope};
+use super::formula::{Scope, eval_formula};
 
 /// 一条校验违规。
 #[derive(Debug, Clone, serde::Serialize)]
@@ -75,10 +75,7 @@ pub fn validate(rules: &[Value], scope: &Scope) -> ValidateResult {
                             .and_then(|v| v.as_str())
                             .unwrap_or("error")
                             .to_string(),
-                        level: rule
-                            .get("level")
-                            .and_then(|v| v.as_str())
-                            .map(String::from),
+                        level: rule.get("level").and_then(|v| v.as_str()).map(String::from),
                     });
                 }
             }
@@ -97,7 +94,7 @@ pub fn validate(rules: &[Value], scope: &Scope) -> ValidateResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::formula::{scope_from_json, FValue};
+    use crate::formula::{FValue, scope_from_json};
     use serde_json::json;
 
     #[test]

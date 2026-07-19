@@ -374,15 +374,15 @@ fn extract_delegated_user_token(req: &Request<Body>) -> Option<String> {
 ///    仅在 header 缺失时兜底，不影响常规请求的鉴权语义。
 fn extract_bearer_token(req: &Request<Body>) -> Option<String> {
     // 1. 优先 Authorization 头
-    if let Some(auth_header) = req.headers().get("authorization") {
-        if let Ok(s) = auth_header.to_str() {
-            if let Some(token) = s.strip_prefix("Bearer ") {
-                return Some(token.to_string());
-            }
-            // 也支持小写的 bearer
-            if let Some(token) = s.strip_prefix("bearer ") {
-                return Some(token.to_string());
-            }
+    if let Some(auth_header) = req.headers().get("authorization")
+        && let Ok(s) = auth_header.to_str()
+    {
+        if let Some(token) = s.strip_prefix("Bearer ") {
+            return Some(token.to_string());
+        }
+        // 也支持小写的 bearer
+        if let Some(token) = s.strip_prefix("bearer ") {
+            return Some(token.to_string());
         }
     }
 
@@ -390,13 +390,13 @@ fn extract_bearer_token(req: &Request<Body>) -> Option<String> {
     if let Some(query) = req.uri().query() {
         for pair in query.split('&') {
             let mut it = pair.splitn(2, '=');
-            if it.next() == Some("access_token") {
-                if let Some(val) = it.next() {
-                    // URL 解码（JWT 含点号等安全字符，通常无需解码，但稳妥处理）
-                    let decoded = urlencoding_decode(val);
-                    if !decoded.is_empty() {
-                        return Some(decoded);
-                    }
+            if it.next() == Some("access_token")
+                && let Some(val) = it.next()
+            {
+                // URL 解码（JWT 含点号等安全字符，通常无需解码，但稳妥处理）
+                let decoded = urlencoding_decode(val);
+                if !decoded.is_empty() {
+                    return Some(decoded);
                 }
             }
         }

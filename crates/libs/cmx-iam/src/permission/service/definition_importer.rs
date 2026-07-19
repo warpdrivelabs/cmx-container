@@ -46,7 +46,10 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
             std::collections::HashMap::new();
         for def in definitions {
             let id = cmx_utils::id::snowflake_id_str();
-            let resource_type = def.resource_type.clone().unwrap_or_else(|| "api".to_string());
+            let resource_type = def
+                .resource_type
+                .clone()
+                .unwrap_or_else(|| "api".to_string());
             let full_path = format!("/{}", def.code);
 
             // upsert:ON CONFLICT (code) DO UPDATE,RETURNING id 取实际入库 id
@@ -249,8 +252,16 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
             std::collections::HashMap::new();
         if let Some(id_rows) = id_json.get("rows").and_then(|r| r.as_array()) {
             for row in id_rows {
-                let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let code = row.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let id = row
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let code = row
+                    .get("code")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if !id.is_empty() {
                     id_to_code.insert(id, code);
                 }
@@ -270,8 +281,16 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             defs.push(PermissionDefinition {
-                code: row.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                name: row.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                code: row
+                    .get("code")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                name: row
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 resource_type: row
                     .get("resource_type")
                     .and_then(|v| v.as_str())

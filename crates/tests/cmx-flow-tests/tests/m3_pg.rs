@@ -9,7 +9,7 @@
 //! - 用**全新 Engine**（模拟进程重启）从 PG 恢复，completionCondition 仍能正确求值；
 //! - cancel_process 后实例归档进 hi_instance（Terminated）。
 
-use cmx_database_pg::{get_default_pg_db_manager, query_sql, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, get_default_pg_db_manager, query_sql};
 use cmx_flow_bpmn::compile;
 use cmx_flow_engine::{Engine, InstanceState, Variables};
 use cmx_flow_model::RuntimeStore;
@@ -52,7 +52,10 @@ async fn setup_db() -> Option<String> {
         module_code: None,
         source_type: Some("default".to_string()),
     };
-    manager.register_data_source(cfg).await.expect("注册数据源失败");
+    manager
+        .register_data_source(cfg)
+        .await
+        .expect("注册数据源失败");
     Some(db_id)
 }
 
@@ -200,7 +203,11 @@ async fn pg_cancel_archives_to_history() {
     assert_eq!(canceled.state, InstanceState::Terminated);
 
     // 运行态：无未办结任务；MiScope 收口。
-    let snap = engine.store().load_snapshot(&started.instance_id).await.unwrap();
+    let snap = engine
+        .store()
+        .load_snapshot(&started.instance_id)
+        .await
+        .unwrap();
     assert_eq!(snap.tasks.iter().filter(|t| !t.completed).count(), 0);
     assert!(snap.mi_scopes.iter().all(|s| s.finished));
 

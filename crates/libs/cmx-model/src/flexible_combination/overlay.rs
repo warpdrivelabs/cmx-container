@@ -158,9 +158,10 @@ where
         // 无 as：缺 name 时用 id 补齐
         None => {
             if !obj.contains_key("name")
-                && let Some(id) = obj.get("id").cloned() {
-                    obj.insert("name".to_string(), id);
-                }
+                && let Some(id) = obj.get("id").cloned()
+            {
+                obj.insert("name".to_string(), id);
+            }
         }
     }
     Some(merged)
@@ -188,7 +189,10 @@ where
     // 仅在注入了 DOC 列闭包时才展开 use/pick
     if let Some(tc) = table_cols {
         // use:"*" —— 全部物理列 + over 补丁
-        let use_all = matches!(detail.get("use").and_then(|v| v.as_str()), Some("*") | Some("all"));
+        let use_all = matches!(
+            detail.get("use").and_then(|v| v.as_str()),
+            Some("*") | Some("all")
+        );
         if use_all {
             let over_map = detail.get("over").and_then(|v| v.as_object());
             if let (Some(t), Some(cols)) = (table, table.and_then(tc)) {
@@ -268,7 +272,10 @@ where
     if !rule_uses_overlay(rule) || table_cols.is_none() {
         return rule.clone();
     }
-    let detail = rule.get("detail").cloned().unwrap_or(Value::Object(Map::new()));
+    let detail = rule
+        .get("detail")
+        .cloned()
+        .unwrap_or(Value::Object(Map::new()));
     let fields = expand_detail_fields(&detail, table_cols);
 
     // 清除 overlay 专用键，写入展开后的 fields
@@ -324,7 +331,11 @@ mod tests {
         ]
     }
     fn tc(t: &str) -> Option<Vec<Value>> {
-        if t == "voucher_detail" { Some(cols()) } else { None }
+        if t == "voucher_detail" {
+            Some(cols())
+        } else {
+            None
+        }
     }
 
     #[test]
@@ -342,7 +353,14 @@ mod tests {
     fn ref_field_inherits_and_overrides() {
         let f = expand_ref_field("voucher_detail.cashflow_item_id", None, None, None, &tc);
         assert!(f.is_none()); // not in cols
-        let f = expand_ref_field("voucher_detail.cost_center_id", Some(&json!({"edit":{"required":true}})), None, None, &tc).unwrap();
+        let f = expand_ref_field(
+            "voucher_detail.cost_center_id",
+            Some(&json!({"edit":{"required":true}})),
+            None,
+            None,
+            &tc,
+        )
+        .unwrap();
         assert_eq!(f["dataType"], json!("BIGINT"));
         assert_eq!(f["edit"]["required"], json!(true));
     }
@@ -355,7 +373,14 @@ mod tests {
 
     #[test]
     fn as_renames_keeps_physical_type() {
-        let f = expand_ref_field("voucher_detail.cost_center_id", Some(&json!({"caption":{"zh_CN":"部门"}})), Some("department"), None, &tc).unwrap();
+        let f = expand_ref_field(
+            "voucher_detail.cost_center_id",
+            Some(&json!({"caption":{"zh_CN":"部门"}})),
+            Some("department"),
+            None,
+            &tc,
+        )
+        .unwrap();
         assert_eq!(f["id"], json!("department"));
         assert_eq!(f["name"], json!("department"));
         assert_eq!(f["dataType"], json!("BIGINT"));
@@ -368,7 +393,10 @@ mod tests {
         let fields = expand_detail_fields(&detail, Some(&tc));
         let ids: Vec<_> = fields.iter().filter_map(|f| f["id"].as_str()).collect();
         assert_eq!(ids, vec!["amount", "cost_center_id", "remark"]);
-        let cc = fields.iter().find(|f| f["id"] == json!("cost_center_id")).unwrap();
+        let cc = fields
+            .iter()
+            .find(|f| f["id"] == json!("cost_center_id"))
+            .unwrap();
         assert_eq!(cc["edit"]["required"], json!(true));
     }
 

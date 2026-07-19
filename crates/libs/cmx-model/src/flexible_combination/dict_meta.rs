@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use crate::dict::schema::try_get_schema;
 use crate::error::PortalResult;
-use crate::flexible_combination::drn::{effective_dict_id, FromDam};
+use crate::flexible_combination::drn::{FromDam, effective_dict_id};
 
 /// 由 combination 顶层 DAM（或 docRef）构造引用方 DAM，供 DRN 别名/相对引用补全继承段。
 ///

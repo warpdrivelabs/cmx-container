@@ -80,10 +80,7 @@ impl BizError {
     pub fn from_db_error(raw: &str) -> Self {
         let code = crate::errcode::classify_db_error(raw);
         let detail = crate::errcode::brief_db_detail(raw);
-        let message = crate::errcode::render(
-            code.message_template(),
-            &[("detail", detail)],
-        );
+        let message = crate::errcode::render(code.message_template(), &[("detail", detail)]);
         Self::DbConstraint { code, message }
     }
 
@@ -129,7 +126,9 @@ impl From<BizError> for cmx_traits::error::TraitError {
             BizError::Conflict(msg) => cmx_traits::error::TraitError::Business(msg),
             // 校验/约束错误在 rpc/wasm 层归为 Business，保留优雅文案。
             BizError::Validation(vs) => cmx_traits::error::TraitError::Business(
-                vs.first().map(|v| v.message.clone()).unwrap_or_else(|| "数据校验未通过".into()),
+                vs.first()
+                    .map(|v| v.message.clone())
+                    .unwrap_or_else(|| "数据校验未通过".into()),
             ),
             BizError::DbConstraint { message, .. } => {
                 cmx_traits::error::TraitError::Business(message)

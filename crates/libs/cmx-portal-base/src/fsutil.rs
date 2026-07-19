@@ -142,8 +142,12 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        std::env::temp_dir()
-            .join(format!("cmx-portal-base-fsutil-test-{}-{}-{}", name, std::process::id(), nanos))
+        std::env::temp_dir().join(format!(
+            "cmx-portal-base-fsutil-test-{}-{}-{}",
+            name,
+            std::process::id(),
+            nanos
+        ))
     }
 
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -156,7 +160,10 @@ mod tests {
     async fn write_and_read_json_roundtrip() {
         let dir = unique_tmp_dir("json-rt");
         let path = dir.join("data.json");
-        let original = Sample { name: "测试".into(), value: 42 };
+        let original = Sample {
+            name: "测试".into(),
+            value: 42,
+        };
         write_json_atomic(&path, &original, true).await.unwrap();
         let loaded: Sample = read_json(&path).await.unwrap();
         assert_eq!(loaded, original);
@@ -167,7 +174,10 @@ mod tests {
     async fn read_json_missing_returns_not_found() {
         let path = unique_tmp_dir("missing").join("absent.json");
         let err = read_json::<Sample>(&path).await.unwrap_err();
-        assert!(matches!(err, PortalError::NotFound(_)), "应为 NotFound，实际：{err:?}");
+        assert!(
+            matches!(err, PortalError::NotFound(_)),
+            "应为 NotFound，实际：{err:?}"
+        );
     }
 
     #[tokio::test]
@@ -191,7 +201,10 @@ mod tests {
     async fn write_creates_parent_dirs() {
         let dir = unique_tmp_dir("nested");
         let path = dir.join("a/b/c/deep.json");
-        let payload = Sample { name: "嵌套".into(), value: 7 };
+        let payload = Sample {
+            name: "嵌套".into(),
+            value: 7,
+        };
         // 父目录 a/b/c 不存在，原子写应自动创建。
         write_json_atomic(&path, &payload, false).await.unwrap();
         let loaded: Sample = read_json(&path).await.unwrap();
@@ -203,8 +216,26 @@ mod tests {
     async fn write_overwrites_existing() {
         let dir = unique_tmp_dir("overwrite");
         let path = dir.join("mutable.json");
-        write_json_atomic(&path, &Sample { name: "v1".into(), value: 1 }, true).await.unwrap();
-        write_json_atomic(&path, &Sample { name: "v2".into(), value: 2 }, true).await.unwrap();
+        write_json_atomic(
+            &path,
+            &Sample {
+                name: "v1".into(),
+                value: 1,
+            },
+            true,
+        )
+        .await
+        .unwrap();
+        write_json_atomic(
+            &path,
+            &Sample {
+                name: "v2".into(),
+                value: 2,
+            },
+            true,
+        )
+        .await
+        .unwrap();
         let loaded: Sample = read_json(&path).await.unwrap();
         assert_eq!(loaded.name, "v2");
         assert_eq!(loaded.value, 2);

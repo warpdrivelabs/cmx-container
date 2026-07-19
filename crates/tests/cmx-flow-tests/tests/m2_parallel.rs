@@ -50,7 +50,11 @@ async fn fork_creates_two_parallel_tasks() {
     // fork 后应同时出现两个待办任务。
     assert_eq!(started.state, InstanceState::Active);
     assert_eq!(started.open_tasks.len(), 2, "fork 应产生 2 个并行任务");
-    let nodes: Vec<&str> = started.open_tasks.iter().map(|t| t.node_bpmn_id.as_str()).collect();
+    let nodes: Vec<&str> = started
+        .open_tasks
+        .iter()
+        .map(|t| t.node_bpmn_id.as_str())
+        .collect();
     assert!(nodes.contains(&"finance"));
     assert!(nodes.contains(&"legal"));
 }
@@ -76,7 +80,11 @@ async fn join_waits_for_all_branches_before_proceeding() {
         .unwrap();
 
     // 只办结一支：实例仍 Active，legal 待办仍在；财务令牌应阻塞在 join（Joining）。
-    assert_eq!(after_first.state, InstanceState::Active, "半数分支未办结，实例不应完成");
+    assert_eq!(
+        after_first.state,
+        InstanceState::Active,
+        "半数分支未办结，实例不应完成"
+    );
     assert_eq!(after_first.open_tasks.len(), 1);
     assert_eq!(after_first.open_tasks[0].node_bpmn_id, "legal");
 
@@ -111,14 +119,24 @@ async fn join_order_independent() {
         .start_process("parallel_sign", Variables::new(), None)
         .await
         .unwrap();
-    let legal = started.open_tasks.iter().find(|t| t.node_bpmn_id == "legal").unwrap().clone();
+    let legal = started
+        .open_tasks
+        .iter()
+        .find(|t| t.node_bpmn_id == "legal")
+        .unwrap()
+        .clone();
     let after_first = engine
         .complete_task(&started.instance_id, &legal.id, Variables::new())
         .await
         .unwrap();
     assert_eq!(after_first.state, InstanceState::Active);
 
-    let finance = started.open_tasks.iter().find(|t| t.node_bpmn_id == "finance").unwrap().clone();
+    let finance = started
+        .open_tasks
+        .iter()
+        .find(|t| t.node_bpmn_id == "finance")
+        .unwrap()
+        .clone();
     let done = engine
         .complete_task(&started.instance_id, &finance.id, Variables::new())
         .await

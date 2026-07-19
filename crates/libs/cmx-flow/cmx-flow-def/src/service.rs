@@ -16,8 +16,8 @@ use cmx_flow_model::ProcessDefinition;
 use uuid::Uuid;
 
 use crate::{
-    validate_bpmn, DefError, DefResult, DefinitionRecord, DefinitionState, DefinitionStore,
-    VersionMeta, VersionRecord,
+    DefError, DefResult, DefinitionRecord, DefinitionState, DefinitionStore, VersionMeta,
+    VersionRecord, validate_bpmn,
 };
 
 /// 定义服务。持一个 DefinitionStore 实现（泛型，测试可注入内存假实现）。
@@ -45,6 +45,9 @@ impl<S: DefinitionStore> DefinitionService<S> {
     ///
     /// 返回编译出的定义 key（= BPMN process id）。key 由 XML 决定，不由调用方乱传——
     /// 若 process id 与传入 key 不一致，以 XML 里的为准并在此提示（避免存串）。
+    // 8 个参数均为语义独立的定义坐标（name/domain/application/module/category）+ 载荷(bpmn_xml)
+    // + 审计(updated_by)；聚成 struct 只是把同样的字段搬个位置，收益为负，故就地放行。
+    #[allow(clippy::too_many_arguments)]
     pub async fn save_draft(
         &self,
         name: &str,
@@ -188,8 +191,16 @@ impl<S: DefinitionStore> DefinitionService<S> {
         if self.store.get(&key).await?.is_some() {
             return Ok(false); // 已存在，不覆盖
         }
-        self.save_draft(name, None, None, module, None, bpmn_xml, Some("seed".into()))
-            .await?;
+        self.save_draft(
+            name,
+            None,
+            None,
+            module,
+            None,
+            bpmn_xml,
+            Some("seed".into()),
+        )
+        .await?;
         Ok(true)
     }
 

@@ -51,7 +51,11 @@ impl CmxResourceDataServerImpl {
 }
 
 impl resource_data_proto::CmxResourceDataService for CmxResourceDataServerImpl {
-    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_import_resource_data")]
+    #[instrument(
+        target = "cmx_rpc",
+        skip(self, req),
+        name = "grpc_import_resource_data"
+    )]
     fn import_resource_data(
         &self,
         req: volo_grpc::Request<resource_data_proto::ImportResourceDataRequest>,
@@ -80,112 +84,117 @@ impl resource_data_proto::CmxResourceDataService for CmxResourceDataServerImpl {
                 request_id.unwrap_or_default(),
                 None,
                 async {
-                let Some(importer) = data_importer else {
-                    let response = resource_data_proto::ImportResourceDataResponse {
-                        success: false,
-                        message: "data_importer 未配置".into(),
-                        created_count: 0,
-                        updated_count: 0,
-                        deleted_count: 0,
-                    };
-                    return Ok(volo_grpc::Response::new(response));
-                };
-
-                let Some(category) = ResourceDataCategory::parse_from_str(&req.category) else {
-                    let response = resource_data_proto::ImportResourceDataResponse {
-                        success: false,
-                        message: format!(
-                            "无效的数据类别: {}（有效值: menu/perm/form/flow）",
-                            req.category
-                        )
-                        .into(),
-                        created_count: 0,
-                        updated_count: 0,
-                        deleted_count: 0,
-                    };
-                    return Ok(volo_grpc::Response::new(response));
-                };
-
-                // 校验必填字段(domain_code/application_code/module_code 所有类别都需要)
-                if req.domain_code.is_empty()
-                    || req.application_code.is_empty()
-                    || req.module_code.is_empty()
-                {
-                    let response = resource_data_proto::ImportResourceDataResponse {
-                        success: false,
-                        message: "domain_code/application_code/module_code 不能为空".into(),
-                        created_count: 0,
-                        updated_count: 0,
-                        deleted_count: 0,
-                    };
-                    return Ok(volo_grpc::Response::new(response));
-                }
-                // plugin_id/app_id/version 仅 Perm(插件权限导入)场景需要;
-                // Form/Menu/Table(模块资源导入)无插件上下文,允许为空。
-                if matches!(category, ResourceDataCategory::Perm)
-                    && (req.plugin_id.is_empty()
-                        || req.app_id.is_empty()
-                        || req.version.is_empty())
-                {
-                    let response = resource_data_proto::ImportResourceDataResponse {
-                        success: false,
-                        message: "Perm 类别导入需要 plugin_id/app_id/version 非空".into(),
-                        created_count: 0,
-                        updated_count: 0,
-                        deleted_count: 0,
-                    };
-                    return Ok(volo_grpc::Response::new(response));
-                }
-
-                let request = ResourceDataImportRequest {
-                    category,
-                    domain_code: req.domain_code.to_string(),
-                    application_code: req.application_code.to_string(),
-                    module_code: req.module_code.to_string(),
-                    plugin_id: req.plugin_id.to_string(),
-                    app_id: req.app_id.to_string(),
-                    version: req.version.to_string(),
-                    zip_data: req.zip_data.to_vec(),
-                };
-
-                match importer.import_data(request).await {
-                    Ok(result) => {
-                        let response = resource_data_proto::ImportResourceDataResponse {
-                            success: result.success,
-                            message: result.message.into(),
-                            created_count: result.created_count,
-                            updated_count: result.updated_count,
-                            deleted_count: result.deleted_count,
-                        };
-                        Ok(volo_grpc::Response::new(response))
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            target: "cmx_rpc",
-                            error = %e,
-                            category = %req.category,
-                            domain = %req.domain_code,
-                            app = %req.application_code,
-                            module = %req.module_code,
-                            plugin_id = %req.plugin_id,
-                            "资源数据导入失败"
-                        );
+                    let Some(importer) = data_importer else {
                         let response = resource_data_proto::ImportResourceDataResponse {
                             success: false,
-                            message: e.to_string().into(),
+                            message: "data_importer 未配置".into(),
                             created_count: 0,
                             updated_count: 0,
                             deleted_count: 0,
                         };
-                        Ok(volo_grpc::Response::new(response))
+                        return Ok(volo_grpc::Response::new(response));
+                    };
+
+                    let Some(category) = ResourceDataCategory::parse_from_str(&req.category) else {
+                        let response = resource_data_proto::ImportResourceDataResponse {
+                            success: false,
+                            message: format!(
+                                "无效的数据类别: {}（有效值: menu/perm/form/flow）",
+                                req.category
+                            )
+                            .into(),
+                            created_count: 0,
+                            updated_count: 0,
+                            deleted_count: 0,
+                        };
+                        return Ok(volo_grpc::Response::new(response));
+                    };
+
+                    // 校验必填字段(domain_code/application_code/module_code 所有类别都需要)
+                    if req.domain_code.is_empty()
+                        || req.application_code.is_empty()
+                        || req.module_code.is_empty()
+                    {
+                        let response = resource_data_proto::ImportResourceDataResponse {
+                            success: false,
+                            message: "domain_code/application_code/module_code 不能为空".into(),
+                            created_count: 0,
+                            updated_count: 0,
+                            deleted_count: 0,
+                        };
+                        return Ok(volo_grpc::Response::new(response));
                     }
-                }
-            })
+                    // plugin_id/app_id/version 仅 Perm(插件权限导入)场景需要;
+                    // Form/Menu/Table(模块资源导入)无插件上下文,允许为空。
+                    if matches!(category, ResourceDataCategory::Perm)
+                        && (req.plugin_id.is_empty()
+                            || req.app_id.is_empty()
+                            || req.version.is_empty())
+                    {
+                        let response = resource_data_proto::ImportResourceDataResponse {
+                            success: false,
+                            message: "Perm 类别导入需要 plugin_id/app_id/version 非空".into(),
+                            created_count: 0,
+                            updated_count: 0,
+                            deleted_count: 0,
+                        };
+                        return Ok(volo_grpc::Response::new(response));
+                    }
+
+                    let request = ResourceDataImportRequest {
+                        category,
+                        domain_code: req.domain_code.to_string(),
+                        application_code: req.application_code.to_string(),
+                        module_code: req.module_code.to_string(),
+                        plugin_id: req.plugin_id.to_string(),
+                        app_id: req.app_id.to_string(),
+                        version: req.version.to_string(),
+                        zip_data: req.zip_data.to_vec(),
+                    };
+
+                    match importer.import_data(request).await {
+                        Ok(result) => {
+                            let response = resource_data_proto::ImportResourceDataResponse {
+                                success: result.success,
+                                message: result.message.into(),
+                                created_count: result.created_count,
+                                updated_count: result.updated_count,
+                                deleted_count: result.deleted_count,
+                            };
+                            Ok(volo_grpc::Response::new(response))
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                target: "cmx_rpc",
+                                error = %e,
+                                category = %req.category,
+                                domain = %req.domain_code,
+                                app = %req.application_code,
+                                module = %req.module_code,
+                                plugin_id = %req.plugin_id,
+                                "资源数据导入失败"
+                            );
+                            let response = resource_data_proto::ImportResourceDataResponse {
+                                success: false,
+                                message: e.to_string().into(),
+                                created_count: 0,
+                                updated_count: 0,
+                                deleted_count: 0,
+                            };
+                            Ok(volo_grpc::Response::new(response))
+                        }
+                    }
+                },
+            )
             .await
         }
     }
 
-    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_cleanup_resource_data")]
+    #[instrument(
+        target = "cmx_rpc",
+        skip(self, req),
+        name = "grpc_cleanup_resource_data"
+    )]
     fn cleanup_resource_data(
         &self,
         req: volo_grpc::Request<resource_data_proto::CleanupResourceDataRequest>,
@@ -212,70 +221,71 @@ impl resource_data_proto::CmxResourceDataService for CmxResourceDataServerImpl {
                 request_id.unwrap_or_default(),
                 None,
                 async {
-                let Some(importer) = data_importer else {
-                    let response = resource_data_proto::ImportResourceDataResponse {
-                        success: false,
-                        message: "data_importer 未配置".into(),
-                        created_count: 0,
-                        updated_count: 0,
-                        deleted_count: 0,
-                    };
-                    return Ok(volo_grpc::Response::new(response));
-                };
-
-                let Some(category) = ResourceDataCategory::parse_from_str(&req.category) else {
-                    let response = resource_data_proto::ImportResourceDataResponse {
-                        success: false,
-                        message: format!("无效的数据类别: {}", req.category).into(),
-                        created_count: 0,
-                        updated_count: 0,
-                        deleted_count: 0,
-                    };
-                    return Ok(volo_grpc::Response::new(response));
-                };
-
-                let request = ResourceDataCleanupRequest {
-                    category,
-                    domain_code: req.domain_code.to_string(),
-                    application_code: req.application_code.to_string(),
-                    module_code: req.module_code.to_string(),
-                    plugin_id: req.plugin_id.to_string(),
-                    app_id: req.app_id.to_string(),
-                };
-
-                match importer.cleanup_data(request).await {
-                    Ok(result) => {
-                        let response = resource_data_proto::ImportResourceDataResponse {
-                            success: result.success,
-                            message: result.message.into(),
-                            created_count: result.created_count,
-                            updated_count: result.updated_count,
-                            deleted_count: result.deleted_count,
-                        };
-                        Ok(volo_grpc::Response::new(response))
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            target: "cmx_rpc",
-                            error = %e,
-                            category = %req.category,
-                            domain = %req.domain_code,
-                            app = %req.application_code,
-                            module = %req.module_code,
-                            plugin_id = %req.plugin_id,
-                            "资源数据清理失败"
-                        );
+                    let Some(importer) = data_importer else {
                         let response = resource_data_proto::ImportResourceDataResponse {
                             success: false,
-                            message: e.to_string().into(),
+                            message: "data_importer 未配置".into(),
                             created_count: 0,
                             updated_count: 0,
                             deleted_count: 0,
                         };
-                        Ok(volo_grpc::Response::new(response))
+                        return Ok(volo_grpc::Response::new(response));
+                    };
+
+                    let Some(category) = ResourceDataCategory::parse_from_str(&req.category) else {
+                        let response = resource_data_proto::ImportResourceDataResponse {
+                            success: false,
+                            message: format!("无效的数据类别: {}", req.category).into(),
+                            created_count: 0,
+                            updated_count: 0,
+                            deleted_count: 0,
+                        };
+                        return Ok(volo_grpc::Response::new(response));
+                    };
+
+                    let request = ResourceDataCleanupRequest {
+                        category,
+                        domain_code: req.domain_code.to_string(),
+                        application_code: req.application_code.to_string(),
+                        module_code: req.module_code.to_string(),
+                        plugin_id: req.plugin_id.to_string(),
+                        app_id: req.app_id.to_string(),
+                    };
+
+                    match importer.cleanup_data(request).await {
+                        Ok(result) => {
+                            let response = resource_data_proto::ImportResourceDataResponse {
+                                success: result.success,
+                                message: result.message.into(),
+                                created_count: result.created_count,
+                                updated_count: result.updated_count,
+                                deleted_count: result.deleted_count,
+                            };
+                            Ok(volo_grpc::Response::new(response))
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                target: "cmx_rpc",
+                                error = %e,
+                                category = %req.category,
+                                domain = %req.domain_code,
+                                app = %req.application_code,
+                                module = %req.module_code,
+                                plugin_id = %req.plugin_id,
+                                "资源数据清理失败"
+                            );
+                            let response = resource_data_proto::ImportResourceDataResponse {
+                                success: false,
+                                message: e.to_string().into(),
+                                created_count: 0,
+                                updated_count: 0,
+                                deleted_count: 0,
+                            };
+                            Ok(volo_grpc::Response::new(response))
+                        }
                     }
-                }
-            })
+                },
+            )
             .await
         }
     }
@@ -307,70 +317,71 @@ impl resource_data_proto::CmxResourceDataService for CmxResourceDataServerImpl {
                 request_id.unwrap_or_default(),
                 None,
                 async {
-                let Some(importer) = data_importer else {
-                    let response = resource_data_proto::ListResourceDataResponse {
-                        success: false,
-                        message: "data_importer 未配置".into(),
-                        json_data: Vec::new().into(),
-                    };
-                    return Ok(volo_grpc::Response::new(response));
-                };
-
-                let Some(category) = ResourceDataCategory::parse_from_str(&req.category) else {
-                    let response = resource_data_proto::ListResourceDataResponse {
-                        success: false,
-                        message: format!("无效的数据类别: {}", req.category).into(),
-                        json_data: Vec::new().into(),
-                    };
-                    return Ok(volo_grpc::Response::new(response));
-                };
-
-                if req.module_code.is_empty() {
-                    let response = resource_data_proto::ListResourceDataResponse {
-                        success: false,
-                        message: "module_code 不能为空".into(),
-                        json_data: Vec::new().into(),
-                    };
-                    return Ok(volo_grpc::Response::new(response));
-                }
-
-                let request = ResourceDataImportRequest {
-                    category,
-                    domain_code: req.domain_code.to_string(),
-                    application_code: req.application_code.to_string(),
-                    module_code: req.module_code.to_string(),
-                    plugin_id: String::new(),
-                    app_id: String::new(),
-                    version: String::new(),
-                    zip_data: Vec::new(),
-                };
-
-                match importer.list_data(request).await {
-                    Ok(result) => {
-                        let response = resource_data_proto::ListResourceDataResponse {
-                            success: result.success,
-                            message: result.message.into(),
-                            json_data: result.json_data.into(),
-                        };
-                        Ok(volo_grpc::Response::new(response))
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            target: "cmx_rpc",
-                            error = %e,
-                            category = %req.category,
-                            module = %req.module_code,
-                            "资源数据查询失败"
-                        );
+                    let Some(importer) = data_importer else {
                         let response = resource_data_proto::ListResourceDataResponse {
                             success: false,
-                            message: e.to_string().into(),
+                            message: "data_importer 未配置".into(),
                             json_data: Vec::new().into(),
                         };
-                        Ok(volo_grpc::Response::new(response))
+                        return Ok(volo_grpc::Response::new(response));
+                    };
+
+                    let Some(category) = ResourceDataCategory::parse_from_str(&req.category) else {
+                        let response = resource_data_proto::ListResourceDataResponse {
+                            success: false,
+                            message: format!("无效的数据类别: {}", req.category).into(),
+                            json_data: Vec::new().into(),
+                        };
+                        return Ok(volo_grpc::Response::new(response));
+                    };
+
+                    if req.module_code.is_empty() {
+                        let response = resource_data_proto::ListResourceDataResponse {
+                            success: false,
+                            message: "module_code 不能为空".into(),
+                            json_data: Vec::new().into(),
+                        };
+                        return Ok(volo_grpc::Response::new(response));
                     }
-                }
-            })
+
+                    let request = ResourceDataImportRequest {
+                        category,
+                        domain_code: req.domain_code.to_string(),
+                        application_code: req.application_code.to_string(),
+                        module_code: req.module_code.to_string(),
+                        plugin_id: String::new(),
+                        app_id: String::new(),
+                        version: String::new(),
+                        zip_data: Vec::new(),
+                    };
+
+                    match importer.list_data(request).await {
+                        Ok(result) => {
+                            let response = resource_data_proto::ListResourceDataResponse {
+                                success: result.success,
+                                message: result.message.into(),
+                                json_data: result.json_data.into(),
+                            };
+                            Ok(volo_grpc::Response::new(response))
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                target: "cmx_rpc",
+                                error = %e,
+                                category = %req.category,
+                                module = %req.module_code,
+                                "资源数据查询失败"
+                            );
+                            let response = resource_data_proto::ListResourceDataResponse {
+                                success: false,
+                                message: e.to_string().into(),
+                                json_data: Vec::new().into(),
+                            };
+                            Ok(volo_grpc::Response::new(response))
+                        }
+                    }
+                },
+            )
             .await
         }
     }

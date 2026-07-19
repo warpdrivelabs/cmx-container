@@ -17,10 +17,10 @@ use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::{DataSet, Row};
 use cmx_database::DatabaseManager;
 
+use cmx_biz::{BizError, Result};
 use cmx_doc_model::meta::{DocMetaView, LayerView};
 use cmx_doc_model::query::DocQuery;
 use cmx_doc_model::sql_builder::build_layer_select;
-use cmx_biz::{BizError, Result};
 
 pub struct DocLoader;
 
@@ -55,7 +55,18 @@ impl DocLoader {
 
         // 2. 逐层下钻（沿 layer_groups 递归挂子集）
         let max_depth = query.depth.unwrap_or(usize::MAX);
-        Self::descend(mm, db_id, meta, root, &mut root_ds, 1, max_depth, query, txn_id).await?;
+        Self::descend(
+            mm,
+            db_id,
+            meta,
+            root,
+            &mut root_ds,
+            1,
+            max_depth,
+            query,
+            txn_id,
+        )
+        .await?;
 
         Ok(root_ds)
     }
@@ -128,39 +139,60 @@ impl DocLoader {
             let use_sp = txn_id.is_some() && !is_primary;
             let sp = "cmx_sibling_sp";
             if use_sp && let Some(tx) = txn_id {
-                let _ = mm.execute_sql(db_id, Some(tx), &format!("SAVEPOINT {sp}")).await;
+                let _ = mm
+                    .execute_sql(db_id, Some(tx), &format!("SAVEPOINT {sp}"))
+                    .await;
             }
-            let mut child_ds =
-                match Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids, query, txn_id)
-                    .await
-                {
-                    Ok(ds) => {
-                        if use_sp && let Some(tx) = txn_id {
-                            let _ = mm.execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}")).await;
-                        }
-                        ds
+            let mut child_ds = match Self::query_children_by_key(
+                mm,
+                db_id,
+                child_layer,
+                &child_key,
+                &parent_ids,
+                query,
+                txn_id,
+            )
+            .await
+            {
+                Ok(ds) => {
+                    if use_sp && let Some(tx) = txn_id {
+                        let _ = mm
+                            .execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}"))
+                            .await;
                     }
-                    Err(e) if !is_primary => {
-                        // 事务内：回滚到 savepoint 复活事务；非事务：无 savepoint，直接跳过。
-                        if use_sp && let Some(tx) = txn_id {
-                            let _ = mm
-                                .execute_sql(db_id, Some(tx), &format!("ROLLBACK TO SAVEPOINT {sp}"))
-                                .await;
-                            let _ = mm.execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}")).await;
-                        }
-                        tracing::warn!(
-                            "跳过并列兄弟子表 {}（装载失败，可能未物理部署）: {e}",
-                            child_layer.table_name
-                        );
-                        continue;
+                    ds
+                }
+                Err(e) if !is_primary => {
+                    // 事务内：回滚到 savepoint 复活事务；非事务：无 savepoint，直接跳过。
+                    if use_sp && let Some(tx) = txn_id {
+                        let _ = mm
+                            .execute_sql(db_id, Some(tx), &format!("ROLLBACK TO SAVEPOINT {sp}"))
+                            .await;
+                        let _ = mm
+                            .execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}"))
+                            .await;
                     }
-                    Err(e) => return Err(e),
-                };
+                    tracing::warn!(
+                        "跳过并列兄弟子表 {}（装载失败，可能未物理部署）: {e}",
+                        child_layer.table_name
+                    );
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
 
             // 孙层：仅从该组主表继续下钻
             if is_primary {
                 Box::pin(Self::descend(
-                    mm, db_id, meta, child_layer, &mut child_ds, cur_depth + 1, max_depth, query, txn_id,
+                    mm,
+                    db_id,
+                    meta,
+                    child_layer,
+                    &mut child_ds,
+                    cur_depth + 1,
+                    max_depth,
+                    query,
+                    txn_id,
                 ))
                 .await?;
             }
@@ -234,10 +266,7 @@ fn attach_children(parent_ds: &mut DataSet, child_ds: DataSet, child_key: &str, 
     // 分桶：父key字符串 → 子行列表
     let mut buckets: HashMap<String, Vec<Row>> = HashMap::new();
     for row in child_ds.rows {
-        let key = row
-            .get(child_fk_idx)
-            .map(dv_to_key)
-            .unwrap_or_default();
+        let key = row.get(child_fk_idx).map(dv_to_key).unwrap_or_default();
         buckets.entry(key).or_default().push(row);
     }
 

@@ -8,7 +8,7 @@
 //!
 //! 快照复用 ColumnarCodec（与装载同一序列化器），存进 cmx_doc_revision.snapshot(JSONB)。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::{ColumnarCodec, DataSet};

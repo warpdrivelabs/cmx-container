@@ -435,7 +435,10 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
         .module
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| ns.module.clone());
-    let doc = input.doc.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let doc = input
+        .doc
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     let rel_path = ns.rel_path.clone();
     // latestHtmlFile：旧式用 <page>.html，否则取 relPath basename
     let latest = if ns.is_legacy {

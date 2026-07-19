@@ -9,7 +9,9 @@ pub mod handler;
 pub mod package_handler;
 
 // 从 cmx-biz re-export 业务层类型
-pub use cmx_biz::module::{Module, ModuleBmc, ModuleFilter, ModuleForCreate, ModuleForUpdate, ModuleService};
+pub use cmx_biz::module::{
+    Module, ModuleBmc, ModuleFilter, ModuleForCreate, ModuleForUpdate, ModuleService,
+};
 
 pub use handler::module_custom_page;
 
@@ -31,13 +33,25 @@ impl ModuleRoutes for ModuleHandler {
             .route("/module/delete", post(handler::delete_module))
             // 读操作：复用 rest::handler 泛型函数（无副作用）
             .route("/module/get", get(rest_handler::get_by_id::<ModuleBmc>))
-            .route("/module/list", post(rest_handler::list::<ModuleBmc, ModuleFilter>))
-            .route("/module/page", post(rest_handler::page::<ModuleBmc, ModuleFilter>))
+            .route(
+                "/module/list",
+                post(rest_handler::list::<ModuleBmc, ModuleFilter>),
+            )
+            .route(
+                "/module/page",
+                post(rest_handler::page::<ModuleBmc, ModuleFilter>),
+            )
             // 自定义：联表分页（带 application_name + domain_name）
             .route("/module/custom-page", post(module_custom_page))
             // 模块迁移包导入/导出
-            .route("/module/package/import", post(package_handler::module_package_import))
-            .route("/module/package/export", get(package_handler::module_package_export))
+            .route(
+                "/module/package/import",
+                post(package_handler::module_package_import),
+            )
+            .route(
+                "/module/package/export",
+                get(package_handler::module_package_export),
+            )
     }
 
     fn prefix() -> &'static str {

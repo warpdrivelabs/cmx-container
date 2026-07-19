@@ -98,7 +98,9 @@ impl OpenCodeClient {
     ///
     /// 预期返回 204；返回 `Ok(())` 表示已触发生成。
     pub async fn prompt_async(&self, session_id: &str, body: &serde_json::Value) -> AiResult<()> {
-        let url = self.config.url(&format!("/session/{session_id}/prompt_async"))?;
+        let url = self
+            .config
+            .url(&format!("/session/{session_id}/prompt_async"))?;
         let resp = self
             .with_auth(self.client.post(url).json(body))
             .send()
@@ -172,7 +174,9 @@ impl OpenCodeClient {
         reply: &str,
         message: Option<&str>,
     ) -> AiResult<()> {
-        let url = self.config.url(&format!("/permission/{request_id}/reply"))?;
+        let url = self
+            .config
+            .url(&format!("/permission/{request_id}/reply"))?;
         let mut body = serde_json::json!({ "reply": reply });
         if let Some(msg) = message {
             body["message"] = serde_json::Value::String(msg.to_string());
@@ -194,7 +198,9 @@ impl OpenCodeClient {
     /// 通过单独的 `Client`（`timeout=None`）建立，避免被普通请求超时切断。
     ///
     /// 返回的 Stream 项为 `Result<bytes::Bytes, reqwest::Error>`。
-    pub async fn stream_events(&self) -> AiResult<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + 'static> {
+    pub async fn stream_events(
+        &self,
+    ) -> AiResult<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + 'static> {
         // SSE 长连接专用 client：不设超时，避免 30s 后被切断。
         let sse_client = Client::builder()
             .build()

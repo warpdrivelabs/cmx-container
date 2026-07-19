@@ -59,10 +59,7 @@ impl ModuleExportService {
     ///
     /// 注入后,导出时的表单/菜单/元数据/权限查询统一委托给 bundle 的 list_* 方法,
     /// 消除本文件内的内联 SQL。为 None 时导出这些资源会跳过(向后兼容)。
-    pub fn with_definition_importers(
-        mut self,
-        importers: Arc<DefinitionImporterBundle>,
-    ) -> Self {
+    pub fn with_definition_importers(mut self, importers: Arc<DefinitionImporterBundle>) -> Self {
         self.importers = Some(importers);
         self
     }
@@ -94,7 +91,9 @@ impl ModuleExportService {
         let mut resources = ModuleResources::default();
 
         // 资源定义经 bundle 的 list_* 方法查询(消除内联 SQL)
-        let (form_count, menu_count, table_count, perm_count) = if let Some(bundle) = &self.importers {
+        let (form_count, menu_count, table_count, perm_count) = if let Some(bundle) =
+            &self.importers
+        {
             // 1. 表单
             let form_defs = bundle
                 .form
@@ -178,8 +177,15 @@ impl ModuleExportService {
         // 5. 导出插件子包 → plugins/{plugin_id}.zip
         // app_id 取配置值(当前设计下 app_id ≡ module_code),避免把 application_code 误当 app_id
         let app_id = cmx_utils::ConfigManager::global().get_app_id();
-        let plugin_entries =
-            Self::export_plugins(mm, db_id, &app_id, module_code, &export_dir, &self.plugin_root).await?;
+        let plugin_entries = Self::export_plugins(
+            mm,
+            db_id,
+            &app_id,
+            module_code,
+            &export_dir,
+            &self.plugin_root,
+        )
+        .await?;
 
         // 6. 组装 module.json + module.manifest.json
         let module_info = ModuleInfo {
@@ -363,7 +369,10 @@ impl ModuleExportService {
     /// 递归为每个节点填充 children(从 children_map 查找其子节点)。
     fn fill_children(
         nodes: &mut [cmx_core::model::module::MenuDefinition],
-        children_map: &std::collections::HashMap<String, Vec<cmx_core::model::module::MenuDefinition>>,
+        children_map: &std::collections::HashMap<
+            String,
+            Vec<cmx_core::model::module::MenuDefinition>,
+        >,
     ) {
         for node in nodes.iter_mut() {
             if let Some(child_list) = children_map.get(&node.code) {

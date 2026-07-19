@@ -404,18 +404,22 @@ pub async fn query_sql_with_params(
                     let result = match params {
                         SqlParams::Json(json) => {
                             let values = json_to_data_values(json).map_err(Error::InvalidParams)?;
-                            txn.query_with_datavalues(&sql, &values, &dataset_id).await?
+                            txn.query_with_datavalues(&sql, &values, &dataset_id)
+                                .await?
                         }
                         SqlParams::DataValues(values) => {
-                            txn.query_with_datavalues(&sql, &values, &dataset_id).await?
+                            txn.query_with_datavalues(&sql, &values, &dataset_id)
+                                .await?
                         }
                         SqlParams::SeaValues(sea_values) => {
-                            txn.query_with_seavalues(&sql, sea_values, &dataset_id).await?
+                            txn.query_with_seavalues(&sql, sea_values, &dataset_id)
+                                .await?
                         }
                         SqlParams::Typed(params) => {
                             let values: Vec<DataValue> =
                                 params.into_iter().map(Into::into).collect();
-                            txn.query_with_datavalues(&sql, &values, &dataset_id).await?
+                            txn.query_with_datavalues(&sql, &values, &dataset_id)
+                                .await?
                         }
                     };
                     Ok(result)
@@ -435,7 +439,8 @@ pub async fn query_sql_with_params(
                     pool.query_with_datavalues(&sql, &values, &dataset_id).await
                 }
                 SqlParams::SeaValues(sea_values) => {
-                    pool.query_with_seavalues(&sql, sea_values, &dataset_id).await
+                    pool.query_with_seavalues(&sql, sea_values, &dataset_id)
+                        .await
                 }
                 SqlParams::Typed(params) => {
                     let values: Vec<DataValue> = params.into_iter().map(Into::into).collect();

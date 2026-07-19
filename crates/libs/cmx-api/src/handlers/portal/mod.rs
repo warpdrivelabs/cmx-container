@@ -144,30 +144,33 @@ impl ModuleRoutes for PortalModule {
             .route("/flexible-combination/rule", get(handler::fc_rule))
             .route("/flexible-combination/validate", post(handler::fc_validate))
             .route("/flexible-combination/preview", post(handler::fc_preview))
-            .route("/flexible-combination/default", post(handler::fc_set_default))
+            .route(
+                "/flexible-combination/default",
+                post(handler::fc_set_default),
+            )
             // 三元定义统一注册（DCT/DOC/FLC）+ DRN 解析 + 依赖图 + overlay 编译
             .route("/defs/list", get(handler::defs_list))
             .route("/defs/resolve", get(handler::defs_resolve))
             .route("/defs/deps", get(handler::defs_deps))
             .route("/defs/compile", get(handler::defs_compile))
-            // ────────────── 旧接口（不推荐使用 ─ 基于 JSON 文件存储） ──────────────
-            // 字典检索服务（基于 data/dict/ 文件存储，新增字典功能请走 /api/dct/*）
-            // .route("/dict/_schemas", get(handler::dict_schemas))
-            // .route("/dict/_schema", post(handler::dict_register_schema))
-            // .route("/dict/multi-search", post(handler::dict_multi_search))
-            // .route("/dict/batch-data", post(handler::dict_batch_data))
-            // .route("/dict/{dictId}/search", post(handler::dict_search))
-            // .route("/dict/{dictId}/suggest", get(handler::dict_suggest))
-            // .route(
-            //     "/dict/{dictId}/entries",
-            //     post(handler::dict_upsert_entries).delete(handler::dict_clear_entries),
-            // )
-            // .route(
-            //     "/dict/{dictId}/entries/{id}",
-            //     axum::routing::delete(handler::dict_delete_entry),
-            // )
-            // .route("/dict/{dictId}/deactivate", post(handler::dict_deactivate))
-            // .route("/dict/{dictId}/supersede", post(handler::dict_supersede))
+        // ────────────── 旧接口（不推荐使用 ─ 基于 JSON 文件存储） ──────────────
+        // 字典检索服务（基于 data/dict/ 文件存储，新增字典功能请走 /api/dct/*）
+        // .route("/dict/_schemas", get(handler::dict_schemas))
+        // .route("/dict/_schema", post(handler::dict_register_schema))
+        // .route("/dict/multi-search", post(handler::dict_multi_search))
+        // .route("/dict/batch-data", post(handler::dict_batch_data))
+        // .route("/dict/{dictId}/search", post(handler::dict_search))
+        // .route("/dict/{dictId}/suggest", get(handler::dict_suggest))
+        // .route(
+        //     "/dict/{dictId}/entries",
+        //     post(handler::dict_upsert_entries).delete(handler::dict_clear_entries),
+        // )
+        // .route(
+        //     "/dict/{dictId}/entries/{id}",
+        //     axum::routing::delete(handler::dict_delete_entry),
+        // )
+        // .route("/dict/{dictId}/deactivate", post(handler::dict_deactivate))
+        // .route("/dict/{dictId}/supersede", post(handler::dict_supersede))
     }
 
     fn prefix() -> &'static str {

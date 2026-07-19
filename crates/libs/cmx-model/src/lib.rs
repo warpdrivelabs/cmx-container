@@ -16,6 +16,6 @@
 // 基础设施再导出：保持被移动代码里的 crate::{config,error,fsutil,util} 路径有效。
 pub use cmx_portal_base::{config, error, fsutil, util};
 
-pub mod flexible_combination;
 pub mod definitions;
 pub mod dict;
+pub mod flexible_combination;

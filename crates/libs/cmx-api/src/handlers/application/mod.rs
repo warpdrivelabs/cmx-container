@@ -32,9 +32,18 @@ impl ModuleRoutes for ApplicationModule {
             .route("/applications/update", post(handler::update_application))
             .route("/applications/delete", post(handler::delete_application))
             // 读操作：复用 rest::handler 泛型函数（无副作用）
-            .route("/applications/get", get(rest_handler::get_by_id::<ApplicationBmc>))
-            .route("/applications/list", post(rest_handler::list::<ApplicationBmc, ApplicationFilter>))
-            .route("/applications/page", post(rest_handler::page::<ApplicationBmc, ApplicationFilter>))
+            .route(
+                "/applications/get",
+                get(rest_handler::get_by_id::<ApplicationBmc>),
+            )
+            .route(
+                "/applications/list",
+                post(rest_handler::list::<ApplicationBmc, ApplicationFilter>),
+            )
+            .route(
+                "/applications/page",
+                post(rest_handler::page::<ApplicationBmc, ApplicationFilter>),
+            )
             // 自定义：联表分页（带 domain_name）
             .route("/applications/custom-page", post(application_custom_page))
     }

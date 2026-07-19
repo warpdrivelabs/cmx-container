@@ -9,13 +9,13 @@ pub mod engine;
 pub mod handlers;
 pub mod views;
 
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
-use cmx_api::routes::traits::ModuleRoutes;
 use cmx_api::CmxAppState;
+use cmx_api::routes::traits::ModuleRoutes;
 
-pub use engine::{flow, spawn_timer_poller, FlowRuntime};
+pub use engine::{FlowRuntime, flow, spawn_timer_poller};
 
 /// 流程模块路由聚合（实现 cmx-api 的 ModuleRoutes，由 web-server 合并进主路由）。
 pub struct FlowModule;
@@ -25,12 +25,27 @@ impl ModuleRoutes for FlowModule {
         Router::new()
             // —— 定义（设计器：草稿/发布/装载） ——
             .route("/flow/definitions", get(handlers::get_definitions))
-            .route("/flow/design/definitions", get(handlers::list_design_definitions))
-            .route("/flow/definitions/draft", post(handlers::save_definition_draft))
-            .route("/flow/definitions/{key}", get(handlers::get_definition_detail))
-            .route("/flow/definitions/{key}/publish", post(handlers::publish_definition))
+            .route(
+                "/flow/design/definitions",
+                get(handlers::list_design_definitions),
+            )
+            .route(
+                "/flow/definitions/draft",
+                post(handlers::save_definition_draft),
+            )
+            .route(
+                "/flow/definitions/{key}",
+                get(handlers::get_definition_detail),
+            )
+            .route(
+                "/flow/definitions/{key}/publish",
+                post(handlers::publish_definition),
+            )
             // —— 版本管理（对标报表版本：列表/激活/删除） ——
-            .route("/flow/definitions/{key}/versions", get(handlers::list_definition_versions))
+            .route(
+                "/flow/definitions/{key}/versions",
+                get(handlers::list_definition_versions),
+            )
             .route(
                 "/flow/definitions/{key}/versions/{version}/activate",
                 post(handlers::activate_definition_version),
@@ -46,7 +61,10 @@ impl ModuleRoutes for FlowModule {
             )
             .route("/flow/instances/{id}", get(handlers::get_instance))
             .route("/flow/instances/{id}/children", get(handlers::get_children))
-            .route("/flow/instances/{id}/cancel", post(handlers::cancel_instance))
+            .route(
+                "/flow/instances/{id}/cancel",
+                post(handlers::cancel_instance),
+            )
             // —— 任务 ——
             .route("/flow/tasks/{id}/complete", post(handlers::complete_task))
             .route("/flow/tasks/{id}/claim", post(handlers::claim_task))

@@ -50,7 +50,11 @@ pub fn eval_condition(expr: &str, vars: &Variables) -> Result<bool> {
 /// 剥离 `${ ... }` 或 `#{ ... }` 包裹（Flowable/JUEL 风格），无包裹则原样返回。
 fn strip_wrapper(s: &str) -> &str {
     let bytes = s.as_bytes();
-    if s.len() >= 3 && (bytes[0] == b'$' || bytes[0] == b'#') && bytes[1] == b'{' && bytes[s.len() - 1] == b'}' {
+    if s.len() >= 3
+        && (bytes[0] == b'$' || bytes[0] == b'#')
+        && bytes[1] == b'{'
+        && bytes[s.len() - 1] == b'}'
+    {
         s[2..s.len() - 1].trim()
     } else {
         s
@@ -195,7 +199,9 @@ fn tokenize(src: &str) -> Result<Vec<Token>> {
             c if c.is_ascii_digit() => {
                 let start = i;
                 let mut seen_dot = false;
-                while i < chars.len() && (chars[i].is_ascii_digit() || (chars[i] == '.' && !seen_dot)) {
+                while i < chars.len()
+                    && (chars[i].is_ascii_digit() || (chars[i] == '.' && !seen_dot))
+                {
                     if chars[i] == '.' {
                         seen_dot = true;
                     }
@@ -209,7 +215,9 @@ fn tokenize(src: &str) -> Result<Vec<Token>> {
             }
             c if c.is_alphabetic() || c == '_' => {
                 let start = i;
-                while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == '.') {
+                while i < chars.len()
+                    && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == '.')
+                {
                     i += 1;
                 }
                 let word: String = chars[start..i].iter().collect();
@@ -461,7 +469,11 @@ fn eval_binary(op: BinOp, l: &Ast, r: &Ast, vars: &Variables) -> Result<Value> {
         BinOp::Add => {
             // 数字相加；任一为字符串则做拼接（宽容，便于 assignee 拼装类场景）。
             if lv.is_string() || rv.is_string() {
-                Ok(Value::String(format!("{}{}", to_plain_string(&lv), to_plain_string(&rv))))
+                Ok(Value::String(format!(
+                    "{}{}",
+                    to_plain_string(&lv),
+                    to_plain_string(&rv)
+                )))
             } else {
                 Ok(Value::from(as_number(&lv)? + as_number(&rv)?))
             }
@@ -494,9 +506,11 @@ fn truthy(v: &Value) -> bool {
 /// 相等比较：数字按数值比，其余按 JSON 结构比。
 fn json_eq(a: &Value, b: &Value) -> bool {
     match (a, b) {
-        (Value::Number(x), Value::Number(y)) => {
-            x.as_f64().zip(y.as_f64()).map(|(p, q)| p == q).unwrap_or(false)
-        }
+        (Value::Number(x), Value::Number(y)) => x
+            .as_f64()
+            .zip(y.as_f64())
+            .map(|(p, q)| p == q)
+            .unwrap_or(false),
         _ => a == b,
     }
 }

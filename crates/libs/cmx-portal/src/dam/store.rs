@@ -148,7 +148,8 @@ pub async fn get_dam_registry(active_only: bool) -> crate::error::PortalResult<D
 }
 
 /// 从 DB 获取默认 DatabaseManager + db_id。
-async fn db_handle() -> crate::error::PortalResult<(&'static cmx_database::DatabaseManager, String)> {
+async fn db_handle() -> crate::error::PortalResult<(&'static cmx_database::DatabaseManager, String)>
+{
     let mm = cmx_database::get_default_db_manager();
     let db_id = mm.get_default_db_id().await;
     Ok((mm, db_id))
@@ -231,7 +232,10 @@ pub async fn list_domains(active_only: bool) -> crate::error::PortalResult<Vec<D
 /// DB 的 application_code 是 `{domain}_{app_id}` 拼接，反向拆出原始 app_id 作为 id。
 /// `active_only` 为 true 时只返回 status=1（启用）的记录。
 #[tracing::instrument]
-pub async fn list_applications(domain: Option<&str>, active_only: bool) -> crate::error::PortalResult<Vec<DamApplication>> {
+pub async fn list_applications(
+    domain: Option<&str>,
+    active_only: bool,
+) -> crate::error::PortalResult<Vec<DamApplication>> {
     let (mm, db_id) = db_handle().await?;
     let d = domain.unwrap_or("").trim();
     // 组合 WHERE 条件：domain_code 和 status（参数化，避免 SQL 注入）。
@@ -365,7 +369,9 @@ pub async fn list_modules(
             resource_root,
             manifest_path,
             aliases,
-            theme: row_str_opt(row, schema, "theme").filter(|s| !s.is_empty()).map(|s| serde_json::json!({"name": s})),
+            theme: row_str_opt(row, schema, "theme")
+                .filter(|s| !s.is_empty())
+                .map(|s| serde_json::json!({"name": s})),
             theme_color: row_str(row, schema, "theme_color"),
             sort_order: row_i32(row, schema, "sort_order"),
         });

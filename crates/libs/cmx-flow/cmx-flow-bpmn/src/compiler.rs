@@ -16,9 +16,9 @@
 use std::collections::HashMap;
 
 use cmx_flow_model::{
-    candidate::parse_candidate_expr, duration::parse_iso8601_duration, BoundaryTimer, CallActivity,
-    CandidateKind, CandidateRef, FlowNode, MultiInstance, NodeId, NodeKind, ProcessDefinition,
-    SequenceFlow, ServiceTask, UserTask, VarMapping,
+    BoundaryTimer, CallActivity, CandidateKind, CandidateRef, FlowNode, MultiInstance, NodeId,
+    NodeKind, ProcessDefinition, SequenceFlow, ServiceTask, UserTask, VarMapping,
+    candidate::parse_candidate_expr, duration::parse_iso8601_duration,
 };
 use roxmltree::{Document, Node};
 
@@ -99,10 +99,14 @@ pub fn compile(xml: &str) -> Result<ProcessDefinition> {
         })?;
 
         let source_id = *index.get(source_ref).ok_or_else(|| {
-            Error::DanglingReference(format!("sequenceFlow {flow_id} 的 sourceRef '{source_ref}' 无对应节点"))
+            Error::DanglingReference(format!(
+                "sequenceFlow {flow_id} 的 sourceRef '{source_ref}' 无对应节点"
+            ))
         })?;
         let target_id = *index.get(target_ref).ok_or_else(|| {
-            Error::DanglingReference(format!("sequenceFlow {flow_id} 的 targetRef '{target_ref}' 无对应节点"))
+            Error::DanglingReference(format!(
+                "sequenceFlow {flow_id} 的 targetRef '{target_ref}' 无对应节点"
+            ))
         })?;
 
         let condition = parse_condition(&child);
@@ -327,7 +331,8 @@ fn collect_var_mappings(node: &Node, local: &str, out: &mut Vec<VarMapping>) {
     for child in node.children().filter(Node::is_element) {
         let name = child.tag_name().name();
         if name == local {
-            let source = local_attr(&child, "source").or_else(|| local_attr(&child, "sourceExpression"));
+            let source =
+                local_attr(&child, "source").or_else(|| local_attr(&child, "sourceExpression"));
             if let Some(source) = source {
                 let target = local_attr(&child, "target").unwrap_or_else(|| source.clone());
                 out.push(VarMapping { source, target });

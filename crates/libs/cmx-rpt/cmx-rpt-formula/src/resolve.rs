@@ -23,7 +23,7 @@ use crate::value::FValue;
 /// 三色标记状态（会话内存态，不落库）。
 #[derive(Clone, Copy, PartialEq)]
 enum Color {
-    Gray, // 正在解析（在递归栈上）
+    Gray,  // 正在解析（在递归栈上）
     Black, // 已解析（memo 命中）
 }
 
@@ -105,7 +105,8 @@ impl<'p> Session<'p> {
                     }
                     Err(e) => {
                         self.color.insert(addr.clone(), Color::Black);
-                        self.cycle_errors.push(format!("装载报表失败 {report}: {e}"));
+                        self.cycle_errors
+                            .push(format!("装载报表失败 {report}: {e}"));
                         let v = FValue::Error("#REF!".into());
                         self.memo.insert(addr, v.clone());
                         return v;
@@ -117,11 +118,7 @@ impl<'p> Session<'p> {
             let (formula, stored, is_manual) = {
                 let snap = self.reports.get(&rk).unwrap();
                 match snap.find_cell(&cell) {
-                    Some(ci) => (
-                        snap.effective_formula(ci),
-                        ci.stored.clone(),
-                        ci.is_manual,
-                    ),
+                    Some(ci) => (snap.effective_formula(ci), ci.stored.clone(), ci.is_manual),
                     None => (None, None, false),
                 }
             };

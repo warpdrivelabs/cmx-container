@@ -363,7 +363,11 @@ fn parse_level_names(vs: &Value) -> std::collections::HashMap<String, String> {
             };
             let group_name = nodes
                 .iter()
-                .find_map(|n| n.get("levelName").and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
+                .find_map(|n| {
+                    n.get("levelName")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                })
                 .unwrap_or("");
             for n in nodes {
                 if let Some(id) = n.get("id").and_then(|v| v.as_str()) {
@@ -394,7 +398,11 @@ fn parse_layer_groups(vs: &Value) -> Vec<LevelGroup> {
                 .to_string();
             let level_name = nodes
                 .iter()
-                .find_map(|n| n.get("levelName").and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
+                .find_map(|n| {
+                    n.get("levelName")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                })
                 .unwrap_or("")
                 .to_string();
             let table_ids: Vec<String> = nodes
@@ -477,24 +485,27 @@ fn parse_layer(
     if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
         for f in own {
             if let Some(c) = parse_column(f)
-                && seen.insert(c.name.clone()) {
-                    raw_fields.push(f.clone());
-                    columns.push(c);
-                }
+                && seen.insert(c.name.clone())
+            {
+                raw_fields.push(f.clone());
+                columns.push(c);
+            }
         }
     }
     if let Some(sets) = t.get("documentFieldSets").and_then(|v| v.as_array()) {
         for s in sets {
             if let Some(set_name) = s.as_str()
-                && let Some(fields) = base_fieldset(base, set_name) {
-                    for f in fields {
-                        if let Some(c) = parse_column(f)
-                            && seen.insert(c.name.clone()) {
-                                raw_fields.push(f.clone());
-                                columns.push(c);
-                            }
+                && let Some(fields) = base_fieldset(base, set_name)
+            {
+                for f in fields {
+                    if let Some(c) = parse_column(f)
+                        && seen.insert(c.name.clone())
+                    {
+                        raw_fields.push(f.clone());
+                        columns.push(c);
                     }
                 }
+            }
         }
     }
 
@@ -550,7 +561,9 @@ fn build_schema(id: &str, columns: &[ColumnView]) -> std::result::Result<Arc<Sch
             label: String::new(),
         })
         .collect();
-    Schema::new(id.to_string(), fields).map(Arc::new).map_err(|e| e.to_string())
+    Schema::new(id.to_string(), fields)
+        .map(Arc::new)
+        .map_err(|e| e.to_string())
 }
 
 /// 解析一张表的汇总表（`voucherTables[i].summaries[]`）。
@@ -588,9 +601,10 @@ fn parse_summaries(t: &Value, source_table: &str) -> Result<Vec<SummaryView>> {
         if let Some(fields) = s.get("fields").and_then(|v| v.as_array()) {
             for f in fields {
                 if let Some(c) = parse_column(f)
-                    && seen.insert(c.name.clone()) {
-                        columns.push(c);
-                    }
+                    && seen.insert(c.name.clone())
+                {
+                    columns.push(c);
+                }
             }
         }
         let schema = build_schema(&id, &columns)
@@ -797,7 +811,12 @@ mod tests {
         assert!(names.contains(&"upper_id"));
         assert!(names.contains(&"line_no"));
         // id 是主键
-        assert!(batch.columns.iter().any(|c| c.name == "id" && c.is_primary_key));
+        assert!(
+            batch
+                .columns
+                .iter()
+                .any(|c| c.name == "id" && c.is_primary_key)
+        );
         // Schema 建成，字段数一致
         assert_eq!(batch.schema.field_count(), batch.columns.len());
         // id 列类型为 Int（BIGINT→Int）
@@ -844,7 +863,11 @@ mod tests {
         let aux = v.layer("cv_aux").expect("cv_aux 应被解析进 layers");
         assert_eq!(aux.level, "L3");
         assert_eq!(aux.level_name, "科目行"); // 同层多表共享 levelName
-        assert!(aux.columns.iter().any(|c| c.name == "profit_ctr_id" && c.caption == "利润中心"));
+        assert!(
+            aux.columns
+                .iter()
+                .any(|c| c.name == "profit_ctr_id" && c.caption == "利润中心")
+        );
         // layers 含全部 4 张表（cv_batch/cv_header/cv_line/cv_aux）
         assert_eq!(v.layers.len(), 4);
 
@@ -880,7 +903,11 @@ mod tests {
         // cv_header 的子 = L3 组全部表（回退：无 parent_table 声明 → 全组同父兄弟）
         let kids = v.child_layers("cv_header");
         let ids: Vec<&str> = kids.iter().map(|l| l.id.as_str()).collect();
-        assert_eq!(ids, vec!["cv_line", "cv_aux"], "同父兄弟：下一组两张表都是子");
+        assert_eq!(
+            ids,
+            vec!["cv_line", "cv_aux"],
+            "同父兄弟：下一组两张表都是子"
+        );
         // 主表判定：cv_line 是 L3 组主表，cv_aux 不是
         assert!(v.is_primary_in_group("cv_line"));
         assert!(!v.is_primary_in_group("cv_aux"));
@@ -925,9 +952,9 @@ mod tests {
         let v = DocMetaView::parse(&doc, &sample_base()).unwrap();
         assert_eq!(v.state_field(), Some("doc_status"));
         assert!(v.is_state_editable("draft"));
-        assert!(!v.is_state_editable("posted"));       // 过账不可编辑（§14.1 铁律）
-        assert!(v.is_state_editable("unknown"));        // 未声明默认可编辑
+        assert!(!v.is_state_editable("posted")); // 过账不可编辑（§14.1 铁律）
+        assert!(v.is_state_editable("unknown")); // 未声明默认可编辑
         assert!(v.versioning_enabled());
-        assert_eq!(v.validation_rules.len(), 0);        // sample 无 validationRules
+        assert_eq!(v.validation_rules.len(), 0); // sample 无 validationRules
     }
 }

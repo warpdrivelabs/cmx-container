@@ -23,9 +23,9 @@ use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use cmx_database_pg::{execute_sql, get_default_pg_db_manager, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, execute_sql, get_default_pg_db_manager};
 use cmx_flow_bpmn::compile;
 use cmx_flow_def::{DefinitionService, PgDefinitionStore};
 use cmx_flow_engine::{
@@ -61,7 +61,11 @@ struct RiskDelegate;
 #[async_trait::async_trait]
 impl JavaDelegate for RiskDelegate {
     async fn execute(&self, ctx: &mut DelegateContext<'_>) -> Result<(), String> {
-        let amount = ctx.variables.get("amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let amount = ctx
+            .variables
+            .get("amount")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         let level = if amount > 50000.0 {
             "高"
         } else if amount > 10000.0 {
@@ -76,7 +80,9 @@ impl JavaDelegate for RiskDelegate {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().with_env_filter("info,cmx_flow_demo=debug").init();
+    tracing_subscriber::fmt()
+        .with_env_filter("info,cmx_flow_demo=debug")
+        .init();
 
     // 1) 注册 fico（flow 运行态，默认源）+ cmx（IAM 候选人解析源）两个数据源。
     let url = std::env::var("FICO_PG_URL")
@@ -88,7 +94,10 @@ async fn main() {
 
     // 2) 建表（幂等）。
     let store = PgRuntimeStore::new(DB_ID);
-    store.ensure_schema().await.expect("建表失败，请检查 fico 库连接");
+    store
+        .ensure_schema()
+        .await
+        .expect("建表失败，请检查 fico 库连接");
     tracing::info!("✅ cmx_flow_* 表已就绪（fico 库）");
 
     // 2.5) 幂等播种演示 IAM 数据（角色/岗位/用户关联，df_ 前缀，供候选人解析演示）。
@@ -124,7 +133,9 @@ async fn main() {
     engine.register_delegate("riskDelegate", RiskDelegate);
     engine.set_resolver(Arc::new(PgIamAssigneeResolver::new(IAM_DB_ID)));
     engine.set_subflow_router(Arc::new(PgSubflowRouter::new(IAM_DB_ID)));
-    tracing::info!("✅ 流程定义已部署：credit / countersign / timed / candidate / subflow_main(+hq/branch 子流程)");
+    tracing::info!(
+        "✅ 流程定义已部署：credit / countersign / timed / candidate / subflow_main(+hq/branch 子流程)"
+    );
 
     // 3.6) 定义服务（设计器草稿/发布）。建表 + 装载库里已发布的定义（设计器产物）。
     //      内置 include_str! 定义是 seed；设计器发布的定义从库读，二者都进引擎。
@@ -224,7 +235,9 @@ async fn main() {
     // 端口默认 8090（避开生产 web-server 常用的 8080），可用 DEMO_PORT 覆盖。
     let port = std::env::var("DEMO_PORT").unwrap_or_else(|_| "8090".to_string());
     let addr = format!("127.0.0.1:{port}");
-    let listener = tokio::net::TcpListener::bind(&addr).await.expect("端口占用");
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .expect("端口占用");
     tracing::info!("🚀 演示已启动 → http://{addr}");
     axum::serve(listener, app).await.expect("服务异常退出");
 }
@@ -314,7 +327,9 @@ async fn seed_demo_iam() {
             tracing::warn!(error = %e, "播种 IAM 语句失败");
         }
     }
-    tracing::info!("✅ 演示数据已播种（角色/岗位 + 组织树 df_root/df_bj/df_sh + 子流程绑定 fin_review）");
+    tracing::info!(
+        "✅ 演示数据已播种（角色/岗位 + 组织树 df_root/df_bj/df_sh + 子流程绑定 fin_review）"
+    );
 }
 
 // ============================ handlers ============================
@@ -332,7 +347,15 @@ async fn save_definition_draft(
 ) -> Result<Json<Value>, ApiError> {
     let rec = st
         .def_svc
-        .save_draft(&req.name, req.domain, req.application, req.module, req.category, &req.bpmn_xml, req.updated_by)
+        .save_draft(
+            &req.name,
+            req.domain,
+            req.application,
+            req.module,
+            req.category,
+            &req.bpmn_xml,
+            req.updated_by,
+        )
         .await
         .map_err(ApiError::from_def)?;
     Ok(Json(json!({
@@ -659,7 +682,13 @@ async fn transfer_task(
     Json(req): Json<TransferReq>,
 ) -> Result<Json<Value>, ApiError> {
     st.engine
-        .transfer_task(&req.instance_id, &task_id, &req.from_user, &req.to_user, req.reason.as_deref())
+        .transfer_task(
+            &req.instance_id,
+            &task_id,
+            &req.from_user,
+            &req.to_user,
+            req.reason.as_deref(),
+        )
         .await
         .map_err(ApiError::from_engine)?;
     load_view(&st, &req.instance_id).await
@@ -672,7 +701,13 @@ async fn delegate_task(
     Json(req): Json<TransferReq>,
 ) -> Result<Json<Value>, ApiError> {
     st.engine
-        .delegate_task(&req.instance_id, &task_id, &req.from_user, &req.to_user, req.reason.as_deref())
+        .delegate_task(
+            &req.instance_id,
+            &task_id,
+            &req.from_user,
+            &req.to_user,
+            req.reason.as_deref(),
+        )
         .await
         .map_err(ApiError::from_engine)?;
     load_view(&st, &req.instance_id).await
@@ -700,7 +735,14 @@ async fn add_sign_task(
     Json(req): Json<AddSignReq>,
 ) -> Result<Json<Value>, ApiError> {
     st.engine
-        .add_sign(&req.instance_id, &task_id, &req.from_user, &req.to_user, req.before, req.reason.as_deref())
+        .add_sign(
+            &req.instance_id,
+            &task_id,
+            &req.from_user,
+            &req.to_user,
+            req.before,
+            req.reason.as_deref(),
+        )
         .await
         .map_err(ApiError::from_engine)?;
     load_view(&st, &req.instance_id).await
@@ -838,7 +880,11 @@ async fn mark_cc_read(
     State(st): State<AppState>,
     Path(cc_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let ok = st.engine.mark_cc_read(&cc_id).await.map_err(ApiError::from_engine)?;
+    let ok = st
+        .engine
+        .mark_cc_read(&cc_id)
+        .await
+        .map_err(ApiError::from_engine)?;
     Ok(Json(json!({ "ok": ok })))
 }
 

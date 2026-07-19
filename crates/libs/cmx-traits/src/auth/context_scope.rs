@@ -137,10 +137,7 @@ pub fn current_request_id() -> Option<String> {
 
 /// 当前调用源身份。
 pub fn current_caller() -> Option<CallerIdentity> {
-    CURRENT_AUTH
-        .try_with(|v| v.caller.clone())
-        .ok()
-        .flatten()
+    CURRENT_AUTH.try_with(|v| v.caller.clone()).ok().flatten()
 }
 
 // ========================================================

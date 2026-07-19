@@ -3,12 +3,12 @@
 use serde_json::{Map, Value, json};
 
 use crate::definitions::store::{DefRef, get_definition};
+use crate::error::PortalResult;
 use crate::flexible_combination::dict_meta::enrich_flexible_combination_dict_meta;
 use crate::flexible_combination::engine::Engine;
 use crate::flexible_combination::overlay::expand_rules_value;
 use crate::flexible_combination::store::{FcRef, get_flexible_combination};
 use crate::flexible_combination::validator::validate_flexible_combination;
-use crate::error::PortalResult;
 
 /// 读时 overlay 展开：若 combination 引用了业务单据(docRef)，加载该 DOC，把各表物理列作为
 /// `table_cols` 注入 overlay 编译器，将 use/pick 规则展开为 inline。DOC 缺失/加载失败时原样返回
@@ -29,8 +29,12 @@ async fn expand_combination_overlay(cfg: &Value) -> Value {
         .map(|rs| {
             rs.iter().any(|r| {
                 let d = r.get("detail");
-                d.and_then(|d| d.get("use")).map(|v| !v.is_null()).unwrap_or(false)
-                    || d.and_then(|d| d.get("pick")).map(|v| v.is_array()).unwrap_or(false)
+                d.and_then(|d| d.get("use"))
+                    .map(|v| !v.is_null())
+                    .unwrap_or(false)
+                    || d.and_then(|d| d.get("pick"))
+                        .map(|v| v.is_array())
+                        .unwrap_or(false)
             })
         })
         .unwrap_or(false);
@@ -95,7 +99,10 @@ async fn expand_combination_overlay(cfg: &Value) -> Value {
 /// `combination.anchorDimensions` 为非空数组时取其元素；否则用 `fallback`
 /// （调用方决定回退源——`/resolve`、`/rule` 回退到 query 键，`/preview` 回退到 raw 键并排除 DAM 键）。
 fn anchor_dims_from_cfg(combination: &Value, fallback: Vec<String>) -> Vec<String> {
-    match combination.get("anchorDimensions").and_then(|v| v.as_array()) {
+    match combination
+        .get("anchorDimensions")
+        .and_then(|v| v.as_array())
+    {
         Some(a) if !a.is_empty() => a
             .iter()
             .filter_map(|x| x.as_str().map(|s| s.to_string()))
@@ -161,7 +168,11 @@ pub async fn resolve(r: &FcRef, query: &Map<String, Value>) -> PortalResult<Valu
     let engine = Engine::new(&dims, &rules).with_ref_context(
         crate::flexible_combination::drn::FromDam {
             domain: cfg.get("domain").and_then(|v| v.as_str()).map(String::from),
-            app: cfg.get("app").or_else(|| cfg.get("application")).and_then(|v| v.as_str()).map(String::from),
+            app: cfg
+                .get("app")
+                .or_else(|| cfg.get("application"))
+                .and_then(|v| v.as_str())
+                .map(String::from),
             module: cfg.get("module").and_then(|v| v.as_str()).map(String::from),
         },
         cfg.get("imports").cloned(),
@@ -209,7 +220,11 @@ pub async fn rule(r: &FcRef, query: &Map<String, Value>) -> PortalResult<Value> 
     let engine = Engine::new(&dims, &rules).with_ref_context(
         crate::flexible_combination::drn::FromDam {
             domain: cfg.get("domain").and_then(|v| v.as_str()).map(String::from),
-            app: cfg.get("app").or_else(|| cfg.get("application")).and_then(|v| v.as_str()).map(String::from),
+            app: cfg
+                .get("app")
+                .or_else(|| cfg.get("application"))
+                .and_then(|v| v.as_str())
+                .map(String::from),
             module: cfg.get("module").and_then(|v| v.as_str()).map(String::from),
         },
         cfg.get("imports").cloned(),
@@ -294,7 +309,8 @@ pub async fn rule(r: &FcRef, query: &Map<String, Value>) -> PortalResult<Value> 
 /// 返回 `{ diagnostics, anchor, anchorDimensions, ruleId, columnModel, columns, members }`。
 pub async fn preview(body: &Value, r: &FcRef) -> PortalResult<Value> {
     // 取 combination（inline 或存储）→ enrich → overlay 展开 → 校验
-    let combination = enrich_flexible_combination_dict_meta(&body_or_stored(body, r).await?).await?;
+    let combination =
+        enrich_flexible_combination_dict_meta(&body_or_stored(body, r).await?).await?;
     let combination = expand_combination_overlay(&combination).await;
     let diagnostics = validate_flexible_combination(&combination);
     let anchor_raw = body
@@ -308,9 +324,19 @@ pub async fn preview(body: &Value, r: &FcRef) -> PortalResult<Value> {
     let rules = combination.get("rules").cloned().unwrap_or(json!([]));
     let engine = Engine::new(&dims, &rules).with_ref_context(
         crate::flexible_combination::drn::FromDam {
-            domain: combination.get("domain").and_then(|v| v.as_str()).map(String::from),
-            app: combination.get("app").or_else(|| combination.get("application")).and_then(|v| v.as_str()).map(String::from),
-            module: combination.get("module").and_then(|v| v.as_str()).map(String::from),
+            domain: combination
+                .get("domain")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            app: combination
+                .get("app")
+                .or_else(|| combination.get("application"))
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            module: combination
+                .get("module")
+                .and_then(|v| v.as_str())
+                .map(String::from),
         },
         combination.get("imports").cloned(),
     );

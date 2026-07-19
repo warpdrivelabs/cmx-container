@@ -52,7 +52,12 @@ async fn send_with_retry(req: RequestBuilder) -> PortalResult<reqwest::Response>
                 let retryable = code == 429 || (500..600).contains(&code);
                 if retryable && attempt < MAX_ATTEMPTS {
                     let backoff = 500u64 * 2u64.pow(attempt - 1);
-                    tracing::warn!(code = code, attempt = attempt, backoff_ms = backoff, "AI 上游返回可重试状态码，退避后重试");
+                    tracing::warn!(
+                        code = code,
+                        attempt = attempt,
+                        backoff_ms = backoff,
+                        "AI 上游返回可重试状态码，退避后重试"
+                    );
                     tokio::time::sleep(Duration::from_millis(backoff)).await;
                     continue;
                 }
@@ -284,10 +289,11 @@ where
                     .and_then(|c| c.get("delta"))
                     .and_then(|d| d.get("content"))
                     .and_then(|s| s.as_str())
-                    && !delta.is_empty() {
-                        full.push_str(delta);
-                        on_delta(delta);
-                    }
+                && !delta.is_empty()
+            {
+                full.push_str(delta);
+                on_delta(delta);
+            }
         }
     }
     if full.trim().is_empty() {

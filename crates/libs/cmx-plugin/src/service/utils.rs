@@ -42,10 +42,12 @@ pub async fn execute_seed_data(
     let mut table_config_manager = TableDefinesConfigManager::new();
     for table_config_file in &plugin_define.table_config_files {
         let config_path = install_path.join(table_config_file);
-        let table_df = load_table_defines_config_from_path(&config_path)
-            .map_err(|e| PluginError::Metadata(format!(
-                "加载表配置文件失败:路径{:?}，错误： {}", config_path, e
-            )))?;
+        let table_df = load_table_defines_config_from_path(&config_path).map_err(|e| {
+            PluginError::Metadata(format!(
+                "加载表配置文件失败:路径{:?}，错误： {}",
+                config_path, e
+            ))
+        })?;
         table_config_manager.add_config(table_df);
     }
     let table_defs = table_config_manager

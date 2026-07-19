@@ -144,7 +144,12 @@ fn levenshtein(text: &str, pattern: &str) -> usize {
             curr.push(v);
         }
         // curr 至少含初始的 i+1(见循环上方 curr.push),必非空。
-        if *curr.iter().min().expect("invariant: curr 非空(已 push i+1)") > 2 {
+        if *curr
+            .iter()
+            .min()
+            .expect("invariant: curr 非空(已 push i+1)")
+            > 2
+        {
             return 3;
         }
         prev = curr;

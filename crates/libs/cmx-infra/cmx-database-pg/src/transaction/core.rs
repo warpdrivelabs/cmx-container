@@ -272,11 +272,7 @@ impl DbTransaction {
     }
 
     /// 执行带 JSON 参数的 SQL。
-    pub async fn execute_with_json(
-        &mut self,
-        sql: &str,
-        params: serde_json::Value,
-    ) -> Result<u64> {
+    pub async fn execute_with_json(&mut self, sql: &str, params: serde_json::Value) -> Result<u64> {
         let values: Vec<DataValue> =
             serde_json::from_value(params).map_err(|e| Error::InvalidParams(e.to_string()))?;
         self.execute_with_datavalues(sql, &values).await

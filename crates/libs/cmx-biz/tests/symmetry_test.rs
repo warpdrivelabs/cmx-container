@@ -6,14 +6,17 @@
 
 mod common;
 
-use common::setup_db_manager;
 use cmx_biz::form::{FormFilter, FormForCreate, FormService};
 use cmx_biz::menu::{MenuForCreate, MenuService};
+use common::setup_db_manager;
 use modql::filter::OpValsString;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// DataSet 取首行某字段为 JSON
-fn first_row_field_json(ds: &cmx_core::model::data::dataset::DataSet, field: &str) -> Option<Value> {
+fn first_row_field_json(
+    ds: &cmx_core::model::data::dataset::DataSet,
+    field: &str,
+) -> Option<Value> {
     let j = serde_json::to_value(ds).expect("DataSet 应可序列化");
     j.get("rows")
         .and_then(|r| r.as_array())
@@ -93,8 +96,7 @@ async fn test_form_definition_roundtrip_symmetry() {
     .await
     .expect("查询应成功");
 
-    let roundtrip_definition =
-        first_row_field_json(&ds, "definition").expect("应返回 definition");
+    let roundtrip_definition = first_row_field_json(&ds, "definition").expect("应返回 definition");
 
     // DB JSONB 列可能以字符串形式返回,需解析回对象后比对
     let roundtrip_parsed: Value = if roundtrip_definition.is_string() {
@@ -212,21 +214,40 @@ async fn test_menu_definition_roundtrip_symmetry() {
     assert_eq!(defs.len(), 3, "模式A:模块下应导出全部 3 个节点");
 
     // 根节点:parent_code 为 None,一等字段(path/icon)正确导出
-    let root_export = defs.iter().find(|d| d.code == "test_menu:sym_root")
+    let root_export = defs
+        .iter()
+        .find(|d| d.code == "test_menu:sym_root")
         .expect("应导出根节点");
-    assert!(root_export.parent_code.is_none(), "根 parent_code 应为 None");
-    assert_eq!(root_export.path.as_deref(), Some("/sym"), "根 path 应作为一等字段导出");
-    assert_eq!(root_export.icon.as_deref(), Some("home"), "根 icon 应作为一等字段导出");
+    assert!(
+        root_export.parent_code.is_none(),
+        "根 parent_code 应为 None"
+    );
+    assert_eq!(
+        root_export.path.as_deref(),
+        Some("/sym"),
+        "根 path 应作为一等字段导出"
+    );
+    assert_eq!(
+        root_export.icon.as_deref(),
+        Some("home"),
+        "根 icon 应作为一等字段导出"
+    );
 
     // 孙节点:parent_code 应指向子节点,一等字段正确导出
-    let grand_export = defs.iter().find(|d| d.code == "test_menu:sym_child:grand")
+    let grand_export = defs
+        .iter()
+        .find(|d| d.code == "test_menu:sym_child:grand")
         .expect("应导出孙节点");
     assert_eq!(
         grand_export.parent_code.as_deref(),
         Some("test_menu:sym_child"),
         "孙节点 parent_code 应指向子节点"
     );
-    assert_eq!(grand_export.path.as_deref(), Some("/sym/child/grand"), "孙 path 应作为一等字段导出");
+    assert_eq!(
+        grand_export.path.as_deref(),
+        Some("/sym/child/grand"),
+        "孙 path 应作为一等字段导出"
+    );
 
     // 清理
     let _ = MenuService::delete_by_module(&mm, db_id, None, module_code).await;
@@ -250,5 +271,8 @@ fn test_permission_definition_serialize_symmetry() {
     let deserialized: Value = serde_json::from_str(&serialized).expect("反序列化应成功");
     assert_eq!(deserialized, perm_def, "权限定义序列化 round-trip 一致");
     // code 必须含 ':'(导入校验规则)
-    assert!(perm_def["code"].as_str().unwrap().contains(':'), "权限 code 必须含 :");
+    assert!(
+        perm_def["code"].as_str().unwrap().contains(':'),
+        "权限 code 必须含 :"
+    );
 }

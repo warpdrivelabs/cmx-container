@@ -370,7 +370,11 @@ async fn test_type_roundtrip() -> cmx_database_pg::Result<()> {
     let null_row = &ds_null.rows[0];
     for i in 0..ds_null.schema.field_count() {
         let v = null_row.get(i).unwrap();
-        assert!(matches!(v, DataValue::Null), "NULL 列应为 DataValue::Null，实际 {:?}", v);
+        assert!(
+            matches!(v, DataValue::Null),
+            "NULL 列应为 DataValue::Null，实际 {:?}",
+            v
+        );
     }
 
     manager
@@ -399,8 +403,7 @@ async fn test_guard_drop_auto_rollback() -> cmx_database_pg::Result<()> {
         .await?;
 
     {
-        let guard =
-            begin_transaction_guard_by_db_id(TEST_DB_KEY, Default::default()).await?;
+        let guard = begin_transaction_guard_by_db_id(TEST_DB_KEY, Default::default()).await?;
         let txn_id = guard.txn_id().to_string();
         manager
             .execute_sql(

@@ -85,7 +85,10 @@ mod tests {
             <subProcess id="sp"/>
           </process></definitions>"#;
         let err = compile(xml).unwrap_err();
-        assert!(matches!(err, Error::Unsupported(_)), "子流程 M2 仍应报不支持");
+        assert!(
+            matches!(err, Error::Unsupported(_)),
+            "子流程 M2 仍应报不支持"
+        );
     }
 
     #[test]
@@ -177,7 +180,10 @@ mod tests {
             NodeKind::UserTask(ut) => {
                 let mi = ut.multi_instance.as_ref().expect("应识别为多实例");
                 assert!(mi.sequential, "isSequential=true → 顺序或签");
-                assert_eq!(mi.collection_var, "approvers", "应从 loopDataInputRef 取集合");
+                assert_eq!(
+                    mi.collection_var, "approvers",
+                    "应从 loopDataInputRef 取集合"
+                );
                 assert_eq!(mi.element_var, None);
             }
             other => panic!("chain 应为 userTask，实际 {other:?}"),
@@ -273,7 +279,10 @@ mod tests {
             <endEvent id="done"/>
           </process></definitions>"#;
         let err = compile(xml).unwrap_err();
-        assert!(matches!(err, Error::Unsupported(_)), "非定时器边界事件应报不支持");
+        assert!(
+            matches!(err, Error::Unsupported(_)),
+            "非定时器边界事件应报不支持"
+        );
     }
 
     #[test]
@@ -300,11 +309,22 @@ mod tests {
                 // 2 个 role（finance/legal）+ 1 个 position + 1 个 org = 4 条候选。
                 assert_eq!(ut.candidates.len(), 4, "应汇总 4 条候选引用");
                 assert_eq!(
-                    ut.candidates.iter().filter(|c| c.kind == CandidateKind::Role).count(),
+                    ut.candidates
+                        .iter()
+                        .filter(|c| c.kind == CandidateKind::Role)
+                        .count(),
                     2
                 );
-                assert!(ut.candidates.iter().any(|c| c.kind == CandidateKind::Position && c.value == "cfo"));
-                assert!(ut.candidates.iter().any(|c| c.kind == CandidateKind::Org && c.value == "d_fin"));
+                assert!(
+                    ut.candidates
+                        .iter()
+                        .any(|c| c.kind == CandidateKind::Position && c.value == "cfo")
+                );
+                assert!(
+                    ut.candidates
+                        .iter()
+                        .any(|c| c.kind == CandidateKind::Org && c.value == "d_fin")
+                );
                 // 抄送：1 条 user。
                 assert_eq!(ut.cc.len(), 1);
                 assert_eq!(ut.cc[0].kind, CandidateKind::User);
@@ -375,7 +395,10 @@ mod tests {
             <sequenceFlow id="f1" sourceRef="call" targetRef="done"/>
             <endEvent id="done"/>
           </process></definitions>"#;
-        assert!(matches!(compile(xml).unwrap_err(), Error::MissingElement(_)));
+        assert!(matches!(
+            compile(xml).unwrap_err(),
+            Error::MissingElement(_)
+        ));
     }
 
     #[test]
@@ -394,7 +417,10 @@ mod tests {
         match &def.node_by_bpmn("call").unwrap().kind {
             NodeKind::CallActivity(ca) => {
                 assert_eq!(ca.called_key.as_deref(), Some("fin_review"));
-                assert!(ca.called_element.is_empty(), "用逻辑 key 时 calledElement 为空");
+                assert!(
+                    ca.called_element.is_empty(),
+                    "用逻辑 key 时 calledElement 为空"
+                );
             }
             other => panic!("call 应为 callActivity，实际 {other:?}"),
         }

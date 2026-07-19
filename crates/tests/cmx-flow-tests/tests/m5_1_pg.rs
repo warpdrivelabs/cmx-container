@@ -8,9 +8,7 @@
 //! find_child_instances 查子、子完成回写变量唤醒主、**用全新 Engine（模拟重启）**从库恢复后
 //! 办结子任务仍能唤醒主流程。
 
-use std::sync::Arc;
-
-use cmx_database_pg::{get_default_pg_db_manager, query_sql, DbConfig, DbType};
+use cmx_database_pg::{DbConfig, DbType, get_default_pg_db_manager, query_sql};
 use cmx_flow_bpmn::compile;
 use cmx_flow_engine::{Engine, InstanceState, RuntimeStore, Variables};
 use cmx_flow_store_pg::PgRuntimeStore;
@@ -66,7 +64,10 @@ async fn setup_db() -> Option<String> {
         module_code: None,
         source_type: Some("default".to_string()),
     };
-    manager.register_data_source(cfg).await.expect("注册数据源失败");
+    manager
+        .register_data_source(cfg)
+        .await
+        .expect("注册数据源失败");
     Some(db_id)
 }
 
@@ -103,7 +104,10 @@ async fn pg_subflow_persists_and_recovers() {
         e1.deploy(sub_def.clone()).unwrap();
         let mut vars = Variables::new();
         vars.set("amount", json!(88000));
-        let started = e1.start_process("pg_main", vars, Some("PG-SUB-001".into())).await.unwrap();
+        let started = e1
+            .start_process("pg_main", vars, Some("PG-SUB-001".into()))
+            .await
+            .unwrap();
         let main_id = started.instance_id.clone();
 
         // 主令牌 WAITING_SUBFLOW 落库。
@@ -121,12 +125,24 @@ async fn pg_subflow_persists_and_recovers() {
         let children = e1.store().find_child_instances(&main_id).await.unwrap();
         assert_eq!(children.len(), 1);
         let sub_id = children[0].id.clone();
-        assert_eq!(children[0].parent_instance_id.as_deref(), Some(main_id.as_str()));
+        assert_eq!(
+            children[0].parent_instance_id.as_deref(),
+            Some(main_id.as_str())
+        );
         assert!(children[0].parent_token_id.is_some());
         // 输入变量映射落库。
         let sub_snap = e1.store().load_snapshot(&sub_id).await.unwrap();
-        assert_eq!(sub_snap.instance.variables.get("subAmount"), Some(&json!(88000)));
-        let review_task = sub_snap.tasks.iter().find(|t| !t.completed).unwrap().id.clone();
+        assert_eq!(
+            sub_snap.instance.variables.get("subAmount"),
+            Some(&json!(88000))
+        );
+        let review_task = sub_snap
+            .tasks
+            .iter()
+            .find(|t| !t.completed)
+            .unwrap()
+            .id
+            .clone();
         (main_id, sub_id, review_task)
     };
 
@@ -141,19 +157,42 @@ async fn pg_subflow_persists_and_recovers() {
 
     // 子完成。
     assert_eq!(
-        e2.store().load_snapshot(&sub_id).await.unwrap().instance.state,
+        e2.store()
+            .load_snapshot(&sub_id)
+            .await
+            .unwrap()
+            .instance
+            .state,
         InstanceState::Completed
     );
     // 主被唤醒 → 出纳打款 + 回写变量。
     let main_after = e2.store().load_snapshot(&main_id).await.unwrap();
     assert_eq!(main_after.instance.state, InstanceState::Active);
-    let open: Vec<&str> = main_after.tasks.iter().filter(|t| !t.completed).map(|t| t.node_bpmn_id.as_str()).collect();
+    let open: Vec<&str> = main_after
+        .tasks
+        .iter()
+        .filter(|t| !t.completed)
+        .map(|t| t.node_bpmn_id.as_str())
+        .collect();
     assert_eq!(open, vec!["cashier"], "重启后子完成仍能唤醒主流程");
-    assert_eq!(main_after.instance.variables.get("ok"), Some(&json!(true)), "输出变量回写");
+    assert_eq!(
+        main_after.instance.variables.get("ok"),
+        Some(&json!(true)),
+        "输出变量回写"
+    );
 
     // 出纳办结 → 主完成。
-    let cashier = main_after.tasks.iter().find(|t| !t.completed).unwrap().id.clone();
-    let done = e2.complete_task(&main_id, &cashier, Variables::new()).await.unwrap();
+    let cashier = main_after
+        .tasks
+        .iter()
+        .find(|t| !t.completed)
+        .unwrap()
+        .id
+        .clone();
+    let done = e2
+        .complete_task(&main_id, &cashier, Variables::new())
+        .await
+        .unwrap();
     assert_eq!(done.state, InstanceState::Completed);
 
     cleanup(&db_id, &[main_id, sub_id]).await;

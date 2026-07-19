@@ -1,5 +1,8 @@
 //! doc_versioning_test —— 方案 B / B1（版本快照接线）真实库端到端测试。
 //!
+// 下方文档用中文顺序号（1./2./3.）陈述断言，非 Markdown 列表；放行 rustdoc 缩进 lint。
+#![allow(clippy::doc_lazy_continuation)]
+//!
 //! **默认 `#[ignore]`**：需本机可达的 fico 库（含 cmxfico 单据表 + 种子数据）。
 //! 手动运行：
 //! ```bash
@@ -16,10 +19,10 @@
 
 use std::path::PathBuf;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use cmx_doc_store_pg::{BatchItem, DocMetaView, DocSaver, SaveCtx, SaveMode};
 use cmx_database::{DatabaseManager, DatabaseManagerConfig, DbConfig, DbType, PoolConfig};
+use cmx_doc_store_pg::{BatchItem, DocMetaView, DocSaver, SaveCtx, SaveMode};
 
 const DB_ID: &str = "fico_ver_test";
 
@@ -85,11 +88,21 @@ async fn setup_manager() -> DatabaseManager {
 /// 取一个存在的根单据 id（cv_batch 首行）。
 async fn pick_root_id(mm: &DatabaseManager) -> String {
     let ds = mm
-        .query_sql_with_datavalues(DB_ID, None, "SELECT id FROM cv_batch ORDER BY id LIMIT 1", vec![], "pick")
+        .query_sql_with_datavalues(
+            DB_ID,
+            None,
+            "SELECT id FROM cv_batch ORDER BY id LIMIT 1",
+            vec![],
+            "pick",
+        )
         .await
         .expect("查 cv_batch 失败");
     let idx = ds.schema.get_index("id").expect("无 id 列");
-    let dv = ds.rows.first().and_then(|r| r.get(idx)).expect("cv_batch 无数据");
+    let dv = ds
+        .rows
+        .first()
+        .and_then(|r| r.get(idx))
+        .expect("cv_batch 无数据");
     match dv {
         cmx_core::model::cell::DataValue::Int(i) => i.to_string(),
         other => format!("{other:?}"),
@@ -202,10 +215,15 @@ async fn versioning_records_and_flips() {
         )
         .await
         .expect("查当前版失败");
-    let cur_c = cur.schema.get_index("c").and_then(|i| cur.rows.first().and_then(|r| r.get(i))).and_then(|dv| match dv {
-        cmx_core::model::cell::DataValue::Int(n) => Some(*n),
-        _ => None,
-    }).unwrap_or(-1);
+    let cur_c = cur
+        .schema
+        .get_index("c")
+        .and_then(|i| cur.rows.first().and_then(|r| r.get(i)))
+        .and_then(|dv| match dv {
+            cmx_core::model::cell::DataValue::Int(n) => Some(*n),
+            _ => None,
+        })
+        .unwrap_or(-1);
     assert_eq!(cur_c, 1, "同单只应有一个当前版（旧版已翻 0）");
 
     // ── 3. actor / snapshot 落值检查 ──
@@ -224,10 +242,15 @@ async fn versioning_records_and_flips() {
         .expect("查版本明细失败");
     let row = detail.rows.first().expect("应有 rev_no=2 行");
     let get_str = |name: &str| -> String {
-        detail.schema.get_index(name).and_then(|i| row.get(i)).map(|dv| match dv {
-            cmx_core::model::cell::DataValue::String(s) => s.clone(),
-            other => format!("{other:?}"),
-        }).unwrap_or_default()
+        detail
+            .schema
+            .get_index(name)
+            .and_then(|i| row.get(i))
+            .map(|dv| match dv {
+                cmx_core::model::cell::DataValue::String(s) => s.clone(),
+                other => format!("{other:?}"),
+            })
+            .unwrap_or_default()
     };
     assert_eq!(get_str("actor_id"), "42", "actor_id 应落 SaveCtx.actor_id");
     assert_eq!(get_str("actor_name"), "集成测试", "actor_name 落值");
@@ -247,9 +270,16 @@ async fn versioning_disabled_records_nothing() {
     // versioning 关闭：save 不应写任何版本
     let meta = build_meta(false);
     assert!(!meta.versioning_enabled());
-    DocSaver::save(&mm, DB_ID, &meta, SaveMode::Merge, &merge_update(&root_id), &ctx())
-        .await
-        .expect("save 失败");
+    DocSaver::save(
+        &mm,
+        DB_ID,
+        &meta,
+        SaveMode::Merge,
+        &merge_update(&root_id),
+        &ctx(),
+    )
+    .await
+    .expect("save 失败");
     let (c, _) = rev_stats(&mm, doc_file, &root_id).await;
     assert_eq!(c, 0, "versioning 关闭时不应记版本");
 }
@@ -261,7 +291,9 @@ async fn root_update_time(mm: &DatabaseManager, root_id: &str) -> Option<String>
             DB_ID,
             None,
             "SELECT update_time FROM cv_batch WHERE id = $1",
-            vec![cmx_core::model::cell::DataValue::Int(root_id.parse().unwrap())],
+            vec![cmx_core::model::cell::DataValue::Int(
+                root_id.parse().unwrap(),
+            )],
             "ut",
         )
         .await
@@ -298,10 +330,19 @@ async fn optimistic_lock_conflict_and_refresh() {
     let meta = build_meta(true);
 
     // 起点：先跑一次无基线 save（退化为不加锁），确保根行有一个已知 update_time。
-    DocSaver::save(&mm, DB_ID, &meta, SaveMode::Merge, &merge_update(&root_id), &ctx())
+    DocSaver::save(
+        &mm,
+        DB_ID,
+        &meta,
+        SaveMode::Merge,
+        &merge_update(&root_id),
+        &ctx(),
+    )
+    .await
+    .expect("初始化 save 失败");
+    let base_now = root_update_time(&mm, &root_id)
         .await
-        .expect("初始化 save 失败");
-    let base_now = root_update_time(&mm, &root_id).await.expect("应有 update_time");
+        .expect("应有 update_time");
 
     // ── 1. 正确基线 → 成功，且 SaveResult 回传新基线（供前端刷新）──
     let r = DocSaver::save(
@@ -380,7 +421,9 @@ async fn root_period_code(mm: &DatabaseManager, root_id: &str) -> Option<String>
             DB_ID,
             None,
             "SELECT period_code FROM cv_batch WHERE id = $1",
-            vec![cmx_core::model::cell::DataValue::Int(root_id.parse().unwrap())],
+            vec![cmx_core::model::cell::DataValue::Int(
+                root_id.parse().unwrap(),
+            )],
             "pc",
         )
         .await
@@ -407,25 +450,52 @@ async fn batch_atomic_all_or_nothing_and_non_atomic_isolation() {
     // ── atomic：第 1 单正常、第 2 单陈旧基线冲突 → 整批回滚，第 1 单也不落地 ──
     // 捕获 id_a 原值，用与之不同的合法哨兵；测试末尾复原，保证可重复运行（幂等）。
     let orig_a = root_period_code(&mm, &id_a).await;
-    let sentinel = if orig_a.as_deref() == Some("209901") { "209902" } else { "209901" };
+    let sentinel = if orig_a.as_deref() == Some("209901") {
+        "209902"
+    } else {
+        "209901"
+    };
     let ch_a_ok = json!({ "cv_batch": { "updated": [ { "id": id_a, "fields": { "period_code": sentinel } } ] } });
     let ch_b_conflict = merge_update_with_baseline(&id_b, Some("2000-01-01T00:00:00Z"));
     let items = vec![
-        BatchItem { meta: &meta, mode: SaveMode::Merge, changes: &ch_a_ok, sctx: &sctx },
-        BatchItem { meta: &meta, mode: SaveMode::Merge, changes: &ch_b_conflict, sctx: &sctx },
+        BatchItem {
+            meta: &meta,
+            mode: SaveMode::Merge,
+            changes: &ch_a_ok,
+            sctx: &sctx,
+        },
+        BatchItem {
+            meta: &meta,
+            mode: SaveMode::Merge,
+            changes: &ch_b_conflict,
+            sctx: &sctx,
+        },
     ];
     let err = DocSaver::save_batch(&mm, DB_ID, &items, true)
         .await
         .expect_err("atomic 批含冲突单应整体失败");
-    assert!(matches!(err, BizError::Conflict(_)), "应为冲突，实得 {err:?}");
+    assert!(
+        matches!(err, BizError::Conflict(_)),
+        "应为冲突，实得 {err:?}"
+    );
     let after_a = root_period_code(&mm, &id_a).await;
     assert_eq!(orig_a, after_a, "atomic 回滚：第 1 单的改动不应落地");
     assert_ne!(after_a.as_deref(), Some(sentinel), "哨兵值不应写入");
 
     // ── 非 atomic：第 1 单正常、第 2 单冲突 → 第 1 单提交、第 2 单标记失败 ──
     let items2 = vec![
-        BatchItem { meta: &meta, mode: SaveMode::Merge, changes: &ch_a_ok, sctx: &sctx },
-        BatchItem { meta: &meta, mode: SaveMode::Merge, changes: &ch_b_conflict, sctx: &sctx },
+        BatchItem {
+            meta: &meta,
+            mode: SaveMode::Merge,
+            changes: &ch_a_ok,
+            sctx: &sctx,
+        },
+        BatchItem {
+            meta: &meta,
+            mode: SaveMode::Merge,
+            changes: &ch_b_conflict,
+            sctx: &sctx,
+        },
     ];
     let results = DocSaver::save_batch(&mm, DB_ID, &items2, false)
         .await
@@ -434,7 +504,11 @@ async fn batch_atomic_all_or_nothing_and_non_atomic_isolation() {
     assert!(results[0].ok, "第 1 单应成功");
     assert!(!results[1].ok, "第 2 单应失败");
     assert!(results[1].error.is_some(), "失败单应带 error");
-    assert_eq!(root_period_code(&mm, &id_a).await.as_deref(), Some(sentinel), "非 atomic：第 1 单已提交");
+    assert_eq!(
+        root_period_code(&mm, &id_a).await.as_deref(),
+        Some(sentinel),
+        "非 atomic：第 1 单已提交"
+    );
 
     // 复原 id_a 的 period_code（幂等）+ 清版本行。
     if let Some(orig) = &orig_a {
@@ -444,4 +518,3 @@ async fn batch_atomic_all_or_nothing_and_non_atomic_isolation() {
     cleanup(&mm, "cmxfico_doc_meta_v2.json", &id_a).await;
     cleanup(&mm, "cmxfico_doc_meta_v2.json", &id_b).await;
 }
-

@@ -85,7 +85,8 @@ impl MsgPackWrite for Vec<u8> {
 }
 
 /// rmp 写 Vec<u8> 不可失败的统一提示语(仅 OOM 时 panic,走 abort 不走 Err)。
-const INFALLIBLE_WRITE: &str = "msgpack write to Vec<u8> infallible (OOM panics, never returns Err)";
+const INFALLIBLE_WRITE: &str =
+    "msgpack write to Vec<u8> infallible (OOM panics, never returns Err)";
 
 /// 中立列类型(driver 把自己的 PG 类型映射过来,编码器只认这个)。
 ///
@@ -338,19 +339,21 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
             let mut buckets: HashMap<String, Vec<usize>> = HashMap::new();
             for (child_row_idx, pid) in group.parent_ids.iter().enumerate() {
                 if let Some(set) = scope
-                    && !set.contains(pid) {
-                        continue; // 该子行的父不在当前子集内,跳过(核心:限定下钻范围)
-                    }
+                    && !set.contains(pid)
+                {
+                    continue; // 该子行的父不在当前子集内,跳过(核心:限定下钻范围)
+                }
                 buckets.entry(pid.clone()).or_default().push(child_row_idx);
             }
             for (pid, idxs) in buckets {
                 if !by_parent.contains_key(&pid) {
                     order.push(pid.clone());
                 }
-                by_parent
-                    .entry(pid)
-                    .or_default()
-                    .push((group.child_key.as_str(), &group.child, idxs));
+                by_parent.entry(pid).or_default().push((
+                    group.child_key.as_str(),
+                    &group.child,
+                    idxs,
+                ));
             }
         }
         order
@@ -500,11 +503,7 @@ pub fn encode_row_json<R: ZmcRowSource>(row: &R, schema: &ZmcSchema) -> serde_js
 
 /// 编码单个单元格为 JSON —— 与 [`encode_cell`] 的 msgpack 分派值语义完全一致
 /// (Decimal/Date/DateTime/Uuid→字符串、Bytea→"B64:"、Jsonb→字符串、Null→null),失败一律 `null`。
-pub fn encode_cell_json<R: ZmcRowSource>(
-    row: &R,
-    col: usize,
-    ty: ZmcColType,
-) -> serde_json::Value {
+pub fn encode_cell_json<R: ZmcRowSource>(row: &R, col: usize, ty: ZmcColType) -> serde_json::Value {
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
     use serde_json::Value;
 
@@ -536,9 +535,9 @@ pub fn encode_cell_json<R: ZmcRowSource>(
         ZmcColType::Uuid => row
             .get_uuid(col)
             .map_or(Value::Null, |u| Value::String(u.to_string())),
-        ZmcColType::Bytea => row
-            .get_bytes(col)
-            .map_or(Value::Null, |b| Value::String(format!("B64:{}", BASE64.encode(b)))),
+        ZmcColType::Bytea => row.get_bytes(col).map_or(Value::Null, |b| {
+            Value::String(format!("B64:{}", BASE64.encode(b)))
+        }),
         ZmcColType::Date => row
             .get_date(col)
             .map_or(Value::Null, |d| Value::String(d.to_string())),
@@ -912,12 +911,7 @@ mod tests {
         let acc = ds(
             "cv_acc_line",
             vec!["id", "upper_id"],
-            vec![
-                vec![100, 10],
-                vec![101, 11],
-                vec![102, 12],
-                vec![103, 13],
-            ],
+            vec![vec![100, 10], vec![101, 11], vec![102, 12], vec![103, 13]],
         );
         // header 挂 acc(parent_ids = 各 acc 行的 upper_id 字符串)
         header.add_child_group(ZmcChildGroup {
@@ -956,7 +950,13 @@ mod tests {
         assert_eq!(b1_child.len(), 2, "只含本 batch 的两个 header 作父");
         assert!(b1_child.contains_key("10") && b1_child.contains_key("11"));
         assert!(!b1_child.contains_key("12") && !b1_child.contains_key("13"));
-        assert_eq!(b1_child["10"]["cv_acc_line"]["rows"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            b1_child["10"]["cv_acc_line"]["rows"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
         assert_eq!(b1_child["10"]["cv_acc_line"]["rows"][0][0], 100);
 
         // batch 2 → header 12,13,同样各自 1 条 acc,不串到 batch 1
@@ -970,7 +970,11 @@ mod tests {
         // (修复前会随 batch 数重复 → 8 次)。用解码后结构计数更稳。
         let mut acc_row_total = 0;
         for pid in ["1", "2"] {
-            for hchild in cr[pid]["cv_header"]["childRows"].as_object().unwrap().values() {
+            for hchild in cr[pid]["cv_header"]["childRows"]
+                .as_object()
+                .unwrap()
+                .values()
+            {
                 acc_row_total += hchild["cv_acc_line"]["rows"].as_array().unwrap().len();
             }
         }
@@ -1004,7 +1008,6 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod rfc3339_tests {
     use super::*;
@@ -1015,13 +1018,23 @@ mod rfc3339_tests {
         use chrono::TimeZone;
         let cases = [
             chrono::Utc.with_ymd_and_hms(2026, 7, 5, 12, 0, 0).unwrap(),
-            chrono::Utc.timestamp_opt(1_751_700_000, 123_456_789).unwrap(), // 纳秒(9位)
-            chrono::Utc.timestamp_opt(1_751_700_000, 123_456_000).unwrap(), // 微秒整(6位)
-            chrono::Utc.timestamp_opt(1_751_700_000, 123_000_000).unwrap(), // 毫秒整(3位)
-            chrono::Utc.timestamp_opt(0, 0).unwrap(),                       // epoch
-            chrono::Utc.timestamp_opt(1_751_700_000, 500_000_000).unwrap(), // .5 秒
-            chrono::Utc.with_ymd_and_hms(1, 1, 1, 0, 0, 0).unwrap(),        // 极小年份
-            chrono::Utc.with_ymd_and_hms(9999, 12, 31, 23, 59, 59).unwrap(),
+            chrono::Utc
+                .timestamp_opt(1_751_700_000, 123_456_789)
+                .unwrap(), // 纳秒(9位)
+            chrono::Utc
+                .timestamp_opt(1_751_700_000, 123_456_000)
+                .unwrap(), // 微秒整(6位)
+            chrono::Utc
+                .timestamp_opt(1_751_700_000, 123_000_000)
+                .unwrap(), // 毫秒整(3位)
+            chrono::Utc.timestamp_opt(0, 0).unwrap(), // epoch
+            chrono::Utc
+                .timestamp_opt(1_751_700_000, 500_000_000)
+                .unwrap(), // .5 秒
+            chrono::Utc.with_ymd_and_hms(1, 1, 1, 0, 0, 0).unwrap(), // 极小年份
+            chrono::Utc
+                .with_ymd_and_hms(9999, 12, 31, 23, 59, 59)
+                .unwrap(),
         ];
         for dt in cases {
             let mut s = String::new();

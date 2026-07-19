@@ -67,7 +67,10 @@ impl Default for OpenCodeConfig {
 /// 接受的"启用"值（大小写不敏感）：`true` / `1` / `yes` / `on`。
 fn default_enabled() -> bool {
     match std::env::var("OPENCODE_ENABLED") {
-        Ok(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on"),
+        Ok(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "true" | "1" | "yes" | "on"
+        ),
         Err(_) => false,
     }
 }
@@ -124,12 +127,15 @@ impl OpenCodeConfig {
 /// # Panics
 /// ConfigManager 未初始化时 `get_as_or` 会回退默认值，不会 panic。
 pub fn load_config() -> OpenCodeConfig {
-    let mut cfg = cmx_utils::ConfigManager::global()
-        .get_as_or("opencode", OpenCodeConfig::default());
+    let mut cfg =
+        cmx_utils::ConfigManager::global().get_as_or("opencode", OpenCodeConfig::default());
 
     // 环境变量覆盖（最高优先级）。
     if let Ok(v) = std::env::var("OPENCODE_ENABLED") {
-        cfg.enabled = matches!(v.trim().to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on");
+        cfg.enabled = matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "true" | "1" | "yes" | "on"
+        );
     }
     if let Ok(v) = std::env::var("OPENCODE_BASE_URL") {
         let v = v.trim_end_matches('/').to_string();
@@ -155,7 +161,10 @@ pub fn load_config() -> OpenCodeConfig {
 
     if let Err(e) = cfg.validate() {
         tracing::warn!(error = %e, "OpenCode 配置校验失败，将禁用 AI 子系统（/api/ai/* 返回 503）");
-        return OpenCodeConfig { enabled: false, ..OpenCodeConfig::default() };
+        return OpenCodeConfig {
+            enabled: false,
+            ..OpenCodeConfig::default()
+        };
     }
 
     tracing::info!(

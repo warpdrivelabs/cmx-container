@@ -97,9 +97,7 @@ impl From<AiError> for cmx_api_types::Error {
                 cmx_api_types::Error::not_found(msg)
             }
             AiError::Timeout => cmx_api_types::Error::Timeout,
-            AiError::NotConfigured => {
-                cmx_api_types::Error::business_error(err.to_string())
-            }
+            AiError::NotConfigured => cmx_api_types::Error::business_error(err.to_string()),
             other => cmx_api_types::Error::internal_error(other.to_string()),
         }
     }

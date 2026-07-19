@@ -7,9 +7,7 @@
 //! 用例 `#[ignore]` 门控:`cargo test -p cmx-database-pg --test zmc_test -- --ignored`
 
 use cmx_core::model::cell::{DataValue, SqlParam, SqlTypeMarker};
-use cmx_database_pg::{
-    DatabaseManager, DatabaseManagerConfig, DbConfig, DbType, PoolConfig,
-};
+use cmx_database_pg::{DatabaseManager, DatabaseManagerConfig, DbConfig, DbType, PoolConfig};
 
 const DEFAULT_DB_URL: &str = "postgresql://postgres:postgres@127.0.0.1:5432/cmx";
 const TEST_DB_KEY: &str = "zmc_test_db";
@@ -123,7 +121,9 @@ async fn test_zmc_columnar_roundtrip() -> cmx_database_pg::Result<()> {
     let zmc = mm
         .query_sql_zmc(
             TEST_DB_KEY,
-            &format!("SELECT id,name,amount,flag,uid,blob,meta,created,note FROM {table} ORDER BY id"),
+            &format!(
+                "SELECT id,name,amount,flag,uid,blob,meta,created,note FROM {table} ORDER BY id"
+            ),
             "zmc_test",
         )
         .await?;
@@ -188,7 +188,11 @@ async fn test_zmc_empty() -> cmx_database_pg::Result<()> {
     .await?;
 
     let zmc = mm
-        .query_sql_zmc(TEST_DB_KEY, &format!("SELECT id,name FROM {table}"), "empty")
+        .query_sql_zmc(
+            TEST_DB_KEY,
+            &format!("SELECT id,name FROM {table}"),
+            "empty",
+        )
         .await?;
     assert_eq!(zmc.row_count(), 0);
     let mut buf = Vec::new();
@@ -248,4 +252,3 @@ async fn dump_real_columnar_binary() -> cmx_database_pg::Result<()> {
     mm.shutdown().await?;
     Ok(())
 }
-

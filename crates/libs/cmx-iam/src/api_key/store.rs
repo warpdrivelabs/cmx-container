@@ -54,9 +54,13 @@ pub async fn insert_api_key(
         DataValue::String(key_prefix.to_string()),
         DataValue::String(key_hash.to_string()),
         user_id.map(DataValue::String).unwrap_or(DataValue::Null),
-        service_name.map(DataValue::String).unwrap_or(DataValue::Null),
+        service_name
+            .map(DataValue::String)
+            .unwrap_or(DataValue::Null),
         DataValue::String(scopes_json),
-        description.map(DataValue::String).unwrap_or(DataValue::Null),
+        description
+            .map(DataValue::String)
+            .unwrap_or(DataValue::Null),
     ];
     db_manager
         .execute_sql_with_datavalues(&db_id, None, sql, params)
@@ -86,7 +90,10 @@ pub async fn list_api_keys(
         where_clause.push_str(&format!(" AND user_id = '{}'", uid.replace('\'', "''")));
     }
     if let Some(svc) = &service_name {
-        where_clause.push_str(&format!(" AND service_name = '{}'", svc.replace('\'', "''")));
+        where_clause.push_str(&format!(
+            " AND service_name = '{}'",
+            svc.replace('\'', "''")
+        ));
     }
 
     let sql = format!(
@@ -120,8 +127,7 @@ pub async fn set_api_key_status(id: &str, status: i64) -> std::result::Result<u6
     let db_manager = cmx_database::get_default_db_manager();
     let db_id = db_manager.get_default_db_id().await;
 
-    let sql =
-        "UPDATE cmx_auth_api_key SET status = $2, update_time = NOW() WHERE id = $1 AND archived = 0";
+    let sql = "UPDATE cmx_auth_api_key SET status = $2, update_time = NOW() WHERE id = $1 AND archived = 0";
     let params = vec![DataValue::String(id.to_string()), DataValue::Int(status)];
     db_manager
         .execute_sql_with_datavalues(&db_id, None, sql, params)

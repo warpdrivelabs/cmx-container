@@ -11,10 +11,10 @@ pub mod circuit_breaker;
 pub mod config;
 // API Key / OAuth2 客户端数据服务（cmx_auth_* 物理表读写下沉，供 cmx-api 认证 handler 调用）。
 pub mod api_key;
-pub mod oauth_client;
 pub mod error;
 pub mod host_functions;
 pub mod iam_checker;
+pub mod oauth_client;
 pub mod permission;
 pub mod role;
 pub mod role_group;

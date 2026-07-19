@@ -97,8 +97,8 @@ impl<'de> Deserialize<'de> for Schema {
 // 3. 行式数据集 (Row / DataSet) 在 rds 子模块
 // ==========================================
 
-pub use rds::{DataSet, Row};
 pub use columnar::ColumnarCodec;
+pub use rds::{DataSet, Row};
 
 use crate::model::cell::Field;
 

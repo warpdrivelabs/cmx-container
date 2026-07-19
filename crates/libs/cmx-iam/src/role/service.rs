@@ -358,7 +358,8 @@ impl RoleService for RoleServiceImpl {
         let txn_id = guard.txn_id();
 
         // 2. 删除前查询受影响用户（供提交后失效缓存，必须在 cmx_user_role 物理删除前查询）
-        let affected_user_sql = "SELECT DISTINCT user_id FROM cmx_user_role WHERE role_id = ANY($1) AND archived = 0";
+        let affected_user_sql =
+            "SELECT DISTINCT user_id FROM cmx_user_role WHERE role_id = ANY($1) AND archived = 0";
         let affected_user_params = vec![DataValue::Array(
             role_ids
                 .iter()
@@ -480,7 +481,10 @@ impl RoleService for RoleServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = Some(match filters {
-            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            Some(fs) => fs
+                .into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>(),
             None => vec![Self::with_default_archived(RoleFilter::default())],
         });
 
@@ -522,7 +526,10 @@ impl RoleService for RoleServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = Some(match filters {
-            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            Some(fs) => fs
+                .into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>(),
             None => vec![Self::with_default_archived(RoleFilter::default())],
         });
 

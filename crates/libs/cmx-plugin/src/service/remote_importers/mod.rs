@@ -34,7 +34,9 @@ use crate::center_client::types::DataCategory;
 use crate::error::{PluginError, PluginResult};
 use cmx_traits::auth::context_scope;
 use cmx_traits::error::TraitError;
-use cmx_traits::resource::{ResourceDataImportRequest, ResourceDataImportResult, ResourceDataListResult};
+use cmx_traits::resource::{
+    ResourceDataImportRequest, ResourceDataImportResult, ResourceDataListResult,
+};
 
 /// 将 [`PluginError`] 结构化映射为 [`TraitError`],保留远程/网络类别(避免全部坍缩为 Business 字符串)。
 ///
@@ -189,7 +191,10 @@ impl RemoteImporterContext {
             .list_resource_data(&service_name, request)
             .await
             .map_err(|e| {
-                PluginError::CenterData(format!("gRPC远程[{}]导出失败: {e}", category.center_name()))
+                PluginError::CenterData(format!(
+                    "gRPC远程[{}]导出失败: {e}",
+                    category.center_name()
+                ))
             })
     }
 
@@ -200,7 +205,9 @@ impl RemoteImporterContext {
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataListResult> {
         let http_client = self.http_client.as_ref().ok_or_else(|| {
-            PluginError::CenterData("HTTP 客户端未初始化(mode 非 http_url/http_discovery)".to_string())
+            PluginError::CenterData(
+                "HTTP 客户端未初始化(mode 非 http_url/http_discovery)".to_string(),
+            )
         })?;
 
         let url = self.resolve_http_url_for_list(category).await?;
@@ -212,18 +219,20 @@ impl RemoteImporterContext {
 
         // GET 查询参数
         let resp = self
-            .apply_auth_headers(
-                http_client.get(&url).query(&[
-                    ("category", request.category.as_str()),
-                    ("domain_code", request.domain_code.as_str()),
-                    ("application_code", request.application_code.as_str()),
-                    ("module_code", request.module_code.as_str()),
-                ]),
-            )
+            .apply_auth_headers(http_client.get(&url).query(&[
+                ("category", request.category.as_str()),
+                ("domain_code", request.domain_code.as_str()),
+                ("application_code", request.application_code.as_str()),
+                ("module_code", request.module_code.as_str()),
+            ]))
             .send()
             .await
             .map_err(|e| {
-                PluginError::CenterData(format!("HTTP 查询 {} 中心失败 ({}): {e}", category.center_name(), url))
+                PluginError::CenterData(format!(
+                    "HTTP 查询 {} 中心失败 ({}): {e}",
+                    category.center_name(),
+                    url
+                ))
             })?;
 
         let status = resp.status();
@@ -249,7 +258,10 @@ impl RemoteImporterContext {
         })?;
         let code = json.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
         if code != 200 {
-            let msg = json.get("message").and_then(|v| v.as_str()).unwrap_or("未知错误");
+            let msg = json
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("未知错误");
             return Err(PluginError::CenterData(format!(
                 "{} 中心业务失败: {msg}",
                 category.center_name()
@@ -302,7 +314,10 @@ impl RemoteImporterContext {
             .import_resource_data(&service_name, request)
             .await
             .map_err(|e| {
-                PluginError::CenterData(format!("gRPC 远程 {} 导入失败: {e}", category.center_name()))
+                PluginError::CenterData(format!(
+                    "gRPC 远程 {} 导入失败: {e}",
+                    category.center_name()
+                ))
             })
     }
 
@@ -316,7 +331,9 @@ impl RemoteImporterContext {
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataImportResult> {
         let http_client = self.http_client.as_ref().ok_or_else(|| {
-            PluginError::CenterData("HTTP 客户端未初始化(mode 非 http_url/http_discovery)".to_string())
+            PluginError::CenterData(
+                "HTTP 客户端未初始化(mode 非 http_url/http_discovery)".to_string(),
+            )
         })?;
 
         let url = self.resolve_http_url(category).await?;
@@ -412,11 +429,9 @@ impl RemoteImporterContext {
             )));
         }
         // 随机选一个实例(简单负载均衡)
-        let instance = pool
-            .choose(&mut rand::thread_rng())
-            .ok_or_else(|| {
-                PluginError::CenterData(format!("选择 {} 实例失败", category.center_name()))
-            })?;
+        let instance = pool.choose(&mut rand::thread_rng()).ok_or_else(|| {
+            PluginError::CenterData(format!("选择 {} 实例失败", category.center_name()))
+        })?;
         let port = instance
             .metadata
             .get("http_port")
@@ -428,7 +443,10 @@ impl RemoteImporterContext {
 }
 
 /// 解析 HTTP 接收端响应(ApiResp<ImportResultDto> JSON)。
-fn parse_http_response(body: &str, category: DataCategory) -> PluginResult<ResourceDataImportResult> {
+fn parse_http_response(
+    body: &str,
+    category: DataCategory,
+) -> PluginResult<ResourceDataImportResult> {
     let json: serde_json::Value = serde_json::from_str(body).map_err(|e| {
         PluginError::CenterData(format!(
             "解析 {} 中心响应 JSON 失败: {e} (body={body})",
@@ -448,7 +466,10 @@ fn parse_http_response(body: &str, category: DataCategory) -> PluginResult<Resou
     }
     let data = json.get("data").cloned().unwrap_or_default();
     Ok(ResourceDataImportResult {
-        success: data.get("success").and_then(|v| v.as_bool()).unwrap_or(true),
+        success: data
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true),
         message: data
             .get("message")
             .and_then(|v| v.as_str())

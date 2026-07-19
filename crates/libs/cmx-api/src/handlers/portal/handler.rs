@@ -707,7 +707,11 @@ pub async fn registry_apps(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let apps = cmx_portal::dam::store::list_applications(q.domain.as_deref(), q.active_only.unwrap_or(false)).await?;
+    let apps = cmx_portal::dam::store::list_applications(
+        q.domain.as_deref(),
+        q.active_only.unwrap_or(false),
+    )
+    .await?;
     Ok(Json(ApiResp::ok(serde_json::json!({ "apps": apps }))))
 }
 
@@ -719,7 +723,12 @@ pub async fn registry_modules(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let mods = cmx_portal::dam::store::list_modules(q.domain.as_deref(), q.app.as_deref(), q.active_only.unwrap_or(false)).await?;
+    let mods = cmx_portal::dam::store::list_modules(
+        q.domain.as_deref(),
+        q.app.as_deref(),
+        q.active_only.unwrap_or(false),
+    )
+    .await?;
     Ok(Json(ApiResp::ok(serde_json::json!({ "modules": mods }))))
 }
 
@@ -857,7 +866,9 @@ pub async fn definitions_get(
     }
     let mut doc = match kind {
         "DOC" => {
-            let file = cmx_portal::definitions::resolve::resolve_doc_file(domain, app, module, Some(code)).await?;
+            let file =
+                cmx_portal::definitions::resolve::resolve_doc_file(domain, app, module, Some(code))
+                    .await?;
             cmx_portal::definitions::store::get_definition(
                 &cmx_portal::definitions::store::DefRef {
                     domain: Some(domain.to_string()),
@@ -870,7 +881,9 @@ pub async fn definitions_get(
             .await?
         }
         "DCT" => {
-            let file = cmx_portal::definitions::resolve::resolve_dict_file(domain, app, module, code).await?;
+            let file =
+                cmx_portal::definitions::resolve::resolve_dict_file(domain, app, module, code)
+                    .await?;
             let mut d = cmx_portal::definitions::store::get_definition(
                 &cmx_portal::definitions::store::DefRef {
                     domain: Some(domain.to_string()),
@@ -925,7 +938,8 @@ pub async fn definitions_batch(
         .cloned()
         .unwrap_or_default();
     // 需反查的 DCT ref：反查后的文件名 → dictCode（用于结果单表过滤）
-    let mut dct_filters: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut dct_filters: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     let mut rewritten: Vec<serde_json::Value> = Vec::with_capacity(raw_refs.len());
     for r in &raw_refs {
         // 字符串 ref 或 .json 对象 ref：原样透传
@@ -955,15 +969,28 @@ pub async fn definitions_batch(
             .unwrap_or("");
         let module = obj.get("module").and_then(|v| v.as_str()).unwrap_or("");
         let file = match kind {
-            "DOC" => cmx_portal::definitions::resolve::resolve_doc_file(domain, app, module, Some(id_val)).await?,
+            "DOC" => {
+                cmx_portal::definitions::resolve::resolve_doc_file(
+                    domain,
+                    app,
+                    module,
+                    Some(id_val),
+                )
+                .await?
+            }
             "DCT" => {
-                let f = cmx_portal::definitions::resolve::resolve_dict_file(domain, app, module, id_val).await?;
+                let f = cmx_portal::definitions::resolve::resolve_dict_file(
+                    domain, app, module, id_val,
+                )
+                .await?;
                 dct_filters.insert(f.clone(), id_val.to_string());
                 f
             }
-            _ => return Err(cmx_api_types::Error::BadRequest(format!(
-                "业务编码批量定位仅支持 kind=DOC/DCT，收到 ref={r}"
-            ))),
+            _ => {
+                return Err(cmx_api_types::Error::BadRequest(format!(
+                    "业务编码批量定位仅支持 kind=DOC/DCT，收到 ref={r}"
+                )));
+            }
         };
         let mut new_obj = obj.clone();
         new_obj.insert("file".into(), serde_json::json!(file));
@@ -974,19 +1001,18 @@ pub async fn definitions_batch(
     new_body["refs"] = serde_json::Value::Array(rewritten);
     let mut result = cmx_portal::definitions::store::get_definitions_batch(&new_body).await?;
     // DCT 单表过滤：对记录的 DCT item 只保留命中 dictCode 的那张表
-    if !dct_filters.is_empty() {
-        if let Some(items) = result.get_mut("items").and_then(|v| v.as_array_mut()) {
-            for it in items.iter_mut() {
-                let file = it.get("file").and_then(|v| v.as_str()).unwrap_or("");
-                if let Some(code) = dct_filters.get(file) {
-                    if let Some(tables) = it
-                        .get_mut("doc")
-                        .and_then(|d| d.get_mut("dictionaryTables"))
-                        .and_then(|v| v.as_array_mut())
-                    {
-                        tables.retain(|t| cmx_portal::definitions::resolve::dict_matches(t, code));
-                    }
-                }
+    if !dct_filters.is_empty()
+        && let Some(items) = result.get_mut("items").and_then(|v| v.as_array_mut())
+    {
+        for it in items.iter_mut() {
+            let file = it.get("file").and_then(|v| v.as_str()).unwrap_or("");
+            if let Some(code) = dct_filters.get(file)
+                && let Some(tables) = it
+                    .get_mut("doc")
+                    .and_then(|d| d.get_mut("dictionaryTables"))
+                    .and_then(|v| v.as_array_mut())
+            {
+                tables.retain(|t| cmx_portal::definitions::resolve::dict_matches(t, code));
             }
         }
     }
@@ -1389,7 +1415,7 @@ pub struct DefsQuery {
 }
 
 impl DefsQuery {
-    fn from_dam(&self) -> cmx_portal::flexible_combination::drn::FromDam {
+    fn to_dam(&self) -> cmx_portal::flexible_combination::drn::FromDam {
         cmx_portal::flexible_combination::drn::FromDam {
             domain: self.domain.clone(),
             app: self.app.clone(),
@@ -1424,7 +1450,7 @@ pub async fn defs_resolve(
         .drn
         .as_deref()
         .ok_or_else(|| cmx_api_types::Error::bad_request("缺少 drn 参数"))?;
-    let def = cmx_portal::flexible_combination::defs::resolve(drn, &q.from_dam()).await?;
+    let def = cmx_portal::flexible_combination::defs::resolve(drn, &q.to_dam()).await?;
     Ok(Json(ApiResp::ok(def)))
 }
 
@@ -1438,7 +1464,7 @@ pub async fn defs_deps(
         .drn
         .as_deref()
         .ok_or_else(|| cmx_api_types::Error::bad_request("缺少 drn 参数"))?;
-    let from = q.from_dam();
+    let from = q.to_dam();
     let def = cmx_portal::flexible_combination::defs::resolve(drn, &from).await?;
     let deps = cmx_portal::flexible_combination::defs::dependencies_of(&def, &from);
     Ok(Json(ApiResp::ok(serde_json::json!({

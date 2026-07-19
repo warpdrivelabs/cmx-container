@@ -164,7 +164,9 @@ async fn get_menu_page_json_from_db(menu_ref: &str) -> PortalResult<Value> {
     }
     if roots.is_empty() {
         // 无数据：返回 NotFound，让 DAM 派生回退到资源菜单（与原菜单文件不存在行为一致）
-        return Err(PortalError::not_found(format!("菜单数据不存在：{menu_ref}")));
+        return Err(PortalError::not_found(format!(
+            "菜单数据不存在：{menu_ref}"
+        )));
     }
     let items: Vec<Value> = roots
         .iter()

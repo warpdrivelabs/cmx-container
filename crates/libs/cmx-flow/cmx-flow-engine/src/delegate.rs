@@ -52,7 +52,11 @@ impl DelegateRegistry {
     }
 
     /// 便捷注册：直接从实现了 JavaDelegate 的具体类型注册。
-    pub fn register_delegate<D: JavaDelegate + 'static>(&mut self, key: impl Into<String>, delegate: D) {
+    pub fn register_delegate<D: JavaDelegate + 'static>(
+        &mut self,
+        key: impl Into<String>,
+        delegate: D,
+    ) {
         self.register(key, Arc::new(delegate));
     }
 

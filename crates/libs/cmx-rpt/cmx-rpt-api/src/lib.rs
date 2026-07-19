@@ -59,8 +59,7 @@ impl ModuleRoutes for ReportModule {
             //   data   = 报表数据（cr_cell_data 按 org+period，读走 ZmcDataSet 零拷贝）
             .route(
                 "/report-design/reports/{code}/layout",
-                get(handlers::report_design_load_layout)
-                    .post(handlers::report_design_save_layout),
+                get(handlers::report_design_load_layout).post(handlers::report_design_save_layout),
             )
             .route(
                 "/report-design/reports/{code}/data/query",

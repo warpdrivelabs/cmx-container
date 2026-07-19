@@ -58,22 +58,21 @@ check:
   allow_failure: false
 
 # ── 格式化门禁 ────────────────────────────────────────────────────────
-# 现存量代码未全量 rustfmt 化；先以 allow_failure 观察，避免引入 CI 当天即全红。
-# 待 `cargo fmt --all` 单独成一个「格式化」提交后，改为 allow_failure: false 硬失败。
+# 全量 rustfmt 化已完成（cargo fmt --all，186 文件），转硬失败：
+# 此后任何未格式化代码阻断合并。
 fmt:
   stage: lint
   script:
     - cargo fmt --all -- --check
-  allow_failure: true
+  allow_failure: false
 
 # ── clippy 门禁 ───────────────────────────────────────────────────────
-# 现存 29 处风格告警（多为重构逐字搬迁带入）；先以 allow_failure 观察，
-# 待评估报告 v4 建议 3 清零后，改为 -D warnings 硬失败。
+# 存量告警已清零（44→0：clippy --fix 自动修 37，手工修/放行 7）；转硬失败 -D warnings。
 clippy:
   stage: lint
   script:
     - cargo clippy --workspace --all-targets -- -D warnings
-  allow_failure: true
+  allow_failure: false
 
 # ── 单元测试门禁 ──────────────────────────────────────────────────────
 # 注：需要 live PG 的集成测试（cmx-biz form/menu、各 *_pg_test）在 CI 无库环境会失败，
@@ -83,3 +82,23 @@ test:
   script:
     - cargo test --workspace --lib
   allow_failure: false
+
+# ── 集成测试门禁（PG service）─────────────────────────────────────────
+# cmx-flow 的 9 个 *_pg.rs 是自建 schema（store.ensure_schema()）、只需一个空库，
+# 不依赖 fico 种子数据，适合在 CI 起 postgres service 后跑。以 TEST_PG_URL 注入连接。
+# 依赖 fico 种子的集成测试（doc 版本、DCT 落库）仍需有数据的 runner，暂不纳入。
+# 现阶段 allow_failure（runner/service 首次接线需观察）；稳定后转硬失败。
+integration-test:
+  stage: test
+  services:
+    - name: postgres:16
+      alias: postgres
+  variables:
+    POSTGRES_DB: cmx_ci
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    TEST_PG_URL: "postgres://postgres:postgres@postgres:5432/cmx_ci"
+  script:
+    # 仅跑自建 schema、无需种子的 cmx-flow PG 集成测试（#[ignore] 门控，用 --ignored 显式开启）。
+    - cargo test -p cmx-flow-tests -- --ignored --test-threads=1
+  allow_failure: true

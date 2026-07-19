@@ -36,7 +36,6 @@ pub async fn init_plugins() -> crate::Result<()> {
         .get_as::<cmx_plugin::AutoInstallConfig>("plugin.auto_install")
         .unwrap_or_default();
 
-
     //0702 更换统一的appid获取方式
     let app_id = cmx_utils::ConfigManager::global().get_app_id();
 

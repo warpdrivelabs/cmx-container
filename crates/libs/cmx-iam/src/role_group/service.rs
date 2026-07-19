@@ -431,7 +431,10 @@ impl RoleGroupService for RoleGroupServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = Some(match filters {
-            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            Some(fs) => fs
+                .into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>(),
             None => vec![Self::with_default_archived(RoleGroupFilter::default())],
         });
 
@@ -473,7 +476,10 @@ impl RoleGroupService for RoleGroupServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = Some(match filters {
-            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            Some(fs) => fs
+                .into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>(),
             None => vec![Self::with_default_archived(RoleGroupFilter::default())],
         });
 

@@ -74,7 +74,11 @@ async fn prompt_async_returns_ok() {
     });
     let result = client.prompt_async(&sid, &body).await;
     // 无论 OpenCode 是否配置 LLM，prompt_async 本身应返回 Ok（204）。
-    assert!(result.is_ok(), "prompt_async 应返回 Ok，实际: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "prompt_async 应返回 Ok，实际: {:?}",
+        result.err()
+    );
 
     // 清理（abort 中止可能正在跑的生成）。
     let _ = client.abort(&sid).await;

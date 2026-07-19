@@ -14,7 +14,7 @@ use cmx_core::model::cell::DataValue;
 use serde_json::Value;
 
 use super::meta::LayerView;
-use super::query::{json_to_datavalue, Cond, Filter, LayerQuery, Op, OrderBy};
+use super::query::{Cond, Filter, LayerQuery, Op, OrderBy, json_to_datavalue};
 use cmx_biz::{BizError, Result};
 
 /// 参数收集器：顺序累积 DataValue，产出 `$N` 占位符。
@@ -97,7 +97,13 @@ pub fn build_layer_select(
     if !order.is_empty() {
         let ob = order
             .iter()
-            .map(|o| format!("{} {}", quote_ident(&o.col), if o.desc { "DESC" } else { "ASC" }))
+            .map(|o| {
+                format!(
+                    "{} {}",
+                    quote_ident(&o.col),
+                    if o.desc { "DESC" } else { "ASC" }
+                )
+            })
             .collect::<Vec<_>>()
             .join(", ");
         sql.push_str(" ORDER BY ");
@@ -204,10 +210,9 @@ fn build_leaf(layer: &LayerView, c: &Cond, p: &mut Params) -> Result<String> {
         Op::Lt => format!("{qcol} < {}", p.push(type_val(&c.val)?)),
         Op::Lte => format!("{qcol} <= {}", p.push(type_val(&c.val)?)),
         Op::In | Op::NotIn => {
-            let arr = c
-                .val
-                .as_array()
-                .ok_or_else(|| BizError::business(format!("{} 的 $in/$notIn 值必须是数组", c.col)))?;
+            let arr = c.val.as_array().ok_or_else(|| {
+                BizError::business(format!("{} 的 $in/$notIn 值必须是数组", c.col))
+            })?;
             let vals = arr.iter().map(type_val).collect::<Result<Vec<_>>>()?;
             let ph = p.push_array(vals);
             let neg = if c.op == Op::NotIn { "NOT " } else { "" };
@@ -286,7 +291,11 @@ fn build_cursor_pred(
     // 值序列：与 keys 对齐。除末列 id 外用 cursor.vals；末列用 cursor.id。
     // keys 里最后一项若是 id，用 cursor.id；其余用 vals（按序）。
     let last_is_id = keys.last().map(|(c, _)| *c == "id").unwrap_or(false);
-    let non_id_count = if last_is_id { keys.len() - 1 } else { keys.len() };
+    let non_id_count = if last_is_id {
+        keys.len() - 1
+    } else {
+        keys.len()
+    };
     if cursor.vals.len() < non_id_count {
         return Err(BizError::business("游标值数量与排序列不匹配"));
     }
@@ -393,7 +402,10 @@ mod tests {
 
     #[test]
     fn root_eq_and_range() {
-        let layer = mock_layer("t", &[("id", "BIGINT"), ("code", "VARCHAR"), ("amt", "DECIMAL")]);
+        let layer = mock_layer(
+            "t",
+            &[("id", "BIGINT"), ("code", "VARCHAR"), ("amt", "DECIMAL")],
+        );
         let q = lq(json!({ "code": "A", "amt": { "$gte": 100, "$lt": 500 } }));
         let (sql, params) = build_layer_select(&layer, &q, None).unwrap();
         assert!(sql.contains("WHERE"));
@@ -404,9 +416,14 @@ mod tests {
 
     #[test]
     fn child_scope_any() {
-        let layer = mock_layer("c", &[("id", "BIGINT"), ("upper_id", "BIGINT"), ("line_no", "INT")]);
+        let layer = mock_layer(
+            "c",
+            &[("id", "BIGINT"), ("upper_id", "BIGINT"), ("line_no", "INT")],
+        );
         let parents = vec![DataValue::Int(1), DataValue::Int(2)];
-        let (sql, params) = build_layer_select(&layer, &LayerQuery::default(), Some(("upper_id", &parents))).unwrap();
+        let (sql, params) =
+            build_layer_select(&layer, &LayerQuery::default(), Some(("upper_id", &parents)))
+                .unwrap();
         assert!(sql.contains("\"upper_id\" = ANY($1)"));
         // 默认排序 child_key, line_no, id
         assert!(sql.contains("ORDER BY \"upper_id\" ASC, \"line_no\" ASC, \"id\" ASC"));
@@ -416,13 +433,20 @@ mod tests {
 
     #[test]
     fn in_and_isnull_and_like() {
-        let layer = mock_layer("t", &[("id", "BIGINT"), ("st", "VARCHAR"), ("nm", "VARCHAR")]);
+        let layer = mock_layer(
+            "t",
+            &[("id", "BIGINT"), ("st", "VARCHAR"), ("nm", "VARCHAR")],
+        );
         let q = lq(json!({ "st": { "$in": ["a","b"] }, "nm": { "$contains": "x" } }));
         let (sql, params) = build_layer_select(&layer, &q, None).unwrap();
         assert!(sql.contains("\"st\" = ANY("));
         assert!(sql.contains("\"nm\" LIKE "));
         // contains 包 %
-        assert!(params.iter().any(|v| matches!(v, DataValue::String(s) if s == "%x%")));
+        assert!(
+            params
+                .iter()
+                .any(|v| matches!(v, DataValue::String(s) if s == "%x%"))
+        );
     }
 
     #[test]
@@ -444,7 +468,10 @@ mod tests {
     fn cursor_pred_expands() {
         let layer = mock_layer("t", &[("id", "BIGINT"), ("d", "DATE")]);
         let mut q = LayerQuery {
-            order_by: vec![OrderBy { col: "d".into(), desc: false }],
+            order_by: vec![OrderBy {
+                col: "d".into(),
+                desc: false,
+            }],
             ..Default::default()
         };
         q.cursor = Some(super::super::query::Cursor {

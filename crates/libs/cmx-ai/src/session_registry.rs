@@ -34,17 +34,30 @@ impl AiSseEvent {
     /// 构造一个 SSE 事件。
     pub fn new(event_name: &'static str, payload: impl Serialize) -> Self {
         let payload = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".into());
-        Self { event_name, payload }
+        Self {
+            event_name,
+            payload,
+        }
     }
 
     /// `text_delta` 事件。
     pub fn text_delta(content: impl Into<String>) -> Self {
-        Self::new("text_delta", &TextDeltaEvent { content: content.into() })
+        Self::new(
+            "text_delta",
+            &TextDeltaEvent {
+                content: content.into(),
+            },
+        )
     }
 
     /// `reasoning_delta` 事件。
     pub fn reasoning_delta(content: impl Into<String>) -> Self {
-        Self::new("reasoning_delta", &ReasoningDeltaEvent { content: content.into() })
+        Self::new(
+            "reasoning_delta",
+            &ReasoningDeltaEvent {
+                content: content.into(),
+            },
+        )
     }
 
     /// `tool_call` 事件（普通工具，仅 tool + state）。
@@ -80,7 +93,13 @@ impl AiSseEvent {
 
     /// `error` 事件。
     pub fn error(message: impl Into<String>, code: Option<u16>) -> Self {
-        Self::new("error", &ErrorEvent { message: message.into(), code })
+        Self::new(
+            "error",
+            &ErrorEvent {
+                message: message.into(),
+                code,
+            },
+        )
     }
 
     /// `done` 事件。
@@ -197,11 +216,7 @@ impl SessionRegistry {
     /// 登记当前 session 待处理的询问（仅记录 id，供 answer 接口转发）。
     ///
     /// 无超时 —— 对齐 OpenCode 原生行为：question 无限等待直到用户回答/会话结束。
-    pub fn register_pending_question(
-        &self,
-        session_id: &str,
-        question_id: impl Into<String>,
-    ) {
+    pub fn register_pending_question(&self, session_id: &str, question_id: impl Into<String>) {
         self.pending_questions.insert(
             session_id.to_string(),
             PendingEntry {
@@ -222,11 +237,7 @@ impl SessionRegistry {
     /// 登记当前 session 待处理的审批（仅记录 id，供 approval 接口转发）。
     ///
     /// 无超时 —— 对齐 OpenCode 原生行为：permission 无限等待。
-    pub fn register_pending_permission(
-        &self,
-        session_id: &str,
-        permission_id: impl Into<String>,
-    ) {
+    pub fn register_pending_permission(&self, session_id: &str, permission_id: impl Into<String>) {
         self.pending_permissions.insert(
             session_id.to_string(),
             PendingEntry {
@@ -268,11 +279,7 @@ impl SessionRegistry {
     /// 投递前端回传的上下文数据，解除对应工具的挂起。
     ///
     /// 返回 `true` 表示找到并投递成功；`false` 表示无此 pending（已超时清理或不存在）。
-    pub fn resolve_context_request(
-        &self,
-        request_id: &str,
-        data: serde_json::Value,
-    ) -> bool {
+    pub fn resolve_context_request(&self, request_id: &str, data: serde_json::Value) -> bool {
         if let Some((_, entry)) = self.pending_context.remove(request_id) {
             // send 失败说明 receiver 已 drop（handler 超时已返回），忽略即可。
             let _ = entry.tx.send(data);
@@ -350,10 +357,7 @@ mod tests {
     async fn subscribe_and_broadcast() {
         let reg = SessionRegistry::new();
         let mut rx = reg.subscribe("ses_test1");
-        reg.broadcast(
-            "ses_test1",
-            AiSseEvent::text_delta("hello"),
-        );
+        reg.broadcast("ses_test1", AiSseEvent::text_delta("hello"));
         let ev = rx.recv().await.expect("应收到事件");
         assert_eq!(ev.event_name, "text_delta");
         assert!(ev.payload.contains("hello"));

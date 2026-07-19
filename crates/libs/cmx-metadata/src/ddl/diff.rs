@@ -324,9 +324,8 @@ impl DdlDiff {
     /// * `Vec<IndexChange>` - 索引变更列表
     fn diff_indexes(old_idxs: &[IndexDefine], new_idxs: &[IndexDefine]) -> Vec<IndexChange> {
         // 索引内容相等：列名序列与类型都一致（顺序敏感，与复合索引语义一致）。
-        let same_content = |a: &IndexDefine, b: &IndexDefine| {
-            a.columns == b.columns && a.kind == b.kind
-        };
+        let same_content =
+            |a: &IndexDefine, b: &IndexDefine| a.columns == b.columns && a.kind == b.kind;
 
         let mut changes = Vec::new();
 
@@ -739,7 +738,11 @@ mod tests {
         );
 
         // 整张表 diff 也应无变更
-        let old = vec![make_simple_table("cf_client", vec![db_restored.clone()], vec![])];
+        let old = vec![make_simple_table(
+            "cf_client",
+            vec![db_restored.clone()],
+            vec![],
+        )];
         let new = vec![make_simple_table("cf_client", vec![desired], vec![])];
         assert!(
             DdlDiff::diff(&old, &new).is_empty(),
@@ -808,12 +811,16 @@ mod tests {
         if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
             assert_eq!(index_changes.len(), 2, "应报 AddIndex + DropIndex");
             assert!(
-                index_changes.iter().any(|c| matches!(c, IndexChange::AddIndex(i) if i.name == "uk_cf_t_1")),
+                index_changes
+                    .iter()
+                    .any(|c| matches!(c, IndexChange::AddIndex(i) if i.name == "uk_cf_t_1")),
                 "应有 AddIndex(设计期名): {index_changes:?}"
             );
             // DropIndex 应携带 DB 真实名（供 DROP 执行）
             assert!(
-                index_changes.iter().any(|c| matches!(c, IndexChange::DropIndex(i) if i.name == "cf_t_code_key")),
+                index_changes
+                    .iter()
+                    .any(|c| matches!(c, IndexChange::DropIndex(i) if i.name == "cf_t_code_key")),
                 "应有 DropIndex(DB真实名): {index_changes:?}"
             );
         } else {
@@ -855,7 +862,9 @@ mod tests {
         let dialect = PostgresDdlDialect::default();
         let stmts = DdlDiff::changes_to_ddl(&dialect, &changes).unwrap();
         assert!(
-            stmts.iter().any(|s| s.contains("COMMENT ON COLUMN") && s.contains("字典项主键")),
+            stmts
+                .iter()
+                .any(|s| s.contains("COMMENT ON COLUMN") && s.contains("字典项主键")),
             "应生成 COMMENT ON COLUMN 写入新注释: {stmts:?}"
         );
         assert!(
