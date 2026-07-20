@@ -29,6 +29,8 @@ use tracing::debug;
 // 抽出后直接用 cmx-api-types，避免反向依赖 cmx-api 成环。
 use cmx_api_types::{Error, Result};
 
+pub mod seed_scanner;
+
 const META_VERSION: i32 = 2;
 const ENGINE_VERSION: &str = "1.0.0";
 /// VARCHAR 字段未指定 fieldLength 时的默认长度。
