@@ -405,6 +405,9 @@ pub struct DataSet {
     pub updated: Vec<Row>,
     /// 删除数据池（待删除的行）
     pub deleted: Vec<Row>,
+    /// 根层 COUNT(*) 结果（仅在 DocQuery.count_total=true 时由 loader 填入；其它场景为 None）。
+    /// 序列化为可选字段，老客户端读不到不受影响。
+    pub total: Option<i64>,
 }
 
 impl DataSet {
@@ -422,6 +425,7 @@ impl DataSet {
             inserted: Vec::new(),
             updated: Vec::new(),
             deleted: Vec::new(),
+            total: None,
         }
     }
 
@@ -438,6 +442,7 @@ impl DataSet {
             inserted: Vec::new(),
             updated: Vec::new(),
             deleted: Vec::new(),
+            total: None,
         }
     }
 
@@ -455,6 +460,7 @@ impl DataSet {
             inserted: Vec::new(),
             updated: Vec::new(),
             deleted: Vec::new(),
+            total: None,
         }
     }
 
@@ -541,7 +547,9 @@ impl Serialize for DataSet {
         S: Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut st = serializer.serialize_struct("DataSet", 3)?;
+        // total 仅在 Some 时序列化（skip_serializing_if 语义用字段数控制：None→3，Some→4）
+        let field_count = if self.total.is_some() { 4 } else { 3 };
+        let mut st = serializer.serialize_struct("DataSet", field_count)?;
         // 序列化数据集 ID
         st.serialize_field("id", &self.id)?;
         // 序列化 Schema 定义
@@ -554,6 +562,10 @@ impl Serialize for DataSet {
                 schema: &self.schema,
             },
         )?;
+        // 根层 COUNT(*) 结果（仅 Some 时输出）
+        if let Some(t) = self.total {
+            st.serialize_field("total", &t)?;
+        }
         st.end()
     }
 }
@@ -628,6 +640,9 @@ struct DataSetDe {
     id: String,
     schema: Schema,
     rows: Vec<serde_json::Value>,
+    /// 可选：根层 COUNT(*) 结果（仅 count_total=true 路径会带上）
+    #[serde(default)]
+    total: Option<i64>,
 }
 
 /// DataSet 的 Deserialize 实现
@@ -657,6 +672,7 @@ impl<'de> Deserialize<'de> for DataSet {
             inserted: Vec::new(),
             updated: Vec::new(),
             deleted: Vec::new(),
+            total: de.total,
         })
     }
 }

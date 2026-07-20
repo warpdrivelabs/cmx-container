@@ -124,6 +124,37 @@ pub fn build_layer_select(
     Ok((sql, p.vals))
 }
 
+/// 构造根层 COUNT 查询：`SELECT COUNT(*) FROM <table> [WHERE <filter>]`。
+///
+/// 与 [`build_layer_select`] 的核心差异：COUNT 不需要 ORDER BY / LIMIT / OFFSET / cursor /
+/// parent_scope——只复用 filter 下推以保证 COUNT 与分页 SELECT 看到同一行集。
+///
+/// # 参数
+/// - `layer`：本层视图（用于表名 + filter 列校验）
+/// - `lq`：本层查询（仅复用 `lq.filter`；其它字段忽略）
+///
+/// # 返回
+/// `(sql, params)`，参数顺序与 `$N` 占位符对齐。
+pub fn build_layer_count(
+    layer: &LayerView,
+    lq: &LayerQuery,
+) -> Result<(String, Vec<DataValue>)> {
+    // 列名白名单前置校验（与 build_layer_select 一致）
+    lq.validate_against(layer)?;
+
+    let mut p = Params::new();
+    let mut sql = format!("SELECT COUNT(*) FROM {}", quote_ident(&layer.table_name));
+
+    // 仅复用 filter 下推（不含 parent_scope/cursor；COUNT 只针对根层独立计数）
+    if let Some(filter) = &lq.filter {
+        let f = build_filter(layer, filter, &mut p)?;
+        sql.push_str(" WHERE ");
+        sql.push_str(&f);
+    }
+
+    Ok((sql, p.vals))
+}
+
 /// 逗号分隔的**带引号**列名列表（按定义 schema 顺序）。
 fn column_list(layer: &LayerView) -> String {
     layer
@@ -412,6 +443,34 @@ mod tests {
         assert!(sql.contains("\"code\" = $1") || sql.contains("\"code\" = $"));
         assert!(sql.contains("ORDER BY \"id\" ASC"));
         assert_eq!(params.len(), 3); // code, amt gte, amt lt
+    }
+
+    #[test]
+    fn count_reuses_filter() {
+        let layer = mock_layer(
+            "t",
+            &[("id", "BIGINT"), ("code", "VARCHAR"), ("amt", "DECIMAL")],
+        );
+        let q = lq(json!({ "code": "A", "amt": { "$gte": 100, "$lt": 500 } }));
+        let (sql, params) = build_layer_count(&layer, &q).unwrap();
+        // 形如 SELECT COUNT(*) FROM "t" WHERE (...)
+        assert!(
+            sql.starts_with("SELECT COUNT(*) FROM \"t\""),
+            "unexpected sql: {sql}"
+        );
+        assert!(sql.contains("WHERE"), "应含 WHERE 复用 filter: {sql}");
+        // 与 build_layer_select 同一套 filter → 同一份参数（code, amt gte, amt lt）
+        assert_eq!(params.len(), 3);
+        // COUNT 不该带 ORDER BY / LIMIT / OFFSET
+        assert!(!sql.contains("ORDER BY"), "COUNT 不应含 ORDER BY: {sql}");
+        assert!(!sql.contains("LIMIT"), "COUNT 不应含 LIMIT: {sql}");
+        assert!(!sql.contains("OFFSET"), "COUNT 不应含 OFFSET: {sql}");
+
+        // 无 filter 时：裸 COUNT(*)，无 WHERE
+        let empty = LayerQuery::default();
+        let (sql2, params2) = build_layer_count(&layer, &empty).unwrap();
+        assert_eq!(sql2, "SELECT COUNT(*) FROM \"t\"");
+        assert!(params2.is_empty());
     }
 
     #[test]
