@@ -1,0 +1,28 @@
+[
+  {
+    "code": "K4",
+    "name": "K4-会计年度变式(12正常+4特别)",
+    "sort_no": 1,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "posting_periods": 12,
+    "special_periods": 4
+  },
+  {
+    "code": "V9",
+    "name": "V9-日历年度(12正常)",
+    "sort_no": 2,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "posting_periods": 12,
+    "special_periods": 0
+  }
+]

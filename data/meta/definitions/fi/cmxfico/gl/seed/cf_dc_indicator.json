@@ -1,0 +1,16 @@
+[
+  {
+    "code": "S",
+    "name": "借方",
+    "sort_no": 1,
+    "status": 1,
+    "is_system": 1
+  },
+  {
+    "code": "H",
+    "name": "贷方",
+    "sort_no": 2,
+    "status": 1,
+    "is_system": 1
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "code": "G001",
+    "name": "一般字段状态组(基本)",
+    "sort_no": 1,
+    "status": 1,
+    "is_system": 1,
+    "field_status_variant": "V001",
+    "required_fields": "account,profit_center",
+    "optional_fields": "cost_center,text",
+    "suppressed_fields": ""
+  },
+  {
+    "code": "G002",
+    "name": "供应商字段状态组",
+    "sort_no": 2,
+    "status": 1,
+    "is_system": 1,
+    "field_status_variant": "V002",
+    "required_fields": "account,vendor,baseline_date",
+    "optional_fields": "payment_terms,text",
+    "suppressed_fields": ""
+  },
+  {
+    "code": "G003",
+    "name": "客户字段状态组",
+    "sort_no": 3,
+    "status": 1,
+    "is_system": 1,
+    "field_status_variant": "V003",
+    "required_fields": "account,customer",
+    "optional_fields": "payment_terms,text",
+    "suppressed_fields": ""
+  },
+  {
+    "code": "G004",
+    "name": "物料字段状态组",
+    "sort_no": 4,
+    "status": 1,
+    "is_system": 1,
+    "field_status_variant": "V004",
+    "required_fields": "account,material",
+    "optional_fields": "plant,text",
+    "suppressed_fields": ""
+  }
+]

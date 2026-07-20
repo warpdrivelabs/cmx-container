@@ -1,0 +1,54 @@
+[
+  {
+    "id": 1,
+    "code": "1000",
+    "name": "管理职能",
+    "sort_no": 1,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "function_category": "ADMIN"
+  },
+  {
+    "id": 2,
+    "code": "2000",
+    "name": "销售职能",
+    "sort_no": 2,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "function_category": "SALES"
+  },
+  {
+    "id": 3,
+    "code": "3000",
+    "name": "生产职能",
+    "sort_no": 3,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "function_category": "PROD"
+  },
+  {
+    "id": 4,
+    "code": "4000",
+    "name": "研发职能",
+    "sort_no": 4,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "function_category": "R&D"
+  }
+]

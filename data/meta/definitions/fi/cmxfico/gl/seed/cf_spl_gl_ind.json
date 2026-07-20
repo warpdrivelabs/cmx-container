@@ -1,0 +1,35 @@
+[
+  {
+    "code": "A",
+    "name": "预付账款(特别总账)",
+    "sort_no": 1,
+    "status": 1,
+    "is_system": 1,
+    "special_gl_type": "DOWN_PAYMENT",
+    "account_type_code": "K",
+    "reconciliation_account_id": 2202,
+    "special_gl_account_id": 1123
+  },
+  {
+    "code": "F",
+    "name": "预收账款(特别总账)",
+    "sort_no": 2,
+    "status": 1,
+    "is_system": 1,
+    "special_gl_type": "DOWN_PAYMENT",
+    "account_type_code": "D",
+    "reconciliation_account_id": 1122,
+    "special_gl_account_id": 2203
+  },
+  {
+    "code": "W",
+    "name": "应收票据(特别总账)",
+    "sort_no": 3,
+    "status": 1,
+    "is_system": 1,
+    "special_gl_type": "BILL",
+    "account_type_code": "D",
+    "reconciliation_account_id": 1122,
+    "special_gl_account_id": 1121
+  }
+]

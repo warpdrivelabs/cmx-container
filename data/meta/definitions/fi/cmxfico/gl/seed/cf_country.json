@@ -1,0 +1,52 @@
+[
+  {
+    "code": "CN",
+    "name": "中国",
+    "sort_no": 1,
+    "status": 1,
+    "is_system": 1,
+    "currency_code": "CNY",
+    "iso_code_2": "CN",
+    "iso_code_3": "CHN"
+  },
+  {
+    "code": "US",
+    "name": "美国",
+    "sort_no": 2,
+    "status": 1,
+    "is_system": 1,
+    "currency_code": "USD",
+    "iso_code_2": "US",
+    "iso_code_3": "USA"
+  },
+  {
+    "code": "DE",
+    "name": "德国",
+    "sort_no": 3,
+    "status": 1,
+    "is_system": 1,
+    "currency_code": "EUR",
+    "iso_code_2": "DE",
+    "iso_code_3": "DEU"
+  },
+  {
+    "code": "HK",
+    "name": "中国香港",
+    "sort_no": 4,
+    "status": 1,
+    "is_system": 1,
+    "currency_code": "HKD",
+    "iso_code_2": "HK",
+    "iso_code_3": "HKG"
+  },
+  {
+    "code": "JP",
+    "name": "日本",
+    "sort_no": 5,
+    "status": 1,
+    "is_system": 1,
+    "currency_code": "JPY",
+    "iso_code_2": "JP",
+    "iso_code_3": "JPN"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "code": "01",
+    "name": "总账凭证号范围",
+    "sort_no": 1,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "range_from": "0100000000",
+    "range_to": "0199999999",
+    "external_numbering": "0"
+  },
+  {
+    "code": "02",
+    "name": "供应商凭证号范围",
+    "sort_no": 2,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "range_from": "0200000000",
+    "range_to": "0299999999",
+    "external_numbering": "0"
+  },
+  {
+    "code": "03",
+    "name": "客户凭证号范围",
+    "sort_no": 3,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "range_from": "0300000000",
+    "range_to": "0399999999",
+    "external_numbering": "0"
+  }
+]
