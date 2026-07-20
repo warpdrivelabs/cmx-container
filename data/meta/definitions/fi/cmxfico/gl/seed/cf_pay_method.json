@@ -8,7 +8,8 @@
     "payment_type": "BANK_TRANSFER",
     "country_code": "CN",
     "bank_transfer": 1,
-    "check_payment": 0
+    "check_payment": 0,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "C",
@@ -19,7 +20,8 @@
     "payment_type": "CHECK",
     "country_code": "CN",
     "bank_transfer": 0,
-    "check_payment": 1
+    "check_payment": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "D",
@@ -30,6 +32,7 @@
     "payment_type": "DRAFT",
     "country_code": "CN",
     "bank_transfer": 0,
-    "check_payment": 0
+    "check_payment": 0,
+    "create_time": "2026-01-01 00:00:00"
   }
 ]

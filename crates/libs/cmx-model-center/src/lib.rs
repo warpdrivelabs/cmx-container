@@ -54,6 +54,20 @@ fn db_err<E: std::fmt::Display>(ctx: &str) -> impl Fn(E) -> Error + '_ {
     move |e| Error::InternalError(format!("{ctx}: {e}"))
 }
 
+/// 部署 kind 优先级：DCT(0) → DOC(1) → RPT(2) → SEED(3) → MENU(4)。
+/// 保证 SEED 在 DCT 建表之后执行（SEED 依赖目标表已建），MENU 最后同步。
+/// deploy_with_events 与 deploy_plan_stream 共用此函数，确保「预览顺序 == 执行顺序」。
+fn kind_order(k: &str) -> u8 {
+    match k {
+        "DCT" => 0,
+        "DOC" => 1,
+        "RPT" => 2,
+        "SEED" => 3,
+        "MENU" => 4,
+        _ => 99,
+    }
+}
+
 fn data_value_string(v: &DataValue) -> Option<String> {
     match v {
         DataValue::String(s) => Some(s.clone()),
@@ -2389,9 +2403,17 @@ pub async fn deploy_plan_stream(
         "step",
         json!({ "message": format!("开始生成 {} 个模块定义的部署计划", items.len()), "total": items.len() }),
     );
+    // 按 kind 优先级稳定排序（与 deploy_with_events 一致）：DCT → DOC → RPT → SEED → MENU，
+    // 保证「预览顺序 == 执行顺序」，避免用户看到 SEED 排在 DCT 前的预览但执行时被后端重排。
+    let mut sorted_items: Vec<(usize, &Value)> = items.iter().enumerate().collect();
+    sorted_items.sort_by_key(|(orig_idx, it)| {
+        let kind = it.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+        (kind_order(kind), *orig_idx)
+    });
     let mut results = Vec::new();
     let mut total_tables = 0usize;
-    for (idx, it) in items.iter().enumerate() {
+    for (idx, (_orig_idx, it)) in sorted_items.iter().enumerate() {
+        let it = *it;
         let kind = it
             .get("kind")
             .and_then(|v| v.as_str())
@@ -2603,18 +2625,9 @@ async fn deploy_with_events(
         json!({ "message": format!("开始部署 {} 个模块定义", items.len()), "batch_id": batch_id, "total": items.len() }),
     );
 
-    // 按 kind 优先级稳定排序：DCT(0) → DOC(1) → RPT(2) → SEED(3) → MENU(4)
-    // 保证 SEED 在 DCT 建表之后执行（SEED 依赖目标表已建），MENU 最后同步。
-    fn kind_order(k: &str) -> u8 {
-        match k {
-            "DCT" => 0,
-            "DOC" => 1,
-            "RPT" => 2,
-            "SEED" => 3,
-            "MENU" => 4,
-            _ => 99,
-        }
-    }
+    // 按 kind 优先级稳定排序（复用模块级 kind_order）：
+    // DCT(0) → DOC(1) → RPT(2) → SEED(3) → MENU(4)，保证 SEED 在 DCT 建表之后执行，
+    // MENU 最后同步。同 kind 内保持 items 原始顺序（稳定排序）。
     let mut sorted_items: Vec<(usize, &Value)> = items.iter().enumerate().collect();
     sorted_items.sort_by_key(|(orig_idx, it)| {
         let kind = it.get("kind").and_then(|v| v.as_str()).unwrap_or("");

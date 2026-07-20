@@ -4,6 +4,7 @@
 //! - 扫描结果包含原始内容，调用方可直接拿去执行/适配，无需重复读盘
 //! - checksum 用 SHA256；模块级聚合 hash 按文件路径排序后拼接计算（顺序无关）
 
+use cmx_model::config::data_path;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
@@ -25,17 +26,19 @@ pub struct ScannedFile {
 }
 
 /// 扫描指定模块下的 seed/*.json
-/// 路径：data/meta/definitions/<domain>/<app>/<module>/seed/
+/// 路径：<data_root>/meta/definitions/<domain>/<app>/<module>/seed/
+/// data_root 解析优先级：portal.data_root 配置 → CMX_PORTAL_DATA_ROOT 环境变量 → ./data
 pub fn scan_seed_files(domain: &str, app: &str, module: &str) -> Vec<ScannedFile> {
-    let dir = Path::new("data/meta/definitions").join(domain).join(app).join(module).join("seed");
+    let dir = data_path(["meta", "definitions", domain, app, module, "seed"]);
     let prefix = format!("{domain}/{app}/{module}/seed");
     scan_seed_files_in_dir_with_prefix(&dir, &prefix)
 }
 
 /// 扫描指定模块下的 menu-pages JSON
-/// 路径：data/menu-pages/<domain>/<app>/<module>/
+/// 路径：<data_root>/menu-pages/<domain>/<app>/<module>/
+/// data_root 解析优先级：portal.data_root 配置 → CMX_PORTAL_DATA_ROOT 环境变量 → ./data
 pub fn scan_menu_files(domain: &str, app: &str, module: &str) -> Vec<ScannedFile> {
-    let dir = Path::new("data/menu-pages").join(domain).join(app).join(module);
+    let dir = data_path(["menu-pages", domain, app, module]);
     let prefix = format!("{domain}/{app}/{module}");
     scan_menu_files_in_dir_with_prefix(&dir, &prefix)
 }

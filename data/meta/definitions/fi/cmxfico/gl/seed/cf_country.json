@@ -7,7 +7,8 @@
     "is_system": 1,
     "currency_code": "CNY",
     "iso_code_2": "CN",
-    "iso_code_3": "CHN"
+    "iso_code_3": "CHN",
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "US",
@@ -17,7 +18,8 @@
     "is_system": 1,
     "currency_code": "USD",
     "iso_code_2": "US",
-    "iso_code_3": "USA"
+    "iso_code_3": "USA",
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "DE",
@@ -27,7 +29,8 @@
     "is_system": 1,
     "currency_code": "EUR",
     "iso_code_2": "DE",
-    "iso_code_3": "DEU"
+    "iso_code_3": "DEU",
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "HK",
@@ -37,7 +40,8 @@
     "is_system": 1,
     "currency_code": "HKD",
     "iso_code_2": "HK",
-    "iso_code_3": "HKG"
+    "iso_code_3": "HKG",
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "JP",
@@ -47,6 +51,7 @@
     "is_system": 1,
     "currency_code": "JPY",
     "iso_code_2": "JP",
-    "iso_code_3": "JPN"
+    "iso_code_3": "JPN",
+    "create_time": "2026-01-01 00:00:00"
   }
 ]

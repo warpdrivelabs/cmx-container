@@ -8,7 +8,8 @@
     "field_status_variant": "V001",
     "required_fields": "account,profit_center",
     "optional_fields": "cost_center,text",
-    "suppressed_fields": ""
+    "suppressed_fields": "",
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "G002",
@@ -19,7 +20,8 @@
     "field_status_variant": "V002",
     "required_fields": "account,vendor,baseline_date",
     "optional_fields": "payment_terms,text",
-    "suppressed_fields": ""
+    "suppressed_fields": "",
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "G003",
@@ -30,7 +32,8 @@
     "field_status_variant": "V003",
     "required_fields": "account,customer",
     "optional_fields": "payment_terms,text",
-    "suppressed_fields": ""
+    "suppressed_fields": "",
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "G004",
@@ -41,6 +44,7 @@
     "field_status_variant": "V004",
     "required_fields": "account,material",
     "optional_fields": "plant,text",
-    "suppressed_fields": ""
+    "suppressed_fields": "",
+    "create_time": "2026-01-01 00:00:00"
   }
 ]

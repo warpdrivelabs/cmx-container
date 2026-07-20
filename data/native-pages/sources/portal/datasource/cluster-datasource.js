@@ -656,7 +656,7 @@ function mcKindDetailHtml (cell, kind, moduleKey = '') {
   const upgradeSelect = canUpgrade ? mcInstalledUpgradeSelectHtml(moduleKey, kind, c) : ''
   return `<div class="mc-kind-detail">
     <div class="mc-kd-head">
-      <span class="cds-bd-kbadge ${kind === 'DOC' ? 'doc' : (kind === 'SEED' ? 'seed' : 'dct')}">${esc(MC_KINDS.find((k) => k.id === kind)?.label || kind)}</span>
+      <span class="cds-bd-kbadge ${kind === 'DOC' ? 'doc' : (kind === 'SEED' ? 'seed' : (kind === 'MENU' ? 'menu' : 'dct'))}">${esc(MC_KINDS.find((k) => k.id === kind)?.label || kind)}</span>
       <span class="mc-kd-actions">
         ${upgradeSelect}
         ${actionLabel ? `<button class="mc-action-btn t-${esc(sm.tone)}" data-mc-upgrade="${esc(moduleKey)}:${esc(kind)}" title="${esc(actionLabel)}到所选定义版本"><ui5-icon name="${actionIcon}"></ui5-icon>${esc(actionLabel)}</button>` : ''}
@@ -1038,7 +1038,7 @@ function mcReviewPlanDetailHtml (rv) {
       return `<div class="cds-bd-plan-grp">
         <div class="cds-bd-plan-grp-h">
           <span class="mc-badge t-${stTone(r.status)} sm"><ui5-icon name="${stIcon(r.status)}"></ui5-icon>${r.status === 'failed' ? '失败' : (r.status === 'skipped' ? '跳过' : '计划')}</span>
-          <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'SEED' ? 'seed' : (r.kind === 'SYS' ? 'seed' : 'dct'))}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
+          <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'SEED' ? 'seed' : (r.kind === 'MENU' ? 'menu' : (r.kind === 'SYS' ? 'seed' : 'dct')))}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
           <span class="cds-bd-plan-grp-t">${esc(r.module)}${r.version != null ? ' · v' + esc(r.version) : ''}</span>
           <span class="cds-bd-plan-grp-n">${r.tables != null ? r.tables + ' 张表' : (r.note ? esc(r.note) : '')}</span>
         </div>
@@ -1273,7 +1273,7 @@ function mcPlanHtml () {
         return `<div class="cds-bd-plan-grp">
           <div class="cds-bd-plan-grp-h">
             <span class="mc-badge t-${stTone(r.status)} sm"><ui5-icon name="${stIcon(r.status)}"></ui5-icon>${r.status === 'success' ? '成功' : (r.status === 'failed' ? '失败' : '跳过')}</span>
-            <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'SEED' ? 'seed' : 'dct')}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
+            <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'SEED' ? 'seed' : (r.kind === 'MENU' ? 'menu' : 'dct'))}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
             <span class="cds-bd-plan-grp-t">${esc(r.module)}${r.version != null ? ' · v' + esc(r.version) : ''}</span>
             <span class="cds-bd-plan-grp-n">${r.tables != null ? r.tables + ' 张表' : (r.note ? esc(r.note) : '')}</span>
           </div>
@@ -2110,6 +2110,7 @@ function styleHtml () {
     .cds-bd-plan-foot ui5-icon{width:.9rem;height:.9rem;color:#0a6ed1;flex:0 0 auto}
     /* ── 场景工作台（模型中心）── */
     .cds-bd-kbadge.seed{background:#fff2df;color:#c77700}
+    .cds-bd-kbadge.menu{background:#efe9fb;color:#6a4cd9}
     /* 运维 tab 切换 */
     .mc-tabs{display:flex;align-items:center;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#e5e5e5)}
     .mc-tab{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:8px 14px;font:inherit;font-size:13px;font-weight:600;color:var(--sapContent_LabelColor,#6a6d70);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -2302,6 +2303,8 @@ function styleHtml () {
       --cds-mc-green:var(--sapPositiveColor,#107e3e);
       --cds-mc-amber:var(--sapCriticalColor,#e9730c);
       --cds-mc-red:var(--sapNegativeColor,#bb0000);
+      --cds-mc-purple-bg:color-mix(in srgb,#6a4cd9 14%,var(--sapTile_Background,#fff));
+      --cds-mc-purple:#6a4cd9;
     }
     .cds-neo .cds-bd-target{
       border-color:color-mix(in srgb,var(--cds-mc-blue) 35%,var(--cds-mc-border));
@@ -2366,6 +2369,7 @@ function styleHtml () {
     .cds-neo .cds-bd-kbadge.seed,
     .cds-neo .mc-badge.t-amber.active,
     .cds-neo .mc-cell.t-amber{background:var(--cds-mc-amber-bg);color:var(--cds-mc-amber)}
+    .cds-neo .cds-bd-kbadge.menu{background:var(--cds-mc-purple-bg);color:var(--cds-mc-purple)}
     .cds-neo .mc-badge.t-red.active,
     .cds-neo .mc-cell.t-red{background:var(--cds-mc-red-bg);color:var(--cds-mc-red)}
     .cds-neo .mc-cell.t-gray{background:var(--cds-mc-gray-bg);color:var(--sapContent_LabelColor,#7a828c)}

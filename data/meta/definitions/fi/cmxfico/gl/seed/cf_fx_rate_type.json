@@ -4,27 +4,31 @@
     "name": "平均汇率(月末)",
     "sort_no": 1,
     "status": 1,
-    "is_system": 1
+    "is_system": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "B",
     "name": "银行买入价",
     "sort_no": 2,
     "status": 1,
-    "is_system": 1
+    "is_system": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "G",
     "name": "银行卖出价",
     "sort_no": 3,
     "status": 1,
-    "is_system": 1
+    "is_system": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "AVG",
     "name": "期间平均汇率",
     "sort_no": 4,
     "status": 1,
-    "is_system": 1
+    "is_system": 1,
+    "create_time": "2026-01-01 00:00:00"
   }
 ]

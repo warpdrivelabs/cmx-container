@@ -18,7 +18,6 @@ use cmx_metadata::seed::PgSeedDataExecutor;
 use cmx_model::definitions::store::list_definitions;
 use cmx_utils::snowflake_id_str;
 use serde_json::{json, Value};
-use std::path::Path;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::menu_pages_adapter::parse_menu_pages_file;
@@ -189,7 +188,9 @@ pub async fn deploy_seed_with_events(
         .collect();
 
     // 4. 构造 SeedDataConfig（冲突列从 TableDefine 推断）
-    let base_path = Path::new("data/meta/definitions");
+    // base_path 走 data_root 解析（portal.data_root → CMX_PORTAL_DATA_ROOT → ./data），
+    // 与 cmx-model::definitions::store 保持一致，避免硬编码相对路径在非默认 cwd 失效。
+    let base_path = cmx_model::config::data_path(["meta", "definitions"]);
     let seed_configs: Vec<SeedDataConfig> = seed_files
         .iter()
         .map(|f| {
@@ -241,7 +242,7 @@ pub async fn deploy_seed_with_events(
     let txn_id = guard.txn_id().to_string();
     let executor = PgSeedDataExecutor::new(db_id.to_string(), Some(txn_id.clone()));
     let summary = executor
-        .execute_all_seed_data(&table_defines, &seed_configs, base_path)
+        .execute_all_seed_data(&table_defines, &seed_configs, &base_path)
         .await;
     let total_success = summary.total_success() as i64;
     let total_failed = summary.total_failed() as i64;

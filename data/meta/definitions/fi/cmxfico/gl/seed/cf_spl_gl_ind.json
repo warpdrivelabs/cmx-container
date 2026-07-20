@@ -8,7 +8,8 @@
     "special_gl_type": "DOWN_PAYMENT",
     "account_type_code": "K",
     "reconciliation_account_id": 2202,
-    "special_gl_account_id": 1123
+    "special_gl_account_id": 1123,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "F",
@@ -19,7 +20,8 @@
     "special_gl_type": "DOWN_PAYMENT",
     "account_type_code": "D",
     "reconciliation_account_id": 1122,
-    "special_gl_account_id": 2203
+    "special_gl_account_id": 2203,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "W",
@@ -30,6 +32,7 @@
     "special_gl_type": "BILL",
     "account_type_code": "D",
     "reconciliation_account_id": 1122,
-    "special_gl_account_id": 1121
+    "special_gl_account_id": 1121,
+    "create_time": "2026-01-01 00:00:00"
   }
 ]
