@@ -365,6 +365,8 @@ rand = "0.8"
 nacos-sdk = "0.8"
 # 获取本机IP地址
 local-ip-address = "0.6"
+# 临时目录/文件（测试用）
+tempfile = "3"
 
 [profile.dev]
 # 优化级别：0=关闭，1=基本，2=中等，3=激进

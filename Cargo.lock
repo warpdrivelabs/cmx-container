@@ -1497,8 +1497,10 @@ dependencies = [
 name = "cmx-model-center"
 version = "0.1.12"
 dependencies = [
+ "anyhow",
  "chrono",
  "cmx-api-types",
+ "cmx-biz",
  "cmx-core",
  "cmx-database",
  "cmx-metadata",
@@ -1506,6 +1508,8 @@ dependencies = [
  "cmx-utils",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
  "tokio",
  "tracing",
 ]
