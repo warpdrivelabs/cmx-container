@@ -410,9 +410,10 @@ function dbSummaryHtml (ds) {
 // 换成 GET /api/portal/model/db-state?db_id= 即可（本文件 buildPanelHtml 以下逻辑不变）。
 
 const MC_KINDS = [
-  { id: 'DCT', label: '数据字典', icon: 'dimension' },
-  { id: 'DOC', label: '业务单据', icon: 'document-text' },
+  { id: 'DCT',  label: '数据字典',   icon: 'dimension' },
+  { id: 'DOC',  label: '业务单据',   icon: 'document-text' },
   { id: 'SEED', label: '初始化数据', icon: 'course-book' },
+  { id: 'MENU', label: '菜单同步',   icon: 'list' },
 ]
 // 场景元数据：文案 / 图标 / 色调 / 是否可勾选执行
 const MC_SCENARIO = {
@@ -527,6 +528,7 @@ function mcCellSelectedVersion (m, kind) {
 }
 
 function mcVersionOptionsHtml (m, kind) {
+  if (kind === 'SEED' || kind === 'MENU') return ''
   const versions = Array.isArray(m.cells?.[kind]?.versions) ? m.cells[kind].versions : []
   if (!versions.length) return ''
   const selected = mcCellSelectedVersion(m, kind)
@@ -576,9 +578,10 @@ function mcNormalizeDbState (raw, dbId) {
     const app = m.app || m.application || m.application_code || ''
     const module = m.module || m.module_code || ''
     const cells = {
-      DCT: mcNormalizeCell(m.cells?.DCT || m.cells?.dct || m.DCT || m.dct),
-      DOC: mcNormalizeCell(m.cells?.DOC || m.cells?.doc || m.DOC || m.doc),
+      DCT:  mcNormalizeCell(m.cells?.DCT  || m.cells?.dct  || m.DCT  || m.dct),
+      DOC:  mcNormalizeCell(m.cells?.DOC  || m.cells?.doc  || m.DOC  || m.doc),
       SEED: mcNormalizeCell(m.cells?.SEED || m.cells?.seed || m.SEED || m.seed || mcEmptyCell()),
+      MENU: mcNormalizeCell(m.cells?.MENU || m.cells?.menu || m.MENU || m.menu || mcEmptyCell()),
     }
     for (const k of MC_KINDS) counts[cells[k.id].scenario] = (counts[cells[k.id].scenario] || 0) + 1
     return {
@@ -607,9 +610,10 @@ function mcNormalizeDbState (raw, dbId) {
       module_name: m.module_name || m.moduleName || module || '未命名模块',
       table_count: Number(m.table_count ?? m.tableCount ?? 0) || 0,
       cells: {
-        DCT: mcNormalizeCell(m.dct || m.cells?.DCT || m.cells?.dct),
-        DOC: mcNormalizeCell(m.doc || m.cells?.DOC || m.cells?.doc),
+        DCT:  mcNormalizeCell(m.dct  || m.cells?.DCT  || m.cells?.dct),
+        DOC:  mcNormalizeCell(m.doc  || m.cells?.DOC  || m.cells?.doc),
         SEED: mcNormalizeCell(m.seed || m.cells?.SEED || m.cells?.seed),
+        MENU: mcNormalizeCell(m.menu || m.cells?.MENU || m.cells?.menu || mcEmptyCell()),
       },
     }
   })
@@ -812,11 +816,21 @@ function buildPanelHtml (ds) {
     const on = !!b.picked[mcCellKey(m.key, k.id)]
     const selectedVersion = mcCellSelectedVersion(m, k.id)
     let verText = ''
-    if (sc === 'create') verText = selectedVersion ? `v${selectedVersion.version}` : `v${c.latest}`
-    else if (sc === 'upgrade') verText = `v${c.applied}→v${selectedVersion?.version || c.latest}`
-    else if (sc === 'downgrade') verText = `v${c.applied}(库) / v${selectedVersion?.version || c.latest}(定义)`
-    else if (sc === 'none') verText = ''
-    else verText = `v${c.applied || selectedVersion?.version || c.latest}`
+    const hasVersion = k.id === 'DCT' || k.id === 'DOC' || k.id === 'RPT'
+    if (!hasVersion) {
+      const unit = k.id === 'MENU' ? '节点' : '行'
+      if (sc === 'create' || sc === 'current' || sc === 'drift') {
+        verText = c.row_count != null ? `${c.row_count} ${unit}` : ''
+      } else {
+        verText = ''
+      }
+    } else {
+      if (sc === 'create') verText = selectedVersion ? `v${selectedVersion.version}` : `v${c.latest}`
+      else if (sc === 'upgrade') verText = `v${c.applied}→v${selectedVersion?.version || c.latest}`
+      else if (sc === 'downgrade') verText = `v${c.applied}(库) / v${selectedVersion?.version || c.latest}(定义)`
+      else if (sc === 'none') verText = ''
+      else verText = `v${c.applied || selectedVersion?.version || c.latest}`
+    }
     return `<div class="mc-cell t-${sm.tone} ${pickable ? 'pickable' : ''} ${on ? 'on' : ''}" ${pickable ? `data-mc-cell="${esc(mcCellKey(m.key, k.id))}"` : ''}>
       ${pickable ? `<span class="mc-cell-ck"><ui5-icon name="accept"></ui5-icon></span>` : ''}
       <ui5-icon name="${sm.icon}" class="mc-cell-ic"></ui5-icon>
@@ -935,6 +949,22 @@ function mcInitLogHtml () {
 function mcResultDetailHtml (r, summary = '查看详情') {
   const changes = Array.isArray(r.changes) ? r.changes : []
   const tableNames = Array.isArray(r.table_names) ? r.table_names : []
+  if (r.kind === 'SEED' && Array.isArray(r.detail)) {
+    return `<div class="mc-change-table"><div class="mc-change-sec">
+      <b>种子表 (${r.detail.length} · 共 ${r.rows} 行)</b>
+      <div class="mc-change-tags">${r.detail.map((d) =>
+        `<span>${esc(d.table)} · ${d.rows}</span>`
+      ).join('')}</div>
+    </div></div>`
+  }
+  if (r.kind === 'MENU' && Array.isArray(r.detail)) {
+    return `<div class="mc-change-table"><div class="mc-change-sec">
+      <b>菜单文件 (${r.detail.length} · 共 ${r.nodes} 节点)</b>
+      <div class="mc-change-tags">${r.detail.map((d) =>
+        `<span>${esc(d.file)} · ${d.nodes}</span>`
+      ).join('')}</div>
+    </div></div>`
+  }
   if (!changes.length && !tableNames.length && !r.error) return ''
   const rows = changes.length
     ? changes.map((ch) => {
@@ -1697,11 +1727,21 @@ function rerenderMatrix (root) {
     const pickable = sm.pick && (!b.scenarioFilter || sc === b.scenarioFilter)
     const on = !!b.picked[mcCellKey(m.key, k.id)]
     let verText = ''
-    if (sc === 'create') verText = `v${c.latest}`
-    else if (sc === 'upgrade') verText = `v${c.applied}→v${c.latest}`
-    else if (sc === 'downgrade') verText = `v${c.applied}(库) / v${c.latest}(定义)`
-    else if (sc === 'none') verText = ''
-    else verText = `v${c.applied || c.latest}`
+    const hasVersion = k.id === 'DCT' || k.id === 'DOC' || k.id === 'RPT'
+    if (!hasVersion) {
+      const unit = k.id === 'MENU' ? '节点' : '行'
+      if (sc === 'create' || sc === 'current' || sc === 'drift') {
+        verText = c.row_count != null ? `${c.row_count} ${unit}` : ''
+      } else {
+        verText = ''
+      }
+    } else {
+      if (sc === 'create') verText = `v${c.latest}`
+      else if (sc === 'upgrade') verText = `v${c.applied}→v${c.latest}`
+      else if (sc === 'downgrade') verText = `v${c.applied}(库) / v${c.latest}(定义)`
+      else if (sc === 'none') verText = ''
+      else verText = `v${c.applied || c.latest}`
+    }
     return `<div class="mc-cell t-${sm.tone} ${pickable ? 'pickable' : ''} ${on ? 'on' : ''}" ${pickable ? `data-mc-cell="${esc(mcCellKey(m.key, k.id))}"` : ''}>
       ${pickable ? `<span class="mc-cell-ck"><ui5-icon name="accept"></ui5-icon></span>` : ''}
       <ui5-icon name="${sm.icon}" class="mc-cell-ic"></ui5-icon>
