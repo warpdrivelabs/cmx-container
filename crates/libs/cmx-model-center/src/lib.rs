@@ -31,6 +31,7 @@ use cmx_api_types::{Error, Result};
 
 pub mod seed_scanner;
 pub mod menu_pages_adapter;
+pub mod deploy_seed_menu;
 
 const META_VERSION: i32 = 2;
 const ENGINE_VERSION: &str = "1.0.0";
@@ -570,7 +571,7 @@ async fn read_base(file: &str) -> Result<Value> {
 }
 
 /// 编译一个定义（kind=DCT/DOC/RPT）→ (TableDefine 列表, 源 JSON)。
-async fn compile_definition(
+pub(crate) async fn compile_definition(
     kind: &str,
     domain: &str,
     app: &str,
