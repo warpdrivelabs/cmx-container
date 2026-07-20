@@ -2786,7 +2786,8 @@ async fn fail_history(hist_id: &str, db_id: &str, err: &str, dur_ms: i64) -> Res
 ///
 /// 参数：
 /// - `txn_id`：事务 id；锚点写一般在事务外，传 `None`。
-/// - `def_ref`：定义文件名（DCT 路径用 file 名）。
+/// - `action`：动作类型（DCT 路径用 `'create'`；SEED 用 `'seed'`；MENU 用 `'menu'`）。
+/// - `def_ref`：定义来源（DCT 路径用 file 名；SEED 用 `'seed/'`；MENU 用 `'menu-pages/'`）。
 pub(crate) async fn insert_history_executing(
     db_id: &str,
     txn_id: Option<&str>,
@@ -2796,6 +2797,7 @@ pub(crate) async fn insert_history_executing(
     app: &str,
     module: &str,
     kind: &str,
+    action: &str,
     def_ref: &str,
     operator_id: &str,
     operator_name: &str,
@@ -2804,7 +2806,7 @@ pub(crate) async fn insert_history_executing(
     mm.execute_sql_with_datavalues(
         db_id,
         txn_id,
-        "INSERT INTO cmx_model_deploy_history (id, batch_id, db_id, domain_code, application_code, module_code, kind, action, status, def_ref, engine_version, operator_id, operator_name, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7,'create','executing',$8,$9,$10,$11,CURRENT_TIMESTAMP)",
+        "INSERT INTO cmx_model_deploy_history (id, batch_id, db_id, domain_code, application_code, module_code, kind, action, status, def_ref, engine_version, operator_id, operator_name, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'executing',$9,$10,$11,$12,CURRENT_TIMESTAMP)",
         vec![
             DataValue::String(hist_id.to_string()),
             DataValue::String(batch_id.to_string()),
@@ -2813,6 +2815,7 @@ pub(crate) async fn insert_history_executing(
             DataValue::String(app.to_string()),
             DataValue::String(module.to_string()),
             DataValue::String(kind.to_string()),
+            DataValue::String(action.to_string()),
             DataValue::String(def_ref.to_string()),
             DataValue::String(ENGINE_VERSION.to_string()),
             DataValue::String(operator_id.to_string()),
@@ -2824,20 +2827,24 @@ pub(crate) async fn insert_history_executing(
     Ok(())
 }
 
-/// 把某历史行更新为 success：补 to_version / object_count / ddl_summary / finished_at / duration_ms。
+/// 把某历史行更新为 success：补 to_version / object_count / seed_rows / ddl_summary / finished_at / duration_ms。
 ///
 /// 与 `deploy_with_events` DCT 路径中的 success 写入（lib.rs:2725-2734）等价：
 /// 在部署事务内执行，`txn_id` 传事务 id。
 ///
 /// 参数：
+/// - `to_version`：目标版本（SEED/MENU 无版本概念，传 `None`；DCT 路径传 `Some("v3")` 等）。
+/// - `object_count`：对象计数（SEED 用表数；MENU 用节点数；DCT 用建表数）。
+/// - `seed_rows`：SEED/MENU 写入行数（DCT 路径传 `0`）。
 /// - `ddl_summary_json`：DDL 摘要 JSON 字符串（写入 jsonb 列）。
 /// - `dur_ms`：本次部署耗时毫秒。
 pub(crate) async fn update_history_success(
     db_id: &str,
     txn_id: Option<&str>,
     hist_id: &str,
-    to_version: &str,
+    to_version: Option<&str>,
     object_count: i64,
+    seed_rows: i64,
     ddl_summary_json: &str,
     dur_ms: i64,
 ) -> Result<()> {
@@ -2845,11 +2852,12 @@ pub(crate) async fn update_history_success(
     mm.execute_sql_with_datavalues(
         db_id,
         txn_id,
-        "UPDATE cmx_model_deploy_history SET status='success', to_version=$2, object_count=$3, ddl_summary=$4::jsonb, finished_at=CURRENT_TIMESTAMP, duration_ms=$5 WHERE id=$1",
+        "UPDATE cmx_model_deploy_history SET status='success', to_version=$2, object_count=$3, seed_rows=$4, ddl_summary=$5::jsonb, finished_at=CURRENT_TIMESTAMP, duration_ms=$6 WHERE id=$1",
         vec![
             DataValue::String(hist_id.to_string()),
-            DataValue::String(to_version.to_string()),
+            DataValue::String(to_version.map(|s| s.to_string()).unwrap_or_default()),
             DataValue::Int(object_count),
+            DataValue::Int(seed_rows),
             DataValue::Json(ddl_summary_json.to_string()),
             DataValue::Int(dur_ms),
         ],
@@ -2866,9 +2874,10 @@ pub(crate) async fn update_history_success(
 /// `id` 由本函数内部用 `snowflake_id_str()` 生成（INSERT 时使用，UPSERT 命中冲突时被忽略）。
 ///
 /// 参数：
-/// - `version`：定义版本（字符串形式）。
-/// - `table_count`：本模块本 kind 部署的表数量。
-/// - `def_source`：定义来源（DCT 路径用 file 名）。
+/// - `version`：定义版本（字符串形式，DCT 路径传 "v3"；SEED/MENU 无版本概念传 `""`）。
+/// - `table_count`：本模块本 kind 部署的对象数（表数 / 节点数）。
+/// - `def_source`：定义来源（DCT 路径用 file 名；SEED 用 `'seed/'`；MENU 用 `'menu-pages/'`）。
+/// - `def_checksum`：模块级聚合 SHA256（None 时保留旧值，DCT 路径可传 `None`）。
 pub(crate) async fn upsert_module_kind(
     db_id: &str,
     txn_id: Option<&str>,
@@ -2879,6 +2888,7 @@ pub(crate) async fn upsert_module_kind(
     version: &str,
     table_count: i64,
     def_source: &str,
+    def_checksum: Option<&str>,
     operator_id: &str,
     operator_name: &str,
 ) -> Result<()> {
@@ -2886,9 +2896,9 @@ pub(crate) async fn upsert_module_kind(
     mm.execute_sql_with_datavalues(
         db_id,
         txn_id,
-        "INSERT INTO cmx_model_module_kind (id, db_id, domain_code, application_code, module_code, kind, version, status, table_count, def_source, deployed_at, deployed_by, deployed_name) \
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'current',$8,$9,CURRENT_TIMESTAMP,$10,$11) \
-         ON CONFLICT (db_id, app_id, domain_code, application_code, module_code, kind) DO UPDATE SET version=EXCLUDED.version, status='current', table_count=EXCLUDED.table_count, def_source=EXCLUDED.def_source, deployed_at=CURRENT_TIMESTAMP, deployed_by=EXCLUDED.deployed_by, deployed_name=EXCLUDED.deployed_name, error_message=NULL, update_time=CURRENT_TIMESTAMP",
+        "INSERT INTO cmx_model_module_kind (id, db_id, domain_code, application_code, module_code, kind, version, status, table_count, def_source, def_checksum, deployed_at, deployed_by, deployed_name) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'current',$8,$9,$10,CURRENT_TIMESTAMP,$11,$12) \
+         ON CONFLICT (db_id, app_id, domain_code, application_code, module_code, kind) DO UPDATE SET version=EXCLUDED.version, status='current', table_count=EXCLUDED.table_count, def_source=EXCLUDED.def_source, def_checksum=COALESCE(EXCLUDED.def_checksum, cmx_model_module_kind.def_checksum), deployed_at=CURRENT_TIMESTAMP, deployed_by=EXCLUDED.deployed_by, deployed_name=EXCLUDED.deployed_name, error_message=NULL, update_time=CURRENT_TIMESTAMP",
         vec![
             DataValue::String(snowflake_id_str()),
             DataValue::String(db_id.to_string()),
@@ -2899,6 +2909,10 @@ pub(crate) async fn upsert_module_kind(
             DataValue::String(version.to_string()),
             DataValue::Int(table_count),
             DataValue::String(def_source.to_string()),
+            match def_checksum {
+                Some(c) => DataValue::String(c.to_string()),
+                None => DataValue::Null,
+            },
             DataValue::String(operator_id.to_string()),
             DataValue::String(operator_name.to_string()),
         ],

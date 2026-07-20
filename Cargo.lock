@@ -1505,6 +1505,7 @@ dependencies = [
  "cmx-database",
  "cmx-metadata",
  "cmx-model",
+ "cmx-traits",
  "cmx-utils",
  "serde",
  "serde_json",
