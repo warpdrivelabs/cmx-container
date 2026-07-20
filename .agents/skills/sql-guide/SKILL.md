@@ -176,6 +176,64 @@ COMMENT ON COLUMN cmx_user.phone IS '手机号';
 - 涉及多张表时在 `影响表` 列出全部表名
 - `回滚方式` 必须填写对应的 `.down.sql` 文件名，若无回滚则写 `无`
 
+### 3.2.2 同日迁移合并原则（避免序号膨胀）
+
+**核心约束：当日 migrations 未 git commit 前，禁止新建下一个序号的迁移文件。**
+
+- 同一天内对**未提交**的迁移变更，必须**直接编辑当日已有迁移文件**（在 .up.sql / .down.sql 中追加 SQL 区块），而不是新建下一个序号。
+- 仅当满足下列条件之一才允许新建下一个序号：
+  1. 当日已有迁移**已 git commit**（已产生历史记录不可再改，再追改会污染历史）
+  2. 新变更是**完全独立无关的功能模块**，与当日已有迁移无逻辑关联（即便如此，也优先合并到同一文件分区）
+- **禁止**出现"一天 10+ 个序号"的碎片化场景。反例：`20260718_001` ~ `20260718_011` 共 11 个序号，其中多数是同一功能的多次增量，本应合并到 1~2 个文件。
+
+**为什么：**
+
+- 未提交的迁移本质是"草稿"，新建序号会让同日文件数虚高、回滚顺序混乱、init_ddl 同步成本翻倍。
+- 合并到同一文件后，一次 commit = 一日的工作集合，审查与回滚都更清晰。
+- 同一日序号控制在 ≤3 个为佳；超过则视为设计碎片化，必须反思。
+
+**示例：**
+
+```
+# ❌ 错误：同一天未提交就连续新建多个序号
+20260718_001_cmx_flow_identity.up.sql
+20260718_002_cmx_flow_cc.up.sql
+20260718_003_cmx_flow_delegation.up.sql
+20260718_004_cmx_flow_subflow.up.sql
+... (未提交继续建到 011)
+
+# ✅ 正确：未提交的变更合并到当日已有文件（按功能聚合成一个大文件）
+20260718_001_cmx_flow_engine.up.sql     # 含 identity/cc/delegation/subflow/... 分区
+20260718_001_cmx_flow_engine.down.sql
+
+# 提交后若需新增无关变更，再用 002
+20260718_002_xxx.up.sql
+```
+
+**合并写法示例**（同一 .up.sql 内用分隔注释划区块）：
+
+```sql
+-- =============================================
+-- 迁移说明：cmx-flow M4 身份与转签家族（identity + cc + delegation）
+-- 影响表：cmx_org, cmx_position, cmx_user_position, cmx_flow_task_candidate,
+--         cmx_flow_cc, cmx_flow_task_delegation, cmx_flow_task
+-- 操作类型：CREATE TABLE / ADD COLUMN / CREATE INDEX
+-- 回滚方式：20260718_001_cmx_flow_engine.down.sql
+-- =============================================
+
+-- ----- 区块 1：组织/岗位/候选人池 -----
+CREATE TABLE IF NOT EXISTS cmx_org (...);
+...
+
+-- ----- 区块 2：抄送记录 -----
+CREATE TABLE IF NOT EXISTS cmx_flow_cc (...);
+...
+
+-- ----- 区块 3：转签 -----
+ALTER TABLE cmx_flow_task ADD COLUMN IF NOT EXISTS owner_user_id VARCHAR(64);
+...
+```
+
 ### 3.3 up.sql 规范
 
 **允许的操作：**
@@ -339,6 +397,7 @@ COMMENT ON COLUMN cmx_user.phone IS '手机号';
 编写 SQL 时，确认以下事项：
 
 - [ ] 文件命名符合规范（日期_序号_描述，中文描述更直观）
+- [ ] 同日未提交的变更已合并到当日已有迁移文件（未新建序号，见 3.2.2）
 - [ ] migrations 提供了 down.sql
 - [ ] SQL 文件开头已写迁移说明 / 影响表 / 操作类型 / 回滚方式 注释块
 - [ ] init_ddl.sql 已同步最新变更

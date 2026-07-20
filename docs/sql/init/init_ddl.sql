@@ -2612,17 +2612,18 @@ CREATE INDEX idx_doc_change_row ON cmx_doc_change (root_id, row_id, field);
 -- 流程实例（运行态聚合根）
 CREATE TABLE IF NOT EXISTS cmx_flow_instance
 (
-    id                 VARCHAR(64)  NOT NULL,
-    definition_key     VARCHAR(128) NOT NULL,
-    business_key       VARCHAR(128),
-    state              VARCHAR(16)  NOT NULL,
-    variables          JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    created_at         TIMESTAMPTZ  NOT NULL,
-    updated_at         TIMESTAMPTZ  NOT NULL,
-    ended_at           TIMESTAMPTZ,
-    org_id             VARCHAR(64),
-    parent_instance_id VARCHAR(64),
-    parent_token_id    VARCHAR(64),
+    id                  VARCHAR(64)  NOT NULL,
+    definition_key      VARCHAR(128) NOT NULL,
+    business_key        VARCHAR(128),
+    state               VARCHAR(16)  NOT NULL,
+    variables           JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at          TIMESTAMPTZ  NOT NULL,
+    updated_at          TIMESTAMPTZ  NOT NULL,
+    ended_at            TIMESTAMPTZ,
+    org_id              VARCHAR(64),
+    parent_instance_id  VARCHAR(64),
+    parent_token_id     VARCHAR(64),
+    parent_node_bpmn_id VARCHAR(128),
     PRIMARY KEY (id)
 );
 COMMENT ON TABLE  cmx_flow_instance                    IS '流程实例（运行态聚合根）';
@@ -2630,6 +2631,7 @@ COMMENT ON COLUMN cmx_flow_instance.state              IS '实例状态：ACTIVE
 COMMENT ON COLUMN cmx_flow_instance.variables          IS '实例级流程变量（JSONB 动态 KV）';
 COMMENT ON COLUMN cmx_flow_instance.parent_instance_id IS '父实例 id（M5 子流程：子实例指向主实例；主实例为 NULL）';
 COMMENT ON COLUMN cmx_flow_instance.parent_token_id    IS '父实例中挂起等待的令牌 id（子完成时精确唤醒）';
+COMMENT ON COLUMN cmx_flow_instance.parent_node_bpmn_id IS '父实例中发起本子实例的 callActivity 节点 bpmn id（M5.3 多挂载去重键；单挂载恒空）';
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_defkey ON cmx_flow_instance (definition_key);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_bizkey ON cmx_flow_instance (business_key);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_state  ON cmx_flow_instance (state);
@@ -2883,3 +2885,50 @@ COMMENT ON TABLE  cmx_flow_subflow_binding       IS '子流程组织绑定（逻
 COMMENT ON COLUMN cmx_flow_subflow_binding.org_id IS '适用组织（NULL = 默认兜底绑定）';
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_subflow_binding_key ON cmx_flow_subflow_binding (called_key);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_subflow_binding_org ON cmx_flow_subflow_binding (org_id);
+
+-- ================================================================
+-- cmx-flow 流程定义持久化层（设计器 阶段0）
+-- 含 DAM 三段列 + 版本变更说明列；详见 migrations/20260718_007/009/010
+-- ================================================================
+
+-- 流程定义主记录（当前指针：草稿 XML + 已发布版本指向）
+CREATE TABLE IF NOT EXISTS cmx_flow_definition (
+    key            VARCHAR(128) PRIMARY KEY,
+    name           VARCHAR(255) NOT NULL,
+    module         VARCHAR(64),
+    category       VARCHAR(64),
+    state          VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',
+    active_version INTEGER,
+    draft_xml      TEXT,
+    domain         VARCHAR(64),
+    application    VARCHAR(64),
+    updated_at     TIMESTAMPTZ  NOT NULL,
+    updated_by     VARCHAR(64)
+);
+COMMENT ON TABLE  cmx_flow_definition                IS '流程定义主记录（当前指针：草稿 XML + 已发布版本指向）';
+COMMENT ON COLUMN cmx_flow_definition.key            IS '流程定义 key（= BPMN process id）';
+COMMENT ON COLUMN cmx_flow_definition.state          IS '状态：DRAFT / PUBLISHED';
+COMMENT ON COLUMN cmx_flow_definition.active_version IS '当前已发布版本号（未发布为 NULL）';
+COMMENT ON COLUMN cmx_flow_definition.draft_xml      IS '当前草稿的 BPMN XML（设计器产物）';
+COMMENT ON COLUMN cmx_flow_definition.domain         IS '所属域（DAM 三段之一，如 fi）';
+COMMENT ON COLUMN cmx_flow_definition.application    IS '所属应用（DAM 三段之一，如 cmxfico）';
+COMMENT ON COLUMN cmx_flow_definition.module         IS '所属模块（DAM 三段之一，如 gl）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_definition_module ON cmx_flow_definition (module);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_definition_state  ON cmx_flow_definition (state);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_definition_dam    ON cmx_flow_definition (domain, application, module);
+
+-- 流程定义版本历史（不可变，每次发布追加 BPMN 快照）
+CREATE TABLE IF NOT EXISTS cmx_flow_definition_version (
+    id           VARCHAR(64)  PRIMARY KEY,
+    def_key      VARCHAR(128) NOT NULL,
+    version      INTEGER      NOT NULL,
+    bpmn_xml     TEXT         NOT NULL,
+    note         VARCHAR(512),
+    published_at TIMESTAMPTZ  NOT NULL,
+    published_by VARCHAR(64)
+);
+COMMENT ON TABLE  cmx_flow_definition_version         IS '流程定义版本历史（不可变，每次发布追加 BPMN 快照）';
+COMMENT ON COLUMN cmx_flow_definition_version.version IS '版本号（同 def_key 下从 1 递增）';
+COMMENT ON COLUMN cmx_flow_definition_version.note    IS '本版本变更说明（发布时填写，可空）';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cmx_flow_def_version ON cmx_flow_definition_version (def_key, version);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_def_version_key   ON cmx_flow_definition_version (def_key);
