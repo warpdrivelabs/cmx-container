@@ -1350,7 +1350,9 @@ async fn read_modules(db_id: &str) -> Result<std::collections::HashMap<String, V
         }));
     }
     if table_exists(db_id, "cmx_model_module_kind").await? {
-        let ksql = "SELECT domain_code, application_code, module_code, kind, version, status, table_count, def_source, deployed_at, deployed_by, deployed_name, create_time, update_time FROM cmx_model_module_kind WHERE archived = 0";
+        // 注意：def_checksum 仅 SEED/MENU 路径写入（DCT 路径传 None，COALESCE 保留旧值）。
+        // 旧库可能存在 def_checksum=NULL 的行，读取时按 None 处理。
+        let ksql = "SELECT domain_code, application_code, module_code, kind, version, status, table_count, def_source, def_checksum, deployed_at, deployed_by, deployed_name, create_time, update_time FROM cmx_model_module_kind WHERE archived = 0";
         let kds = mm
             .query_sql(db_id, None, ksql, "mc_module_kinds")
             .await
@@ -1412,6 +1414,7 @@ async fn read_modules(db_id: &str) -> Result<std::collections::HashMap<String, V
                 "status": kv(row, "status").unwrap_or_else(|| "none".into()),
                 "table_count": kind_tables,
                 "def_source": kv(row, "def_source"),
+                "def_checksum": kv(row, "def_checksum"),
                 "deployed_at": kv(row, "deployed_at"),
                 "deployed_by": kv(row, "deployed_by"),
                 "deployed_name": kv(row, "deployed_name"),
@@ -1450,6 +1453,68 @@ fn scenario_of(applied: Option<&str>, latest: Option<&str>, status: &str) -> &'s
 // ════════════════════════════════════════════════════════════════════════
 //  四、对外 API：db_state / init_db / deploy
 // ════════════════════════════════════════════════════════════════════════
+
+/// 计算 SEED/MENU 的 scenario（实时扫描文件 + 对比 cmx_model_module_kind.def_checksum）。
+///
+/// 与 `scenario_of`（DCT/DOC/RPT 走版本号对比）不同，SEED/MENU 没有版本概念，
+/// 用文件聚合 SHA256 与库里的 `def_checksum` 对比。
+///
+/// 入参：
+/// - `applied_kind_row`：来自 `read_modules` 的某模块下 `applied_modules[key]["seed"|"menu"]` 子对象；
+///   无部署记录时传 `None`。需含 `status` 和 `def_checksum` 字段（旧库可能没有 def_checksum）。
+///
+/// 返回 `(scenario, cell_json)`。scenario 由调用方累计到 `counts`，cell_json 直接放入 db_state。
+fn compute_seed_menu_cell(
+    kind: &str,
+    domain: &str,
+    app: &str,
+    module: &str,
+    applied_kind_row: Option<&Value>,
+) -> (&'static str, Value) {
+    let files = if kind == "SEED" {
+        seed_scanner::scan_seed_files(domain, app, module)
+    } else {
+        seed_scanner::scan_menu_files(domain, app, module)
+    };
+    let row_count: usize = files.iter().map(|f| f.row_count).sum();
+    let latest_checksum = if files.is_empty() {
+        None
+    } else {
+        Some(seed_scanner::aggregate_sha256(&files))
+    };
+
+    let status_str = applied_kind_row
+        .and_then(|a| a.get("status"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("none");
+    let applied_checksum = applied_kind_row
+        .and_then(|a| a.get("def_checksum"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
+
+    let scenario: &'static str = if status_str == "failed" {
+        "retry"
+    } else {
+        match (applied_checksum, latest_checksum.as_deref()) {
+            (None, None) => "none",
+            (None, Some(_)) => "create",
+            (Some(_), None) => "current", // 文件已删，但库里有部署记录：视为当前态（避免误报 drift）
+            (Some(a), Some(l)) if a == l => "current",
+            (Some(_), Some(_)) => "drift",
+        }
+    };
+
+    let cell = json!({
+        "applied": applied_checksum,
+        "latest": latest_checksum,
+        "status": status_str,
+        "scenario": scenario,
+        "file": if kind == "SEED" { "seed/" } else { "menu-pages/" },
+        "row_count": row_count,
+        "table_count": files.len(),
+    });
+    (scenario, cell)
+}
 
 /// 组合 db-state：库门闸 + 每模块每 kind scenario（真实读台账 + 定义列表）。
 pub async fn db_state(db_id: &str) -> Result<Value> {
@@ -1670,6 +1735,29 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             })
         };
         let tblc: i64 = kinds.values().map(|k| k.tables).sum();
+        // 先算 DCT/DOC/RPT（cell 闭包借用 &mut counts），算完闭包自然 drop；
+        // 再算 SEED/MENU（避免对 counts 的两次可变借用冲突）。
+        let dct_cell = cell("DCT");
+        let doc_cell = cell("DOC");
+        let rpt_cell = cell("RPT");
+        drop(cell);
+        // SEED / MENU cell：实时扫描文件 + 对比 cmx_model_module_kind.def_checksum。
+        let (seed_sc, seed_cell) = compute_seed_menu_cell(
+            "SEED",
+            domain,
+            app,
+            module,
+            applied.and_then(|a| a.get("seed")),
+        );
+        bump(&mut counts, seed_sc);
+        let (menu_sc, menu_cell) = compute_seed_menu_cell(
+            "MENU",
+            domain,
+            app,
+            module,
+            applied.and_then(|a| a.get("menu")),
+        );
+        bump(&mut counts, menu_sc);
         modules.push(json!({
             "domain": domain, "application": app, "module": module,
             "module_name": applied.and_then(|a| a.get("module_name")).and_then(|v| v.as_str()).unwrap_or(if title.is_empty() { module.as_str() } else { title.as_str() }),
@@ -1679,8 +1767,9 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             "deployed_by": applied.and_then(|a| a.get("deployed_by")).and_then(|v| v.as_str()),
             "deployed_name": applied.and_then(|a| a.get("deployed_name")).and_then(|v| v.as_str()),
             "table_count": tblc,
-            "dct": cell("DCT"), "doc": cell("DOC"), "rpt": cell("RPT"),
-            "seed": json!({ "applied": null, "latest": null, "status": "none", "scenario": "none", "file": "" }),
+            "dct": dct_cell, "doc": doc_cell, "rpt": rpt_cell,
+            "seed": seed_cell,
+            "menu": menu_cell,
         }));
     }
 
@@ -1744,7 +1833,8 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             "dct": def_cell("DCT"),
             "doc": def_cell("DOC"),
             "rpt": def_cell("RPT"),
-            "seed": def_cell("SEED"),
+            "seed": compute_seed_menu_cell("SEED", domain, app, module, applied.get("seed")).1,
+            "menu": compute_seed_menu_cell("MENU", domain, app, module, applied.get("menu")).1,
         }));
     }
 
