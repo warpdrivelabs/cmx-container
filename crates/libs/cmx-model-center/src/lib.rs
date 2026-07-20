@@ -30,6 +30,7 @@ use tracing::debug;
 use cmx_api_types::{Error, Result};
 
 pub mod seed_scanner;
+pub mod menu_pages_adapter;
 
 const META_VERSION: i32 = 2;
 const ENGINE_VERSION: &str = "1.0.0";
