@@ -2417,11 +2417,74 @@ pub async fn deploy_plan_stream(
             }),
         );
         if kind == "SEED" {
+            // 只读预览：扫描 seed 文件 + 检查目标表是否已建（不写库）
+            let seed_files = seed_scanner::scan_seed_files(domain, app, module);
+            let total_rows: usize = seed_files.iter().map(|f| f.row_count).sum();
+            let mut detail = Vec::with_capacity(seed_files.len());
+            for f in &seed_files {
+                let exists = table_exists(db_id, &f.table_name).await.unwrap_or(false);
+                detail.push(json!({
+                    "table": f.table_name,
+                    "rows": f.row_count,
+                    "table_exists": exists,
+                }));
+            }
             send(
                 "progress",
-                json!({ "message": format!("{module} · SEED 暂未实现，计划中将跳过"), "module": module, "kind": kind, "status": "skipped" }),
+                json!({
+                    "message": if detail.is_empty() {
+                        format!("{module} · SEED 无种子文件，计划中将跳过")
+                    } else {
+                        format!("{module} · SEED 将写入 {} 张表 / {} 行种子数据", detail.len(), total_rows)
+                    },
+                    "module": module,
+                    "kind": "SEED",
+                    "tables": detail.len(),
+                    "rows": total_rows,
+                }),
             );
-            results.push(json!({ "module": module, "kind": kind, "status": "skipped", "note": "SEED 暂未实现" }));
+            results.push(json!({
+                "module": module,
+                "kind": "SEED",
+                "tables": detail.len(),
+                "rows": total_rows,
+                "detail": detail,
+                "note": if detail.is_empty() { "无种子文件".to_string() }
+                        else { format!("将写入 {} 张表 / {} 行种子数据", detail.len(), total_rows) },
+            }));
+            continue;
+        }
+        if kind == "MENU" {
+            // 只读预览：扫描 menu 文件 + 统计节点数（不写库）
+            let menu_files = seed_scanner::scan_menu_files(domain, app, module);
+            let total_nodes: usize = menu_files.iter().map(|f| f.row_count).sum();
+            let detail: Vec<Value> = menu_files
+                .iter()
+                .map(|f| json!({ "file": f.rel_path, "nodes": f.row_count }))
+                .collect();
+            send(
+                "progress",
+                json!({
+                    "message": if menu_files.is_empty() {
+                        format!("{module} · MENU 无菜单文件，计划中将跳过")
+                    } else {
+                        format!("{module} · MENU 将同步 {} 个菜单文件 / {} 个节点（先删后插 module={}）", menu_files.len(), total_nodes, module)
+                    },
+                    "module": module,
+                    "kind": "MENU",
+                    "files": menu_files.len(),
+                    "nodes": total_nodes,
+                }),
+            );
+            results.push(json!({
+                "module": module,
+                "kind": "MENU",
+                "files": menu_files.len(),
+                "nodes": total_nodes,
+                "detail": detail,
+                "note": if menu_files.is_empty() { "无菜单文件".to_string() }
+                        else { format!("将同步 {} 个菜单文件 / {} 个节点（先删后插 module={}）", menu_files.len(), total_nodes, module) },
+            }));
             continue;
         }
         let (defs, src) = match compile_definition(&kind, domain, app, module, file).await {
@@ -2540,7 +2603,27 @@ async fn deploy_with_events(
         json!({ "message": format!("开始部署 {} 个模块定义", items.len()), "batch_id": batch_id, "total": items.len() }),
     );
 
-    for (idx, it) in items.iter().enumerate() {
+    // 按 kind 优先级稳定排序：DCT(0) → DOC(1) → RPT(2) → SEED(3) → MENU(4)
+    // 保证 SEED 在 DCT 建表之后执行（SEED 依赖目标表已建），MENU 最后同步。
+    fn kind_order(k: &str) -> u8 {
+        match k {
+            "DCT" => 0,
+            "DOC" => 1,
+            "RPT" => 2,
+            "SEED" => 3,
+            "MENU" => 4,
+            _ => 99,
+        }
+    }
+    let mut sorted_items: Vec<(usize, &Value)> = items.iter().enumerate().collect();
+    sorted_items.sort_by_key(|(orig_idx, it)| {
+        let kind = it.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+        (kind_order(kind), *orig_idx)
+    });
+
+    for (seq, (_orig_idx, it)) in sorted_items.iter().enumerate() {
+        let it = *it;
+        let idx = seq;
         let kind = it
             .get("kind")
             .and_then(|v| v.as_str())
@@ -2566,11 +2649,32 @@ async fn deploy_with_events(
             }),
         );
         if kind == "SEED" {
-            send(
-                "progress",
-                json!({ "message": format!("{module} · SEED 暂未实现，已跳过"), "module": module, "kind": kind, "status": "skipped" }),
-            );
-            results.push(json!({ "module": module, "kind": kind, "status": "skipped", "note": "SEED 暂未实现" }));
+            // SEED 走完整部署流程（依赖目标表已由 DCT 路径建好）
+            let result = deploy_seed_menu::deploy_seed_with_events(
+                db_id,
+                domain,
+                app,
+                module,
+                operator_id,
+                operator_name,
+                tx,
+            )
+            .await?;
+            results.push(result);
+            continue;
+        }
+        if kind == "MENU" {
+            // MENU 走完整部署流程（平台库，先删后插）
+            let result = deploy_seed_menu::deploy_menu_with_events(
+                domain,
+                app,
+                module,
+                operator_id,
+                operator_name,
+                tx,
+            )
+            .await?;
+            results.push(result);
             continue;
         }
         let started = std::time::Instant::now();
