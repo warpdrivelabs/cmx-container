@@ -2771,6 +2771,143 @@ async fn fail_history(hist_id: &str, db_id: &str, err: &str, dur_ms: i64) -> Res
     Ok(())
 }
 
+// ════════════════════════════════════════════════════════════════════════
+//  数据库辅助函数：SEED / MENU 部署路径复用（DCT 路径保持原内联 SQL 不变）
+//
+//  说明：DCT 部署路径（deploy_with_events 内）已就地写好内联 SQL，运行稳定，
+//  本组函数仅供 Task 6 的 SEED / MENU 部署路径使用，避免重复 SQL 散落。
+//  语义与 DCT 路径内联 SQL 完全一致，但**不替换**原内联代码。
+// ════════════════════════════════════════════════════════════════════════
+
+/// 写入 deploy_history 行：status='executing'，作为部署对账锚点。
+///
+/// 与 `deploy_with_events` DCT 路径中的 executing 写入（lib.rs:2493-2500）等价：
+/// 通常 `txn_id=None`（PG DDL 自动提交前的锚点），失败不阻断主流程由调用方决定。
+///
+/// 参数：
+/// - `txn_id`：事务 id；锚点写一般在事务外，传 `None`。
+/// - `def_ref`：定义文件名（DCT 路径用 file 名）。
+pub(crate) async fn insert_history_executing(
+    db_id: &str,
+    txn_id: Option<&str>,
+    hist_id: &str,
+    batch_id: &str,
+    domain: &str,
+    app: &str,
+    module: &str,
+    kind: &str,
+    def_ref: &str,
+    operator_id: &str,
+    operator_name: &str,
+) -> Result<()> {
+    let mm = get_default_db_manager();
+    mm.execute_sql_with_datavalues(
+        db_id,
+        txn_id,
+        "INSERT INTO cmx_model_deploy_history (id, batch_id, db_id, domain_code, application_code, module_code, kind, action, status, def_ref, engine_version, operator_id, operator_name, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7,'create','executing',$8,$9,$10,$11,CURRENT_TIMESTAMP)",
+        vec![
+            DataValue::String(hist_id.to_string()),
+            DataValue::String(batch_id.to_string()),
+            DataValue::String(db_id.to_string()),
+            DataValue::String(domain.to_string()),
+            DataValue::String(app.to_string()),
+            DataValue::String(module.to_string()),
+            DataValue::String(kind.to_string()),
+            DataValue::String(def_ref.to_string()),
+            DataValue::String(ENGINE_VERSION.to_string()),
+            DataValue::String(operator_id.to_string()),
+            DataValue::String(operator_name.to_string()),
+        ],
+    )
+    .await
+    .map_err(db_err("写执行历史锚点失败"))?;
+    Ok(())
+}
+
+/// 把某历史行更新为 success：补 to_version / object_count / ddl_summary / finished_at / duration_ms。
+///
+/// 与 `deploy_with_events` DCT 路径中的 success 写入（lib.rs:2725-2734）等价：
+/// 在部署事务内执行，`txn_id` 传事务 id。
+///
+/// 参数：
+/// - `ddl_summary_json`：DDL 摘要 JSON 字符串（写入 jsonb 列）。
+/// - `dur_ms`：本次部署耗时毫秒。
+pub(crate) async fn update_history_success(
+    db_id: &str,
+    txn_id: Option<&str>,
+    hist_id: &str,
+    to_version: &str,
+    object_count: i64,
+    ddl_summary_json: &str,
+    dur_ms: i64,
+) -> Result<()> {
+    let mm = get_default_db_manager();
+    mm.execute_sql_with_datavalues(
+        db_id,
+        txn_id,
+        "UPDATE cmx_model_deploy_history SET status='success', to_version=$2, object_count=$3, ddl_summary=$4::jsonb, finished_at=CURRENT_TIMESTAMP, duration_ms=$5 WHERE id=$1",
+        vec![
+            DataValue::String(hist_id.to_string()),
+            DataValue::String(to_version.to_string()),
+            DataValue::Int(object_count),
+            DataValue::Json(ddl_summary_json.to_string()),
+            DataValue::Int(dur_ms),
+        ],
+    )
+    .await
+    .map_err(db_err("更新历史为 success 失败"))?;
+    Ok(())
+}
+
+/// UPSERT cmx_model_module_kind：记录某模块某 kind 的当前态版本/状态。
+///
+/// 与 `deploy_with_events` DCT 路径中的 module_kind 写入（lib.rs:2633-2641）等价：
+/// 在部署事务内执行，`txn_id` 传事务 id。
+/// `id` 由本函数内部用 `snowflake_id_str()` 生成（INSERT 时使用，UPSERT 命中冲突时被忽略）。
+///
+/// 参数：
+/// - `version`：定义版本（字符串形式）。
+/// - `table_count`：本模块本 kind 部署的表数量。
+/// - `def_source`：定义来源（DCT 路径用 file 名）。
+pub(crate) async fn upsert_module_kind(
+    db_id: &str,
+    txn_id: Option<&str>,
+    domain: &str,
+    app: &str,
+    module: &str,
+    kind: &str,
+    version: &str,
+    table_count: i64,
+    def_source: &str,
+    operator_id: &str,
+    operator_name: &str,
+) -> Result<()> {
+    let mm = get_default_db_manager();
+    mm.execute_sql_with_datavalues(
+        db_id,
+        txn_id,
+        "INSERT INTO cmx_model_module_kind (id, db_id, domain_code, application_code, module_code, kind, version, status, table_count, def_source, deployed_at, deployed_by, deployed_name) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'current',$8,$9,CURRENT_TIMESTAMP,$10,$11) \
+         ON CONFLICT (db_id, app_id, domain_code, application_code, module_code, kind) DO UPDATE SET version=EXCLUDED.version, status='current', table_count=EXCLUDED.table_count, def_source=EXCLUDED.def_source, deployed_at=CURRENT_TIMESTAMP, deployed_by=EXCLUDED.deployed_by, deployed_name=EXCLUDED.deployed_name, error_message=NULL, update_time=CURRENT_TIMESTAMP",
+        vec![
+            DataValue::String(snowflake_id_str()),
+            DataValue::String(db_id.to_string()),
+            DataValue::String(domain.to_string()),
+            DataValue::String(app.to_string()),
+            DataValue::String(module.to_string()),
+            DataValue::String(kind.to_string()),
+            DataValue::String(version.to_string()),
+            DataValue::Int(table_count),
+            DataValue::String(def_source.to_string()),
+            DataValue::String(operator_id.to_string()),
+            DataValue::String(operator_name.to_string()),
+        ],
+    )
+    .await
+    .map_err(db_err("写模块类型台账失败"))?;
+    Ok(())
+}
+
 // 时间戳保留（供未来 last_sync 等使用）
 #[allow(dead_code)]
 fn _keep_now() -> String {
