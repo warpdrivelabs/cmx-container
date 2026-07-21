@@ -313,15 +313,16 @@ pub async fn deploy_seed_with_events(
 /// MENU 部署主流程：扫描 menu-pages JSON → 适配转换 → 调 LocalMenuDefinitionImporter → 写台账。
 ///
 /// 关键阶段：
-/// 1. 写历史锚点到**平台库**（`action='menu'`，`def_ref='menu-pages/'`）
+/// 1. 写历史锚点到**目标库**（`action='menu'`，`def_ref='menu-pages/'`）
 /// 2. 扫描 `data/menu-pages/<domain>/<app>/<module>/*.json`
 /// 3. 解析 + 扁平化为 `MenuDefinition` 列表
-/// 4. 调 `LocalMenuDefinitionImporter::apply_menu_definitions`（内部按 module_code 先删后插，自管事务）
-/// 5. 写 `cmx_model_module_kind` 台账（平台库，无外部事务包裹，复用 importer 已提交的事务）
+/// 4. 调 `LocalMenuDefinitionImporter::apply_menu_definitions`（菜单数据写**平台库**，内部按 module_code 先删后插，自管事务）
+/// 5. 写 `cmx_model_module_kind` 台账到**目标库**（无外部事务包裹，复用 importer 已提交的事务）
 /// 6. 更新历史为 success（`object_count`=文件数，`seed_rows`=已应用节点数）
 ///
 /// 无 menu 文件时返回 `status='skipped'`，不算错误。
 pub async fn deploy_menu_with_events(
+    db_id: &str,
     domain: &str,
     app: &str,
     module: &str,
@@ -331,13 +332,12 @@ pub async fn deploy_menu_with_events(
 ) -> Result<Value> {
     let started = std::time::Instant::now();
     let mm = get_default_db_manager();
-    let platform_db_id = mm.get_default_db_id().await;
     let batch_id = snowflake_id_str();
     let hist_id = snowflake_id_str();
 
-    // 1. 写历史锚点（平台库，事务外，action='menu'，def_ref='menu-pages/'）
+    // 1. 写历史锚点（目标库，事务外，action='menu'，def_ref='menu-pages/'）
     insert_history_executing(
-        &platform_db_id,
+        db_id,
         None,
         &hist_id,
         &batch_id,
@@ -362,7 +362,7 @@ pub async fn deploy_menu_with_events(
     let menu_files = scan_menu_files(domain, app, module);
     if menu_files.is_empty() {
         let _ = update_history_success(
-            &platform_db_id,
+            db_id,
             None,
             &hist_id,
             None,
@@ -418,7 +418,7 @@ pub async fn deploy_menu_with_events(
             let err_msg = format!("菜单同步失败: {e:?}");
             let _ = crate::fail_history(
                 &hist_id,
-                &platform_db_id,
+                db_id,
                 &err_msg,
                 started.elapsed().as_millis() as i64,
             )
@@ -436,7 +436,7 @@ pub async fn deploy_menu_with_events(
         .max()
         .unwrap_or("");
     upsert_module_kind(
-        &platform_db_id,
+        db_id,
         None,
         domain,
         app,
@@ -459,7 +459,7 @@ pub async fn deploy_menu_with_events(
         "checksum": menu_checksum,
     });
     let _ = update_history_success(
-        &platform_db_id,
+        db_id,
         None,
         &hist_id,
         None,

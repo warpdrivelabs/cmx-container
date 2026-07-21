@@ -200,57 +200,15 @@ function mount (ctx, html, after) {
 }
 
 /**
- * 联动 property 栏与 content view：
- * - 概览（content-overview）→ 隐藏整个 property 栏（splitter + pane）
- * - DCT/DOC/弹性组合 → 显示 property 栏，并切到对应 tab（DCT/DOC/profile）
+ * property 栏显隐与内部 tab 联动由框架级支持：
+ * - 显隐：content view spec 声明 hideProperty: true（见 menu-node 配置）。
+ * - 内部 tab：content view spec 声明 syncPropertyView: '<property-viewId>'。
  *
- * 实现：从 host 反向找外层 portal-app shadow 内的 #property-pane / #splitter-right，
- * 直接操作显隐；同时通过 workspace.pageview 找 property-{kind} host 触发 region 内 tab 切换。
+ * 见 workspace-view-renderer.js 的 data-hide-property / data-sync-property-view
+ * 属性输出 + handleWorkspaceRegionTabBarClick 派发的 portal-content-view-change 事件，
+ * portal-app 监听事件后自动切换 property region 的内部 tab。
  */
-function syncPropertyRegion (host, viewName) {
-  try {
-    // 解析 viewName（'content-overview' / 'content-dct' / 'content-doc' / 'content-profile'）
-    const kind = viewName.startsWith('content-') ? viewName.slice('content-'.length) : ''
-    const isOverview = kind === 'overview'
 
-    // 1) 跨出 host 的 shadow root，找外层 portal-app 的 #property-pane / #splitter-right
-    const root = host?.getRootNode?.()
-    const propPane = root?.getElementById?.('property-pane')
-    const splitterRight = root?.getElementById?.('splitter-right')
-    const propPanel = root?.querySelector?.('portal-property-panel')
-    if (isOverview) {
-      // 概览：整体隐藏（splitter + pane + panel CE）
-      propPane?.setAttribute('data-hidden', '')
-      splitterRight?.setAttribute('data-hidden', '')
-      if (propPanel) propPanel.style.display = 'none'
-    } else {
-      // 其他：恢复显示
-      propPane?.removeAttribute('data-hidden')
-      splitterRight?.removeAttribute('data-hidden')
-      if (propPanel) propPanel.style.display = ''
-    }
-
-    // 2) 联动 property region 内部 tab（切到 property-{kind}）
-    if (!isOverview && (kind === 'dct' || kind === 'doc' || kind === 'profile')) {
-      const ws = host?.workspace
-      const propHost = ws?.pageview?.[`property-${kind}`]
-      if (propHost && propHost.isConnected) {
-        // 找到 property host 所在的 .cmx-ws-region 容器，触发对应 tab 按钮点击
-        const region = propHost.closest?.('.cmx-ws-region')
-        const tabBtns = region?.querySelectorAll?.('.cmx-ws-tab-btn')
-        const targetPane = propHost.closest?.('[data-pane-index]')
-        const targetIdx = targetPane?.getAttribute?.('data-pane-index')
-        if (tabBtns && targetIdx != null) {
-          const btn = Array.from(tabBtns).find((b) => b.getAttribute('data-pane-index') === targetIdx)
-          btn?.click?.()
-        }
-      }
-    }
-  } catch (e) {
-    // 联动失败不影响主流程，仅控制台提示
-    console.warn('[cluster-datasource] syncPropertyRegion 失败:', e)
-  }
-}
 
 function viewOf (host) {
   const v = host?.getAttribute?.('view') || ''
@@ -2514,23 +2472,19 @@ export default {
     // 数据源概览（第一个 content 视图）：顶部选中数据库标识 + 概览创意内容。
     async 'content-overview' (ctx) {
       if (!state.datasources.length) await loadDatasources()
-      syncPropertyRegion(ctx.host, 'content-overview')
       return mount(ctx, contentHtml('overview'), (root) => bindView(root, 'content-overview'))
     },
     // content 三视图：整块交给真实功能组件（只读自管列表/详情），此处只需 DAM 供过滤属性。
     async 'content-dct' (ctx) {
       if (!state.dam.domains.length) await loadDam()
-      syncPropertyRegion(ctx.host, 'content-dct')
       return mount(ctx, contentHtml('dct'), (root) => bindView(root, 'content-dct'))
     },
     async 'content-doc' (ctx) {
       if (!state.dam.domains.length) await loadDam()
-      syncPropertyRegion(ctx.host, 'content-doc')
       return mount(ctx, contentHtml('doc'), (root) => bindView(root, 'content-doc'))
     },
     async 'content-profile' (ctx) {
       if (!state.dam.domains.length) await loadDam()
-      syncPropertyRegion(ctx.host, 'content-profile')
       return mount(ctx, contentHtml('profile'), (root) => bindView(root, 'content-profile'))
     },
     // property 三视图：各嵌对应检查器（与同名 content tab 同 scope 联动）。

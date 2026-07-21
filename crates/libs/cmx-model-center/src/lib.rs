@@ -2706,8 +2706,9 @@ async fn deploy_with_events(
             continue;
         }
         if kind == "MENU" {
-            // MENU 走完整部署流程（平台库，先删后插）
+            // MENU 走完整部署流程（菜单数据写平台库，台账/历史写目标库）
             let result = deploy_seed_menu::deploy_menu_with_events(
+                db_id,
                 domain,
                 app,
                 module,
