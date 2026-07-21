@@ -52,7 +52,7 @@ pub struct HelpPath {
     pub file: String,
 }
 
-/// html-pages 列表查询：分页 + domain/app/module 过滤。
+/// html-pages 列表查询：分页 + keyword 搜索 + domain/app/module 过滤。
 #[derive(Debug, Deserialize)]
 pub struct HtmlListQuery {
     #[serde(default)]
@@ -65,6 +65,9 @@ pub struct HtmlListQuery {
     pub app: Option<String>,
     #[serde(default)]
     pub module: Option<String>,
+    /// 关键词：对 id/name/details 做不区分大小写的包含匹配。
+    #[serde(default)]
+    pub keyword: Option<String>,
 }
 
 /// DAM 列举过滤（domain / app）。
@@ -635,7 +638,7 @@ pub async fn launcher_resolve(
 }
 
 // ───────────────────────── HTML 页面 ─────────────────────────
-/// `GET /api/html-pages?page=&pageSize=&domain=&app=&module=` —— 分页列表。
+/// `GET /api/html-pages?page=&pageSize=&domain=&app=&module=&keyword=` —— 分页列表。
 pub async fn list_html_pages(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -647,6 +650,7 @@ pub async fn list_html_pages(
         q.domain.as_deref(),
         q.app.as_deref(),
         q.module.as_deref(),
+        q.keyword.as_deref(),
     )
     .await?;
     Ok(Json(ApiResp::ok(doc)))

@@ -297,13 +297,14 @@ async fn read_full_from_row(row: &serde_json::Value) -> PortalResult<serde_json:
     }))
 }
 
-/// 分页列表（带 domain/app/module 过滤）。
+/// 分页列表（带 keyword 搜索 + domain/app/module 过滤）。
 ///
 /// # Arguments
 ///
 /// * `page` - 页码（从 1 起，缺省 1）。
 /// * `page_size` - 每页条数（缺省 20，范围 1–200）。
 /// * `f_domain` / `f_app` / `f_module` - 可选过滤条件，`None` 表示不过滤。
+/// * `f_keyword` - 可选关键词，对 id/name/details 做不区分大小写的包含匹配。
 ///
 /// # Returns
 ///
@@ -314,6 +315,7 @@ pub async fn list_html_pages_paged(
     f_domain: Option<&str>,
     f_app: Option<&str>,
     f_module: Option<&str>,
+    f_keyword: Option<&str>,
 ) -> PortalResult<serde_json::Value> {
     // 归一页码、每页条数与过滤参数
     let p = page.unwrap_or(1).max(1);
@@ -322,10 +324,24 @@ pub async fn list_html_pages_paged(
     let fd = f_domain.unwrap_or("").trim();
     let fa = f_app.unwrap_or("").trim();
     let fm = f_module.unwrap_or("").trim();
-    // 逐条应用 domain/app/module 过滤（domain 缺省归 _legacy）
+    // keyword：trim 后转小写，对 id/name/details 任一做包含匹配
+    let fk = f_keyword
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+    // 逐条应用 keyword + domain/app/module 过滤（domain 缺省归 _legacy）
     let filtered: Vec<&serde_json::Value> = pages
         .iter()
         .filter(|r| {
+            if !fk.is_empty() {
+                let id = r.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                let name = r.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let details = r.get("details").and_then(|v| v.as_str()).unwrap_or("");
+                let hay = format!("{id}\n{name}\n{details}").to_lowercase();
+                if !hay.contains(&fk) {
+                    return false;
+                }
+            }
             if !fd.is_empty() {
                 let rd = r
                     .get("domain")

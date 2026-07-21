@@ -92,9 +92,16 @@ pub(crate) async fn list_html_pages(args: &Value) -> PortalResult<Value> {
     let domain = args.get("domain").and_then(|v| v.as_str());
     let app = args.get("app").and_then(|v| v.as_str());
     let module = args.get("module").and_then(|v| v.as_str());
-    let out =
-        crate::pages::html::list_html_pages_paged(Some(page), Some(page_size), domain, app, module)
-            .await?;
+    let keyword = args.get("keyword").and_then(|v| v.as_str());
+    let out = crate::pages::html::list_html_pages_paged(
+        Some(page),
+        Some(page_size),
+        domain,
+        app,
+        module,
+        keyword,
+    )
+    .await?;
     // 裁剪 items 字段
     let items: Vec<Value> = out
         .get("items")
