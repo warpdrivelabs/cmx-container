@@ -8,34 +8,34 @@
       保存
     </ui5-button>
   </ui5-bar>
-  <div style="flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0px; min-width: 0px; overflow: auto;" data-node-id="n-5">
-    <div style="display: flex; flex-direction: column; min-height: 0px; min-width: 0px; overflow: hidden; height: 250px;" data-node-id="n-6">
-      <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; height: 100%;" data-node-id="n-7-row">
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0px; min-width: 0px;" data-node-id="n-5">
+    <div style="display: flex; flex-direction: column; min-height: 0px; min-width: 0px; overflow: hidden; flex: 1 1 0;" data-node-id="n-6">
+      <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; flex-shrink: 0;" data-node-id="n-7-row">
         <ui5-title level="H5" size="H5" data-node-id="n-7" wrapping-type="Normal">
           凭证批（L1）
         </ui5-title>
         <span style="flex:1;" data-node-id="n-19"></span>
-        <cmx-pager master-slave-id="ms" layer="cv_batch" data-node-id="n-8" page-sizes="5,10,20,50" style="height: 100%; "></cmx-pager>
+        <cmx-pager master-slave-id="ms" layer="cv_batch" data-node-id="n-8" page-sizes="5,10,20,50"></cmx-pager>
       </div>
-      <cmx-revo-grid id="gBatch" style="display: block; width: 100%; flex: 1 1 0%; min-width: 0px; height: 100%;" data-node-id="n-9" data-cmx-dataset-id="cv_batch" data-cmx-model-id="batchModel" data-cmx-master-slave-id="ms" class="cmx-grid-neo"></cmx-revo-grid>
+      <cmx-revo-grid id="gBatch" style="display: block; width: 100%; flex: 1 1 0%; min-width: 0px; min-height: 0px;" data-node-id="n-9" data-cmx-dataset-id="cv_batch" data-cmx-model-id="batchModel" data-cmx-master-slave-id="ms" class="cmx-grid-neo"></cmx-revo-grid>
     </div>
-    <div style="display: flex; flex-direction: column; min-height: 0px; min-width: 0px; overflow: hidden; height: 250px;" data-node-id="n-10">
-      <ui5-title level="H5" size="H5" data-node-id="n-11" wrapping-type="Normal">
+    <div style="display: flex; flex-direction: column; min-height: 0px; min-width: 0px; overflow: hidden; flex: 1 1 0;" data-node-id="n-10">
+      <ui5-title level="H5" size="H5" data-node-id="n-11" wrapping-type="Normal" style="flex-shrink: 0;">
         凭证头（L2）
       </ui5-title>
-      <cmx-revo-grid id="gHeader" style="display: block; width: 100%; flex: 1 1 0%; min-width: 0px; height: 100%;" data-node-id="n-12" data-cmx-dataset-id="cv_batch.cv_header" data-cmx-model-id="headerModel" data-cmx-master-slave-id="ms" class="cmx-grid-neo"></cmx-revo-grid>
+      <cmx-revo-grid id="gHeader" style="display: block; width: 100%; flex: 1 1 0%; min-width: 0px; min-height: 0px;" data-node-id="n-12" data-cmx-dataset-id="cv_batch.cv_header" data-cmx-model-id="headerModel" data-cmx-master-slave-id="ms" class="cmx-grid-neo"></cmx-revo-grid>
     </div>
-    <div style="display: flex; flex-direction: column; min-height: 0px; min-width: 0px; overflow: hidden; height: 250px;" data-node-id="n-13">
-      <ui5-title level="H5" size="H5" data-node-id="n-14" wrapping-type="Normal">
+    <div style="display: flex; flex-direction: column; min-height: 0px; min-width: 0px; overflow: hidden; flex: 1.3 1 0;" data-node-id="n-13">
+      <ui5-title level="H5" size="H5" data-node-id="n-14" wrapping-type="Normal" style="flex-shrink: 0;">
         科目行（L3）
       </ui5-title>
-      <cmx-revo-grid id="gAcc" style="display: block; width: 100%; flex: 1 1 0%; min-width: 0px; height: 100%;" data-node-id="n-15" data-cmx-dataset-id="cv_batch.cv_header.cv_acc_line" data-cmx-model-id="accModel" data-cmx-master-slave-id="ms" class="cmx-grid-neo"></cmx-revo-grid>
+      <cmx-revo-grid id="gAcc" style="display: block; width: 100%; flex: 1 1 0%; min-width: 0px; min-height: 0px;" data-node-id="n-15" data-cmx-dataset-id="cv_batch.cv_header.cv_acc_line" data-cmx-model-id="accModel" data-cmx-master-slave-id="ms" class="cmx-grid-neo"></cmx-revo-grid>
     </div>
-    <div style="display: flex; flex-direction: column; min-height: 0px; min-width: 0px; overflow: hidden; height: 250px;" data-node-id="n-16">
-      <ui5-title level="H5" size="H5" data-node-id="n-17" wrapping-type="Normal" style="height: 100%;">
+    <div style="display: flex; flex-direction: column; min-height: 0px; min-width: 0px; overflow: hidden; flex: 1 1 0;" data-node-id="n-16">
+      <ui5-title level="H5" size="H5" data-node-id="n-17" wrapping-type="Normal" style="flex-shrink: 0;">
         辅助核算行（L4）
       </ui5-title>
-      <cmx-revo-grid id="gAux" style="display: block; width: 100%; flex: 1 1 0%; min-width: 0px; height: 100%;" data-node-id="n-18" data-cmx-dataset-id="cv_batch.cv_header.cv_acc_line.cv_aux_line" data-cmx-model-id="auxModel" data-cmx-master-slave-id="ms" class="cmx-grid-neo"></cmx-revo-grid>
+      <cmx-revo-grid id="gAux" style="display: block; width: 100%; flex: 1 1 0%; min-width: 0px; min-height: 0px;" data-node-id="n-18" data-cmx-dataset-id="cv_batch.cv_header.cv_acc_line.cv_aux_line" data-cmx-model-id="auxModel" data-cmx-master-slave-id="ms" class="cmx-grid-neo"></cmx-revo-grid>
     </div>
   </div>
 </div>
