@@ -347,7 +347,11 @@ impl Config {
 
     /// 获取应用隔离标识(app_id)，统一入口。
     ///
-    /// 查找顺序：
+    /// **按 `[deploy] mode` 分支**：
+    /// - `Mono`：固定返回 `"default"`，**不读** `[app].module_code`（单体下 [app] 块不生效）
+    /// - `Micro`：维持原有查找顺序（[app].module_code → 环境变量 → "default"）
+    ///
+    /// Micro 模式下的查找顺序：
     /// 1. 配置项 `app.module_code`
     /// 2. 环境变量 `APP_ID`
     /// 3. 环境变量 `SERVICE_REGISTRY_NAME`(nacos 场景)
@@ -356,6 +360,12 @@ impl Config {
     ///
     /// 全项目应通过此方法获取 app_id，避免散落的 `get_string("app.id")` 调用。
     pub fn get_app_id(&self) -> String {
+        // 单体模式：固定返回 "default"，不读 [app].module_code
+        if DeployMode::from_config() == DeployMode::Mono {
+            return "default".to_string();
+        }
+
+        // micro 模式：维持原有查找顺序
         // 1. 配置项
         if let Ok(v) = self.get_string("app.module_code")
             && !v.is_empty()
@@ -543,6 +553,50 @@ impl Config {
     /// 用于需要直接操作底层配置的场景
     pub fn inner(&self) -> &config::Config {
         &self.inner
+    }
+}
+
+/// 部署模式 — 启动期契约，决定数据源加载策略、app_id 取值、模块导入守卫。
+///
+/// - `Mono`：单体模式，加载全部数据源，app_id 固定为 `"default"`
+/// - `Micro`：微服务模式，按 `[app]` 三元组精确过滤，app_id 取 `[app].module_code`
+///
+/// 从 `[deploy] mode` TOML 节读取，支持 `DEPLOY__MODE` 环境变量覆盖。
+/// 缺省为 `Mono`（向后兼容）。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DeployMode {
+    /// 单体模式：一个进程服务所有域/应用/模块
+    #[default]
+    Mono,
+    /// 微服务模式：一个进程只服务 `[app]` 三元组指定的模块
+    Micro,
+}
+
+impl std::str::FromStr for DeployMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "mono" | "monolithic" | "single" => Ok(Self::Mono),
+            "micro" | "microservice" => Ok(Self::Micro),
+            other => Err(format!(
+                "未知的 deploy.mode: {}（支持 mono/micro）",
+                other
+            )),
+        }
+    }
+}
+
+impl DeployMode {
+    /// 从全局配置读取部署模式。
+    ///
+    /// 读取 `[deploy] mode` 配置项，缺省返回 `Mono`。
+    pub fn from_config() -> Self {
+        ConfigManager::global()
+            .get_string("deploy.mode")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_default()
     }
 }
 
