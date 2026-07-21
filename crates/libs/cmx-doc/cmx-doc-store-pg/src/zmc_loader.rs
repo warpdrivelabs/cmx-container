@@ -19,7 +19,7 @@ use cmx_database_pg::{
 use cmx_biz::{BizError, Result};
 use cmx_doc_model::meta::{DocMetaView, LayerView};
 use cmx_doc_model::query::DocQuery;
-use cmx_doc_model::sql_builder::build_layer_select;
+use cmx_doc_model::sql_builder::{build_layer_count, build_layer_select};
 
 /// 零拷贝单据装载器（tokio-postgres + ZmcDataSet）。SQL 全部由 `build_layer_select` 元数据驱动。
 pub struct ZmcDocLoader;
@@ -37,6 +37,21 @@ impl ZmcDocLoader {
             .ok_or_else(|| BizError::business("单据定义无根层"))?;
 
         let mut root_ds = Self::query_root(mm, db_id, root, query).await?;
+
+        // 可选：根层 COUNT(*) —— 当 count_total=true 时多跑一条 COUNT，结果挂到 root_ds.total。
+        // Zmc 路径下用 query_sql_zmc_with_datavalues 取回 ZmcDataSet，COUNT(*) 必为单行单列 int8。
+        if query.count_total {
+            let (csql, cparams) = build_layer_count(root, &query.layer(&root.id))?;
+            let count_ds = mm
+                .query_sql_zmc_with_datavalues(db_id, &csql, cparams, "doc_count")
+                .await
+                .map_err(|e| BizError::internal(format!("装载根层 {} COUNT 失败: {e}", root.table_name)))?;
+            if let Some(row0) = count_ds.rows.first()
+                && let Some(n) = row0.get_i64(0)
+            {
+                root_ds.total = Some(n);
+            }
+        }
 
         let max_depth = query.depth.unwrap_or(usize::MAX);
         Self::descend(mm, db_id, meta, root, &mut root_ds, 1, max_depth, query).await?;

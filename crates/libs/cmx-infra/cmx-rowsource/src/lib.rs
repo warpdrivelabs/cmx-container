@@ -210,6 +210,9 @@ pub struct ZmcDataSet<R: ZmcRowSource> {
     pub schema: Arc<ZmcSchema>,
     pub rows: Vec<R>,
     pub children: Vec<ZmcChildGroup<R>>,
+    /// 根层 COUNT(*) 结果（仅在 DocQuery.count_total=true 时由 loader 填入；其它场景为 None）。
+    /// 编码为列式包的可选 `total` 字段，与老 `DataSet.total` 同义。
+    pub total: Option<i64>,
 }
 
 impl<R: ZmcRowSource> ZmcDataSet<R> {
@@ -224,6 +227,7 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
             schema,
             rows,
             children: Vec::new(),
+            total: None,
         }
     }
 
@@ -234,6 +238,7 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
             schema,
             rows,
             children: Vec::new(),
+            total: None,
         }
     }
 
@@ -243,6 +248,7 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
             schema,
             rows: Vec::new(),
             children: Vec::new(),
+            total: None,
         }
     }
 
@@ -288,10 +294,12 @@ pub fn stringify_key<R: ZmcRowSource>(row: &R, col: usize, ty: ZmcColType) -> Op
 // ============================================================================
 
 impl<R: ZmcRowSource> ZmcDataSet<R> {
-    /// 编码为列式包 msgpack,写入 `buf`。输出 `{datasetId, columns, rows, childRows?}`。
+    /// 编码为列式包 msgpack,写入 `buf`。输出 `{datasetId, columns, rows, childRows?, total?}`。
     pub fn encode_columnar_binary(&self, buf: &mut Vec<u8>) {
         let has_children = !self.children.is_empty();
-        let map_len = if has_children { 4 } else { 3 };
+        let has_total = self.total.is_some();
+        // map_len：datasetId + columns + rows 基础 3 项；has_children +1；has_total +1
+        let map_len = 3 + (if has_children { 1 } else { 0 }) + (if has_total { 1 } else { 0 });
         buf.mp_map(map_len);
 
         buf.mp_str("datasetId");
@@ -312,6 +320,11 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
         if has_children {
             buf.mp_str("childRows");
             self.encode_child_rows(buf);
+        }
+
+        if let Some(t) = self.total {
+            buf.mp_str("total");
+            buf.mp_i64(t);
         }
     }
 
@@ -487,6 +500,11 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
                 }
                 obj.insert("childRows".into(), Value::Object(child_rows));
             }
+        }
+
+        // 根层 COUNT(*) 结果（仅 Some 时输出）
+        if let Some(t) = self.total {
+            obj.insert("total".into(), Value::from(t));
         }
 
         Value::Object(obj)

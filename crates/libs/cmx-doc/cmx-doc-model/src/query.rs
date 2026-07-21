@@ -304,6 +304,8 @@ pub struct DocQuery {
     pub include_siblings: bool,
     /// 懒下钻：只装这些父 id 的子树（配合 root_layer_override）。
     pub only_parents: Option<Vec<Value>>,
+    /// true 时根层多跑一条 COUNT(*) 查询，结果挂到响应 DataSet.total（默认 false）。
+    pub count_total: bool,
 }
 
 impl DocQuery {
@@ -332,6 +334,9 @@ impl DocQuery {
             .map(|n| n as usize);
         if let Some(b) = obj.get("includeSiblings").and_then(|x| x.as_bool()) {
             dq.include_siblings = b;
+        }
+        if let Some(b) = obj.get("countTotal").and_then(|x| x.as_bool()) {
+            dq.count_total = b;
         }
         dq.only_parents = obj
             .get("onlyParents")
@@ -494,6 +499,28 @@ mod tests {
         assert_eq!(dq.layer("cv_acc_line").offset, Some(20));
         // 未指定层 → 默认
         assert!(dq.layer("cv_header").filter.is_none());
+    }
+
+    #[test]
+    fn parse_docquery_count_total() {
+        // countTotal: true → count_total == true
+        let dq = DocQuery::from_json(&json!({
+            "countTotal": true,
+            "layers": { "cv_batch": { "limit": 50 } }
+        }))
+        .unwrap();
+        assert!(dq.count_total);
+
+        // 不传 countTotal → 默认 false
+        let dq2 = DocQuery::from_json(&json!({
+            "layers": { "cv_batch": { "limit": 50 } }
+        }))
+        .unwrap();
+        assert!(!dq2.count_total);
+
+        // 空 body → 默认 false
+        let dq3 = DocQuery::from_json(&json!({})).unwrap();
+        assert!(!dq3.count_total);
     }
 
     #[test]

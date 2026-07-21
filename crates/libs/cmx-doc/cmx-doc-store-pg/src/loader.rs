@@ -20,7 +20,7 @@ use cmx_database::DatabaseManager;
 use cmx_biz::{BizError, Result};
 use cmx_doc_model::meta::{DocMetaView, LayerView};
 use cmx_doc_model::query::DocQuery;
-use cmx_doc_model::sql_builder::build_layer_select;
+use cmx_doc_model::sql_builder::{build_layer_count, build_layer_select};
 
 pub struct DocLoader;
 
@@ -52,6 +52,23 @@ impl DocLoader {
 
         // 1. 根层查询
         let mut root_ds = Self::query_root(mm, db_id, root, query, txn_id).await?;
+
+        // 1b. 可选：根层 COUNT(*) —— 当 count_total=true 时多跑一条 COUNT，结果挂到 root_ds.total，
+        //     供前端算总页数。与主 SELECT 共享同一份 filter 下推，看到的行集一致。
+        if query.count_total {
+            let (csql, cparams) = build_layer_count(root, &query.layer(&root.id))?;
+            let count_ds = mm
+                .query_sql_with_datavalues(db_id, txn_id, &csql, cparams, "doc_count")
+                .await
+                .map_err(|e| BizError::internal(format!("装载根层 {} COUNT 失败: {e}", root.table_name)))?;
+            if let Some(row0) = count_ds.rows.first()
+                && let Some(v) = row0.get(0)
+            {
+                if let DataValue::Int(n) = v {
+                    root_ds.total = Some(*n);
+                }
+            }
+        }
 
         // 2. 逐层下钻（沿 layer_groups 递归挂子集）
         let max_depth = query.depth.unwrap_or(usize::MAX);

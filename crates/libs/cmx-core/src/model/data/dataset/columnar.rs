@@ -32,6 +32,8 @@ mod keys {
     pub const COLUMNS: &str = "columns";
     pub const ROWS: &str = "rows";
     pub const CHILD_ROWS: &str = "childRows";
+    /// 根层 COUNT(*) 结果（仅 DocQuery.count_total=true 路径出现）
+    pub const TOTAL: &str = "total";
 }
 
 /// 列式编解码器（无状态，方法为关联函数）。
@@ -85,6 +87,10 @@ impl ColumnarCodec {
         obj.insert(keys::ROWS.into(), Value::Array(rows));
         if !child_rows.is_empty() {
             obj.insert(keys::CHILD_ROWS.into(), Value::Object(child_rows));
+        }
+        // 根层 COUNT(*) 结果（仅 Some 时输出；老客户端读不到不受影响）
+        if let Some(t) = ds.total {
+            obj.insert(keys::TOTAL.into(), json!(t));
         }
         Value::Object(obj)
     }
@@ -189,6 +195,11 @@ impl ColumnarCodec {
                     }
                 }
             }
+        }
+
+        // 根层 COUNT(*) 结果（可选；缺省 → None）
+        if let Some(t) = obj.get(keys::TOTAL).and_then(|v| v.as_i64()) {
+            ds.total = Some(t);
         }
 
         Ok(ds)
