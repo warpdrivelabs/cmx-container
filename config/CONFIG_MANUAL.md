@@ -97,7 +97,7 @@
     - **数据源**：加载 `cmx_sys_datasource` 中所有 `status=1 AND archived=0` 的记录（忽略 D-A-M 过滤）
     - **app_id**：`get_app_id()` 固定返回 `"default"`（不读 `[app].module_code`）
     - **模块导入守卫**：放宽（允许导入任意 `module_code` 的模块包）
-    - **启动期校验**：默认库 `db_url` ≡ 业务库 `db_url`（不一致时 warn）
+    - **启动期校验**：无（mono 允许主库 + 业务库分库部署，是常见用法）
     - **`[app]` 块**：整体不生效（可省略或保留作 micro 切换预留）
   - `micro`（微服务）：一个进程只服务 `[app]` 三元组指定的模块
     - **数据源**：按 `[app]` 三元组精确过滤

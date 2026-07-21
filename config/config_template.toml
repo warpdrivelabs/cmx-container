@@ -31,7 +31,7 @@ web_folder = "./web-folder"
 #   * 数据源：加载 cmx_sys_datasource 中所有 status=1/archived=0 的记录（忽略 D-A-M 过滤）
 #   * app_id：固定返回 "default"（不读 [app].module_code）
 #   * 模块导入：允许任意 module_code 的模块包
-#   * 启动期校验默认库 db_url ≡ 业务库 db_url（误配告警）
+#   * 支持主库 + 业务库分库部署（常见用法，不强制同库）
 #   * [app] 块整体不生效（可省略或保留作 micro 切换预留）
 # - micro       ：微服务模式，一个进程只服务 [app] 三元组指定的模块
 #   * 数据源：按 [app] 三元组精确过滤

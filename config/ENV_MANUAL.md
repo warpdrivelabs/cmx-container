@@ -97,7 +97,7 @@
 | `get_app_id()` 返回值 | 固定 `"default"`（不读 `[app].module_code`） | `[app].module_code`（维持现状） |
 | 模块导入守卫 | 放宽（允许任意 `module_code`） | 保留（`module_code != app_id` 拒绝） |
 | `[app]` 块 | 整体不生效 | 必需，不能为 `default` |
-| 启动期校验 | 默认库 ≡ 业务库 `db_url`（不一致 warn） | 不校验 |
+| 启动期校验 | 无（允许主库 + 业务库分库） | 不校验 |
 
 **mono 切换的数据迁移**：从 micro 切到 mono 时，需执行 `docs/sql/migrations/20260721_001_deploy_mode_mono_app_id_unification.up.sql` 把历史 `app_id` 统一为 `'default'`。
 

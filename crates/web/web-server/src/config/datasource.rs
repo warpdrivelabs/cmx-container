@@ -143,13 +143,6 @@ pub async fn init_datasources() -> crate::Result<()> {
         warn!("注册数据库中的数据源失败: {}", e);
     }
 
-    // mono 模式启动期一致性校验（B-4）：默认库 ≡ 业务库
-    if deploy_mode == DeployMode::Mono {
-        if let Err(e) = check_mono_datasource_consistency(db_manager).await {
-            warn!("mono 模式一致性校验失败（不阻断启动）: {}", e);
-        }
-    }
-
     info!("数据源初始化完成");
     Ok(())
 }
@@ -388,40 +381,6 @@ async fn load_active_datasources(
 
     info!("成功加载 {} 个有效数据源", datasources.len());
     Ok(datasources)
-}
-
-/// mono 模式启动期一致性校验（B-4）
-///
-/// 单体意图是"默认库与业务库同库"，若二者 `db_url` 不一致则告警。
-/// 这是软告警（不阻断启动），让运维立即发现误配。
-///
-/// # Arguments
-///
-/// * `mm` - 数据库管理器
-async fn check_mono_datasource_consistency(mm: &DatabaseManager) -> crate::Result<()> {
-    let default_db_id = mm.get_default_db_id().await;
-    let biz_db_id = mm.get_biz_db_id().await;
-
-    // 若二者 db_id 相同，必然同库，无需校验
-    if default_db_id == biz_db_id {
-        return Ok(());
-    }
-
-    // 二者 db_id 不同时，比较 db_url
-    let default_url = mm.get_db_config(&default_db_id).await.map(|c| c.db_url).ok();
-    let biz_url = mm.get_db_config(&biz_db_id).await.map(|c| c.db_url).ok();
-
-    if let (Some(d), Some(b)) = (default_url, biz_url) {
-        if d != b {
-            warn!(
-                "单体模式下默认库与业务库 db_url 不一致（默认库 {}: {}, 业务库 {}: {}），\
-                 请确认意图。若为误配，请调整 [databases] 配置使二者指向同一物理库。",
-                default_db_id, d, biz_db_id, b
-            );
-        }
-    }
-
-    Ok(())
 }
 
 /// 注册数据源到内存
