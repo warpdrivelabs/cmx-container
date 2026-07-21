@@ -8,7 +8,8 @@
 
 - [服务器配置](#服务器配置)
 - [Web 服务配置](#web-服务配置)
-- [应用标识配置](#应用标识配置)
+- [部署模式配置](#部署模式配置)
+- [应用标识配置](#应用标识配置仅-micro-模式生效)
 - [数据库配置](#数据库配置)
 - [Redis 配置](#redis-配置)
 - [WASM 运行时配置](#wasm-运行时配置)
@@ -77,26 +78,61 @@
 
 ---
 
-## 应用标识配置
+## 部署模式配置
+
+### `[deploy]`
+
+启动期契约，决定数据源加载策略、`app_id` 取值、模块导入守卫。把"部署意图"从"运行时副作用"提升为"启动期契约"，让服务既支持单体（资源全局共享）又支持分体（按模块隔离）。
+
+支持环境变量覆盖：`DEPLOY__MODE`（详见 [ENV_MANUAL.md](ENV_MANUAL.md)）。
+
+#### `mode`
+
+- **类型**: string
+- **必需**: 否
+- **默认值**: `"mono"`
+- **可选值**: `"mono"` / `"micro"`
+- **说明**: 部署模式
+  - `mono`（单体，默认）：一个进程服务所有域/应用/模块
+    - **数据源**：加载 `cmx_sys_datasource` 中所有 `status=1 AND archived=0` 的记录（忽略 D-A-M 过滤）
+    - **app_id**：`get_app_id()` 固定返回 `"default"`（不读 `[app].module_code`）
+    - **模块导入守卫**：放宽（允许导入任意 `module_code` 的模块包）
+    - **启动期校验**：默认库 `db_url` ≡ 业务库 `db_url`（不一致时 warn）
+    - **`[app]` 块**：整体不生效（可省略或保留作 micro 切换预留）
+  - `micro`（微服务）：一个进程只服务 `[app]` 三元组指定的模块
+    - **数据源**：按 `[app]` 三元组精确过滤
+    - **app_id**：返回 `[app].module_code`（维持现状）
+    - **模块导入守卫**：保留（`module_code != app_id` 则拒绝）
+    - **`[app]` 块**：三元组必需，缺省值 `default` 会被拒绝启动
+- **示例**: `mode = "mono"`
+
+> **mono 切换的数据迁移**：从 micro 切到 mono 时，需执行迁移脚本 `docs/sql/migrations/20260721_001_deploy_mode_mono_app_id_unification.up.sql` 把历史 `app_id` 统一为 `'default'`，否则历史数据在 mono 模式下不可见。
+
+---
+
+## 应用标识配置（仅 micro 模式生效）
 
 ### `[app]`
 
-当前实例所属的域/应用/模块标识，用于数据源过滤。`load_active_datasources` 仅加载归属本实例域的数据源，`persist_datasource_configs` 持久化时也按此标识查重。
+当前实例所属的域/应用/模块标识。
+
+> **mono 模式下本块整体不生效**（`get_app_id` 固定返回 `"default"`，数据源不按此过滤）。
+> **micro 模式下**：用于数据源过滤、插件/服务隔离（`app_id = module_code`）、模块导入守卫。
 
 支持环境变量覆盖：`APP__DOMAIN_CODE` / `APP__APPLICATION_CODE` / `APP__MODULE_CODE`（双下划线分隔层级，详见 [ENV_MANUAL.md](ENV_MANUAL.md)）。
 
 #### `domain_code`
 
 - **类型**: string
-- **必需**: 是
+- **必需**: micro 模式下必需
 - **默认值**: `"default"`
-- **说明**: 当前实例所属域编码，用于过滤该实例应加载的数据源
+- **说明**: 当前实例所属域编码，micro 模式下用于过滤该实例应加载的数据源
 - **示例**: `"default"`、`"finance"`、`"logistics"`
 
 #### `application_code`
 
 - **类型**: string
-- **必需**: 是
+- **必需**: micro 模式下必需
 - **默认值**: `"default"`
 - **说明**: 当前实例所属应用编码
 - **示例**: `"default"`、`"erp"`、`"wms"`
@@ -104,9 +140,9 @@
 #### `module_code`
 
 - **类型**: string
-- **必需**: 是
+- **必需**: micro 模式下必需
 - **默认值**: `"default"`
-- **说明**: 当前实例所属模块编码
+- **说明**: 当前实例所属模块编码；micro 模式下决定 `app_id`
 - **示例**: `"default"`、`"order"`、`"inventory"`
 
 ---

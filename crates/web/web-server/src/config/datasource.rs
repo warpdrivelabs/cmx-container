@@ -11,6 +11,7 @@ use cmx_utils::ConfigManager;
 use modql::filter::{OpValInt64, OpValString, OpValsInt64, OpValsString};
 use tracing::{info, warn};
 
+use crate::config::DeployMode;
 use crate::Error;
 
 /// 初始化数据源（主入口）
@@ -29,6 +30,9 @@ use crate::Error;
 pub async fn init_datasources() -> crate::Result<()> {
     info!("开始初始化数据源...");
 
+    let deploy_mode = crate::config::load_deploy_mode();
+    info!("部署模式: {:?}", deploy_mode);
+
     let config = ConfigManager::global();
     let mut configs: Vec<DbConfig> = config.get_as("databases").map_err(|e| {
         Error::DatasourceInit(format!("无法从配置管理器获取 databases 配置: {}", e))
@@ -36,17 +40,38 @@ pub async fn init_datasources() -> crate::Result<()> {
 
     info!("成功解析到 {} 个数据源配置", configs.len());
 
-    // 读取本实例应用标识，为配置文件数据源统一注入域应用模块归属。
+    // 读取本实例应用标识（micro 模式下用于数据源过滤；mono 模式下不生效）。
     let app_identity = crate::config::load_app_identity();
+
+    // micro 模式校验：[app] 三元组必须配置具体值，不能为 default。
+    if deploy_mode == DeployMode::Micro {
+        if app_identity.domain_code == "default"
+            || app_identity.application_code == "default"
+            || app_identity.module_code == "default"
+        {
+            return Err(Error::DatasourceInit(format!(
+                "micro 模式下 [app] 三元组必须配置具体值（当前: {}/{}/{}），\
+                 禁止使用 default 占位",
+                app_identity.domain_code,
+                app_identity.application_code,
+                app_identity.module_code
+            )));
+        }
+    }
+
     for c in &mut configs {
-        if c.domain_code.is_none() {
-            c.domain_code = Some(app_identity.domain_code.clone());
-        }
-        if c.application_code.is_none() {
-            c.application_code = Some(app_identity.application_code.clone());
-        }
-        if c.module_code.is_none() {
-            c.module_code = Some(app_identity.module_code.clone());
+        // mono 模式不强制覆盖 D-A-M（保留配置文件原值，为未来分体化预留元数据）；
+        // micro 模式维持原兜底逻辑（未显式声明则继承 [app] 三元组）。
+        if deploy_mode == DeployMode::Micro {
+            if c.domain_code.is_none() {
+                c.domain_code = Some(app_identity.domain_code.clone());
+            }
+            if c.application_code.is_none() {
+                c.application_code = Some(app_identity.application_code.clone());
+            }
+            if c.module_code.is_none() {
+                c.module_code = Some(app_identity.module_code.clone());
+            }
         }
         if c.source_type.is_none() {
             c.source_type = Some(if c.default {
@@ -78,8 +103,14 @@ pub async fn init_datasources() -> crate::Result<()> {
 
     crate::config::init_database_migrations().await?;
 
-    if let Err(e) =
-        persist_datasource_configs(db_manager, &default_db_id, &app_identity, &configs).await
+    if let Err(e) = persist_datasource_configs(
+        db_manager,
+        &default_db_id,
+        &app_identity,
+        deploy_mode,
+        &configs,
+    )
+    .await
     {
         return Err(Error::DatasourceInit(format!(
             "持久化数据源配置失败: {}",
@@ -87,8 +118,13 @@ pub async fn init_datasources() -> crate::Result<()> {
         )));
     }
 
-    let active_datasources =
-        load_active_datasources(db_manager, &default_db_id, &app_identity).await?;
+    let active_datasources = load_active_datasources(
+        db_manager,
+        &default_db_id,
+        &app_identity,
+        deploy_mode,
+    )
+    .await?;
 
     // 过滤掉配置文件中的数据源（只保留数据库中的数据源）
     let mut filtered_datasources = Vec::new();
@@ -107,6 +143,13 @@ pub async fn init_datasources() -> crate::Result<()> {
         warn!("注册数据库中的数据源失败: {}", e);
     }
 
+    // mono 模式启动期一致性校验（B-4）：默认库 ≡ 业务库
+    if deploy_mode == DeployMode::Mono {
+        if let Err(e) = check_mono_datasource_consistency(db_manager).await {
+            warn!("mono 模式一致性校验失败（不阻断启动）: {}", e);
+        }
+    }
+
     info!("数据源初始化完成");
     Ok(())
 }
@@ -114,38 +157,52 @@ pub async fn init_datasources() -> crate::Result<()> {
 /// 持久化数据源配置到数据库
 ///
 /// 执行以下操作：
-/// 1. **upsert**：对配置文件中的每个数据源，按 db_id + 域应用模块查重，存在则更新、不存在则插入。
-/// 2. **清理**：查询数据库中 `source="config"` 且匹配当前域应用模块的记录，
-///    将配置文件中已删除的（db_id 不在配置文件中）归档（archived=1），避免残留无效数据源。
+/// 1. **upsert**：对配置文件中的每个数据源查重，存在则更新、不存在则插入。
+///    - mono 模式：按 `db_id + source='config'` 查重（全局唯一）
+///    - micro 模式：按 `db_id + 域应用模块` 查重（同 db_id 可在不同域下重复）
+/// 2. **清理**：查询数据库中 `source="config"` 的记录，
+///    将配置文件中已删除的（db_id 不在配置文件中）物理删除，避免残留无效数据源。
 ///
 /// # Arguments
 ///
 /// * `mm` - 数据库管理器
 /// * `db_id` - 默认数据库ID
-/// * `app_identity` - 当前实例应用标识
+/// * `app_identity` - 当前实例应用标识（micro 模式用）
+/// * `deploy_mode` - 部署模式
 /// * `configs` - 配置文件中的数据源配置列表
 async fn persist_datasource_configs(
     mm: &DatabaseManager,
     db_id: &str,
     app_identity: &crate::config::AppIdentity,
+    deploy_mode: DeployMode,
     configs: &[DbConfig],
 ) -> crate::Result<()> {
-    info!("开始持久化数据源配置...");
+    info!("开始持久化数据源配置（模式: {:?}）...", deploy_mode);
 
     for config in configs {
-        // 按 db_id + 域应用模块联合查重（db_id 在不同域下可重复）
-        let filter = SysDatasourceFilter {
-            db_id: Some(OpValsString(vec![OpValString::Eq(config.db_id.clone())])),
-            domain_code: Some(OpValsString(vec![OpValString::Eq(
-                app_identity.domain_code.clone(),
-            )])),
-            application_code: Some(OpValsString(vec![OpValString::Eq(
-                app_identity.application_code.clone(),
-            )])),
-            module_code: Some(OpValsString(vec![OpValString::Eq(
-                app_identity.module_code.clone(),
-            )])),
-            ..Default::default()
+        // 查重键按部署模式分支
+        let filter = if deploy_mode == DeployMode::Mono {
+            // mono 模式：仅按 db_id + source='config' 查重（全局唯一）
+            SysDatasourceFilter {
+                db_id: Some(OpValsString(vec![OpValString::Eq(config.db_id.clone())])),
+                source: Some(OpValsString(vec![OpValString::Eq("config".to_string())])),
+                ..Default::default()
+            }
+        } else {
+            // micro 模式：按 db_id + 域应用模块联合查重（db_id 在不同域下可重复）
+            SysDatasourceFilter {
+                db_id: Some(OpValsString(vec![OpValString::Eq(config.db_id.clone())])),
+                domain_code: Some(OpValsString(vec![OpValString::Eq(
+                    app_identity.domain_code.clone(),
+                )])),
+                application_code: Some(OpValsString(vec![OpValString::Eq(
+                    app_identity.application_code.clone(),
+                )])),
+                module_code: Some(OpValsString(vec![OpValString::Eq(
+                    app_identity.module_code.clone(),
+                )])),
+                ..Default::default()
+            }
         };
 
         let existing = GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(
@@ -191,22 +248,30 @@ async fn persist_datasource_configs(
         info!("成功持久化数据源: {}", config.db_id);
     }
 
-    // 清理：查询数据库中 source="config" 且匹配当前域应用模块的记录，
-    // 配置文件中已删除的（db_id 不在配置文件中）物理删除，避免残留无效数据源。
+    // 清理：查询 source="config" 的记录，配置文件中已删除的（db_id 不在配置文件中）物理删除。
+    // mono 模式：全局清理（不按 D-A-M）
+    // micro 模式：仅清理本域应用模块的记录
     let config_db_ids: Vec<String> = configs.iter().map(|c| c.db_id.clone()).collect();
 
-    let cleanup_filter = SysDatasourceFilter {
-        source: Some(OpValsString(vec![OpValString::Eq("config".to_string())])),
-        domain_code: Some(OpValsString(vec![OpValString::Eq(
-            app_identity.domain_code.clone(),
-        )])),
-        application_code: Some(OpValsString(vec![OpValString::Eq(
-            app_identity.application_code.clone(),
-        )])),
-        module_code: Some(OpValsString(vec![OpValString::Eq(
-            app_identity.module_code.clone(),
-        )])),
-        ..Default::default()
+    let cleanup_filter = if deploy_mode == DeployMode::Mono {
+        SysDatasourceFilter {
+            source: Some(OpValsString(vec![OpValString::Eq("config".to_string())])),
+            ..Default::default()
+        }
+    } else {
+        SysDatasourceFilter {
+            source: Some(OpValsString(vec![OpValString::Eq("config".to_string())])),
+            domain_code: Some(OpValsString(vec![OpValString::Eq(
+                app_identity.domain_code.clone(),
+            )])),
+            application_code: Some(OpValsString(vec![OpValString::Eq(
+                app_identity.application_code.clone(),
+            )])),
+            module_code: Some(OpValsString(vec![OpValString::Eq(
+                app_identity.module_code.clone(),
+            )])),
+            ..Default::default()
+        }
     };
 
     let existing_configs = GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(
@@ -246,12 +311,16 @@ async fn persist_datasource_configs(
 
 /// 从数据库加载启用的数据源
 ///
-/// 查询条件：status=1（启用）且 archived=0（未归档）。
+/// 查询条件：
+/// - mono 模式：`status=1 AND archived=0`（加载全部，不按 D-A-M 过滤）
+/// - micro 模式：`status=1 AND archived=0 AND domain_code=? AND application_code=? AND module_code=?`
 ///
 /// # Arguments
 ///
 /// * `mm` - 数据库管理器
 /// * `db_id` - 默认数据库ID
+/// * `app_identity` - 当前实例应用标识（micro 模式用）
+/// * `deploy_mode` - 部署模式
 ///
 /// # Returns
 ///
@@ -260,25 +329,40 @@ async fn load_active_datasources(
     mm: &DatabaseManager,
     db_id: &str,
     app_identity: &crate::config::AppIdentity,
+    deploy_mode: DeployMode,
 ) -> crate::Result<Vec<DbConfig>> {
     info!(
-        "开始加载有效数据源（域: {}/{}/{}）...",
-        app_identity.domain_code, app_identity.application_code, app_identity.module_code
+        "开始加载有效数据源（模式: {:?}, 域: {}/{}/{}）...",
+        deploy_mode,
+        app_identity.domain_code,
+        app_identity.application_code,
+        app_identity.module_code
     );
 
-    let filter = SysDatasourceFilter {
-        domain_code: Some(OpValsString(vec![OpValString::Eq(
-            app_identity.domain_code.clone(),
-        )])),
-        application_code: Some(OpValsString(vec![OpValString::Eq(
-            app_identity.application_code.clone(),
-        )])),
-        module_code: Some(OpValsString(vec![OpValString::Eq(
-            app_identity.module_code.clone(),
-        )])),
-        status: Some(OpValsInt64(vec![OpValInt64::Eq(1)])),
-        archived: Some(OpValsInt64(vec![OpValInt64::Eq(0)])),
-        ..Default::default()
+    // 过滤条件按部署模式分支
+    let filter = if deploy_mode == DeployMode::Mono {
+        // mono 模式：仅按 status/archived 过滤，加载全部数据源
+        SysDatasourceFilter {
+            status: Some(OpValsInt64(vec![OpValInt64::Eq(1)])),
+            archived: Some(OpValsInt64(vec![OpValInt64::Eq(0)])),
+            ..Default::default()
+        }
+    } else {
+        // micro 模式：按 D-A-M + status/archived 精确过滤
+        SysDatasourceFilter {
+            domain_code: Some(OpValsString(vec![OpValString::Eq(
+                app_identity.domain_code.clone(),
+            )])),
+            application_code: Some(OpValsString(vec![OpValString::Eq(
+                app_identity.application_code.clone(),
+            )])),
+            module_code: Some(OpValsString(vec![OpValString::Eq(
+                app_identity.module_code.clone(),
+            )])),
+            status: Some(OpValsInt64(vec![OpValInt64::Eq(1)])),
+            archived: Some(OpValsInt64(vec![OpValInt64::Eq(0)])),
+            ..Default::default()
+        }
     };
 
     let dataset = GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(
@@ -304,6 +388,40 @@ async fn load_active_datasources(
 
     info!("成功加载 {} 个有效数据源", datasources.len());
     Ok(datasources)
+}
+
+/// mono 模式启动期一致性校验（B-4）
+///
+/// 单体意图是"默认库与业务库同库"，若二者 `db_url` 不一致则告警。
+/// 这是软告警（不阻断启动），让运维立即发现误配。
+///
+/// # Arguments
+///
+/// * `mm` - 数据库管理器
+async fn check_mono_datasource_consistency(mm: &DatabaseManager) -> crate::Result<()> {
+    let default_db_id = mm.get_default_db_id().await;
+    let biz_db_id = mm.get_biz_db_id().await;
+
+    // 若二者 db_id 相同，必然同库，无需校验
+    if default_db_id == biz_db_id {
+        return Ok(());
+    }
+
+    // 二者 db_id 不同时，比较 db_url
+    let default_url = mm.get_db_config(&default_db_id).await.map(|c| c.db_url).ok();
+    let biz_url = mm.get_db_config(&biz_db_id).await.map(|c| c.db_url).ok();
+
+    if let (Some(d), Some(b)) = (default_url, biz_url) {
+        if d != b {
+            warn!(
+                "单体模式下默认库与业务库 db_url 不一致（默认库 {}: {}, 业务库 {}: {}），\
+                 请确认意图。若为误配，请调整 [databases] 配置使二者指向同一物理库。",
+                default_db_id, d, biz_db_id, b
+            );
+        }
+    }
+
+    Ok(())
 }
 
 /// 注册数据源到内存

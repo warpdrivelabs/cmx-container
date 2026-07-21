@@ -1,0 +1,72 @@
+[
+  {
+    "code": "A001",
+    "name": "流动资产科目组",
+    "sort_no": 1,
+    "status": 1,
+    "is_system": 1,
+    "from_account": "1001",
+    "to_account": "1299",
+    "create_time": "2026-01-01 00:00:00"
+  },
+  {
+    "code": "A002",
+    "name": "非流动资产科目组",
+    "sort_no": 2,
+    "status": 1,
+    "is_system": 1,
+    "from_account": "1301",
+    "to_account": "1799",
+    "create_time": "2026-01-01 00:00:00"
+  },
+  {
+    "code": "L001",
+    "name": "流动负债科目组",
+    "sort_no": 3,
+    "status": 1,
+    "is_system": 1,
+    "from_account": "2001",
+    "to_account": "2299",
+    "create_time": "2026-01-01 00:00:00"
+  },
+  {
+    "code": "L002",
+    "name": "非流动负债科目组",
+    "sort_no": 4,
+    "status": 1,
+    "is_system": 1,
+    "from_account": "2501",
+    "to_account": "2799",
+    "create_time": "2026-01-01 00:00:00"
+  },
+  {
+    "code": "E001",
+    "name": "权益科目组",
+    "sort_no": 5,
+    "status": 1,
+    "is_system": 1,
+    "from_account": "3001",
+    "to_account": "3299",
+    "create_time": "2026-01-01 00:00:00"
+  },
+  {
+    "code": "P001",
+    "name": "损益(收入)科目组",
+    "sort_no": 6,
+    "status": 1,
+    "is_system": 1,
+    "from_account": "4001",
+    "to_account": "4999",
+    "create_time": "2026-01-01 00:00:00"
+  },
+  {
+    "code": "P002",
+    "name": "损益(成本费用)科目组",
+    "sort_no": 7,
+    "status": 1,
+    "is_system": 1,
+    "from_account": "5001",
+    "to_account": "6999",
+    "create_time": "2026-01-01 00:00:00"
+  }
+]

@@ -18,6 +18,9 @@ pub mod storage;
 
 pub use datasource::init_datasources;
 
+/// 部署模式（从 cmx-utils re-export，供 web-server 各模块使用）。
+pub use cmx_utils::config::DeployMode;
+
 pub use audit::build_audit_logger;
 pub use auth::init_auth_service;
 pub use cache::init_cache;
@@ -137,4 +140,11 @@ pub fn load_app_identity() -> AppIdentity {
         identity.module_code = v;
     }
     identity
+}
+
+/// 加载部署模式（`[deploy] mode`）。
+///
+/// 未配置时缺省为 `DeployMode::Mono`（向后兼容）。
+pub fn load_deploy_mode() -> DeployMode {
+    DeployMode::from_config()
 }

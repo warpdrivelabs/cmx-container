@@ -402,13 +402,17 @@ impl AuditStore for DatabaseAuditStore {
                 Column::StartedAt,
                 Column::DurationMs,
             ])
-            .and_where(Expr::col(Column::Archived).eq(0))
-            // 默认按 self.app_id 过滤（多租户隔离），调用方可显式覆盖
-            .and_where(
+            .and_where(Expr::col(Column::Archived).eq(0));
+        // app_id 过滤按部署模式分支：
+        // - Mono：不拼 WHERE app_id（审计全局可见，与 [deploy] mode = "mono" 语义一致）
+        // - Micro：默认按 self.app_id 过滤（多租户隔离），调用方可通过 filter.app_id 显式覆盖
+        if cmx_utils::config::DeployMode::from_config() != cmx_utils::config::DeployMode::Mono {
+            q.and_where(
                 Expr::col(Column::AppId)
                     .eq(filter.app_id.clone().unwrap_or_else(|| self.app_id.clone())),
-            )
-            .order_by(Column::StartedAt, Order::Desc)
+            );
+        }
+        q.order_by(Column::StartedAt, Order::Desc)
             .limit(limit)
             .offset(offset);
         if let Some(d) = &filter.domain {

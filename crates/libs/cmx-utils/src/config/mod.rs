@@ -30,7 +30,7 @@ pub mod value;
 
 mod config_impl;
 
-pub use config_impl::{Config, ConfigBuilder, ConfigManager, DefaultConfigLoader};
+pub use config_impl::{Config, ConfigBuilder, ConfigManager, DefaultConfigLoader, DeployMode};
 pub use error::{ConfigError, ConfigResult};
 pub use source::CommandLineSource;
 pub use value::{ConfigStore, ConfigValue, FromConfigValue};

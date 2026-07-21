@@ -100,13 +100,28 @@ impl ModuleInstallService {
         // 导入守卫:模块包的 module.code 必须与当前服务 app_id 一致。
         // 当前设计下 app_id 由配置 app.module_code 决定(get_app_id),即 app_id ≡ module_code,
         // 因此这里用模块 code 比对服务 app_id;二者不一致说明模块包不属于本服务,拒绝导入。
+        //
+        // **按 [deploy] mode 分支**：
+        // - Mono：放宽守卫，允许导入任意 module_code 的模块包（单体聚合所有模块）
+        // - Micro：维持原守卫，module_code != app_id 则拒绝
         let module_code = &manifest.module.code;
         let current_service_app_id = cmx_utils::ConfigManager::global().get_app_id();
-        if module_code != &current_service_app_id {
+        let deploy_mode = cmx_utils::config::DeployMode::from_config();
+
+        if deploy_mode == cmx_utils::config::DeployMode::Micro
+            && module_code != &current_service_app_id
+        {
             return Err(PluginError::CenterData(format!(
                 "导入的模块资源不属于当前模块: 模块包 module_code={}, 当前服务 app_id={}",
                 module_code, current_service_app_id
             )));
+        }
+
+        if deploy_mode == cmx_utils::config::DeployMode::Mono {
+            info!(
+                module_code = %manifest.module.code,
+                "单体模式下导入模块包（跳过 module_code 与 app_id 一致性校验）"
+            );
         }
 
         info!(

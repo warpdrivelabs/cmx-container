@@ -29,6 +29,10 @@ use tracing::debug;
 // 抽出后直接用 cmx-api-types，避免反向依赖 cmx-api 成环。
 use cmx_api_types::{Error, Result};
 
+pub mod seed_scanner;
+pub mod menu_pages_adapter;
+pub mod deploy_seed_menu;
+
 const META_VERSION: i32 = 2;
 const ENGINE_VERSION: &str = "1.0.0";
 /// VARCHAR 字段未指定 fieldLength 时的默认长度。
@@ -48,6 +52,20 @@ fn now_iso() -> String {
 }
 fn db_err<E: std::fmt::Display>(ctx: &str) -> impl Fn(E) -> Error + '_ {
     move |e| Error::InternalError(format!("{ctx}: {e}"))
+}
+
+/// 部署 kind 优先级：DCT(0) → DOC(1) → RPT(2) → SEED(3) → MENU(4)。
+/// 保证 SEED 在 DCT 建表之后执行（SEED 依赖目标表已建），MENU 最后同步。
+/// deploy_with_events 与 deploy_plan_stream 共用此函数，确保「预览顺序 == 执行顺序」。
+fn kind_order(k: &str) -> u8 {
+    match k {
+        "DCT" => 0,
+        "DOC" => 1,
+        "RPT" => 2,
+        "SEED" => 3,
+        "MENU" => 4,
+        _ => 99,
+    }
 }
 
 fn data_value_string(v: &DataValue) -> Option<String> {
@@ -567,7 +585,7 @@ async fn read_base(file: &str) -> Result<Value> {
 }
 
 /// 编译一个定义（kind=DCT/DOC/RPT）→ (TableDefine 列表, 源 JSON)。
-async fn compile_definition(
+pub(crate) async fn compile_definition(
     kind: &str,
     domain: &str,
     app: &str,
@@ -672,7 +690,7 @@ const LEDGER_MODULE_UPGRADE_DDL: &[&str] = &[
 ];
 
 const LEDGER_MODULE_KIND_DDL: &[&str] = &[
-    "CREATE TABLE IF NOT EXISTS cmx_model_module_kind (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), kind VARCHAR(20) NOT NULL, version VARCHAR(50), status VARCHAR(20) DEFAULT 'none', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), error_message TEXT, archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
+    "CREATE TABLE IF NOT EXISTS cmx_model_module_kind (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL, domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), kind VARCHAR(20) NOT NULL, version VARCHAR(50), status VARCHAR(20) DEFAULT 'none', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), error_message TEXT, archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_module_kind_key ON cmx_model_module_kind (db_id, app_id, domain_code, application_code, module_code, kind)",
     "CREATE INDEX IF NOT EXISTS idx_model_module_kind_module ON cmx_model_module_kind (db_id, domain_code, application_code, module_code)",
 ];
@@ -1346,7 +1364,9 @@ async fn read_modules(db_id: &str) -> Result<std::collections::HashMap<String, V
         }));
     }
     if table_exists(db_id, "cmx_model_module_kind").await? {
-        let ksql = "SELECT domain_code, application_code, module_code, kind, version, status, table_count, def_source, deployed_at, deployed_by, deployed_name, create_time, update_time FROM cmx_model_module_kind WHERE archived = 0";
+        // 注意：def_checksum 仅 SEED/MENU 路径写入（DCT 路径传 None，COALESCE 保留旧值）。
+        // 旧库可能存在 def_checksum=NULL 的行，读取时按 None 处理。
+        let ksql = "SELECT domain_code, application_code, module_code, kind, version, status, table_count, def_source, def_checksum, deployed_at, deployed_by, deployed_name, create_time, update_time FROM cmx_model_module_kind WHERE archived = 0";
         let kds = mm
             .query_sql(db_id, None, ksql, "mc_module_kinds")
             .await
@@ -1408,6 +1428,7 @@ async fn read_modules(db_id: &str) -> Result<std::collections::HashMap<String, V
                 "status": kv(row, "status").unwrap_or_else(|| "none".into()),
                 "table_count": kind_tables,
                 "def_source": kv(row, "def_source"),
+                "def_checksum": kv(row, "def_checksum"),
                 "deployed_at": kv(row, "deployed_at"),
                 "deployed_by": kv(row, "deployed_by"),
                 "deployed_name": kv(row, "deployed_name"),
@@ -1446,6 +1467,90 @@ fn scenario_of(applied: Option<&str>, latest: Option<&str>, status: &str) -> &'s
 // ════════════════════════════════════════════════════════════════════════
 //  四、对外 API：db_state / init_db / deploy
 // ════════════════════════════════════════════════════════════════════════
+
+/// 计算 SEED/MENU 的 scenario（实时扫描文件 + 对比 cmx_model_module_kind.def_checksum）。
+///
+/// 与 `scenario_of`（DCT/DOC/RPT 走版本号对比）不同，SEED/MENU 没有语义版本概念，
+/// 用文件聚合 SHA256 与库里的 `def_checksum` 对比判断 drift。
+///
+/// 字段策略：
+/// - `version`/`applied`/`latest`：**给用户看的日期版本**（YYYY-MM-DD，取文件 mtime）
+/// - `applied_checksum`/`latest_checksum`：**内部 drift 判断依据**（SHA256，hash 变了说明有更新）
+///
+/// 入参：
+/// - `applied_kind_row`：来自 `read_modules` 的某模块下 `applied_modules[key]["seed"|"menu"]` 子对象；
+///   无部署记录时传 `None`。需含 `status` 和 `def_checksum` 字段（旧库可能没有 def_checksum）。
+///
+/// 返回 `(scenario, cell_json)`。scenario 由调用方累计到 `counts`，cell_json 直接放入 db_state。
+fn compute_seed_menu_cell(
+    kind: &str,
+    domain: &str,
+    app: &str,
+    module: &str,
+    applied_kind_row: Option<&Value>,
+) -> (&'static str, Value) {
+    let files = if kind == "SEED" {
+        seed_scanner::scan_seed_files(domain, app, module)
+    } else {
+        seed_scanner::scan_menu_files(domain, app, module)
+    };
+    let row_count: usize = files.iter().map(|f| f.row_count).sum();
+    let latest_checksum = if files.is_empty() {
+        None
+    } else {
+        Some(seed_scanner::aggregate_sha256(&files))
+    };
+    // 用户可见版本：取所有文件 mtime 中最新的日期（YYYY-MM-DD）
+    // 同一天多次修改只算一个版本（语义上"今天有更新"）
+    let latest_version = files
+        .iter()
+        .filter_map(|f| f.modified_date.as_deref())
+        .max()
+        .unwrap_or("");
+
+    let status_str = applied_kind_row
+        .and_then(|a| a.get("status"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("none");
+    let applied_checksum = applied_kind_row
+        .and_then(|a| a.get("def_checksum"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
+    // 已部署版本：来自 cmx_model_module_kind.version（部署时写入的当时日期）
+    let applied_version = applied_kind_row
+        .and_then(|a| a.get("version"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("");
+
+    let scenario: &'static str = if status_str == "failed" {
+        "retry"
+    } else {
+        match (applied_checksum, latest_checksum.as_deref()) {
+            (None, None) => "none",
+            (None, Some(_)) => "create",
+            (Some(_), None) => "current", // 文件已删，但库里有部署记录：视为当前态（避免误报 drift）
+            (Some(a), Some(l)) if a == l => "current",
+            (Some(_), Some(_)) => "drift",
+        }
+    };
+
+    let cell = json!({
+        // 用户可见字段（与 DCT/DOC 的 cell 对齐：version/applied/latest 都是给人看的）
+        "version": latest_version,
+        "applied": applied_version,
+        "latest": latest_version,
+        "status": status_str,
+        "scenario": scenario,
+        "file": if kind == "SEED" { "seed/" } else { "menu-pages/" },
+        "row_count": row_count,
+        "table_count": files.len(),
+        // 内部字段（drift 判断依据，前端不展示）
+        "applied_checksum": applied_checksum,
+        "latest_checksum": latest_checksum,
+    });
+    (scenario, cell)
+}
 
 /// 组合 db-state：库门闸 + 每模块每 kind scenario（真实读台账 + 定义列表）。
 pub async fn db_state(db_id: &str) -> Result<Value> {
@@ -1666,6 +1771,29 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             })
         };
         let tblc: i64 = kinds.values().map(|k| k.tables).sum();
+        // 先算 DCT/DOC/RPT（cell 闭包借用 &mut counts），算完闭包自然 drop；
+        // 再算 SEED/MENU（避免对 counts 的两次可变借用冲突）。
+        let dct_cell = cell("DCT");
+        let doc_cell = cell("DOC");
+        let rpt_cell = cell("RPT");
+        drop(cell);
+        // SEED / MENU cell：实时扫描文件 + 对比 cmx_model_module_kind.def_checksum。
+        let (seed_sc, seed_cell) = compute_seed_menu_cell(
+            "SEED",
+            domain,
+            app,
+            module,
+            applied.and_then(|a| a.get("seed")),
+        );
+        bump(&mut counts, seed_sc);
+        let (menu_sc, menu_cell) = compute_seed_menu_cell(
+            "MENU",
+            domain,
+            app,
+            module,
+            applied.and_then(|a| a.get("menu")),
+        );
+        bump(&mut counts, menu_sc);
         modules.push(json!({
             "domain": domain, "application": app, "module": module,
             "module_name": applied.and_then(|a| a.get("module_name")).and_then(|v| v.as_str()).unwrap_or(if title.is_empty() { module.as_str() } else { title.as_str() }),
@@ -1675,8 +1803,9 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             "deployed_by": applied.and_then(|a| a.get("deployed_by")).and_then(|v| v.as_str()),
             "deployed_name": applied.and_then(|a| a.get("deployed_name")).and_then(|v| v.as_str()),
             "table_count": tblc,
-            "dct": cell("DCT"), "doc": cell("DOC"), "rpt": cell("RPT"),
-            "seed": json!({ "applied": null, "latest": null, "status": "none", "scenario": "none", "file": "" }),
+            "dct": dct_cell, "doc": doc_cell, "rpt": rpt_cell,
+            "seed": seed_cell,
+            "menu": menu_cell,
         }));
     }
 
@@ -1740,7 +1869,8 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             "dct": def_cell("DCT"),
             "doc": def_cell("DOC"),
             "rpt": def_cell("RPT"),
-            "seed": def_cell("SEED"),
+            "seed": compute_seed_menu_cell("SEED", domain, app, module, applied.get("seed")).1,
+            "menu": compute_seed_menu_cell("MENU", domain, app, module, applied.get("menu")).1,
         }));
     }
 
@@ -1767,22 +1897,23 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
 
 /// 台账系统表 DDL（初始化时执行；幂等 IF NOT EXISTS，与迁移文件同源）。
 const INIT_DDL: &[&str] = &[
-    "CREATE TABLE IF NOT EXISTS cmx_model_meta (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), meta_version INT4 NOT NULL DEFAULT 1, app_id VARCHAR(64) NOT NULL DEFAULT 'default', engine_version VARCHAR(50), portal_version VARCHAR(50), status VARCHAR(20) NOT NULL DEFAULT 'ready', initialized_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, initialized_by VARCHAR(100), initialized_name VARCHAR(100), last_upgraded_at TIMESTAMP, last_upgraded_by VARCHAR(100), remark VARCHAR(500), create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
+    "CREATE TABLE IF NOT EXISTS cmx_model_meta (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), meta_version INT4 NOT NULL DEFAULT 1, app_id VARCHAR(64) NOT NULL, engine_version VARCHAR(50), portal_version VARCHAR(50), status VARCHAR(20) NOT NULL DEFAULT 'ready', initialized_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, initialized_by VARCHAR(100), initialized_name VARCHAR(100), last_upgraded_at TIMESTAMP, last_upgraded_by VARCHAR(100), remark VARCHAR(500), create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_meta_db_app ON cmx_model_meta (db_id, app_id)",
-    "CREATE TABLE IF NOT EXISTS cmx_model_module (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), overall_status VARCHAR(20) DEFAULT 'active', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), first_deployed_at TIMESTAMP, current_deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
+    "CREATE TABLE IF NOT EXISTS cmx_model_module (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL, domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), overall_status VARCHAR(20) DEFAULT 'active', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), first_deployed_at TIMESTAMP, current_deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_module_key ON cmx_model_module (db_id, app_id, domain_code, application_code, module_code)",
-    "CREATE TABLE IF NOT EXISTS cmx_model_module_kind (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), kind VARCHAR(20) NOT NULL, version VARCHAR(50), status VARCHAR(20) DEFAULT 'none', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), error_message TEXT, archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
+    "CREATE TABLE IF NOT EXISTS cmx_model_module_kind (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL, domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), kind VARCHAR(20) NOT NULL, version VARCHAR(50), status VARCHAR(20) DEFAULT 'none', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), error_message TEXT, archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_module_kind_key ON cmx_model_module_kind (db_id, app_id, domain_code, application_code, module_code, kind)",
     "CREATE INDEX IF NOT EXISTS idx_model_module_kind_module ON cmx_model_module_kind (db_id, domain_code, application_code, module_code)",
-    "CREATE TABLE IF NOT EXISTS cmx_model_deploy_history (id VARCHAR(64) NOT NULL, batch_id VARCHAR(64), db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), kind VARCHAR(20), action VARCHAR(20), from_version VARCHAR(50), to_version VARCHAR(50), status VARCHAR(20), ddl_summary JSONB, object_count INT4 DEFAULT 0, seed_rows INT4 DEFAULT 0, def_ref VARCHAR(300), def_version VARCHAR(50), engine_version VARCHAR(50), error_message TEXT, started_at TIMESTAMP, finished_at TIMESTAMP, duration_ms INT8, operator_id VARCHAR(100), operator_name VARCHAR(100), create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
+    "CREATE TABLE IF NOT EXISTS cmx_model_deploy_history (id VARCHAR(64) NOT NULL, batch_id VARCHAR(64), db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL, domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), kind VARCHAR(20), action VARCHAR(20), from_version VARCHAR(50), to_version VARCHAR(50), status VARCHAR(20), ddl_summary JSONB, object_count INT4 DEFAULT 0, seed_rows INT4 DEFAULT 0, def_ref VARCHAR(300), def_version VARCHAR(50), engine_version VARCHAR(50), error_message TEXT, started_at TIMESTAMP, finished_at TIMESTAMP, duration_ms INT8, operator_id VARCHAR(100), operator_name VARCHAR(100), create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE INDEX IF NOT EXISTS idx_model_history_module ON cmx_model_deploy_history (db_id, domain_code, application_code, module_code)",
-    "CREATE TABLE IF NOT EXISTS cmx_model_source (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), kind VARCHAR(20), version VARCHAR(50), source_file VARCHAR(300), source_json JSONB, compiled_json JSONB, checksum VARCHAR(64), table_count INT4 DEFAULT 0, seed_row_count INT4 DEFAULT 0, is_current INT4 DEFAULT 1, engine_version VARCHAR(50), imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, imported_by VARCHAR(100), imported_name VARCHAR(100), remark VARCHAR(500), create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
+    "CREATE TABLE IF NOT EXISTS cmx_model_source (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL, domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), kind VARCHAR(20), version VARCHAR(50), source_file VARCHAR(300), source_json JSONB, compiled_json JSONB, checksum VARCHAR(64), table_count INT4 DEFAULT 0, seed_row_count INT4 DEFAULT 0, is_current INT4 DEFAULT 1, engine_version VARCHAR(50), imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, imported_by VARCHAR(100), imported_name VARCHAR(100), remark VARCHAR(500), create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_source_ver ON cmx_model_source (db_id, app_id, domain_code, application_code, module_code, kind, version)",
 ];
 
 /// 初始化目标库：建 5 张台账系统表 + 写 cmx_model_meta + 记 INIT 历史。
 pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Result<Value> {
     let mm = get_default_db_manager();
+    let current_app_id = cmx_utils::ConfigManager::global().get_app_id();
     let reinit = read_meta(db_id).await?.is_some();
     // 1) 建系统表（DDL 自动提交，txn_id=None）
     for ddl in INIT_DDL {
@@ -1799,7 +1930,7 @@ pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Res
         .map_err(db_err("开启事务失败"))?;
     let txn = guard.txn_id().to_string();
 
-    let meta_sql = "INSERT INTO cmx_model_meta (id, db_id, meta_version, engine_version, status, initialized_by, initialized_name) VALUES ($1,$2,$3,$4,'ready',$5,$6) \
+    let meta_sql = "INSERT INTO cmx_model_meta (id, db_id, app_id, meta_version, engine_version, status, initialized_by, initialized_name) VALUES ($1,$2,$3,$4,$5,'ready',$6,$7) \
         ON CONFLICT (db_id, app_id) DO UPDATE SET meta_version = EXCLUDED.meta_version, engine_version = EXCLUDED.engine_version, status = 'ready', last_upgraded_at = CURRENT_TIMESTAMP, last_upgraded_by = EXCLUDED.initialized_by, update_time = CURRENT_TIMESTAMP";
     mm.execute_sql_with_datavalues(
         db_id,
@@ -1808,6 +1939,7 @@ pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Res
         vec![
             DataValue::String(snowflake_id_str()),
             DataValue::String(db_id.to_string()),
+            DataValue::String(current_app_id.clone()),
             DataValue::Int(META_VERSION as i64),
             DataValue::String(ENGINE_VERSION.to_string()),
             DataValue::String(operator_id.to_string()),
@@ -1818,7 +1950,7 @@ pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Res
     .map_err(db_err("写 cmx_model_meta 失败"))?;
 
     let action = if reinit { "upgrade" } else { "create" };
-    let hist_sql = "INSERT INTO cmx_model_deploy_history (id, db_id, kind, action, to_version, status, object_count, engine_version, operator_id, operator_name, finished_at) VALUES ($1,$2,'INIT',$3,$4,'success',$5,$6,$7,$8,CURRENT_TIMESTAMP)";
+    let hist_sql = "INSERT INTO cmx_model_deploy_history (id, db_id, app_id, kind, action, to_version, status, object_count, engine_version, operator_id, operator_name, finished_at) VALUES ($1,$2,$3,'INIT',$4,$5,'success',$6,$7,$8,$9,CURRENT_TIMESTAMP)";
     mm.execute_sql_with_datavalues(
         db_id,
         Some(&txn),
@@ -1826,6 +1958,7 @@ pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Res
         vec![
             DataValue::String(snowflake_id_str()),
             DataValue::String(db_id.to_string()),
+            DataValue::String(current_app_id.clone()),
             DataValue::String(action.to_string()),
             DataValue::String(META_VERSION.to_string()),
             DataValue::Int(LEDGER_TABLES.len() as i64),
@@ -2035,6 +2168,7 @@ pub async fn init_db_stream(
     tx: &tokio::sync::mpsc::UnboundedSender<InitEvent>,
 ) {
     let started = std::time::Instant::now();
+    let current_app_id = cmx_utils::ConfigManager::global().get_app_id();
     let send = |e: InitEvent| {
         let _ = tx.send(e);
     };
@@ -2133,7 +2267,7 @@ pub async fn init_db_stream(
     };
     let txn = guard.txn_id().to_string();
 
-    let meta_sql = "INSERT INTO cmx_model_meta (id, db_id, meta_version, engine_version, status, initialized_by, initialized_name) VALUES ($1,$2,$3,$4,'ready',$5,$6) \
+    let meta_sql = "INSERT INTO cmx_model_meta (id, db_id, app_id, meta_version, engine_version, status, initialized_by, initialized_name) VALUES ($1,$2,$3,$4,$5,'ready',$6,$7) \
         ON CONFLICT (db_id, app_id) DO UPDATE SET meta_version = EXCLUDED.meta_version, engine_version = EXCLUDED.engine_version, status = 'ready', last_upgraded_at = CURRENT_TIMESTAMP, last_upgraded_by = EXCLUDED.initialized_by, update_time = CURRENT_TIMESTAMP";
     if let Err(e) = mm
         .execute_sql_with_datavalues(
@@ -2143,6 +2277,7 @@ pub async fn init_db_stream(
             vec![
                 DataValue::String(snowflake_id_str()),
                 DataValue::String(db_id.to_string()),
+                DataValue::String(current_app_id.clone()),
                 DataValue::Int(META_VERSION as i64),
                 DataValue::String(ENGINE_VERSION.to_string()),
                 DataValue::String(operator_id.to_string()),
@@ -2158,7 +2293,7 @@ pub async fn init_db_stream(
         return;
     }
     let action = if reinit { "upgrade" } else { "create" };
-    let hist_sql = "INSERT INTO cmx_model_deploy_history (id, db_id, kind, action, to_version, status, object_count, engine_version, operator_id, operator_name, finished_at) VALUES ($1,$2,'INIT',$3,$4,'success',$5,$6,$7,$8,CURRENT_TIMESTAMP)";
+    let hist_sql = "INSERT INTO cmx_model_deploy_history (id, db_id, app_id, kind, action, to_version, status, object_count, engine_version, operator_id, operator_name, finished_at) VALUES ($1,$2,$3,'INIT',$4,$5,'success',$6,$7,$8,$9,CURRENT_TIMESTAMP)";
     if let Err(e) = mm
         .execute_sql_with_datavalues(
             db_id,
@@ -2167,6 +2302,7 @@ pub async fn init_db_stream(
             vec![
                 DataValue::String(snowflake_id_str()),
                 DataValue::String(db_id.to_string()),
+                DataValue::String(current_app_id.clone()),
                 DataValue::String(action.to_string()),
                 DataValue::String(META_VERSION.to_string()),
                 DataValue::Int(LEDGER_TABLES.len() as i64),
@@ -2295,9 +2431,17 @@ pub async fn deploy_plan_stream(
         "step",
         json!({ "message": format!("开始生成 {} 个模块定义的部署计划", items.len()), "total": items.len() }),
     );
+    // 按 kind 优先级稳定排序（与 deploy_with_events 一致）：DCT → DOC → RPT → SEED → MENU，
+    // 保证「预览顺序 == 执行顺序」，避免用户看到 SEED 排在 DCT 前的预览但执行时被后端重排。
+    let mut sorted_items: Vec<(usize, &Value)> = items.iter().enumerate().collect();
+    sorted_items.sort_by_key(|(orig_idx, it)| {
+        let kind = it.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+        (kind_order(kind), *orig_idx)
+    });
     let mut results = Vec::new();
     let mut total_tables = 0usize;
-    for (idx, it) in items.iter().enumerate() {
+    for (idx, (_orig_idx, it)) in sorted_items.iter().enumerate() {
+        let it = *it;
         let kind = it
             .get("kind")
             .and_then(|v| v.as_str())
@@ -2323,11 +2467,74 @@ pub async fn deploy_plan_stream(
             }),
         );
         if kind == "SEED" {
+            // 只读预览：扫描 seed 文件 + 检查目标表是否已建（不写库）
+            let seed_files = seed_scanner::scan_seed_files(domain, app, module);
+            let total_rows: usize = seed_files.iter().map(|f| f.row_count).sum();
+            let mut detail = Vec::with_capacity(seed_files.len());
+            for f in &seed_files {
+                let exists = table_exists(db_id, &f.table_name).await.unwrap_or(false);
+                detail.push(json!({
+                    "table": f.table_name,
+                    "rows": f.row_count,
+                    "table_exists": exists,
+                }));
+            }
             send(
                 "progress",
-                json!({ "message": format!("{module} · SEED 暂未实现，计划中将跳过"), "module": module, "kind": kind, "status": "skipped" }),
+                json!({
+                    "message": if detail.is_empty() {
+                        format!("{module} · SEED 无种子文件，计划中将跳过")
+                    } else {
+                        format!("{module} · SEED 将写入 {} 张表 / {} 行种子数据", detail.len(), total_rows)
+                    },
+                    "module": module,
+                    "kind": "SEED",
+                    "tables": detail.len(),
+                    "rows": total_rows,
+                }),
             );
-            results.push(json!({ "module": module, "kind": kind, "status": "skipped", "note": "SEED 暂未实现" }));
+            results.push(json!({
+                "module": module,
+                "kind": "SEED",
+                "tables": detail.len(),
+                "rows": total_rows,
+                "detail": detail,
+                "note": if detail.is_empty() { "无种子文件".to_string() }
+                        else { format!("将写入 {} 张表 / {} 行种子数据", detail.len(), total_rows) },
+            }));
+            continue;
+        }
+        if kind == "MENU" {
+            // 只读预览：扫描 menu 文件 + 统计节点数（不写库）
+            let menu_files = seed_scanner::scan_menu_files(domain, app, module);
+            let total_nodes: usize = menu_files.iter().map(|f| f.row_count).sum();
+            let detail: Vec<Value> = menu_files
+                .iter()
+                .map(|f| json!({ "file": f.rel_path, "nodes": f.row_count }))
+                .collect();
+            send(
+                "progress",
+                json!({
+                    "message": if menu_files.is_empty() {
+                        format!("{module} · MENU 无菜单文件，计划中将跳过")
+                    } else {
+                        format!("{module} · MENU 将同步 {} 个菜单文件 / {} 个节点（先删后插 module={}）", menu_files.len(), total_nodes, module)
+                    },
+                    "module": module,
+                    "kind": "MENU",
+                    "files": menu_files.len(),
+                    "nodes": total_nodes,
+                }),
+            );
+            results.push(json!({
+                "module": module,
+                "kind": "MENU",
+                "files": menu_files.len(),
+                "nodes": total_nodes,
+                "detail": detail,
+                "note": if menu_files.is_empty() { "无菜单文件".to_string() }
+                        else { format!("将同步 {} 个菜单文件 / {} 个节点（先删后插 module={}）", menu_files.len(), total_nodes, module) },
+            }));
             continue;
         }
         let (defs, src) = match compile_definition(&kind, domain, app, module, file).await {
@@ -2421,6 +2628,7 @@ async fn deploy_with_events(
     operator_name: &str,
     tx: Option<&tokio::sync::mpsc::UnboundedSender<InitEvent>>,
 ) -> Result<Value> {
+    let current_app_id = cmx_utils::ConfigManager::global().get_app_id();
     let send = |kind: &str, data: Value| {
         if let Some(tx) = tx {
             let _ = tx.send(ev(kind, data));
@@ -2446,7 +2654,18 @@ async fn deploy_with_events(
         json!({ "message": format!("开始部署 {} 个模块定义", items.len()), "batch_id": batch_id, "total": items.len() }),
     );
 
-    for (idx, it) in items.iter().enumerate() {
+    // 按 kind 优先级稳定排序（复用模块级 kind_order）：
+    // DCT(0) → DOC(1) → RPT(2) → SEED(3) → MENU(4)，保证 SEED 在 DCT 建表之后执行，
+    // MENU 最后同步。同 kind 内保持 items 原始顺序（稳定排序）。
+    let mut sorted_items: Vec<(usize, &Value)> = items.iter().enumerate().collect();
+    sorted_items.sort_by_key(|(orig_idx, it)| {
+        let kind = it.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+        (kind_order(kind), *orig_idx)
+    });
+
+    for (seq, (_orig_idx, it)) in sorted_items.iter().enumerate() {
+        let it = *it;
+        let idx = seq;
         let kind = it
             .get("kind")
             .and_then(|v| v.as_str())
@@ -2472,11 +2691,33 @@ async fn deploy_with_events(
             }),
         );
         if kind == "SEED" {
-            send(
-                "progress",
-                json!({ "message": format!("{module} · SEED 暂未实现，已跳过"), "module": module, "kind": kind, "status": "skipped" }),
-            );
-            results.push(json!({ "module": module, "kind": kind, "status": "skipped", "note": "SEED 暂未实现" }));
+            // SEED 走完整部署流程（依赖目标表已由 DCT 路径建好）
+            let result = deploy_seed_menu::deploy_seed_with_events(
+                db_id,
+                domain,
+                app,
+                module,
+                operator_id,
+                operator_name,
+                tx,
+            )
+            .await?;
+            results.push(result);
+            continue;
+        }
+        if kind == "MENU" {
+            // MENU 走完整部署流程（菜单数据写平台库，台账/历史写目标库）
+            let result = deploy_seed_menu::deploy_menu_with_events(
+                db_id,
+                domain,
+                app,
+                module,
+                operator_id,
+                operator_name,
+                tx,
+            )
+            .await?;
+            results.push(result);
             continue;
         }
         let started = std::time::Instant::now();
@@ -2487,9 +2728,10 @@ async fn deploy_with_events(
             json!({ "message": "写入执行历史锚点 …", "module": module, "kind": kind }),
         );
         let _ = mm.execute_sql_with_datavalues(db_id, None,
-            "INSERT INTO cmx_model_deploy_history (id, batch_id, db_id, domain_code, application_code, module_code, kind, action, status, def_ref, engine_version, operator_id, operator_name, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7,'create','executing',$8,$9,$10,$11,CURRENT_TIMESTAMP)",
+            "INSERT INTO cmx_model_deploy_history (id, batch_id, db_id, app_id, domain_code, application_code, module_code, kind, action, status, def_ref, engine_version, operator_id, operator_name, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'create','executing',$9,$10,$11,$12,CURRENT_TIMESTAMP)",
             vec![
                 DataValue::String(hist_id.clone()), DataValue::String(batch_id.clone()), DataValue::String(db_id.to_string()),
+                DataValue::String(current_app_id.clone()),
                 DataValue::String(domain.to_string()), DataValue::String(app.to_string()), DataValue::String(module.to_string()),
                 DataValue::String(kind.clone()), DataValue::String(file.to_string()), DataValue::String(ENGINE_VERSION.to_string()),
                 DataValue::String(operator_id.to_string()), DataValue::String(operator_name.to_string()),
@@ -2602,15 +2844,16 @@ async fn deploy_with_events(
         let tx_result: Result<()> = async {
             // 4-a 源 JSON 留档：翻旧版 is_current=0，插新版
             mm.execute_sql_with_datavalues(db_id, Some(&txn),
-            "UPDATE cmx_model_source SET is_current = 0 WHERE db_id=$1 AND domain_code=$2 AND application_code=$3 AND module_code=$4 AND kind=$5",
-            vec![DataValue::String(db_id.into()), DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()), DataValue::String(kind.clone())])
+            "UPDATE cmx_model_source SET is_current = 0 WHERE db_id=$1 AND app_id=$2 AND domain_code=$3 AND application_code=$4 AND module_code=$5 AND kind=$6",
+            vec![DataValue::String(db_id.into()), DataValue::String(current_app_id.clone()), DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()), DataValue::String(kind.clone())])
                 .await.map_err(db_err("更新源 JSON 当前标记失败"))?;
 
             let compiled = serde_json::to_value(&defs).unwrap_or(Value::Null);
             mm.execute_sql_with_datavalues(db_id, Some(&txn),
-            "INSERT INTO cmx_model_source (id, db_id, domain_code, application_code, module_code, module_name, kind, version, source_file, source_json, compiled_json, table_count, is_current, engine_version, imported_by, imported_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12,1,$13,$14,$15) ON CONFLICT (db_id, app_id, domain_code, application_code, module_code, kind, version) DO UPDATE SET source_json=EXCLUDED.source_json, compiled_json=EXCLUDED.compiled_json, is_current=1, imported_at=CURRENT_TIMESTAMP",
+            "INSERT INTO cmx_model_source (id, db_id, app_id, domain_code, application_code, module_code, module_name, kind, version, source_file, source_json, compiled_json, table_count, is_current, engine_version, imported_by, imported_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb,$13,1,$14,$15,$16) ON CONFLICT (db_id, app_id, domain_code, application_code, module_code, kind, version) DO UPDATE SET source_json=EXCLUDED.source_json, compiled_json=EXCLUDED.compiled_json, is_current=1, imported_at=CURRENT_TIMESTAMP",
             vec![
-                DataValue::String(snowflake_id_str()), DataValue::String(db_id.into()), DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()), DataValue::String(module_name.clone()),
+                DataValue::String(snowflake_id_str()), DataValue::String(db_id.into()), DataValue::String(current_app_id.clone()),
+                DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()), DataValue::String(module_name.clone()),
                 DataValue::String(kind.clone()), DataValue::String(version.to_string()), DataValue::String(file.into()),
                 DataValue::Json(serde_json::to_string(&src).unwrap_or_default()), DataValue::Json(serde_json::to_string(&compiled).unwrap_or_default()),
                 DataValue::Int(created), DataValue::String(ENGINE_VERSION.into()), DataValue::String(operator_id.into()), DataValue::String(operator_name.into()),
@@ -2618,28 +2861,28 @@ async fn deploy_with_events(
 
             // 4-b 模块态 UPSERT：主表只存模块身份；kind 明细按行存版本/状态。
             mm.execute_sql_with_datavalues(db_id, Some(&txn),
-            "INSERT INTO cmx_model_module (id, db_id, domain_code, application_code, module_code, module_name, table_count, first_deployed_at, current_deployed_at, deployed_by, deployed_name) \
-             VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,$8,$9) \
+            "INSERT INTO cmx_model_module (id, db_id, app_id, domain_code, application_code, module_code, module_name, table_count, first_deployed_at, current_deployed_at, deployed_by, deployed_name) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,$9,$10) \
              ON CONFLICT (db_id, app_id, domain_code, application_code, module_code) DO UPDATE SET module_name=EXCLUDED.module_name, table_count=GREATEST(COALESCE(cmx_model_module.table_count,0), COALESCE(EXCLUDED.table_count,0)), current_deployed_at=CURRENT_TIMESTAMP, deployed_by=EXCLUDED.deployed_by, deployed_name=EXCLUDED.deployed_name, update_time=CURRENT_TIMESTAMP",
             vec![
-                DataValue::String(snowflake_id_str()), DataValue::String(db_id.into()), DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()), DataValue::String(module_name.clone()),
+                DataValue::String(snowflake_id_str()), DataValue::String(db_id.into()), DataValue::String(current_app_id.clone()),
+                DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()), DataValue::String(module_name.clone()),
                 DataValue::Int(created), DataValue::String(operator_id.into()), DataValue::String(operator_name.into()),
             ]).await.map_err(db_err("写模块台账失败"))?;
 
             mm.execute_sql_with_datavalues(db_id, Some(&txn),
-            "INSERT INTO cmx_model_module_kind (id, db_id, domain_code, application_code, module_code, kind, version, status, table_count, def_source, deployed_at, deployed_by, deployed_name) \
-             VALUES ($1,$2,$3,$4,$5,$6,$7,'current',$8,$9,CURRENT_TIMESTAMP,$10,$11) \
+            "INSERT INTO cmx_model_module_kind (id, db_id, app_id, domain_code, application_code, module_code, kind, version, status, table_count, def_source, deployed_at, deployed_by, deployed_name) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'current',$9,$10,CURRENT_TIMESTAMP,$11,$12) \
              ON CONFLICT (db_id, app_id, domain_code, application_code, module_code, kind) DO UPDATE SET version=EXCLUDED.version, status='current', table_count=EXCLUDED.table_count, def_source=EXCLUDED.def_source, deployed_at=CURRENT_TIMESTAMP, deployed_by=EXCLUDED.deployed_by, deployed_name=EXCLUDED.deployed_name, error_message=NULL, update_time=CURRENT_TIMESTAMP",
             vec![
-                DataValue::String(snowflake_id_str()), DataValue::String(db_id.into()), DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()),
+                DataValue::String(snowflake_id_str()), DataValue::String(db_id.into()), DataValue::String(current_app_id.clone()),
+                DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()),
                 DataValue::String(kind.clone()), DataValue::String(version.to_string()), DataValue::Int(created), DataValue::String(file.into()),
                 DataValue::String(operator_id.into()), DataValue::String(operator_name.into()),
             ]).await.map_err(db_err("写模块类型台账失败"))?;
 
             // 4-c 对象台账：主表 + 版本表都需登记(check-then-upsert,避免重复部署累积重复行)
             // 目标库存在核心元数据表时才写;模型中心库只初始化自身台账表,不强依赖此表。
-            // app_id 用当前服务隔离标识(与模块安装守卫一致:app_id ≡ module_code)
-            let current_app_id = cmx_utils::ConfigManager::global().get_app_id();
             let version_str = version.to_string();
             let has_meta_table = table_exists(db_id, "cmx_meta_table_define")
                 .await
@@ -2764,6 +3007,161 @@ async fn fail_history(hist_id: &str, db_id: &str, err: &str, dur_ms: i64) -> Res
         "UPDATE cmx_model_deploy_history SET status='failed', error_message=$2, finished_at=CURRENT_TIMESTAMP, duration_ms=$3 WHERE id=$1",
         vec![DataValue::String(hist_id.into()), DataValue::String(err.into()), DataValue::Int(dur_ms)]
     ).await.map_err(db_err("写失败历史失败"))?;
+    Ok(())
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  数据库辅助函数：SEED / MENU 部署路径复用（DCT 路径保持原内联 SQL 不变）
+//
+//  说明：DCT 部署路径（deploy_with_events 内）已就地写好内联 SQL，运行稳定，
+//  本组函数仅供 Task 6 的 SEED / MENU 部署路径使用，避免重复 SQL 散落。
+//  语义与 DCT 路径内联 SQL 完全一致，但**不替换**原内联代码。
+// ════════════════════════════════════════════════════════════════════════
+
+/// 写入 deploy_history 行：status='executing'，作为部署对账锚点。
+///
+/// 与 `deploy_with_events` DCT 路径中的 executing 写入（lib.rs:2493-2500）等价：
+/// 通常 `txn_id=None`（PG DDL 自动提交前的锚点），失败不阻断主流程由调用方决定。
+///
+/// 参数：
+/// - `txn_id`：事务 id；锚点写一般在事务外，传 `None`。
+/// - `action`：动作类型（DCT 路径用 `'create'`；SEED 用 `'seed'`；MENU 用 `'menu'`）。
+/// - `def_ref`：定义来源（DCT 路径用 file 名；SEED 用 `'seed/'`；MENU 用 `'menu-pages/'`）。
+pub(crate) async fn insert_history_executing(
+    db_id: &str,
+    txn_id: Option<&str>,
+    hist_id: &str,
+    batch_id: &str,
+    domain: &str,
+    app: &str,
+    module: &str,
+    kind: &str,
+    action: &str,
+    def_ref: &str,
+    operator_id: &str,
+    operator_name: &str,
+) -> Result<()> {
+    let mm = get_default_db_manager();
+    let current_app_id = cmx_utils::ConfigManager::global().get_app_id();
+    mm.execute_sql_with_datavalues(
+        db_id,
+        txn_id,
+        "INSERT INTO cmx_model_deploy_history (id, batch_id, db_id, app_id, domain_code, application_code, module_code, kind, action, status, def_ref, engine_version, operator_id, operator_name, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'executing',$10,$11,$12,$13,CURRENT_TIMESTAMP)",
+        vec![
+            DataValue::String(hist_id.to_string()),
+            DataValue::String(batch_id.to_string()),
+            DataValue::String(db_id.to_string()),
+            DataValue::String(current_app_id.clone()),
+            DataValue::String(domain.to_string()),
+            DataValue::String(app.to_string()),
+            DataValue::String(module.to_string()),
+            DataValue::String(kind.to_string()),
+            DataValue::String(action.to_string()),
+            DataValue::String(def_ref.to_string()),
+            DataValue::String(ENGINE_VERSION.to_string()),
+            DataValue::String(operator_id.to_string()),
+            DataValue::String(operator_name.to_string()),
+        ],
+    )
+    .await
+    .map_err(db_err("写执行历史锚点失败"))?;
+    Ok(())
+}
+
+/// 把某历史行更新为 success：补 to_version / object_count / seed_rows / ddl_summary / finished_at / duration_ms。
+///
+/// 与 `deploy_with_events` DCT 路径中的 success 写入（lib.rs:2725-2734）等价：
+/// 在部署事务内执行，`txn_id` 传事务 id。
+///
+/// 参数：
+/// - `to_version`：目标版本（SEED/MENU 无版本概念，传 `None`；DCT 路径传 `Some("v3")` 等）。
+/// - `object_count`：对象计数（SEED 用表数；MENU 用节点数；DCT 用建表数）。
+/// - `seed_rows`：SEED/MENU 写入行数（DCT 路径传 `0`）。
+/// - `ddl_summary_json`：DDL 摘要 JSON 字符串（写入 jsonb 列）。
+/// - `dur_ms`：本次部署耗时毫秒。
+pub(crate) async fn update_history_success(
+    db_id: &str,
+    txn_id: Option<&str>,
+    hist_id: &str,
+    to_version: Option<&str>,
+    object_count: i64,
+    seed_rows: i64,
+    ddl_summary_json: &str,
+    dur_ms: i64,
+) -> Result<()> {
+    let mm = get_default_db_manager();
+    mm.execute_sql_with_datavalues(
+        db_id,
+        txn_id,
+        "UPDATE cmx_model_deploy_history SET status='success', to_version=$2, object_count=$3, seed_rows=$4, ddl_summary=$5::jsonb, finished_at=CURRENT_TIMESTAMP, duration_ms=$6 WHERE id=$1",
+        vec![
+            DataValue::String(hist_id.to_string()),
+            DataValue::String(to_version.map(|s| s.to_string()).unwrap_or_default()),
+            DataValue::Int(object_count),
+            DataValue::Int(seed_rows),
+            DataValue::Json(ddl_summary_json.to_string()),
+            DataValue::Int(dur_ms),
+        ],
+    )
+    .await
+    .map_err(db_err("更新历史为 success 失败"))?;
+    Ok(())
+}
+
+/// UPSERT cmx_model_module_kind：记录某模块某 kind 的当前态版本/状态。
+///
+/// 与 `deploy_with_events` DCT 路径中的 module_kind 写入（lib.rs:2633-2641）等价：
+/// 在部署事务内执行，`txn_id` 传事务 id。
+/// `id` 由本函数内部用 `snowflake_id_str()` 生成（INSERT 时使用，UPSERT 命中冲突时被忽略）。
+///
+/// 参数：
+/// - `version`：定义版本（字符串形式，DCT 路径传 "v3"；SEED/MENU 无版本概念传 `""`）。
+/// - `table_count`：本模块本 kind 部署的对象数（表数 / 节点数）。
+/// - `def_source`：定义来源（DCT 路径用 file 名；SEED 用 `'seed/'`；MENU 用 `'menu-pages/'`）。
+/// - `def_checksum`：模块级聚合 SHA256（None 时保留旧值，DCT 路径可传 `None`）。
+pub(crate) async fn upsert_module_kind(
+    db_id: &str,
+    txn_id: Option<&str>,
+    domain: &str,
+    app: &str,
+    module: &str,
+    kind: &str,
+    version: &str,
+    table_count: i64,
+    def_source: &str,
+    def_checksum: Option<&str>,
+    operator_id: &str,
+    operator_name: &str,
+) -> Result<()> {
+    let mm = get_default_db_manager();
+    let current_app_id = cmx_utils::ConfigManager::global().get_app_id();
+    mm.execute_sql_with_datavalues(
+        db_id,
+        txn_id,
+        "INSERT INTO cmx_model_module_kind (id, db_id, app_id, domain_code, application_code, module_code, kind, version, status, table_count, def_source, def_checksum, deployed_at, deployed_by, deployed_name) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'current',$9,$10,$11,CURRENT_TIMESTAMP,$12,$13) \
+         ON CONFLICT (db_id, app_id, domain_code, application_code, module_code, kind) DO UPDATE SET version=EXCLUDED.version, status='current', table_count=EXCLUDED.table_count, def_source=EXCLUDED.def_source, def_checksum=COALESCE(EXCLUDED.def_checksum, cmx_model_module_kind.def_checksum), deployed_at=CURRENT_TIMESTAMP, deployed_by=EXCLUDED.deployed_by, deployed_name=EXCLUDED.deployed_name, error_message=NULL, update_time=CURRENT_TIMESTAMP",
+        vec![
+            DataValue::String(snowflake_id_str()),
+            DataValue::String(db_id.to_string()),
+            DataValue::String(current_app_id.clone()),
+            DataValue::String(domain.to_string()),
+            DataValue::String(app.to_string()),
+            DataValue::String(module.to_string()),
+            DataValue::String(kind.to_string()),
+            DataValue::String(version.to_string()),
+            DataValue::Int(table_count),
+            DataValue::String(def_source.to_string()),
+            match def_checksum {
+                Some(c) => DataValue::String(c.to_string()),
+                None => DataValue::Null,
+            },
+            DataValue::String(operator_id.to_string()),
+            DataValue::String(operator_name.to_string()),
+        ],
+    )
+    .await
+    .map_err(db_err("写模块类型台账失败"))?;
     Ok(())
 }
 

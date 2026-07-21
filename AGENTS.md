@@ -216,21 +216,33 @@ git push origin main
 
 ## 六、app_id 与 module_code 关系约束
 
-### 6.1 当前约束：`app_id ≡ module_code`
+### 6.1 app_id 取值规则（按 `[deploy] mode` 切换）
 
-当前架构下，`app_id` 与 `module_code` **恒等**，二者指向同一逻辑实体。证据：
+> 本节规则自 2026-07-21 起更新，对应方案：[单体与分体部署模式统一方案](.trae/documents/20260721_cmx-container_单体与分体部署模式统一方案.md)
 
-1. **配置同源**：`ConfigManager::global().get_app_id()`（`cmx-utils/src/config/config_impl.rs`）的第一优先来源是配置键 `app.module_code`，即 `app_id` 的值直接取自 `module_code` 配置项。
-2. **导入强制相等**：`ModuleInstallService::install_module_package`（`cmx-plugin/src/service/module_install.rs`）在导入时校验 `manifest.module.code == get_app_id()`，不一致则拒绝导入。
-3. **导出/查询冗余**：`cmx_plugin`、`cmx_meta_table_define` 等表同时带 `app_id` 和 `module_code` 列，但二者值相同，SQL 中 `WHERE module_code = $1 AND app_id = $2` 的双过滤是冗余的。
+`app_id` 的取值由 `[deploy] mode` 决定，不再无条件等于 `module_code`：
+
+| 部署模式 | `[deploy] mode` | `get_app_id()` 返回 | `[app]` 块 | 数据源加载 |
+|---|---|---|---|---|
+| **单体（默认）** | `mono` | 固定 `"default"`（不读 `[app].module_code`） | 整体不生效 | 加载全部 `status=1/archived=0` 的记录 |
+| **微服务** | `micro` | `[app].module_code`（维持原查找顺序） | 必需，不能为 `default` | 按 `[app]` 三元组精确过滤 |
+
+**历史约束（仅适用于 micro 模式）**：`app_id ≡ module_code`。证据：
+
+1. **配置同源**：`ConfigManager::global().get_app_id()`（`cmx-utils/src/config/config_impl.rs`）micro 模式下第一优先来源是配置键 `app.module_code`。
+2. **导入强制相等**：`ModuleInstallService::install_module_package`（`cmx-plugin/src/service/module_install.rs`）micro 模式下校验 `manifest.module.code == get_app_id()`，不一致则拒绝导入；mono 模式下放宽此守卫。
+3. **导出/查询冗余**：`cmx_plugin`、`cmx_meta_table_define` 等表同时带 `app_id` 和 `module_code` 列，micro 下二者值相同，SQL 中 `WHERE module_code = $1 AND app_id = $2` 是冗余的；mono 下所有 `app_id='default'`。
 
 ### 6.2 AI 开发规则
 
-1. **禁止硬编码 `"default"` 作为 app_id 兜底**。必须使用 `cmx_utils::ConfigManager::global().get_app_id()` 取配置值，确保与 `deploy.rs`、`persistence.rs` 行为一致。
+1. **禁止硬编码 `"default"` 作为 app_id 兜底**。必须使用 `cmx_utils::ConfigManager::global().get_app_id()` 取配置值。该方法内部按 `DeployMode::from_config()` 分支：mono 模式固定返回 `"default"`，micro 模式读 `[app].module_code`。
 2. **不要把 `application_code` 当作 `app_id` 传参**。`application_code`（应用编码）与 `app_id`（隔离标识）是不同概念，尽管当前值可能相同。
 3. **携带 `module_code` 的表**（`cmx_plugin`、`cmx_meta_table_define`、`cmx_meta_table_define_version`、`cmx_service_define`）：`app_id` 列功能冗余，但**保留**（为未来多租户演进预留），查询时优先用 `module_code` 过滤。
 4. **不带 `module_code` 的表**（`cmx_plugin_versions`、`cmx_audit_log`、`cmx_model_*`）：`app_id` 是唯一隔离键，**必须**带上过滤。
+   - **mono 模式下**：所有表数据 `app_id='default'`（全局共享），过滤自动命中全部数据。
+   - **micro 模式下**：`app_id` 按模块隔离，是真正的过滤维度。
 5. `cmx_permission` 表使用 `app_code` 列（命名与全局 `app_id`/`application_code` 不一致），注意区分。
+6. **新增部署模式相关逻辑**：若需根据部署模式分支，使用 `cmx_utils::config::DeployMode::from_config()` 读取，禁止靠 `app_id == "default"` 隐式判断模式。
 
 ---
 

@@ -11,6 +11,7 @@
   - [Nacos 连接配置](#nacos-连接配置)
   - [兼容旧环境变量（不推荐）](#兼容旧环境变量不推荐)
   - [服务注册地址解析优先级](#服务注册地址解析优先级)
+  - [DEPLOY__MODE 部署模式](#deploy_mode-部署模式)
   - [app_id 获取优先级](#app_id-获取优先级)
 - [基础服务中心环境变量覆盖](#基础服务中心环境变量覆盖)
 - [服务对外身份环境变量覆盖](#服务对外身份环境变量覆盖)
@@ -40,7 +41,8 @@
 | `SERVICE_REGISTRY_PORT` | Integer | `server.port` 配置值 | 注册使用的端口号 |
 | `CONFIG_CENTER_TYPE` | String | `mock` | 配置中心类型：`mock` / `nacos` |
 | `CONFIG_CENTER_ENABLED` | Boolean | `false` | 是否启用配置中心 |
-| `APP_ID` | String | `default` | 应用隔离标识 |
+| `APP_ID` | String | `default` | 应用隔离标识（仅 micro 模式生效，详见 [`DEPLOY__MODE`](#deploy_mode-部署模式)） |
+| `DEPLOY__MODE` | String | `mono` | 部署模式：`mono`（单体）/ `micro`（微服务）。详见 [部署模式](#deploy_mode-部署模式) |
 
 ### Nacos 连接配置
 
@@ -79,11 +81,35 @@
 3. 配置文件中的 `server.ip` / `server.port`
 4. 自动检测本机 IP / 默认端口 `8080`
 
+### DEPLOY__MODE 部署模式
+
+> 对应 TOML 配置 `[deploy] mode`（详见 [CONFIG_MANUAL.md](CONFIG_MANUAL.md#部署模式配置)）。
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `DEPLOY__MODE` | String | `mono` | 部署模式：`mono`（单体）/ `micro`（微服务）。可选别名：`monolithic`/`single`、`microservice` |
+
+**双模行为对照**：
+
+| 维度 | `mono`（默认） | `micro` |
+|---|---|---|
+| 数据源加载 | 加载全部 `status=1 AND archived=0` 的记录 | 按 `[app]` 三元组精确过滤 |
+| `get_app_id()` 返回值 | 固定 `"default"`（不读 `[app].module_code`） | `[app].module_code`（维持现状） |
+| 模块导入守卫 | 放宽（允许任意 `module_code`） | 保留（`module_code != app_id` 拒绝） |
+| `[app]` 块 | 整体不生效 | 必需，不能为 `default` |
+| 启动期校验 | 默认库 ≡ 业务库 `db_url`（不一致 warn） | 不校验 |
+
+**mono 切换的数据迁移**：从 micro 切到 mono 时，需执行 `docs/sql/migrations/20260721_001_deploy_mode_mono_app_id_unification.up.sql` 把历史 `app_id` 统一为 `'default'`。
+
 ### app_id 获取优先级
 
-应用标识 `app_id` 的获取优先级（从高到低）：
+应用标识 `app_id` 的获取优先级（按 `[deploy] mode` 分支）：
 
-1. 配置文件 `app.id`
+**mono 模式**：固定返回 `"default"`，不读任何配置。
+
+**micro 模式**（从高到低）：
+
+1. 配置项 `app.module_code`（即 `[app]` 块的 `module_code`）
 2. 环境变量 `APP_ID`
 3. 环境变量 `SERVICE_REGISTRY_NAME`
 4. 环境变量 `NACOS_NAMING_SERVICE_NAME`（兼容旧变量）

@@ -793,6 +793,30 @@ impl MenuService {
         Ok(())
     }
 
+    /// 按模块编码统计菜单节点数（调试用：确认事务 commit 后数据真的落库）
+    pub async fn count_by_module(
+        mm: &DatabaseManager,
+        db_id: &str,
+        module_code: &str,
+    ) -> Result<i64> {
+        let ds = mm
+            .query_sql_with_datavalues(
+                db_id,
+                None,
+                "SELECT COUNT(*) AS cnt FROM cmx_menu WHERE module_code = $1",
+                vec![DataValue::String(module_code.to_string())],
+                "menu_count_by_module",
+            )
+            .await
+            .map_err(|e| crate::error::BizError::internal(format!("按模块统计菜单失败: {e}")))?;
+        let schema = ds.schema.as_ref();
+        Ok(ds
+            .iter()
+            .next()
+            .and_then(|row| row.get_by_name_as::<i64>(schema, "cnt"))
+            .unwrap_or(0))
+    }
+
     /// 按模块编码查询全部菜单节点(供模块导出复用,返回结构化 MenuDefinition 列表)。
     ///
     /// 模式A:一节点一行。查询模块下全部节点(含子节点,不限 parent_id),

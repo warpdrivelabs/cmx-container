@@ -10,7 +10,7 @@
       "expanded": true,
       "children": [
         {
-          "id": "portal-console",
+          "id": "report-portal-console",
           "name": "console",
           "icon": "tabler-outline/load-balancer",
           "caption": "系统控制",
@@ -132,7 +132,7 @@
           }
         },
         {
-          "id": "user-edit",
+          "id": "report-user-edit",
           "caption": "编辑用户",
           "icon": "edit",
           "dialogspace": {
@@ -151,7 +151,7 @@
           }
         },
         {
-          "id": "deploy-config",
+          "id": "report-deploy-config",
           "caption": "部署配置",
           "icon": "shipping-status",
           "dialogspace": {
@@ -241,7 +241,7 @@
           }
         },
         {
-          "id": "portal-overview",
+          "id": "report-portal-overview",
           "name": "overview",
           "icon": "tabler-outline/nut",
           "caption": "页面组装测试",
@@ -406,7 +406,7 @@
           }
         },
         {
-          "id": "outlook-mailbox",
+          "id": "report-outlook-mailbox",
           "name": "outlook-mailbox",
           "caption": "Outlook邮箱",
           "type": "workspace-node",
@@ -440,7 +440,7 @@
           }
         },
         {
-          "id": "demo-master-slave",
+          "id": "report-demo-master-slave",
           "name": "master-slave-demo",
           "caption": "主从表单生成测试",
           "type": "workspace-node",
@@ -462,7 +462,7 @@
           }
         },
         {
-          "id": "combo-box-demo",
+          "id": "report-combo-box-demo",
           "name": "combo-box-demo",
           "caption": "cmx-combo-box 三模式演示",
           "type": "workspace-node",
@@ -484,7 +484,7 @@
           }
         },
         {
-          "id": "tabulator-treegrid-demo",
+          "id": "report-tabulator-treegrid-demo",
           "name": "tabulator-treegrid-demo",
           "caption": "cmx-tabulator 会计科目树",
           "type": "workspace-node",
@@ -506,7 +506,7 @@
           }
         },
         {
-          "id": "dict-select-demo",
+          "id": "report-dict-select-demo",
           "name": "dict-select-demo",
           "caption": "cmx-dict-select 数据字典选择演示",
           "type": "workspace-node",
@@ -528,7 +528,7 @@
           }
         },
         {
-          "id": "cmx-input-editors-demo",
+          "id": "report-cmx-input-editors-demo",
           "name": "cmx-input-editors-demo",
           "caption": "录入控件演示（文本/数字/日期/日期时间）",
           "type": "workspace-node",
@@ -550,7 +550,7 @@
           }
         },
         {
-          "id": "cmx-grid-form-linkage-demo",
+          "id": "report-cmx-grid-form-linkage-demo",
           "name": "cmx-grid-form-linkage-demo",
           "caption": "grid↔form 联动（四录入组件·模型面板）",
           "type": "workspace-node",
@@ -572,7 +572,7 @@
           }
         },
         {
-          "id": "fi-gl-voucher",
+          "id": "report-fi-gl-voucher",
           "name": "voucher",
           "caption": "财务会计凭证",
           "type": "workspace-node",
@@ -594,7 +594,7 @@
           }
         },
         {
-          "id": "fi-gl-voucher-demo",
+          "id": "report-fi-gl-voucher-demo",
           "name": "gl-voucher-demo",
           "caption": "会计凭证（三层·维度选择）",
           "type": "workspace-node",
@@ -616,7 +616,7 @@
           }
         },
         {
-          "id": "fi-gl-voucher-v1-demo",
+          "id": "report-fi-gl-voucher-v1-demo",
           "name": "gl-voucher-v1-demo",
           "caption": "会计凭证（v1 单表多字典）",
           "type": "workspace-node",
@@ -638,7 +638,7 @@
           }
         },
         {
-          "id": "fi-gl-trade",
+          "id": "report-fi-gl-trade",
           "name": "trade",
           "caption": "交易单据",
           "type": "workspace-node",
@@ -660,7 +660,7 @@
           }
         },
         {
-          "id": "fi-gl-travel-expense",
+          "id": "report-fi-gl-travel-expense",
           "name": "travel-expense",
           "caption": "差旅费报销",
           "type": "workspace-node",
@@ -682,7 +682,7 @@
           }
         },
         {
-          "id": "fi-gl-trade-form",
+          "id": "report-fi-gl-trade-form",
           "name": "trade-form",
           "caption": "交易单据（表单视图）",
           "type": "workspace-node",
@@ -704,7 +704,7 @@
           }
         },
         {
-          "id": "fi-gl-dict-editor-demo",
+          "id": "report-fi-gl-dict-editor-demo",
           "name": "dict-editor-demo",
           "caption": "字典选择编辑器演示",
           "type": "workspace-node",
@@ -726,7 +726,7 @@
           }
         },
         {
-          "id": "fi-gl-master-data-demo",
+          "id": "report-fi-gl-master-data-demo",
           "name": "gl-master-data-demo",
           "caption": "总账主数据演示",
           "type": "workspace-node",
@@ -748,7 +748,7 @@
           }
         },
         {
-          "id": "fi-gl-dict-help-test",
+          "id": "report-fi-gl-dict-help-test",
           "name": "dict-help-test",
           "caption": "主数据帮助测试",
           "type": "workspace-node",
@@ -770,7 +770,7 @@
           }
         },
         {
-          "id": "fi-gl-dict-help-lab",
+          "id": "report-fi-gl-dict-help-lab",
           "name": "dict-help-lab",
           "caption": "主数据帮助实验室",
           "type": "workspace-node",
@@ -792,7 +792,7 @@
           }
         },
         {
-          "id": "fi-gl-meta-model-service-test",
+          "id": "report-fi-gl-meta-model-service-test",
           "name": "meta-model-service-test",
           "caption": "元数据模型服务测试",
           "type": "workspace-node",
@@ -814,7 +814,7 @@
           }
         },
         {
-          "id": "fi-gl-dict-grid-meta",
+          "id": "report-fi-gl-dict-grid-meta",
           "name": "dict-grid-meta",
           "caption": "数据字典动态表格",
           "type": "workspace-node",
@@ -836,7 +836,7 @@
           }
         },
         {
-          "id": "fi-gl-erp-voucher-cnpc",
+          "id": "report-fi-gl-erp-voucher-cnpc",
           "name": "erp-voucher-cnpc",
           "caption": "ERP凭证样例(CNPC)",
           "type": "workspace-node",
@@ -858,7 +858,7 @@
           }
         },
         {
-          "id": "fi-gl-erp-voucher-cnpc-ms",
+          "id": "report-fi-gl-erp-voucher-cnpc-ms",
           "name": "erp-voucher-cnpc-ms",
           "caption": "ERP凭证样例(MasterSlave模型版)",
           "type": "workspace-node",
@@ -880,7 +880,7 @@
           }
         },
         {
-          "id": "fi-gl-fico-ws",
+          "id": "report-fi-gl-fico-ws",
           "name": "fico-ws",
           "caption": "ERP凭证(三区工作台)",
           "type": "workspace-node",
@@ -963,7 +963,7 @@
           }
         },
         {
-          "id": "fi-gl-rpt-designer",
+          "id": "report-fi-gl-rpt-designer",
           "name": "rpt-designer",
           "caption": "报表设计器",
           "type": "workspace-node",
@@ -1018,7 +1018,7 @@
           }
         },
         {
-          "id": "fi-gl-rpt-spreadjs-designer",
+          "id": "report-fi-gl-rpt-spreadjs-designer",
           "name": "rpt-spreadjs-designer",
           "caption": "报表设计器（SpreadJS）",
           "type": "workspace-node",
@@ -1073,7 +1073,7 @@
           }
         },
         {
-          "id": "fi-gl-rpt-design-workbench",
+          "id": "report-fi-gl-rpt-design-workbench",
           "name": "rpt-design-workbench",
           "caption": "报表设计工作台",
           "type": "workspace-node",
@@ -1135,7 +1135,7 @@
           }
         },
         {
-          "id": "fi-gl-rpt-app-workbench",
+          "id": "report-fi-gl-rpt-app-workbench",
           "name": "rpt-app-workbench",
           "caption": "报表应用工作台",
           "type": "workspace-node",
@@ -1205,7 +1205,7 @@
           }
         },
         {
-          "id": "fi-gl-dict-ws",
+          "id": "report-fi-gl-dict-ws",
           "name": "dict-ws",
           "caption": "合并组织机构维护",
           "type": "workspace-node",
@@ -1260,7 +1260,7 @@
           }
         },
         {
-          "id": "fi-gl-acct-ws",
+          "id": "report-fi-gl-acct-ws",
           "name": "acct-ws",
           "caption": "会计核算管理",
           "type": "workspace-node",
@@ -1315,7 +1315,7 @@
           }
         },
         {
-          "id": "fi-gl-glacct-ws",
+          "id": "report-fi-gl-glacct-ws",
           "name": "glacct-ws",
           "caption": "总账科目维护",
           "type": "workspace-node",
@@ -1372,7 +1372,7 @@
       ]
     },
     {
-      "id": "grp-ignite-demo",
+      "id": "report-grp-ignite-demo",
       "name": "ignite-demo",
       "caption": "Ignite 组件演示",
       "permissionId": null,
@@ -1380,7 +1380,7 @@
       "expanded": true,
       "children": [
         {
-          "id": "fi-gl-ignite-combo-editor",
+          "id": "report-fi-gl-ignite-combo-editor",
           "name": "ignite-combo-editor",
           "caption": "Ignite 组合框编辑器",
           "type": "workspace-node",
@@ -1402,7 +1402,7 @@
           }
         },
         {
-          "id": "fi-gl-ignite-list",
+          "id": "report-fi-gl-ignite-list",
           "name": "ignite-list",
           "caption": "Ignite 列表主从",
           "type": "workspace-node",
@@ -1426,7 +1426,7 @@
       ]
     },
     {
-      "id": "grp-meta-def",
+      "id": "report-grp-meta-def",
       "name": "meta-def",
       "caption": "定义中心",
       "permissionId": null,
@@ -1434,7 +1434,7 @@
       "expanded": true,
       "children": [
         {
-          "id": "flexible-combination-manager",
+          "id": "report-flexible-combination-manager",
           "name": "flexible-combination-manager",
           "caption": "弹性组合管理",
           "type": "workspace-node",
@@ -1498,7 +1498,7 @@
           }
         },
         {
-          "id": "dict-def-manager",
+          "id": "report-dict-def-manager",
           "name": "dict-def-manager",
           "caption": "数据字典定义",
           "type": "workspace-node",
@@ -1550,7 +1550,7 @@
           }
         },
         {
-          "id": "doc-def-manager",
+          "id": "report-doc-def-manager",
           "name": "doc-def-manager",
           "caption": "业务单据定义",
           "type": "workspace-node",
@@ -1602,7 +1602,7 @@
           }
         },
         {
-          "id": "base-dct-def-manager",
+          "id": "report-base-dct-def-manager",
           "name": "base-dct-def-manager",
           "caption": "字典基础元数据",
           "type": "workspace-node",
@@ -1654,7 +1654,7 @@
           }
         },
         {
-          "id": "base-dct-native-pages-manager",
+          "id": "report-base-dct-native-pages-manager",
           "name": "base-dct-native-pages-manager",
           "caption": "字典基础元数据(native_pages)",
           "type": "workspace-node",
@@ -1714,7 +1714,7 @@
           }
         },
         {
-          "id": "native-pages-linkage-demo",
+          "id": "report-native-pages-linkage-demo",
           "name": "native-pages-linkage-demo",
           "caption": "原生页面联动演示(native_pages·CE+context)",
           "type": "workspace-node",
@@ -1760,7 +1760,7 @@
           }
         },
         {
-          "id": "base-doc-def-manager",
+          "id": "report-base-doc-def-manager",
           "name": "base-doc-def-manager",
           "caption": "单据基础元数据",
           "type": "workspace-node",
@@ -1812,7 +1812,7 @@
           }
         },
         {
-          "id": "custom-page-designer",
+          "id": "report-custom-page-designer",
           "name": "custom-page-designer",
           "caption": "自定义页面设计",
           "type": "workspace-node",
@@ -1834,7 +1834,7 @@
           }
         },
         {
-          "id": "fi-gl-account-def",
+          "id": "report-fi-gl-account-def",
           "name": "account-def",
           "caption": "科目弹性组合",
           "type": "workspace-node",
@@ -1856,7 +1856,7 @@
           }
         },
         {
-          "id": "fi-gl-trade-def",
+          "id": "report-fi-gl-trade-def",
           "name": "trade-def",
           "caption": "交易弹性组合",
           "type": "workspace-node",
@@ -1878,7 +1878,7 @@
           }
         },
         {
-          "id": "fi-gl-ccm-attrs-test",
+          "id": "report-fi-gl-ccm-attrs-test",
           "name": "ccm-attrs-test",
           "caption": "CCM全属性测试",
           "type": "workspace-node",
@@ -1900,7 +1900,7 @@
           }
         },
         {
-          "id": "workspace-node-editor",
+          "id": "report-workspace-node-editor",
           "name": "workspace-node-editor",
           "caption": "工作区节点编辑",
           "type": "workspace-node-editor",
@@ -1910,7 +1910,7 @@
       ]
     },
     {
-      "id": "grp-pages",
+      "id": "report-grp-pages",
       "name": "page-mgmt",
       "caption": "页面管理",
       "permissionId": null,
@@ -1918,25 +1918,25 @@
       "expanded": true,
       "children": [
         {
-          "id": "page-home",
+          "id": "report-page-home",
           "name": "home",
           "caption": "首页",
           "permissionId": null
         },
         {
-          "id": "page-users",
+          "id": "report-page-users",
           "name": "users",
           "caption": "用户管理",
           "permissionId": "MENU.PAGES.USERS"
         },
         {
-          "id": "page-acl",
+          "id": "report-page-acl",
           "name": "acl",
           "caption": "权限配置",
           "permissionId": "MENU.PAGES.ACL"
         },
         {
-          "id": "page-reports",
+          "id": "report-page-reports",
           "name": "reports",
           "caption": "报表中心",
           "permissionId": null
@@ -1944,7 +1944,7 @@
       ]
     },
     {
-      "id": "portal-dam-registry",
+      "id": "report-portal-dam-registry",
       "name": "dam-registry",
       "caption": "DAM 注册管理中心",
       "type": "workspace-node",
@@ -1996,7 +1996,7 @@
       }
     },
     {
-      "id": "grp-components",
+      "id": "report-grp-components",
       "name": "component-lib",
       "caption": "组件库",
       "permissionId": null,
@@ -2004,13 +2004,13 @@
       "expanded": false,
       "children": [
         {
-          "id": "comp-forms",
+          "id": "report-comp-forms",
           "name": "form-widgets",
           "caption": "表单组件",
           "permissionId": null
         },
         {
-          "id": "comp-charts",
+          "id": "report-comp-charts",
           "name": "charts",
           "caption": "图表组件",
           "permissionId": null
@@ -2018,7 +2018,7 @@
       ]
     },
     {
-      "id": "grp-services",
+      "id": "report-grp-services",
       "name": "service-access",
       "caption": "服务接入",
       "permissionId": null,
@@ -2026,19 +2026,19 @@
       "expanded": false,
       "children": [
         {
-          "id": "svc-rest",
+          "id": "report-svc-rest",
           "name": "rest",
           "caption": "REST 接口",
           "permissionId": null
         },
         {
-          "id": "svc-graphql",
+          "id": "report-svc-graphql",
           "name": "graphql",
           "caption": "GraphQL",
           "permissionId": null
         },
         {
-          "id": "svc-ws",
+          "id": "report-svc-ws",
           "name": "websocket",
           "caption": "WebSocket",
           "permissionId": null
@@ -2046,7 +2046,7 @@
       ]
     },
     {
-      "id": "grp-data",
+      "id": "report-grp-data",
       "name": "data-assets",
       "caption": "数据资产",
       "permissionId": null,
@@ -2054,13 +2054,13 @@
       "expanded": false,
       "children": [
         {
-          "id": "data-sources",
+          "id": "report-data-sources",
           "name": "sources",
           "caption": "数据源",
           "permissionId": null
         },
         {
-          "id": "data-models",
+          "id": "report-data-models",
           "name": "models",
           "caption": "数据模型",
           "permissionId": null

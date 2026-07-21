@@ -240,11 +240,6 @@ impl SysDatasourceService {
             .map_err(|e| BizError::business(format!("数据源连接测试失败: {}", e)))
     }
 
-    // /// 列出所有已注册的数据源
-    // pub fn list_registered(mm: &DatabaseManager) -> Vec<String> {
-    //     mm.list_data_sources()
-    // }
-
     /// 将 SysDatasourceForCreate 转换为 DbConfig
     fn to_db_config(data: &SysDatasourceForCreate) -> DbConfig {
         let db_type = DbType::from_str(&data.db_type).unwrap_or(DbType::Postgres);

@@ -1,0 +1,41 @@
+[
+  {
+    "code": "CNAS",
+    "name": "中国企业会计准则",
+    "sort_no": 1,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "gaap_type": "LOCAL",
+    "country_code": "CN"
+  },
+  {
+    "code": "IFRS",
+    "name": "国际财务报告准则",
+    "sort_no": 2,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "gaap_type": "IFRS",
+    "country_code": null
+  },
+  {
+    "code": "CAS",
+    "name": "中国会计准则(新)",
+    "sort_no": 3,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "gaap_type": "LOCAL",
+    "country_code": "CN"
+  }
+]
