@@ -8,9 +8,10 @@
  *           顶部标题区下拉「选具体档案 + 版本」，下方只读展示其详情（参考三大功能的展示，去掉编辑）。
  * property：展示 content 区当前选中项的只读详情。
  *
- * 跨区通信：workspace.context（set/on('change')）。数据组件（CmxDataSet / cmx-ignite-list /
- *           cmx-ui5-form / CmxColumnModel）经 globalThis.__cmxDataComp 取用——原生页由 Blob import
- *           加载，无法裸引 'cmx-data-comp'。
+ * 跨区通信：模块级 state 单例（三区共用）+ data-bus-scope（content↔property 嵌入式组件总线）
+ *           + 框架级事件（hideProperty / syncPropertyView，见 menu-node 配置）。
+ *           数据组件（CmxDataSet / cmx-ignite-list / cmx-ui5-form / CmxColumnModel）经
+ *           globalThis.__cmxDataComp 取用--原生页由 Blob import 加载，无法裸引 'cmx-data-comp'。
  *
  * 说明：DAM 下拉同时过滤「数据库列表」与 content 区——数据库列表按所选 domain/app/module
  *       调用 /api/sys-datasource/list 的 filters（domain_code/application_code/module_code）过滤；
@@ -24,12 +25,13 @@ const state = {
   datasources: [],           // /api/sys-datasource/list 的 rows
   dsLoading: false,
   selectedDsId: '',          // 选中的数据源 id
-  explorer: { splitPct: 52 }, // explorer 下半（数据库摘要）与上半（列表）的高度分割：上半占比 %
+  explorer: { splitPct: Number(localStorage.getItem('cds-explorer-splitPct')) || 52 }, // explorer 上下分割：上半占比 %（持久化到 localStorage）
   // 数据库运维工作台（概览页下方）：场景由「数据库态 × 每模块每 kind 版本态」组合推导，真实落库。
   build: {
     loaded: false, loading: false, error: '',
     dbState: null,           // { db_id, page_mode, db_status, meta_version, expected_meta_version, scenario_counts, modules[] }
     dsKey: '',               // 当前 dbState 对应的 db_id（切库时失效重算）
+    dbStateAbort: null,      // loadDbState 的 AbortController（切库时取消上一个请求，避免竞态）
     opTab: '',               // 顶部 tab：''=运维总览 / init=初始化
     query: '',               // 模块矩阵搜索
     scenarioFilter: '',      // 徽标过滤：''=全部 / create / upgrade / current / retry / drift
@@ -123,7 +125,7 @@ async function loadDatasources () {
     const data = await apiJson('/api/sys-datasource/list', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
-    const rows = Array.isArray(data?.rows) ? data.rows : (Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []))
+    const rows = Array.isArray(data?.rows) ? data.rows : []
     // 归一：补 id（cmx-ignite-list 需要）+ 展示字段。
     state.datasources = rows.map((r, i) => {
       const meta = dbTypeMeta(r.db_type)
@@ -156,6 +158,8 @@ async function loadDatasources () {
 
 function resetBuildStateForDatasource () {
   const b = state.build
+  // 切库时取消正在进行的 db-state 请求
+  if (b.dbStateAbort) { try { b.dbStateAbort.abort() } catch {} b.dbStateAbort = null }
   b.loaded = false
   b.loading = false
   b.error = ''
@@ -190,7 +194,13 @@ function refreshAll () {
 
 function mount (ctx, html, after) {
   const bindWhenReady = (tries = 0) => {
-    if (ctx.host) state.hosts.add(ctx.host)
+    if (ctx.host) {
+      state.hosts.add(ctx.host)
+      // host 从 DOM 移除时清理引用，避免 state.hosts 累积已断开的 host 造成内存泄漏
+      if (typeof ctx.host.onDispose !== 'function') {
+        ctx.host.onDispose = () => { state.hosts.delete(ctx.host) }
+      }
+    }
     const root = ctx.host?.renderRoot || ctx.host?.shadowRoot?.querySelector('.native-page-root')
     if (root && root.isConnected && typeof after === 'function') { after(root); return }
     if (tries < 20) requestAnimationFrame(() => bindWhenReady(tries + 1))
@@ -417,8 +427,7 @@ function dbSummaryHtml (ds) {
 // ─── content · 概览页下方：建表工作台 ────────────────────────────────────────
 // ─── content · 概览页下方：建表工作台（场景组合驱动） ─────────────────────────
 // 场景 = 「数据库态(page_mode)」×「每模块每 kind(DCT/DOC/SEED) 版本态」组合推导。
-// 现为前端演示：dbState 由定义列表 + 稳定 mock 的"已应用版本"合成；后端就绪后
-// 换成 GET /api/portal/model/db-state?db_id= 即可（本文件 buildPanelHtml 以下逻辑不变）。
+// 数据库态由后端 GET /api/model/db-state?db_id= 提供（库门闸 + 每模块每 kind scenario 由后端算好）。
 
 const MC_KINDS = [
   { id: 'DCT',  label: '数据字典',   icon: 'dimension' },
@@ -544,8 +553,45 @@ function mcVersionOptionsHtml (m, kind) {
   if (!versions.length) return ''
   const selected = mcCellSelectedVersion(m, kind)
   return `<select class="mc-ver-select" data-mc-version="${esc(mcCellKey(m.key, kind))}" title="选择定义版本">
-    ${versions.map((v) => `<option value="${esc(v.version)}|${esc(v.file || '')}" ${selected && String(selected.version) === String(v.version) && String(selected.file || '') === String(v.file || '') ? 'selected' : ''}>v${esc(v.version)}${v.is_default ? ' 默认' : ''}</option>`).join('')}
+    ${versions.map((v) => `<option value="${esc(v.version)}" data-file="${esc(v.file || '')}" ${selected && String(selected.version) === String(v.version) && String(selected.file || '') === String(v.file || '') ? 'selected' : ''}>v${esc(v.version)}${v.is_default ? ' 默认' : ''}</option>`).join('')}
   </select>`
+}
+
+/**
+ * 模块矩阵单元格 HTML（buildPanelHtml 与 rerenderMatrix 共用）。
+ * @param {object} m  模块对象
+ * @param {object} k  MC_KINDS 元素 { id, label, icon }
+ * @param {object} [opts]
+ * @param {boolean} [opts.withVersionSelector=false]  是否渲染版本选择器并使用 selectedVersion 显示版本文本
+ */
+function mcCellHtml (m, k, opts = {}) {
+  const b = state.build
+  const c = m.cells[k.id]; const sc = c.scenario; const sm = MC_SCENARIO[sc]
+  const pickable = sm.pick && (!b.scenarioFilter || sc === b.scenarioFilter)
+  const on = !!b.picked[mcCellKey(m.key, k.id)]
+  const selectedVersion = opts.withVersionSelector ? mcCellSelectedVersion(m, k.id) : null
+  let verText = ''
+  const hasVersion = k.id === 'DCT' || k.id === 'DOC' || k.id === 'RPT'
+  if (!hasVersion) {
+    const unit = k.id === 'MENU' ? '节点' : '行'
+    if (sc === 'create' || sc === 'current' || sc === 'drift') {
+      verText = c.row_count != null ? `${c.row_count} ${unit}` : ''
+    } else {
+      verText = ''
+    }
+  } else {
+    if (sc === 'create') verText = selectedVersion ? `v${selectedVersion.version}` : `v${c.latest}`
+    else if (sc === 'upgrade') verText = `v${c.applied}->v${selectedVersion?.version || c.latest}`
+    else if (sc === 'downgrade') verText = `v${c.applied}(库) / v${selectedVersion?.version || c.latest}(定义)`
+    else if (sc === 'none') verText = ''
+    else verText = `v${c.applied || selectedVersion?.version || c.latest}`
+  }
+  const selector = opts.withVersionSelector ? mcVersionOptionsHtml(m, k.id) : ''
+  return `<div class="mc-cell t-${sm.tone} ${pickable ? 'pickable' : ''} ${on ? 'on' : ''}" ${pickable ? `data-mc-cell="${esc(mcCellKey(m.key, k.id))}"` : ''}>
+    ${pickable ? `<span class="mc-cell-ck"><ui5-icon name="accept"></ui5-icon></span>` : ''}
+    <ui5-icon name="${sm.icon}" class="mc-cell-ic"></ui5-icon>
+    <span class="mc-cell-body"><span class="mc-cell-sc">${sm.short}</span>${verText ? `<span class="mc-cell-ver">${esc(verText)}</span>` : ''}${selector}</span>
+  </div>`
 }
 
 function mcPickLatestVersion (moduleKey, kind, cell) {
@@ -576,7 +622,7 @@ function mcInstalledUpgradeSelectHtml (moduleKey, kind, cell) {
   return `<details class="mc-action-menu">
     <summary class="mc-action-summary t-amber" title="${selected ? `当前选择 v${esc(selected.version)}${selected.is_default ? ' 默认' : ''}` : '选择升级版本'}">升级</summary>
     <div class="mc-action-options">
-      ${versions.map((v) => `<button type="button" class="${selected && String(selected.version) === String(v.version) && String(selected.file || '') === String(v.file || '') ? 'active' : ''}" data-mc-upgrade-pick="${esc(key)}" data-mc-upgrade-value="${esc(v.version)}|${esc(v.file || '')}">v${esc(v.version)}${v.is_default ? '<b>默认</b>' : ''}</button>`).join('')}
+      ${versions.map((v) => `<button type="button" class="${selected && String(selected.version) === String(v.version) && String(selected.file || '') === String(v.file || '') ? 'active' : ''}" data-mc-upgrade-pick="${esc(key)}" data-mc-upgrade-version="${esc(v.version)}" data-mc-upgrade-file="${esc(v.file || '')}">v${esc(v.version)}${v.is_default ? '<b>默认</b>' : ''}</button>`).join('')}
     </div>
   </details>`
 }
@@ -695,25 +741,31 @@ function mcModuleMatchesFilter (m) {
     (!q || `${m.module_name} ${m.key}`.toLowerCase().includes(q))
 }
 
-/** 拉取定义并合成 dbState（前端演示 mock；后端就绪替换为 db-state 接口）。 */
+/** 拉取数据库态（后端 GET /api/model/db-state 提供库门闸 + 每模块每 kind scenario）。 */
 async function loadDbState (ds, force = false) {
   const b = state.build
   const key = ds ? (ds.db_id || ds.id) : ''
   if (b.loaded && b.dsKey === key && !force) return
+  // 取消上一个未完成的请求，避免快速切库时后发先至导致状态错乱
+  if (b.dbStateAbort) { try { b.dbStateAbort.abort() } catch {} }
+  const abort = new AbortController()
+  b.dbStateAbort = abort
   b.loading = true; b.error = ''; b.dsKey = key
   try {
-    // 真实后端：GET /api/model/db-state?db_id=（库门闸 + 每模块每 kind scenario 由后端算好）
-    b.dbState = mcNormalizeDbState(await apiJson(`/api/model/db-state?db_id=${encodeURIComponent(key)}`), key)
+    b.dbState = mcNormalizeDbState(await apiJson(`/api/model/db-state?db_id=${encodeURIComponent(key)}`, { signal: abort.signal }), key)
     b.loaded = true
-  } catch (err) { b.error = '模型态加载失败：' + err.message }
-  finally { b.loading = false }
+  } catch (err) {
+    if (err?.name !== 'AbortError') b.error = '模型态加载失败：' + err.message
+  } finally {
+    if (b.dbStateAbort === abort) b.dbStateAbort = null
+    b.loading = false
+  }
 }
 
-/** 当前 tab 生效的显示模式：init tab → 始终进初始化视图；总览 tab → 按真实 db-state。 */
+/** 当前 tab 生效的显示模式：init tab -> 始终进初始化视图；总览 tab -> 始终进模块矩阵（系统表操作统一到初始化 tab）。 */
 function mcPageMode () {
   if ((state.build.opTab || '') === 'init') return 'init'
-  const mode = state.build.dbState?.page_mode || 'normal'
-  return (mode === 'meta_upgrade' || mode === 'conflict') ? mode : 'normal'
+  return 'normal'
 }
 /** DAM + 搜索 + 场景 过滤后的模块（含每模块保留的命中格）。 */
 function mcFilteredModules () {
@@ -826,33 +878,7 @@ function buildPanelHtml (ds) {
     ${badge('create')}${badge('upgrade')}${badge('current')}${badge('retry')}${badge('drift')}
   </div>`
 
-  const cellHtml = (m, k) => {
-    const c = m.cells[k.id]; const sc = c.scenario; const sm = MC_SCENARIO[sc]
-    const pickable = sm.pick && (!b.scenarioFilter || sc === b.scenarioFilter)
-    const on = !!b.picked[mcCellKey(m.key, k.id)]
-    const selectedVersion = mcCellSelectedVersion(m, k.id)
-    let verText = ''
-    const hasVersion = k.id === 'DCT' || k.id === 'DOC' || k.id === 'RPT'
-    if (!hasVersion) {
-      const unit = k.id === 'MENU' ? '节点' : '行'
-      if (sc === 'create' || sc === 'current' || sc === 'drift') {
-        verText = c.row_count != null ? `${c.row_count} ${unit}` : ''
-      } else {
-        verText = ''
-      }
-    } else {
-      if (sc === 'create') verText = selectedVersion ? `v${selectedVersion.version}` : `v${c.latest}`
-      else if (sc === 'upgrade') verText = `v${c.applied}→v${selectedVersion?.version || c.latest}`
-      else if (sc === 'downgrade') verText = `v${c.applied}(库) / v${selectedVersion?.version || c.latest}(定义)`
-      else if (sc === 'none') verText = ''
-      else verText = `v${c.applied || selectedVersion?.version || c.latest}`
-    }
-    return `<div class="mc-cell t-${sm.tone} ${pickable ? 'pickable' : ''} ${on ? 'on' : ''}" ${pickable ? `data-mc-cell="${esc(mcCellKey(m.key, k.id))}"` : ''}>
-      ${pickable ? `<span class="mc-cell-ck"><ui5-icon name="accept"></ui5-icon></span>` : ''}
-      <ui5-icon name="${sm.icon}" class="mc-cell-ic"></ui5-icon>
-      <span class="mc-cell-body"><span class="mc-cell-sc">${sm.short}</span>${verText ? `<span class="mc-cell-ver">${esc(verText)}</span>` : ''}${mcVersionOptionsHtml(m, k.id)}</span>
-    </div>`
-  }
+  const cellHtml = (m, k) => mcCellHtml(m, k, { withVersionSelector: true })
   const installed = (b.dbState?.installed_modules || []).filter(mcModuleMatchesFilter)
   const installedCollapsed = mcCollapsed('installed')
   const availableCollapsed = mcCollapsed('available')
@@ -932,14 +958,33 @@ function buildPanelHtml (ds) {
       </div>
     </div>` : ''
 
+  // 系统表状态提示横幅（运维总览不直接操作系统表，引导到初始化 tab）
+  const rawMode = b.dbState?.page_mode || 'normal'
+  const gateHint = rawMode !== 'normal' ? (() => {
+    const hint = MC_PAGE_MODE[rawMode] || {}
+    const tone = hint.tone || 'blue'
+    const title = rawMode === 'init'
+      ? (b.dbState?.initialized ? '基础管理需要校验/升级' : '该数据库尚未初始化模型中心')
+      : (hint.title || '系统表需要处理')
+    const desc = rawMode === 'init'
+      ? (b.dbState?.initialized ? '台账系统表结构有更新，建议校验/升级。' : '请先初始化后才能部署模块。')
+      : (hint.desc || '请到「初始化」tab 处理。')
+    return `<div class="mc-gate mc-gate-${tone} mc-gate-hint">
+      <ui5-icon name="${esc(hint.icon || 'alert')}" class="mc-gate-ic"></ui5-icon>
+      <div class="mc-gate-main"><div class="mc-gate-title">${esc(title)}</div><div class="mc-gate-desc">${esc(desc)}</div></div>
+      <button class="cds-bd-btn primary" data-mc-optab="init"><ui5-icon name="navigation-right-arrow"></ui5-icon>前往初始化</button>
+    </div>`
+  })() : ''
+
   return `
     <section class="cds-ov-card cds-bd">
       ${head}${tabBar}${targetBar}
+      ${gateHint}
       <div class="mc-toolbar">
         ${badges}
         <input class="cds-bd-search" data-mc-search placeholder="搜索模块名 / 域·应用·模块…" value="${esc(b.query)}">
       </div>
-      <div class="mc-quick"><span>快捷：</span><button class="cds-bd-link" data-mc-pick-scenario="create">全选可创建</button><button class="cds-bd-link" data-mc-pick-scenario="upgrade">全选可升级</button><button class="cds-bd-link" data-mc-pick-scenario="retry">全选失败</button><span class="mc-quick-sp"></span><button class="cds-bd-link" data-mc-reinit ${(b.running || b.review) ? 'disabled' : ''} title="重跑加性校验/升级台账系统表，不删除任何数据"><ui5-icon name="synchronize" style="width:.8rem;height:.8rem"></ui5-icon>校验/升级系统表</button></div>
+      <div class="mc-quick"><span>快捷：</span><button class="cds-bd-link" data-mc-pick-scenario="create">全选可创建</button><button class="cds-bd-link" data-mc-pick-scenario="upgrade">全选可升级</button><button class="cds-bd-link" data-mc-pick-scenario="retry">全选失败</button></div>
       ${installedPanel}
       ${availablePanel}
       ${mcReviewHtml('overview')}
@@ -1652,12 +1697,13 @@ function bindOverview (root) {
   root.addEventListener('click', (e) => {
     if (e.target instanceof Element && e.target.closest('[data-mc-version]')) return
     const t = e.target instanceof Element
-      ? e.target.closest('[data-mc-upgrade-pick],[data-mc-collapse],[data-mc-optab],[data-mc-badge],[data-mc-cell],[data-mc-pick-scenario],[data-mc-clear],[data-mc-run],[data-mc-gate],[data-mc-reinit],[data-mc-stop],[data-mc-recreate],[data-mc-upgrade],[data-mc-review-back],[data-mc-review-approve],[data-mc-review-execute]')
+      ? e.target.closest('[data-mc-upgrade-pick],[data-mc-collapse],[data-mc-optab],[data-mc-badge],[data-mc-cell],[data-mc-pick-scenario],[data-mc-clear],[data-mc-run],[data-mc-gate],[data-mc-stop],[data-mc-recreate],[data-mc-upgrade],[data-mc-review-back],[data-mc-review-approve],[data-mc-review-execute]')
       : null
     if (!t) return
     if (t.hasAttribute('data-mc-upgrade-pick')) {
       const key = t.getAttribute('data-mc-upgrade-pick')
-      const [version, file] = String(t.getAttribute('data-mc-upgrade-value') || '').split('|')
+      const version = t.getAttribute('data-mc-upgrade-version') || ''
+      const file = t.getAttribute('data-mc-upgrade-file') || ''
       b.versionPick[key] = { version, file }
       b.picked[key] = true
       b.scenarioFilter = ''
@@ -1695,7 +1741,6 @@ function bindOverview (root) {
       return
     }
     if (t.hasAttribute('data-mc-gate')) { void runMcGate(t.getAttribute('data-mc-gate')); return }
-    if (t.hasAttribute('data-mc-reinit')) { b.opTab = 'init'; void runMcGate('init'); return }
     if (t.hasAttribute('data-mc-badge')) { b.scenarioFilter = t.getAttribute('data-mc-badge'); rerender(); return }
     if (t.hasAttribute('data-mc-cell')) { const k = t.getAttribute('data-mc-cell'); if (b.picked[k]) delete b.picked[k]; else b.picked[k] = true; rerender(); return }
     if (t.hasAttribute('data-mc-recreate')) {
@@ -1730,7 +1775,8 @@ function bindOverview (root) {
     if (el.hasAttribute('data-mc-search')) { b.query = el.value; rerender() }
     if (el.hasAttribute('data-mc-version')) {
       const key = el.getAttribute('data-mc-version')
-      const [version, file] = String(el.value || '').split('|')
+      const version = el.value || ''
+      const file = el.selectedOptions?.[0]?.dataset?.file || ''
       b.versionPick[key] = { version, file }
       b.picked[key] = true
       rerender()
@@ -1743,33 +1789,7 @@ function rerenderMatrix (root) {
   const host = root.querySelector('.mc-matrix, .cds-bd-empty')
   if (!host || !host.closest('.cds-bd')) return
   const modules = mcFilteredModules()
-  const b = state.build
-  const cellHtml = (m, k) => {
-    const c = m.cells[k.id]; const sc = c.scenario; const sm = MC_SCENARIO[sc]
-    const pickable = sm.pick && (!b.scenarioFilter || sc === b.scenarioFilter)
-    const on = !!b.picked[mcCellKey(m.key, k.id)]
-    let verText = ''
-    const hasVersion = k.id === 'DCT' || k.id === 'DOC' || k.id === 'RPT'
-    if (!hasVersion) {
-      const unit = k.id === 'MENU' ? '节点' : '行'
-      if (sc === 'create' || sc === 'current' || sc === 'drift') {
-        verText = c.row_count != null ? `${c.row_count} ${unit}` : ''
-      } else {
-        verText = ''
-      }
-    } else {
-      if (sc === 'create') verText = `v${c.latest}`
-      else if (sc === 'upgrade') verText = `v${c.applied}→v${c.latest}`
-      else if (sc === 'downgrade') verText = `v${c.applied}(库) / v${c.latest}(定义)`
-      else if (sc === 'none') verText = ''
-      else verText = `v${c.applied || c.latest}`
-    }
-    return `<div class="mc-cell t-${sm.tone} ${pickable ? 'pickable' : ''} ${on ? 'on' : ''}" ${pickable ? `data-mc-cell="${esc(mcCellKey(m.key, k.id))}"` : ''}>
-      ${pickable ? `<span class="mc-cell-ck"><ui5-icon name="accept"></ui5-icon></span>` : ''}
-      <ui5-icon name="${sm.icon}" class="mc-cell-ic"></ui5-icon>
-      <span class="mc-cell-body"><span class="mc-cell-sc">${sm.short}</span>${verText ? `<span class="mc-cell-ver">${esc(verText)}</span>` : ''}</span>
-    </div>`
-  }
+  const cellHtml = (m, k) => mcCellHtml(m, k)
   const fresh = document.createElement('template')
   fresh.innerHTML = modules.length ? `
     <div class="mc-matrix">
@@ -1852,6 +1872,7 @@ function wireExplorerSplitter (root) {
     const up = () => {
       split.classList.remove('dragging')
       bar.releasePointerCapture?.(e.pointerId)
+      try { localStorage.setItem('cds-explorer-splitPct', String(state.explorer.splitPct)) } catch {}
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
