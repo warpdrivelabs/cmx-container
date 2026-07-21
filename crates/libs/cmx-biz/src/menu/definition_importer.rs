@@ -9,7 +9,7 @@ use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
 use cmx_traits::resource::MenuDefinitionImporter;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::menu::{MenuForCreate, MenuService};
 
@@ -50,18 +50,23 @@ impl MenuDefinitionImporter for LocalMenuDefinitionImporter {
         if definitions.is_empty() {
             return Ok(0);
         }
-        // 内部自开事务:一次 apply 一个事务,异常时 guard drop 自动回滚
-        let guard = self
-            .mm
-            .get_transaction_context()
+        // 调试：确认调用 importer 时是否已有遗留事务上下文
+        // （排查 "count=N 但表里没数据" 的事务复用问题）
+        let existing_txn = self.mm.get_transaction_context()
             .begin_with_guard(&self.db_id)
             .await
             .map_err(|e| TraitError::Business(format!("开启菜单导入事务失败: {e}")))?;
-        let txn_id = guard.txn_id();
+        info!(
+            db_id = %self.db_id,
+            txn_id = %existing_txn.txn_id(),
+            "apply_menu_definitions 开启事务"
+        );
+        let guard = existing_txn;
+        let txn_id = guard.txn_id().to_string();
 
         // 幂等:先删整个模块的旧菜单(含子节点),再整体重建
         let _ =
-            MenuService::delete_by_module(&self.mm, &self.db_id, Some(txn_id), module_code).await;
+            MenuService::delete_by_module(&self.mm, &self.db_id, Some(&txn_id), module_code).await;
 
         // 拓扑排序:parent_code 为 None/空串(根)或父已在 done 集合的节点先建(父先于子)
         let mut pending: Vec<&MenuDefinition> = definitions.iter().collect();
@@ -122,7 +127,7 @@ impl MenuDefinitionImporter for LocalMenuDefinitionImporter {
                 application_code: app_code.to_string(),
                 module_code: module_code.to_string(),
             };
-            match MenuService::create(&self.mm, &self.db_id, Some(txn_id), dto).await {
+            match MenuService::create(&self.mm, &self.db_id, Some(&txn_id), dto).await {
                 Ok(ds) => {
                     // 提取新建节点的真实 id,供后续子节点关联
                     let schema = ds.schema.as_ref();
@@ -134,7 +139,19 @@ impl MenuDefinitionImporter for LocalMenuDefinitionImporter {
                     count += 1;
                 }
                 Err(e) => {
-                    warn!(menu = %def.code, error = %e, "菜单安装失败");
+                    // 失败立即抛错：guard drop 时整个事务（含 DELETE）自动回滚，
+                    // 避免「先删后未插成功」导致菜单表数据丢失。
+                    error!(
+                        menu = %def.code,
+                        parent_code = ?def.parent_code,
+                        error = %e,
+                        applied_so_far = count,
+                        "菜单安装失败，整个导入事务将回滚"
+                    );
+                    return Err(TraitError::Business(format!(
+                        "菜单安装失败 code={} parent_code={:?}: {e}",
+                        def.code, def.parent_code
+                    )));
                 }
             }
         }
@@ -142,8 +159,13 @@ impl MenuDefinitionImporter for LocalMenuDefinitionImporter {
             .commit()
             .await
             .map_err(|e| TraitError::Business(format!("提交菜单导入事务失败: {e}")))?;
-        info!(count, "菜单定义导入完成");
-        Ok(count)
+        // 调试：commit 后立即查表确认数据落库
+        let committed_count = count;
+        match MenuService::count_by_module(&self.mm, &self.db_id, module_code).await {
+            Ok(n) => info!(committed_count, db_count = n, txn_id = %txn_id, "菜单定义导入完成（commit 后立即查表）"),
+            Err(e) => error!(committed_count, error = %e, "菜单定义导入 commit 后查表失败"),
+        }
+        Ok(committed_count)
     }
 
     async fn list_menu_definitions(

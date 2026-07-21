@@ -66,6 +66,7 @@ fn test_aggregate_sha256_is_order_independent() {
         content: content.to_string(),
         checksum: String::new(),
         row_count: 0,
+        modified_date: None,
     };
     
     let set1 = vec![
@@ -88,6 +89,7 @@ fn test_aggregate_sha256_changes_when_content_changes() {
         content: content.to_string(),
         checksum: String::new(),
         row_count: 0,
+        modified_date: None,
     };
     
     assert_ne!(aggregate_sha256(&[mk("v1")]), aggregate_sha256(&[mk("v2")]));

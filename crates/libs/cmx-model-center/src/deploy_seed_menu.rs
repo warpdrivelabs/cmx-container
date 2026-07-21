@@ -247,8 +247,13 @@ pub async fn deploy_seed_with_events(
     let total_success = summary.total_success() as i64;
     let total_failed = summary.total_failed() as i64;
 
-    // 写台账（事务内）：SEED 无版本概念，version 传空串
+    // 写台账（事务内）：version 取文件最新修改日期（YYYY-MM-DD），checksum 是聚合 SHA256
     let module_checksum = aggregate_sha256(&seed_files);
+    let module_version = seed_files
+        .iter()
+        .filter_map(|f| f.modified_date.as_deref())
+        .max()
+        .unwrap_or("");
     upsert_module_kind(
         db_id,
         Some(&txn_id),
@@ -256,7 +261,7 @@ pub async fn deploy_seed_with_events(
         app,
         module,
         "SEED",
-        "",
+        module_version,
         seed_files.len() as i64,
         "seed/",
         Some(&module_checksum),
@@ -399,14 +404,37 @@ pub async fn deploy_menu_with_events(
         "step",
         json!({ "message": format!("{module} · 正在同步菜单到平台库…") }),
     );
-    let importer = LocalMenuDefinitionImporter::new(mm.clone(), platform_db_id.clone());
-    let applied = importer
+
+    //菜单在默认数据库中
+    let default_db_id = mm.get_default_db_id().await;
+    let importer = LocalMenuDefinitionImporter::new(mm.clone(), default_db_id.clone());
+    let applied = match importer
         .apply_menu_definitions(domain, app, module, &all_defs)
         .await
-        .map_err(|e| Error::InternalError(format!("菜单同步失败: {e:?}")))?;
+    {
+        Ok(n) => n,
+        Err(e) => {
+            // importer 失败 = 整个事务已回滚（含 DELETE），菜单数据保持原样
+            let err_msg = format!("菜单同步失败: {e:?}");
+            let _ = crate::fail_history(
+                &hist_id,
+                &platform_db_id,
+                &err_msg,
+                started.elapsed().as_millis() as i64,
+            )
+            .await;
+            send(tx, "error", json!({ "message": err_msg }));
+            return Err(Error::InternalError(err_msg));
+        }
+    };
 
-    // 5. 写台账（平台库，无外部事务包裹，复用 importer 已提交的事务）
+    // 5. 写台账（平台库）：version 取文件最新修改日期，checksum 是聚合 SHA256
     let menu_checksum = aggregate_sha256(&menu_files);
+    let menu_version = menu_files
+        .iter()
+        .filter_map(|f| f.modified_date.as_deref())
+        .max()
+        .unwrap_or("");
     upsert_module_kind(
         &platform_db_id,
         None,
@@ -414,7 +442,7 @@ pub async fn deploy_menu_with_events(
         app,
         module,
         "MENU",
-        "",
+        menu_version,
         menu_files.len() as i64,
         "menu-pages/",
         Some(&menu_checksum),

@@ -1,11 +1,14 @@
-//! menu-pages JSON（前端真源格式）→ MenuDefinition（后端结构体）适配层。
+//! menu-pages JSON（前端真源格式）-> MenuDefinition（后端结构体）适配层。
 //!
 //! 字段映射要点：
-//! - 顶层 {version, items:[...]} → 取 items 数组（version 丢弃）
-//! - 节点 id → code；caption → name；name 字段（前端短名）丢弃
-//! - permissionId → fun_code（null → None）
-//! - icon 直传；workspace 整体作为 definition JSONB 透传
-//! - expanded/dirty 是前端运行时态，丢弃
+//! - 顶层 {version, items:[...]} -> 取 items 数组（version 丢弃）
+//! - 节点 id -> code；caption -> name；name 字段（前端短名）丢弃
+//! - permissionId -> fun_code（null -> None）
+//! - icon 直传
+//! - definition JSONB 组装 caption/workspace/dialogspace/expanded/type/name
+//!   （与 .agents/skills/menu-generator/gen_menu_migration.mjs 逻辑一致，
+//!    前端读 definition.caption/definition.dialogspace 等字段渲染菜单）
+//! - expanded/dirty 是前端运行时态，但 expanded 仍入 definition（与迁移脚本一致）
 //! - children 递归 flatten，parent_code 由父节点 code 注入
 //! - sort_order 按数组下标（每个父节点下从 0 重新计数）
 
@@ -30,6 +33,26 @@ pub fn parse_menu_pages_file(
         flatten_node(root, None, domain, app, module, sort_idx as i32, &mut out);
     }
     Ok(out)
+}
+
+/// 组装 definition JSONB，与 gen_menu_migration.mjs 的 definition 生成逻辑一致。
+///
+/// 收集 caption/workspace/dialogspace/expanded/type/name 六个字段（值为 null 的跳过），
+/// 全部缺失时返回 None。
+fn build_definition(v: &serde_json::Value) -> Option<serde_json::Value> {
+    let mut def = serde_json::Map::new();
+    for key in &["caption", "workspace", "dialogspace", "expanded", "type", "name"] {
+        if let Some(val) = v.get(*key) {
+            if !val.is_null() {
+                def.insert((*key).to_string(), val.clone());
+            }
+        }
+    }
+    if def.is_empty() {
+        None
+    } else {
+        Some(serde_json::Value::Object(def))
+    }
 }
 
 fn flatten_node(
@@ -65,7 +88,7 @@ fn flatten_node(
             .get("permissionId")
             .and_then(|x| if x.is_null() { None } else { x.as_str() })
             .map(String::from),
-        definition: v.get("workspace").cloned(), // 整体 JSONB 透传
+        definition: build_definition(v),
         ext_attributes: None,
         children: vec![],
         domain_code: domain.to_string(),

@@ -937,6 +937,7 @@ dependencies = [
  "chrono",
  "cmx-core",
  "cmx-database",
+ "cmx-utils",
  "sea-query",
  "sea-query-sqlx",
  "serde",

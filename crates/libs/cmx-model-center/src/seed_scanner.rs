@@ -19,10 +19,12 @@ pub struct ScannedFile {
     pub rel_path: String,
     /// 文件原始文本内容
     pub content: String,
-    /// 文件内容 SHA256 hex
+    /// 文件内容 SHA256 hex（drift 判断依据）
     pub checksum: String,
     /// SEED: JSON 数组元素数；MENU: items 树递归节点数
     pub row_count: usize,
+    /// 文件修改日期（YYYY-MM-DD，给用户看的版本号；同一天多次修改只算一个版本）
+    pub modified_date: Option<String>,
 }
 
 /// 扫描指定模块下的 seed/*.json
@@ -72,12 +74,13 @@ fn scan_seed_files_in_dir_with_prefix(dir: &Path, prefix: &str) -> Vec<ScannedFi
         };
         let row_count = count_json_array_elements(&content).unwrap_or(0);
         let checksum = sha256_hex(content.as_bytes());
+        let modified_date = file_modified_date(&p);
         let rel_path = if prefix.is_empty() {
             format!("{table_name}.json")
         } else {
             format!("{prefix}/{table_name}.json")
         };
-        out.push(ScannedFile { table_name, rel_path, content, checksum, row_count });
+        out.push(ScannedFile { table_name, rel_path, content, checksum, row_count, modified_date });
     }
     // 按 table_name 排序，保证输出稳定
     out.sort_by(|a, b| a.table_name.cmp(&b.table_name));
@@ -103,6 +106,7 @@ fn scan_menu_files_in_dir_with_prefix(dir: &Path, prefix: &str) -> Vec<ScannedFi
         };
         let row_count = count_menu_nodes(&content).unwrap_or(0);
         let checksum = sha256_hex(content.as_bytes());
+        let modified_date = file_modified_date(&p);
         let rel_path = if prefix.is_empty() {
             file_name.clone()
         } else {
@@ -114,6 +118,7 @@ fn scan_menu_files_in_dir_with_prefix(dir: &Path, prefix: &str) -> Vec<ScannedFi
             content,
             checksum,
             row_count,
+            modified_date,
         });
     }
     out.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
@@ -136,6 +141,16 @@ pub fn aggregate_sha256(files: &[ScannedFile]) -> String {
 
 fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+/// 读取文件 mtime，格式化为 YYYY-MM-DD（给用户看的版本号）
+/// 失败时返回 None（不影响 drift 判断，drift 走 checksum）
+fn file_modified_date(p: &Path) -> Option<String> {
+    use std::time::SystemTime;
+    let meta = fs::metadata(p).ok()?;
+    let mtime: SystemTime = meta.modified().ok()?;
+    let dt: chrono::DateTime<chrono::Utc> = mtime.into();
+    Some(dt.format("%Y-%m-%d").to_string())
 }
 
 fn count_json_array_elements(content: &str) -> Option<usize> {

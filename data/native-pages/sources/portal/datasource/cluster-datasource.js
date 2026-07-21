@@ -199,6 +199,59 @@ function mount (ctx, html, after) {
   return `${styleHtml()}${html}`
 }
 
+/**
+ * 联动 property 栏与 content view：
+ * - 概览（content-overview）→ 隐藏整个 property 栏（splitter + pane）
+ * - DCT/DOC/弹性组合 → 显示 property 栏，并切到对应 tab（DCT/DOC/profile）
+ *
+ * 实现：从 host 反向找外层 portal-app shadow 内的 #property-pane / #splitter-right，
+ * 直接操作显隐；同时通过 workspace.pageview 找 property-{kind} host 触发 region 内 tab 切换。
+ */
+function syncPropertyRegion (host, viewName) {
+  try {
+    // 解析 viewName（'content-overview' / 'content-dct' / 'content-doc' / 'content-profile'）
+    const kind = viewName.startsWith('content-') ? viewName.slice('content-'.length) : ''
+    const isOverview = kind === 'overview'
+
+    // 1) 跨出 host 的 shadow root，找外层 portal-app 的 #property-pane / #splitter-right
+    const root = host?.getRootNode?.()
+    const propPane = root?.getElementById?.('property-pane')
+    const splitterRight = root?.getElementById?.('splitter-right')
+    const propPanel = root?.querySelector?.('portal-property-panel')
+    if (isOverview) {
+      // 概览：整体隐藏（splitter + pane + panel CE）
+      propPane?.setAttribute('data-hidden', '')
+      splitterRight?.setAttribute('data-hidden', '')
+      if (propPanel) propPanel.style.display = 'none'
+    } else {
+      // 其他：恢复显示
+      propPane?.removeAttribute('data-hidden')
+      splitterRight?.removeAttribute('data-hidden')
+      if (propPanel) propPanel.style.display = ''
+    }
+
+    // 2) 联动 property region 内部 tab（切到 property-{kind}）
+    if (!isOverview && (kind === 'dct' || kind === 'doc' || kind === 'profile')) {
+      const ws = host?.workspace
+      const propHost = ws?.pageview?.[`property-${kind}`]
+      if (propHost && propHost.isConnected) {
+        // 找到 property host 所在的 .cmx-ws-region 容器，触发对应 tab 按钮点击
+        const region = propHost.closest?.('.cmx-ws-region')
+        const tabBtns = region?.querySelectorAll?.('.cmx-ws-tab-btn')
+        const targetPane = propHost.closest?.('[data-pane-index]')
+        const targetIdx = targetPane?.getAttribute?.('data-pane-index')
+        if (tabBtns && targetIdx != null) {
+          const btn = Array.from(tabBtns).find((b) => b.getAttribute('data-pane-index') === targetIdx)
+          btn?.click?.()
+        }
+      }
+    }
+  } catch (e) {
+    // 联动失败不影响主流程，仅控制台提示
+    console.warn('[cluster-datasource] syncPropertyRegion 失败:', e)
+  }
+}
+
 function viewOf (host) {
   const v = host?.getAttribute?.('view') || ''
   if (v === 'explorer') return v
@@ -642,11 +695,16 @@ function mcKindDetailHtml (cell, kind, moduleKey = '') {
   const title = c.title || ''
   const file = c.file || ''
   const tables = c.table_count != null ? Number(c.table_count) || 0 : 0
-  const bits = [
-    applied ? `库 v${esc(applied)}` : '',
-    latest ? `定义 v${esc(latest)}` : '',
-    tables ? `${tables} 表` : '',
-  ].filter(Boolean).join(' / ')
+  // SEED/MENU 无版本概念：只显示数据量（行数 / 节点数），不显示版本号
+  const rowCount = c.row_count != null ? Number(c.row_count) || 0 : 0
+  const isSeedOrMenu = kind === 'SEED' || kind === 'MENU'
+  const bits = isSeedOrMenu
+    ? (rowCount ? (kind === 'MENU' ? `${rowCount} 节点` : `${rowCount} 行`) : '-')
+    : [
+        applied ? `库 v${esc(applied)}` : '',
+        latest ? `定义 v${esc(latest)}` : '',
+        tables ? `${tables} 表` : '',
+      ].filter(Boolean).join(' / ')
   const canRecreate = !!moduleKey && (applied || latest || file)
   const canUpgrade = !!moduleKey && scenario === 'upgrade'
   const canRetry = !!moduleKey && scenario === 'retry'
@@ -845,12 +903,18 @@ function buildPanelHtml (ds) {
       <div class="mc-panel-h"><span><ui5-icon name="status-positive"></ui5-icon>当前数据库已创建模块</span><span class="mc-panel-actions"><b>${installed.length}</b>${mcCollapseButton('installed', '当前数据库已创建模块')}</span></div>
       ${installedCollapsed ? '' : (installed.length ? `<div class="mc-installed">
         <div class="mc-installed-head"><span>模块</span><span>版本与明细</span><span>创建 / 更新</span><span>表数</span></div>
-        ${installed.map((m) => `<div class="mc-installed-row">
+        ${installed.map((m) => {
+          // 表数 = DCT 字典表数 + DOC 单据表数（SEED/MENU 不计入物理表数）
+          const cellTables = (kind) => Number(m.cells?.[kind]?.table_count) || 0
+          const totalTables = cellTables('DCT') + cellTables('DOC')
+          const tblText = totalTables || m.table_count || '-'
+          return `<div class="mc-installed-row">
           <div class="mc-installed-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div><div class="mc-mmod-s">${esc(m.deployed_name || m.deployed_by || '')}</div></div>
           <div class="mc-installed-kinds">${MC_KINDS.map((k) => mcKindDetailHtml(m.cells?.[k.id], k.id, m.key)).join('')}</div>
           <div class="mc-installed-time"><span>${mcShortDate(m.created_at || m.first_deployed_at || m.create_time)}</span><span>${mcShortDate(m.updated_at || m.current_deployed_at || m.update_time)}</span></div>
-          <div class="mc-mtbl">${m.table_count || '-'}</div>
-        </div>`).join('')}
+          <div class="mc-mtbl">${tblText}</div>
+        </div>`
+        }).join('')}
       </div>` : `<div class="cds-bd-empty"><ui5-icon name="database"></ui5-icon>当前数据库尚未创建符合筛选条件的模块</div>`)}
     </div>`
 
@@ -2206,13 +2270,13 @@ function styleHtml () {
     .mc-collapse-btn:hover{background:#eef6ff;border-color:#0a6ed1}
     .mc-installed{display:flex;flex-direction:column}
     .mc-panel-installed{overflow:visible}
-    .mc-installed-head,.mc-installed-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(280px,2fr) minmax(130px,.75fr) 54px;gap:10px;align-items:center}
+    .mc-installed-head,.mc-installed-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(280px,3.5fr) minmax(120px,.5fr) 50px;gap:10px;align-items:center}
     .mc-installed-head{padding:8px 12px;font-size:11px;font-weight:700;color:var(--sapContent_LabelColor,#6a6d70);background:#fbfcfe;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#f0f0f0)}
     .mc-installed-row{padding:10px 12px;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#f2f2f2)}
     .mc-installed-row:last-child{border-bottom:0}
     .mc-installed-row:hover{background:#fafcff}
     .mc-installed-mod{min-width:0}
-    .mc-installed-kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+    .mc-installed-kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
     .mc-kind-detail{min-width:0;border:1px solid var(--sapGroup_TitleBorderColor,#edf0f4);border-radius:8px;padding:7px;background:var(--sapList_HeaderBackground,#fafbfc)}
     .mc-kd-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:5px}
     .mc-kind-detail .cds-bd-kbadge{margin-bottom:0}
@@ -2246,7 +2310,7 @@ function styleHtml () {
     }
     /* 模块矩阵 */
     .mc-matrix{overflow:hidden}
-    .mc-matrix-head,.mc-mrow{display:grid;grid-template-columns:minmax(120px,1.4fr) repeat(3, minmax(96px,1fr)) 56px;gap:8px;align-items:center}
+    .mc-matrix-head,.mc-mrow{display:grid;grid-template-columns:minmax(120px,1fr) repeat(4, minmax(84px,1fr)) 50px;gap:8px;align-items:center}
     .mc-matrix-head{padding:8px 12px;background:var(--sapList_HeaderBackground,#f6f8fb);border-bottom:1px solid var(--sapGroup_TitleBorderColor,#eee);font-size:11px;font-weight:700;color:var(--sapContent_LabelColor,#6a6d70)}
     .mc-mh-k{display:inline-flex;align-items:center;gap:4px}
     .mc-mh-k ui5-icon{width:.8rem;height:.8rem;opacity:.7}
@@ -2450,19 +2514,23 @@ export default {
     // 数据源概览（第一个 content 视图）：顶部选中数据库标识 + 概览创意内容。
     async 'content-overview' (ctx) {
       if (!state.datasources.length) await loadDatasources()
+      syncPropertyRegion(ctx.host, 'content-overview')
       return mount(ctx, contentHtml('overview'), (root) => bindView(root, 'content-overview'))
     },
     // content 三视图：整块交给真实功能组件（只读自管列表/详情），此处只需 DAM 供过滤属性。
     async 'content-dct' (ctx) {
       if (!state.dam.domains.length) await loadDam()
+      syncPropertyRegion(ctx.host, 'content-dct')
       return mount(ctx, contentHtml('dct'), (root) => bindView(root, 'content-dct'))
     },
     async 'content-doc' (ctx) {
       if (!state.dam.domains.length) await loadDam()
+      syncPropertyRegion(ctx.host, 'content-doc')
       return mount(ctx, contentHtml('doc'), (root) => bindView(root, 'content-doc'))
     },
     async 'content-profile' (ctx) {
       if (!state.dam.domains.length) await loadDam()
+      syncPropertyRegion(ctx.host, 'content-profile')
       return mount(ctx, contentHtml('profile'), (root) => bindView(root, 'content-profile'))
     },
     // property 三视图：各嵌对应检查器（与同名 content tab 同 scope 联动）。
