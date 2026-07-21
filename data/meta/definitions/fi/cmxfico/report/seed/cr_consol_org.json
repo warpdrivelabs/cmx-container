@@ -18,7 +18,8 @@
     "offset_flag": 1,
     "remark": "集团总部/合并主体(母公司)",
     "sort_no": 1,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 2,
@@ -39,7 +40,8 @@
     "offset_flag": 1,
     "remark": "上市平台(证券代码601668)",
     "sort_no": 2,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 11,
@@ -60,7 +62,8 @@
     "offset_flag": 1,
     "remark": "中建一局",
     "sort_no": 3,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 12,
@@ -81,7 +84,8 @@
     "offset_flag": 1,
     "remark": "中建二局",
     "sort_no": 4,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 13,
@@ -102,7 +106,8 @@
     "offset_flag": 1,
     "remark": "中建三局",
     "sort_no": 5,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 14,
@@ -123,7 +128,8 @@
     "offset_flag": 1,
     "remark": "中建四局",
     "sort_no": 6,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 15,
@@ -144,7 +150,8 @@
     "offset_flag": 1,
     "remark": "中建五局",
     "sort_no": 7,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 16,
@@ -165,7 +172,8 @@
     "offset_flag": 1,
     "remark": "中建六局",
     "sort_no": 8,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 17,
@@ -186,7 +194,8 @@
     "offset_flag": 1,
     "remark": "中建七局",
     "sort_no": 9,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 18,
@@ -207,7 +216,8 @@
     "offset_flag": 1,
     "remark": "中建八局",
     "sort_no": 10,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 21,
@@ -228,7 +238,8 @@
     "offset_flag": 1,
     "remark": "中海地产/中国海外发展",
     "sort_no": 11,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 22,
@@ -249,7 +260,8 @@
     "offset_flag": 1,
     "remark": "中建国际",
     "sort_no": 12,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "id": 23,
@@ -270,6 +282,7 @@
     "offset_flag": 1,
     "remark": "中建基础设施",
     "sort_no": 13,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   }
 ]

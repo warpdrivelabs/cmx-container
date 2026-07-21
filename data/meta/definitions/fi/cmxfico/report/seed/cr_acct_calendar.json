@@ -18,7 +18,8 @@
     "days": 365,
     "remark": "2025会计年度",
     "sort_no": 1,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-01",
@@ -39,7 +40,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 2,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-02",
@@ -60,7 +62,8 @@
     "days": 28,
     "remark": null,
     "sort_no": 3,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-03",
@@ -81,7 +84,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 4,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-04",
@@ -102,7 +106,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 5,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-05",
@@ -123,7 +128,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 6,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-06",
@@ -144,7 +150,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 7,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-07",
@@ -165,7 +172,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 8,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-08",
@@ -186,7 +194,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 9,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-09",
@@ -207,7 +216,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 10,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-10",
@@ -228,7 +238,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 11,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-11",
@@ -249,7 +260,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 12,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2025-12",
@@ -270,7 +282,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 13,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026",
@@ -291,7 +304,8 @@
     "days": 365,
     "remark": "2026会计年度",
     "sort_no": 14,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-01",
@@ -312,7 +326,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 15,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-02",
@@ -333,7 +348,8 @@
     "days": 28,
     "remark": null,
     "sort_no": 16,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-03",
@@ -354,7 +370,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 17,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-04",
@@ -375,7 +392,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 18,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-05",
@@ -396,7 +414,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 19,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-06",
@@ -417,7 +436,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 20,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-07",
@@ -438,7 +458,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 21,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-08",
@@ -459,7 +480,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 22,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-09",
@@ -480,7 +502,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 23,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-10",
@@ -501,7 +524,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 24,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-11",
@@ -522,7 +546,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 25,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2026-12",
@@ -543,7 +568,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 26,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027",
@@ -564,7 +590,8 @@
     "days": 365,
     "remark": "2027会计年度",
     "sort_no": 27,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-01",
@@ -585,7 +612,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 28,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-02",
@@ -606,7 +634,8 @@
     "days": 28,
     "remark": null,
     "sort_no": 29,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-03",
@@ -627,7 +656,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 30,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-04",
@@ -648,7 +678,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 31,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-05",
@@ -669,7 +700,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 32,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-06",
@@ -690,7 +722,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 33,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-07",
@@ -711,7 +744,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 34,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-08",
@@ -732,7 +766,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 35,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-09",
@@ -753,7 +788,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 36,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-10",
@@ -774,7 +810,8 @@
     "days": 31,
     "remark": null,
     "sort_no": 37,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-11",
@@ -795,7 +832,8 @@
     "days": 30,
     "remark": null,
     "sort_no": 38,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   },
   {
     "code": "2027-12",
@@ -816,6 +854,7 @@
     "days": 31,
     "remark": null,
     "sort_no": 39,
-    "status": 1
+    "status": 1,
+    "create_time": "2026-01-01 00:00:00"
   }
 ]
