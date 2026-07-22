@@ -2126,6 +2126,35 @@
           }
         },
         {
+          "id": "gl-dict-data-editor",
+          "name": "gl-dict-data-editor",
+          "caption": "字典数据维护",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/database",
+          "workspace": {
+            "content": {
+              "caption": "字典数据维护",
+              "icon": "database",
+              "views": [
+                {
+                  "tabLabel": "字典数据",
+                  "icon": "database",
+                  "type": "native_pages",
+                  "native_page": "portal.dct.data-editor",
+                  "view": "content",
+                  "props": {
+                    "domain": "fi",
+                    "application": "cmxfico",
+                    "module": "gl",
+                    "dbId": "fico-db"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
           "id": "doc-def-manager",
           "name": "doc-def-manager",
           "caption": "业务单据定义",
