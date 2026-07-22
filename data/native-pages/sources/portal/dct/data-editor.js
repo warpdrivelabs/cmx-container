@@ -144,8 +144,10 @@ function editModeFor (col, meta) {
   // 4) 兜底：按 dataType 推断（元数据未给 edit.mode 或未识别）
   if (t === 'DATE') return { mode: 'cmx-date-input' }
   if (t === 'DATETIME') return { mode: 'cmx-datetime-input' }
-  if (t === 'TINYINT' && name === 'status') return { mode: 'checkbox' }
-  if (t === 'INT' || t === 'BIGINT' || t === 'TINYINT' || t === 'DECIMAL') return { mode: 'cmx-number-input' }
+  // TINYINT 默认当布尔勾选（0/1）；字典里 TINYINT 基本是 status/is_default 等标志位。
+  // 若为小整数语义，元数据应显式 edit.mode='cmx-number-input' 覆盖（上方步骤 1-3 优先）。
+  if (t === 'TINYINT') return { mode: 'checkbox' }
+  if (t === 'INT' || t === 'BIGINT' || t === 'DECIMAL') return { mode: 'cmx-number-input' }
   return { mode: 'cmx-text-input' }
 }
 
@@ -512,6 +514,11 @@ function buildColumnModel (meta) {
         // 不可编辑列：保留元数据的 edit.mode（如 checkbox 显示复选框样式），否则 readonly
         const metaMode = c.edit && c.edit.mode ? String(c.edit.mode).toLowerCase() : ''
         colOpts.edit = (metaMode === 'checkbox') ? { mode: 'checkbox' } : { mode: 'readonly' }
+      }
+      // checkbox 列内容居中（✓ / 空心框），呼应 cmx-checkbox-field-type 的 cellTemplate
+      if (colOpts.edit && colOpts.edit.mode === 'checkbox') {
+        colOpts.display = colOpts.display || {}
+        colOpts.display.align = 'center'
       }
       return new C.CmxColumn(colOpts)
     })

@@ -498,7 +498,6 @@ fn validate_value(
         },
         FieldType::Date => {
             if let Some(s) = val.as_str()
-                && !s.is_empty()
                 && chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").is_err()
             {
                 out.push(Violation::new(
@@ -513,7 +512,6 @@ fn validate_value(
         }
         FieldType::DateTime => {
             if let Some(s) = val.as_str()
-                && !s.is_empty()
                 && !parseable_datetime(s.trim())
             {
                 out.push(Violation::new(

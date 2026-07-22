@@ -255,6 +255,7 @@ impl DatabaseManager {
     }
 
     /// 执行带 serde_json::Value 参数的 SQL 语句
+    #[deprecated(since = "0.1.10", note = "请使用 execute_sql_typed 或 execute_sql_with_datavalues")]
     pub async fn execute_sql_with_json(
         &self,
         db_id: &str,
@@ -337,6 +338,7 @@ impl DatabaseManager {
     }
 
     /// 查询带 serde_json::Value 参数的 SQL 语句
+    #[deprecated(since = "0.1.10", note = "请使用 query_sql_typed 或 query_sql_with_datavalues")]
     pub async fn query_sql_with_json(
         &self,
         db_id: &str,
