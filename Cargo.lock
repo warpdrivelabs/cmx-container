@@ -1453,6 +1453,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-job-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api",
+ "cmx-job-core",
+ "futures",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-job-core"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "cmx-utils",
+ "dashmap",
+ "futures",
+ "inventory",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-job-store-pg"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "cmx-api-types",
+ "cmx-database-pg",
+ "cmx-job-core",
+ "cmx-utils",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "cmx-macros"
 version = "0.1.12"
 dependencies = [
@@ -1723,12 +1767,15 @@ dependencies = [
  "cmx-biz",
  "cmx-core",
  "cmx-database-pg",
+ "cmx-job-core",
  "cmx-rpt-formula",
  "cmx-rpt-model",
  "cmx-utils",
+ "inventory",
  "rust_decimal",
  "serde_json",
  "sha2 0.10.9",
+ "tokio",
  "tracing",
 ]
 
@@ -8742,6 +8789,9 @@ dependencies = [
  "cmx-doc-api",
  "cmx-flow-api",
  "cmx-iam",
+ "cmx-job-api",
+ "cmx-job-core",
+ "cmx-job-store-pg",
  "cmx-plugin",
  "cmx-registry-config",
  "cmx-rpc",

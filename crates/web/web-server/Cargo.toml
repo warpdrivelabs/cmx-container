@@ -21,6 +21,12 @@ cmx-flow-api = { workspace = true }
 cmx-doc-api = { workspace = true }
 # 内部依赖 - 数据字典（DCT）HTTP 层（DctModule 路由，同破环设计）
 cmx-dct-api = { workspace = true }
+# 内部依赖 - 异步任务中心内核（init_job_subsystem 启动 + JobManager 单例）
+cmx-job-core = { workspace = true }
+# 内部依赖 - 异步任务中心 PG 持久化（PgJobStore：cmx_job_* 落库 + 崩溃恢复）
+cmx-job-store-pg = { workspace = true }
+# 内部依赖 - 异步任务中心 HTTP 层（JobModule 路由 + SSE，在此合并进主路由，避免 cmx-api⇄cmx-job 环）
+cmx-job-api = { workspace = true }
 # 内部依赖 - 审计日志
 cmx-audit = { workspace = true }
 # 内部依赖 - 认证模块

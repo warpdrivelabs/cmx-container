@@ -302,6 +302,7 @@ whitelist = [
     "/api/rpt",
     "/api/report-design",
     "/api/flow",
+    "/api/jobs",
     "/api/fact",
     "/api/help",
 ]

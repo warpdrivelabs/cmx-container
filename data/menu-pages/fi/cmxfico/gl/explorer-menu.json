@@ -814,6 +814,31 @@
           }
         },
         {
+          "id": "fi-gl-registry-editor",
+          "name": "registry-editor",
+          "caption": "注册表编辑器",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/database-search",
+          "workspace": {
+            "id": "registry_editor",
+            "content": {
+              "caption": "注册表编辑器",
+              "icon": "tabler-outline/database-search",
+              "views": [
+                {
+                  "id": "registry-editor-content",
+                  "tabLabel": "注册表",
+                  "icon": "tabler-outline/database-search",
+                  "type": "native_pages",
+                  "native_page": "portal.system.registry-editor",
+                  "view": "content"
+                }
+              ]
+            }
+          }
+        },
+        {
           "id": "fi-gl-dict-grid-meta",
           "name": "dict-grid-meta",
           "caption": "数据字典动态表格",
@@ -1252,6 +1277,65 @@
                   "type": "native_pages",
                   "native_page": "portal.rpt.report-app-workbench",
                   "view": "propertyOrg"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-job-center",
+          "name": "job-center",
+          "caption": "任务中心",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "process",
+          "workspace": {
+            "id": "job_center",
+            "model": {
+              "type": "native_pages",
+              "native_page": "portal.job.monitor",
+              "id": "job-center-model",
+              "view": "content"
+            },
+            "explorer": {
+              "caption": "概览 / 新建 / 过滤",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "job-center-explorer",
+                  "tabLabel": "任务台",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "portal.job.monitor",
+                  "view": "explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "任务列表与监控",
+              "icon": "process",
+              "views": [
+                {
+                  "id": "job-center-content",
+                  "tabLabel": "监控",
+                  "icon": "process",
+                  "type": "native_pages",
+                  "native_page": "portal.job.monitor",
+                  "view": "content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "作业属性",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "job-center-prop",
+                  "tabLabel": "属性",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "portal.job.monitor",
+                  "view": "property"
                 }
               ]
             }

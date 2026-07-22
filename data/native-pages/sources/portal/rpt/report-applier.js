@@ -472,16 +472,30 @@ async function loadData (sheet, st, root) {
       body: JSON.stringify({ version: st.props.version || '', orgCode, periodCode }),
     })
     const cells = res?.cells || []
-    const valuesMap = {}
+    // 取数值双路：
+    //  ① 公式格(画布有 =FS(...) 等公式)——灌 setReportValueMap，函数按格取值显示，**不覆盖公式**。
+    //  ② 非公式格(手工值)——仍 setCellValues 直填。
+    const wb = sheet.getWorkbook && sheet.getWorkbook()
+    const ws = wb && wb.getActiveSheet && wb.getActiveSheet()
+    const sheetName = (ws && ws.name && ws.name()) || ''
+    const parseRef = (ref) => { const m = /^([A-Z]+)(\d+)$/.exec(String(ref || '').toUpperCase()); if (!m) return null; let c = 0; for (let i = 0; i < m[1].length; i++) c = c * 26 + (m[1].charCodeAt(i) - 64); return { row: Number(m[2]) - 1, col: c - 1 } }
+    const valueMap = {}     // sheetName!CELLREF -> value（供公式格取数）
+    const plainValues = {}  // CELLREF -> value（非公式格直填）
     for (const r of cells) {
       if (!r.cellRef) continue
-      valuesMap[r.cellRef] = r.valueType === 'number' ? r.numValue : r.textValue
+      const v = r.valueType === 'number' ? r.numValue : r.textValue
+      valueMap[`${sheetName}!${String(r.cellRef).toUpperCase()}`] = v
+      // 判断该格画布上是否是公式格
+      let hasFormula = false
+      const p = parseRef(r.cellRef)
+      if (ws && p) { try { hasFormula = !!ws.getFormula(p.row, p.col) } catch (_) {} }
+      if (!hasFormula) plainValues[r.cellRef] = v
     }
-    if (sheet.setCellValues) {
-      st.__loading = true
-      sheet.setCellValues(valuesMap)
-      setTimeout(() => { st.__loading = false }, 200)
-    }
+    st.__loading = true
+    // 先灌 map（公式格显真值），再直填非公式格
+    if (sheet.setReportValueMap) sheet.setReportValueMap(valueMap)
+    if (sheet.setCellValues && Object.keys(plainValues).length) sheet.setCellValues(plainValues)
+    setTimeout(() => { st.__loading = false }, 200)
     st.dataLoaded = true
     st.loadedCells = cells.length
     markDirty(st, false) // 取数=从DB装载，画布与DB一致，清除未保存标记

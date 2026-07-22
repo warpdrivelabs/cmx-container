@@ -1,0 +1,37 @@
+[package]
+name = "cmx-job-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 异步任务中心内核（语义中立，零业务/零 DB 依赖）：
+#   - 作业领域模型 + 状态机（Job / JobStatus / ProgressSnapshot / ProgressItem）
+#   - 业务接触面 trait：JobHandler（业务实现）/ JobContext（框架注入的进度上报+控制响应句柄）
+#   - JobEventHub：按 job_id 扇出 SSE 事件（母版 = cmx-ai::SessionRegistry）
+#   - JobManager：提交/排队/worker 并发闸/控制信号路由/生命周期（OnceCell 全局单例）
+#   - JobRegistry：inventory 收集业务注册的 JobHandler（母版 = cmx-rpt-formula 函数注册）
+# 业务 crate（cmx-rpt 等）单向依赖本 crate 实现 JobHandler；cmx-job-api 依赖本 crate 暴露 HTTP/SSE。
+# M1 里程碑：作业状态仅内存（进程重启即丢），暂不引入 store-pg。
+
+[dependencies]
+# 异步 trait（JobHandler::run）
+async-trait = { workspace = true }
+# 全局单例（JobManager）+ 队列/worker/watch 控制通道/mpsc 事件扇出
+tokio = { workspace = true }
+# 按 job_id 的订阅路由表 + 作业表（并发安全，母版同 cmx-ai）
+dashmap = { workspace = true }
+# SSE 流：mpsc receiver → stream（cmx-job-api 用；core 侧仅 futures 基础）
+futures = { workspace = true }
+# 序列化：ProgressSnapshot/事件载荷 → JSON
+serde = { workspace = true }
+serde_json = { workspace = true }
+# 编译期注册（业务 crate 用 inventory::submit! 注册 JobHandler）
+inventory = { workspace = true }
+# 主键铸号（next_pk_id：52 位 JS 安全 bigint，进程重启不撞键）
+cmx-utils = { workspace = true }
+# 日志
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+serde_json = { workspace = true }

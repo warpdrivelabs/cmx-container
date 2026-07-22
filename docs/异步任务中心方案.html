@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>异步任务中心方案 · Async Job Center</title>
+<style>
+  :root{
+    --design:#4a90d9; --calc:#42a86b; --apply:#f0b429; --warn:#e0857a;
+    --bg:#0f1419; --card:#1a2028; --card2:#232b35; --txt:#e6edf3; --dim:#8b98a5;
+    --line:#2d3742; --accent:#f0b429; --code:#a9c7e8;
+    --run:#4a90d9; --pause:#f0b429; --done:#42a86b; --fail:#e0857a; --pend:#8b98a5; --cancel:#b072d0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 90px}
+  h1{font-size:28px;font-weight:700;margin:0 0 6px;letter-spacing:.3px}
+  h2{font-size:20px;font-weight:600;margin:56px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;font-weight:600;margin:32px 0 10px;color:var(--accent)}
+  h4{font-size:14px;font-weight:600;margin:22px 0 8px;color:var(--txt)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:4px}
+  p{margin:10px 0}
+  .meta{background:var(--card);border-radius:10px;padding:16px 20px;margin:20px 0;font-size:13px;color:var(--dim)}
+  .meta b{color:var(--txt)}
+  .meta div{margin:4px 0}
+  code{background:#0d1117;padding:1.5px 6px;border-radius:4px;font-size:12.5px;color:var(--code);
+    font-family:"SF Mono",Menlo,Consolas,monospace}
+  pre{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;margin:14px 0;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6}
+  pre code{background:none;padding:0;color:#c9d6e3}
+  .k{color:#f0b429}.s{color:#7fd4a3}.c{color:#8b98a5;font-style:italic}.n{color:#8fc0ef}.f{color:#e6a2d8}.t{color:#5ec8c8}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;background:var(--card);border-radius:10px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--card2);font-weight:600;color:var(--dim);font-size:12px}
+  tbody tr:hover{background:#20272f}
+  .mono{font-family:"SF Mono",Menlo,monospace;font-size:12px;color:var(--code)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600;margin-right:6px}
+  .b-design{background:rgba(74,144,217,.18);color:#8fc0ef}
+  .b-calc{background:rgba(66,168,107,.18);color:#7fd4a3}
+  .b-apply{background:rgba(240,180,41,.18);color:#f0cd76}
+  .b-new{background:rgba(224,133,122,.18);color:#eaa79d}
+  .b-reuse{background:rgba(120,120,180,.2);color:#b0b0e0}
+  .st{display:inline-block;padding:2px 9px;border-radius:5px;font-size:11.5px;font-weight:600;font-family:"SF Mono",Menlo,monospace}
+  .st-run{background:rgba(74,144,217,.18);color:#8fc0ef}
+  .st-pause{background:rgba(240,180,41,.18);color:#f0cd76}
+  .st-done{background:rgba(66,168,107,.18);color:#7fd4a3}
+  .st-fail{background:rgba(224,133,122,.18);color:#eaa79d}
+  .st-pend{background:rgba(139,152,165,.18);color:#b3bdc9}
+  .st-cancel{background:rgba(176,114,208,.2);color:#cfa3e0}
+  .callout{border-left:3px solid var(--accent);background:var(--card);border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;font-size:13px}
+  .callout.good{border-left-color:var(--calc)}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout.info{border-left-color:var(--design)}
+  .callout b{color:var(--txt)}
+  .toc{background:var(--card);border-radius:10px;padding:18px 22px;margin:24px 0}
+  .toc h4{margin:0 0 10px;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .toc ol{margin:0;padding-left:20px;columns:2;column-gap:36px}
+  .toc li{margin:5px 0;break-inside:avoid}
+  .toc a{color:var(--code);text-decoration:none}
+  .toc a:hover{color:var(--accent);text-decoration:underline}
+  .flow{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:18px;margin:16px 0;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12px;line-height:1.5;color:#c9d6e3;white-space:pre;overflow-x:auto}
+  .pill{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11px;font-family:"SF Mono",Menlo,monospace;
+    background:#0d1117;border:1px solid var(--line);color:var(--code);margin:0 2px}
+  .foot{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+  .cols2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+  .num{display:inline-block;min-width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;
+    background:var(--accent);color:#0f1419;font-weight:700;font-size:12px;margin-right:8px}
+  ul.tight{margin:8px 0;padding-left:22px}ul.tight li{margin:5px 0}
+  hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+  @media(max-width:820px){.toc ol{columns:1}.cols2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>异步任务中心方案</h1>
+<div class="sub">Async Job Center · 长任务编排 · 实时进度 SSE 推送 · 暂停/停止/重启可控 · 前后端双向发起</div>
+
+<div class="meta">
+  <div><b>定位</b>：为 <code>cmx-container</code> 提供一套<b>通用的长时后端任务</b>基础设施——统一的作业生命周期、协作式暂停/停止/重启控制、按作业实时推送详细进度（SSE），前端有专门的<b>任务中心工作台</b>可视化监控与操控。业务方（报表计算、报表校验、凭证记账、销售汇总……）只需实现一个 trait 并注册，即可接入。</div>
+  <div><b>后端骨架</b>：新增 crate 群 <span class="pill">cmx-job-core</span>（领域模型/状态机/JobHandler trait/JobContext）+ <span class="pill">cmx-job-store-pg</span>（作业与日志持久化）+ <span class="pill">cmx-job-api</span>（HTTP + SSE 端点，实现 <code>ModuleRoutes</code>）。母版对标现有 <code>cmx-rpt / cmx-flow / cmx-doc</code> 三分层。</div>
+  <div><b>SSE 母版</b>：复用 <code>cmx-ai::SessionRegistry</code> 的成熟模式（按 id 广播 → 多前端订阅 → <code>unfold</code> 转 axum <code>Sse</code> → EventSource 走 query <code>access_token</code> + 白名单放行），抽象为通用 <code>JobEventHub</code>。<b>复用模式，不耦合代码。</b></div>
+  <div><b>本文范围</b>：仅出方案（架构 / 状态机 / 控制模型 / 通信协议 / 持久化 / 前端 / 业务接入 / 扩展路线 / 落地锚点），<b>不动代码</b>。</div>
+</div>
+
+<div class="toc">
+  <h4>目录</h4>
+  <ol>
+    <li><a href="#s0">术语表</a></li>
+    <li><a href="#s1">目标、范围与设计原则</a></li>
+    <li><a href="#s2">全景架构图</a></li>
+    <li><a href="#s3">核心概念与作业状态机</a></li>
+    <li><a href="#s4">控制模型：暂停 / 停止 / 重启的协作式实现</a></li>
+    <li><a href="#s5">进度模型：快照 + 增量事件</a></li>
+    <li><a href="#s6">通信设计：SSE 端点与事件协议</a></li>
+    <li><a href="#s7">后端架构：crate 分层与核心抽象</a></li>
+    <li><a href="#s8">持久化设计：表结构与断点续跑</a></li>
+    <li><a href="#s9">业务接入：以「报表计算」为样例</a></li>
+    <li><a href="#s10">前端设计：任务中心工作台</a></li>
+    <li><a href="#s11">两条发起路径：前端发起 / 后端发起</a></li>
+    <li><a href="#s12">扩展性与未来演进</a></li>
+    <li><a href="#s13">落地清单：接入锚点与里程碑</a></li>
+    <li><a href="#s14">风险、权衡与非目标</a></li>
+  </ol>
+</div>
+
+<!-- ══════════════════════════════ 0 ══════════════════════════════ -->
+<h2 id="s0">0 · 术语表</h2>
+<table>
+<thead><tr><th>术语</th><th>英文 / 标识</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td><b>作业</b></td><td class="mono">Job</td><td>一次可监控、可控制的后端处理实例。如「计算 2026-07 期间总部全部报表」。是本系统的一等公民，有唯一 <code>job_id</code>、状态、进度、结果。</td></tr>
+<tr><td><b>作业种类</b></td><td class="mono">JobKind</td><td>业务类型标识，如 <code>rpt.compute</code> / <code>rpt.verify</code> / <code>doc.post</code> / <code>sc.rollup</code>。决定用哪个 <code>JobHandler</code> 执行。</td></tr>
+<tr><td><b>作业处理器</b></td><td class="mono">JobHandler</td><td>业务方实现的 trait。把「一次报表计算」的真实逻辑写在这里，通过 <code>JobContext</code> 上报进度、响应控制信号。</td></tr>
+<tr><td><b>作业上下文</b></td><td class="mono">JobContext</td><td>执行期注入给 handler 的句柄。提供 <code>progress()</code> 上报、<code>checkpoint()</code> 检查暂停/取消、<code>log()</code> 记日志、<code>emit_item()</code> 更新明细行。</td></tr>
+<tr><td><b>作业管理器</b></td><td class="mono">JobManager</td><td>进程内全局单例（<code>OnceCell</code>）。负责作业的提交、排队、调度、并发限流、控制信号路由、生命周期管理。</td></tr>
+<tr><td><b>事件枢纽</b></td><td class="mono">JobEventHub</td><td>按 <code>job_id</code> 扇出 SSE 事件到所有订阅前端（多标签页）。母版 = <code>cmx-ai::SessionRegistry</code>。</td></tr>
+<tr><td><b>进度快照</b></td><td class="mono">ProgressSnapshot</td><td>作业在某一刻的完整进度视图（阶段 / 百分比 / 计数 / 明细行 / 消息）。新订阅者连上时先收一份，之后收增量。</td></tr>
+<tr><td><b>检查点</b></td><td class="mono">checkpoint</td><td>handler 在循环中主动调用的协作点。系统在此响应暂停（挂起等待）与取消（返回错误），并顺带上报心跳。</td></tr>
+<tr><td><b>明细行</b></td><td class="mono">Item</td><td>进度的细粒度单元。报表计算场景 = 每张报表一行（排队/计算中/成功/失败/耗时）。可按 key 寻址 upsert。</td></tr>
+</tbody>
+</table>
+
+<!-- ══════════════════════════════ 1 ══════════════════════════════ -->
+<h2 id="s1">1 · 目标、范围与设计原则</h2>
+
+<h3>1.1 要解决的问题</h3>
+<p>当前 <code>cmx-container</code> 内，报表计算（<code>report_design_compute</code> / <code>rpt_compute</code>）、报表校验、凭证记账、销售汇总等重处理，都是<b>同步 async 端点</b>：请求发起后一直阻塞到算完才返回。由此产生四个痛点：</p>
+<ul class="tight">
+  <li><b>无进度</b>——前端只能转圈，不知道算到第几张报表、还要多久、哪张失败了。</li>
+  <li><b>不可控</b>——一旦发起无法暂停/停止；算错了参数只能干等或杀连接（后端仍在跑）。</li>
+  <li><b>易超时</b>——HTTP/网关超时会截断长请求，但后端计算仍在空转，浪费且状态不明。</li>
+  <li><b>只能前端发起</b>——定时批量、事件触发（如「期末自动结账」）这类后端自发的长任务，没有统一的承载与监控入口。</li>
+</ul>
+
+<h3>1.2 目标</h3>
+<table>
+<thead><tr><th>#</th><th>目标</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>G1</td><td><b>统一作业生命周期</b></td><td>一套状态机覆盖排队→运行→完成/失败/取消，所有长任务共用。</td></tr>
+<tr><td>G2</td><td><b>实时详细进度</b></td><td>SSE 按作业推送：总进度 + 每个明细单元（如每张报表）的状态与消息，前端毫秒级可见。</td></tr>
+<tr><td>G3</td><td><b>可控：暂停 / 恢复 / 停止 / 重启</b></td><td>协作式控制，业务在检查点响应；停止能真正让后端停下（非仅断连）。</td></tr>
+<tr><td>G4</td><td><b>前后端双向发起</b></td><td>前端 POST 发起，后端（定时器 / 事件总线 / 其它服务）内部 <code>submit()</code> 发起，走同一套监控。</td></tr>
+<tr><td>G5</td><td><b>低接入成本</b></td><td>新业务只实现一个 <code>JobHandler</code> trait + 一条 <code>inventory::submit!</code> 注册，不碰框架。</td></tr>
+<tr><td>G6</td><td><b>可恢复 / 可审计</b></td><td>作业状态与关键日志落库；进程重启后能看到历史作业；失败可重启（从头或断点）。</td></tr>
+<tr><td>G7</td><td><b>面向未来扩展</b></td><td>预留优先级队列、并发编排（子作业/DAG）、多实例分布式、定时触发、可观测性接口。</td></tr>
+</tbody>
+</table>
+
+<h3>1.3 设计原则</h3>
+<ul class="tight">
+  <li><b>复用母版，不造轮子</b>——SSE 沿用 <code>SessionRegistry</code> 模式，crate 分层沿用 <code>cmx-rpt</code>，注册沿用 <code>inventory</code>，路由沿用 <code>ModuleRoutes + merge</code> 破环。</li>
+  <li><b>框架与业务解耦</b>——<code>cmx-job-*</code> 不依赖任何业务 crate；业务 crate 依赖 <code>cmx-job-core</code> 实现 trait。破环方向与 <code>ReportModule</code> 一致。</li>
+  <li><b>协作式而非抢占式</b>——Rust async 无法安全强杀 future。停止/暂停靠业务在 <code>checkpoint()</code> 协作。对不可中断的原子操作，只在其边界响应。</li>
+  <li><b>快照优先</b>——进度以「当前完整快照」为事实源，增量事件只是快照的 diff 推送。任何时刻新连接都能立即拿到全貌，天然抗刷新/抗断线。</li>
+  <li><b>渐进落地</b>——先单机内存态跑通（M1），再补持久化与断点（M2），再谈分布式（M3）。每步可独立上线。</li>
+</ul>
+
+<!-- ══════════════════════════════ 2 ══════════════════════════════ -->
+<h2 id="s2">2 · 全景架构图</h2>
+
+<div class="flow">┌──────────────────────────────────── 前端（native-pages / portal.job.*）────────────────────────────────────┐
+│                                                                                                            │
+│   任务中心工作台 (job-center-workbench)          任务监控器 (job-monitor · 可多实例/多标签页)              │
+│   ┌─────────────┬────────────────────┐          ┌──────────────────────────────────────────────┐          │
+│   │ explorer    │ content            │          │  ▓▓▓▓▓▓▓▓░░░░ 68%  阶段:落库 3/5   ⏸ ⏹ ↻       │          │
+│   │ 种类/状态   │ 作业列表(实时)     │  点击 →  │  ─ 明细流 ──────────────────────────────────  │          │
+│   │ 过滤        │ 每行含进度条+控制  │          │   报表 A  ✔ 1.2s   报表 B  ⟳ 计算中…          │          │
+│   └─────────────┴────────────────────┘          │   报表 C  ✖ 除零    报表 D  … 排队            │          │
+│         │  POST /api/jobs                        │  ─ 日志 ────────────────────────────────────  │          │
+│         │  POST /api/jobs/{id}/pause|resume|…    │   [INFO] 装载 42 张报表模板 …                  │          │
+│         │                                        └──────────── EventSource: /api/jobs/{id}/events ┘          │
+└─────────┼──────────────────────────────────────────────────────▲─────────────────────────────────────────┘
+          │ HTTP (control/submit)                                 │ SSE (text/event-stream, 按 job_id 扇出)
+┌─────────▼─────────────────────────────────────────────────────┼─────────────────────────────────────────┐
+│  web-server (axum)   routes.rs: api_routes().merge(JobModule.routes())   ← 破环，同 ReportModule           │
+│                                                                 │                                          │
+│  ┌───────────────────────── cmx-job-api ─────────────────────┐ │  ┌──────── cmx-job-core（全局单例）──────┐ │
+│  │  POST   /api/jobs              提交作业                    │ │  │  JobManager      提交/排队/调度/限流   │ │
+│  │  GET    /api/jobs              列表(过滤:kind/status/org)  │─┼─▶│   ├─ 队列 + worker pool (并发闸)        │ │
+│  │  GET    /api/jobs/{id}         详情(含当前快照)           │ │  │   ├─ 控制路由 watch<Control> per job   │ │
+│  │  GET    /api/jobs/{id}/events  SSE 订阅  ◀────────────────┼─┼──│   └─ JobEventHub  按 job_id 广播 ──────┼─┐│
+│  │  POST   /api/jobs/{id}/pause|resume|cancel|restart 控制    │ │  │  JobRegistry (inventory) kind→Handler │ ││
+│  └───────────────────────────────────────────────────────────┘ │  └────────────────────────────────────────┘ ││
+│                                                                 │            │ 执行                          ││
+│  ┌──────────────── 业务 crate（实现 JobHandler）───────────────┐ │            ▼                              ││
+│  │ cmx-rpt: RptComputeJob / RptVerifyJob   cmx-doc: DocPostJob │◀┘   ┌──────────────────┐                  ││
+│  │ sc(销售): SalesRollupJob   …未来任意     ↑ 用 JobContext 上报 │     │  JobContext      │  progress()/log()││
+│  └──────────────────────────────────────────────────────────────┘     │  checkpoint()────┼──────────────────┘│
+│                                                                        └────────┬─────────┘                   │
+│  ┌────────────── cmx-job-store-pg（持久化，主库 cmx）──────────────┐            │ 快照落库(去抖)              │
+│  │  cmx_job  作业主表   cmx_job_log  日志/事件   cmx_job_checkpoint 断点 │◀───────┘                            │
+│  └────────────────────────────────────────────────────────────────────┘                                     │
+│  后端自发起：定时器 / GlobalEventBus / 其它服务  ──POST 等价── JobManager::submit()  ─────────────────────────┘
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────┘</div>
+
+<div class="callout info"><b>读图要点</b>：控制流（提交/暂停/停止）走普通 HTTP，进度流走 SSE，两者<b>解耦</b>。<code>JobManager</code> 是唯一状态权威，<code>JobEventHub</code> 只管扇出。业务 crate 只与 <code>cmx-job-core</code> 打交道（实现 <code>JobHandler</code>），既能被前端 POST 触发，也能被后端定时器/事件总线以同一个 <code>submit()</code> 触发。</div>
+
+<!-- ══════════════════════════════ 3 ══════════════════════════════ -->
+<h2 id="s3">3 · 核心概念与作业状态机</h2>
+
+<h3>3.1 状态机</h3>
+<div class="flow">                        pause ↩ ↪ resume        handler 返回 Ok
+        submit()   worker取出    ┌──┐              ┌──────────────▶ ┌───────────┐ Completed ●
+   ● ──────────▶ Pending ─────▶ Running ─────────┤                 │ Completed │  (终态)
+                    │             │  │   Ok/Err   └── handler Err ─▶ ├───────────┤
+                    │             │  └──────────────────────────────▶│  Failed   │─┐
+             cancel │      cancel │                                  └───────────┘ │
+              (排队) │             ▼                                                 │ restart
+                    │         Cancelling ──清理完成──┐              ┌────────────────┘  (fresh: 派生新作业
+                    │      (handler 收 cancel 信号)   │              │                    resume: 断点续跑)
+                    ▼                                ▼              ▼
+                Cancelled ◀──────────────────── Cancelled ●     Pending ●
+                (排队中直接停 · 终态)              (协作停 · 终态)   (重新入队)
+
+   注：Paused 亦可 cancel → Cancelling。Completed/Cancelled 为终态；Failed/Cancelled 可 restart。</div>
+
+<table>
+<thead><tr><th>状态</th><th>标识</th><th>含义</th><th>可触达的下一状态</th></tr></thead>
+<tbody>
+<tr><td><span class="st st-pend">Pending</span></td><td class="mono">pending</td><td>已创建入队，等待 worker 空闲。</td><td>Running、Cancelled</td></tr>
+<tr><td><span class="st st-run">Running</span></td><td class="mono">running</td><td>worker 正在执行 handler。</td><td>Paused、Cancelling、Completed、Failed</td></tr>
+<tr><td><span class="st st-pause">Paused</span></td><td class="mono">paused</td><td>handler 在 checkpoint 挂起，占用 worker 槽但不推进。</td><td>Running（resume）、Cancelling</td></tr>
+<tr><td><span class="st st-cancel">Cancelling</span></td><td class="mono">cancelling</td><td>已发停止信号，handler 正在响应/清理（协作式，非瞬时）。</td><td>Cancelled</td></tr>
+<tr><td><span class="st st-cancel">Cancelled</span></td><td class="mono">cancelled</td><td>已停止（排队中直接停 or 运行中协作停）。终态。</td><td>—（可 restart 派生新作业）</td></tr>
+<tr><td><span class="st st-done">Completed</span></td><td class="mono">completed</td><td>handler 正常返回，带结果摘要。终态。</td><td>—</td></tr>
+<tr><td><span class="st st-fail">Failed</span></td><td class="mono">failed</td><td>handler 返回错误或 panic 被捕获，带错误摘要。终态。</td><td>—（可 restart）</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn"><b>Cancelling 为何单列</b>：停止不是瞬时的。发信号后 handler 可能正在一条大 SQL 中途，要到下一个 checkpoint 才能响应。<code>Cancelling</code> 让前端立刻看到「正在停止」，避免用户以为按钮没反应而反复点。同理，暂停也有一个短暂的「请求已发、尚未挂起」窗口，可用一个 <code>pause_requested</code> 标志在 UI 上表达，不必单列状态。</div>
+
+<h3>3.2 作业实体（内存 + 落库两态）</h3>
+<pre><code><span class="c">// cmx-job-core::model —— 作业的规范定义</span>
+<span class="k">pub struct</span> <span class="t">Job</span> {
+    <span class="k">pub</span> id:         <span class="t">JobId</span>,            <span class="c">// 后端铸号（对齐 bigint 主键后端生成惯例）</span>
+    <span class="k">pub</span> kind:       <span class="t">String</span>,           <span class="c">// "rpt.compute" 等，决定 Handler</span>
+    <span class="k">pub</span> title:      <span class="t">String</span>,           <span class="c">// 人读标题："计算 2026-07 · 总部 · 42 张报表"</span>
+    <span class="k">pub</span> params:     <span class="t">serde_json::Value</span>,<span class="c">// 业务入参（org/period/report_codes…）</span>
+    <span class="k">pub</span> status:     <span class="t">JobStatus</span>,        <span class="c">// 上表状态机</span>
+    <span class="k">pub</span> progress:   <span class="t">ProgressSnapshot</span>, <span class="c">// §5 当前完整进度快照</span>
+    <span class="k">pub</span> result:     <span class="t">Option&lt;serde_json::Value&gt;</span>, <span class="c">// 成功摘要</span>
+    <span class="k">pub</span> error:      <span class="t">Option&lt;JobError&gt;</span>,  <span class="c">// 失败明细（对齐 CmxErrCode 错误码体系）</span>
+    <span class="k">pub</span> priority:   <span class="t">i16</span>,              <span class="c">// 调度优先级（预留，默认 0）</span>
+    <span class="k">pub</span> origin:     <span class="t">JobOrigin</span>,        <span class="c">// Frontend{user} | Backend{trigger}</span>
+    <span class="k">pub</span> org_id:     <span class="t">Option&lt;i64&gt;</span>,      <span class="c">// 多租户归属（鉴权/过滤）</span>
+    <span class="k">pub</span> created_by: <span class="t">Option&lt;i64&gt;</span>,      <span class="c">// 发起人</span>
+    <span class="k">pub</span> created_at: <span class="t">i64</span>, <span class="k">pub</span> started_at: <span class="t">Option&lt;i64&gt;</span>, <span class="k">pub</span> finished_at: <span class="t">Option&lt;i64&gt;</span>,
+}</code></pre>
+
+<!-- ══════════════════════════════ 4 ══════════════════════════════ -->
+<h2 id="s4">4 · 控制模型：暂停 / 停止 / 重启的协作式实现</h2>
+
+<h3>4.1 为什么是协作式</h3>
+<p>Rust 的 async future 不能被安全地「强杀」——直接 <code>drop</code> 一个正在写库的 future 会留下不一致状态。因此本系统采用<b>协作式控制</b>：<code>JobManager</code> 通过 <code>tokio::sync::watch</code> 通道把最新控制意图推给正在跑的 handler，handler 在自己选定的<b>安全点（checkpoint）</b>响应。这与 <code>cmx-ai</code> 的 <code>abort</code>（转发上游中止）异曲同工，但更细化为四种意图。</p>
+
+<h3>4.2 控制信号传递</h3>
+<pre><code><span class="c">// 每个 Running 作业持有一对 watch 通道：Manager 持 Sender，Context 持 Receiver</span>
+<span class="k">pub enum</span> <span class="t">Control</span> { <span class="n">Run</span>, <span class="n">Pause</span>, <span class="n">Cancel</span> }   <span class="c">// watch 只保留“最新意图”，天然去抖</span>
+
+<span class="c">// —— 业务 handler 侧：在循环里埋 checkpoint（唯一需要业务配合的点）——</span>
+<span class="k">for</span> report <span class="k">in</span> reports {
+    ctx.checkpoint().<span class="k">await</span>?;          <span class="c">// ① 若 Pause：在此挂起直到 Run/Cancel  ② 若 Cancel：返回 Err(Cancelled)  ③ 顺带心跳</span>
+    ctx.item_running(&report.code, <span class="s">"计算中"</span>); <span class="c">// 明细行→计算中</span>
+    <span class="k">let</span> r = compute_one(&report).<span class="k">await</span>;
+    <span class="k">match</span> r {
+        <span class="n">Ok</span>(v)  =&gt; ctx.item_ok(&report.code, v.elapsed_ms),
+        <span class="n">Err</span>(e) =&gt; ctx.item_fail(&report.code, &e),   <span class="c">// 单张失败不必终止整个作业（策略可配）</span>
+    }
+    ctx.progress_inc(<span class="n">1</span>);                  <span class="c">// 总进度 +1，Hub 扇出 progress 事件</span>
+}</code></pre>
+
+<pre><code><span class="c">// —— checkpoint 内部（框架实现，业务无需关心）——</span>
+<span class="k">pub async fn</span> <span class="t">checkpoint</span>(&<span class="k">self</span>) -&gt; <span class="t">Result&lt;(), JobCancelled&gt;</span> {
+    <span class="k">loop</span> {
+        <span class="k">match</span> *<span class="k">self</span>.control.borrow() {
+            <span class="t">Control</span>::<span class="n">Cancel</span> =&gt; <span class="k">return</span> <span class="n">Err</span>(<span class="t">JobCancelled</span>),        <span class="c">// 让 handler 走 ? 优雅退出</span>
+            <span class="t">Control</span>::<span class="n">Run</span>    =&gt; <span class="k">return</span> <span class="n">Ok</span>(()),                     <span class="c">// 放行</span>
+            <span class="t">Control</span>::<span class="n">Pause</span>  =&gt; {
+                <span class="k">self</span>.hub.emit_state(<span class="t">JobStatus</span>::<span class="n">Paused</span>);        <span class="c">// 首次进入推 paused 状态</span>
+                <span class="k">self</span>.control.changed().<span class="k">await</span>.ok();          <span class="c">// 挂起等待下一次意图变化，零轮询</span>
+            }
+        }
+    }
+}</code></pre>
+
+<div class="callout good"><b>关键优势</b>：<code>watch::changed().await</code> 让暂停是<b>真正的挂起</b>（不占 CPU、不轮询），恢复是<b>零延迟</b>唤醒。控制意图用「最新值」语义，用户狂点暂停/恢复也只认最后一下，天然幂等。</div>
+
+<h3>4.3 四种控制的语义</h3>
+<table>
+<thead><tr><th>操作</th><th>端点</th><th>Pending 时</th><th>Running/Paused 时</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><b>暂停</b></td><td class="mono">POST …/pause</td><td>标记 pause_requested，取出即挂起</td><td>推 <code>Control::Pause</code>，下个 checkpoint 挂起</td><td>占用 worker 槽（见 §4.4 权衡）</td></tr>
+<tr><td><b>恢复</b></td><td class="mono">POST …/resume</td><td>清除 pause_requested</td><td>推 <code>Control::Run</code>，唤醒挂起点</td><td>幂等</td></tr>
+<tr><td><b>停止</b></td><td class="mono">POST …/cancel</td><td>直接置 Cancelled，出队</td><td>推 <code>Control::Cancel</code> → Cancelling → 清理 → Cancelled</td><td>协作式，非瞬时</td></tr>
+<tr><td><b>重启</b></td><td class="mono">POST …/restart</td><td>—（无意义）</td><td>仅终态可重启</td><td>见 §4.5</td></tr>
+</tbody>
+</table>
+
+<h3>4.4 暂停占槽的权衡</h3>
+<p>暂停中的作业仍占用一个 worker 并发槽。两种取舍：</p>
+<ul class="tight">
+  <li><b>M1 简单版（推荐先行）</b>：暂停占槽。实现最简，语义清晰（handler 栈还在，恢复即原地继续）。配合「最大暂停时长」兜底，超时自动取消，防止长期占槽饿死队列。</li>
+  <li><b>M2+ 让位版</b>：暂停超过阈值时，若 handler 支持 <code>Suspendable</code>（能把进度序列化为 checkpoint），则卸载出内存、释放槽，恢复时从 checkpoint 重建。成本高，仅对超长作业开启。</li>
+</ul>
+
+<h3>4.5 重启（restart）语义</h3>
+<p>只对 <span class="st st-fail">Failed</span> / <span class="st st-cancel">Cancelled</span> 终态作业开放。两种模式，由 <code>JobKind</code> 声明其支持哪种：</p>
+<table>
+<thead><tr><th>模式</th><th>行为</th><th>适用</th><th>前提</th></tr></thead>
+<tbody>
+<tr><td><b>从头重跑</b><br><span class="mono">restart=fresh</span></td><td>用原 params 派生一个新 <code>job_id</code> 重新执行（原作业保留作审计）。</td><td>报表计算/校验（幂等，按 org+period 覆盖写）</td><td>Handler 幂等</td></tr>
+<tr><td><b>断点续跑</b><br><span class="mono">restart=resume</span></td><td>从 <code>cmx_job_checkpoint</code> 读取游标，跳过已完成项，只补未完成部分。</td><td>凭证记账/大批量汇总（重跑代价高）</td><td>Handler 实现 <code>Resumable</code>，周期性存 checkpoint</td></tr>
+</tbody>
+</table>
+<div class="callout info"><b>幂等是重启的地基</b>——这与库内既有实践一致：报表计算按 <code>org+period</code> 覆盖写 <code>cr_cell_data</code>、DCT/DOC 落库前有列级校验与错误码。新业务接入时，方案要求 handler 显式声明幂等级别，restart 才敢自动执行；否则退化为「仅允许人工确认后从头重跑」。</div>
+
+<!-- ══════════════════════════════ 5 ══════════════════════════════ -->
+<h2 id="s5">5 · 进度模型：快照 + 增量事件</h2>
+
+<h3>5.1 双层进度</h3>
+<p>进度分两个粒度，前端可同时展示「总进度条」与「明细流」：</p>
+<pre><code><span class="k">pub struct</span> <span class="t">ProgressSnapshot</span> {
+    <span class="k">pub</span> phase:        <span class="t">String</span>,      <span class="c">// 当前阶段名："装载模板" / "求值" / "落库"</span>
+    <span class="k">pub</span> phase_index:  <span class="t">u32</span>,         <span class="c">// 第几阶段（多阶段作业）</span>
+    <span class="k">pub</span> phase_total:  <span class="t">u32</span>,         <span class="c">// 总阶段数</span>
+    <span class="k">pub</span> done:         <span class="t">u64</span>,         <span class="c">// 已完成明细数（如已算 28 张）</span>
+    <span class="k">pub</span> total:        <span class="t">u64</span>,         <span class="c">// 总明细数（42 张）→ 百分比 = done/total</span>
+    <span class="k">pub</span> ok:           <span class="t">u64</span>,         <span class="c">// 成功数</span>
+    <span class="k">pub</span> failed:       <span class="t">u64</span>,         <span class="c">// 失败数</span>
+    <span class="k">pub</span> message:      <span class="t">String</span>,      <span class="c">// 一句话人读状态</span>
+    <span class="k">pub</span> eta_ms:       <span class="t">Option&lt;u64&gt;</span>, <span class="c">// 预估剩余（滑动均速外推，可选）</span>
+    <span class="k">pub</span> items:        <span class="t">Vec&lt;ProgressItem&gt;</span>, <span class="c">// 明细行（可裁剪：仅推最近变化的，全量走详情接口）</span>
+    <span class="k">pub</span> rev:          <span class="t">u64</span>,         <span class="c">// 单调递增版本号，用于前端去重/乱序保护</span>
+}
+<span class="k">pub struct</span> <span class="t">ProgressItem</span> {
+    <span class="k">pub</span> key:    <span class="t">String</span>,   <span class="c">// 稳定业务键（报表 code），用于 upsert 寻址</span>
+    <span class="k">pub</span> label:  <span class="t">String</span>,   <span class="c">// 显示名</span>
+    <span class="k">pub</span> state:  <span class="t">ItemState</span>,<span class="c">// Queued|Running|Ok|Failed|Skipped</span>
+    <span class="k">pub</span> detail: <span class="t">String</span>,   <span class="c">// "1.2s" / "除零错误@B12"</span>
+}</code></pre>
+
+<h3>5.2 快照优先，增量推送</h3>
+<p><code>JobManager</code> 内每个作业持有一份<b>权威快照</b>。handler 上报时更新快照并把 diff 交 Hub 扇出。设计要点：</p>
+<ul class="tight">
+  <li><b>新订阅先收全量</b>——EventSource 连上，Hub 先发一个 <code>snapshot</code> 事件（当前完整快照），之后只发 <code>progress</code> 增量。刷新页面 / 多标签页 / 断线重连都能立即对齐，不丢状态。</li>
+  <li><b>rev 单调序号</b>——每次快照更新 <code>rev+1</code>。前端只接受 <code>rev</code> 更大的事件，天然抗乱序、抗重复。</li>
+  <li><b>推送去抖</b>——handler 可能每毫秒更新明细；Hub 侧按 ~100–200ms 合并推送（coalesce），避免风暴。落库更狠：仅在阶段切换 / 完成 / 失败 / 固定间隔（如每 5s 或每 N 条）持久化快照，不是每次都写。</li>
+  <li><b>明细裁剪</b>——大作业（数千项）不把全部 items 塞进每个事件。增量只带「本次变化的行」；前端要全量时走 <code>GET /api/jobs/{id}</code>（含完整快照）或分页明细接口。</li>
+</ul>
+
+<!-- ══════════════════════════════ 6 ══════════════════════════════ -->
+<h2 id="s6">6 · 通信设计：SSE 端点与事件协议</h2>
+
+<h3>6.1 端点清单</h3>
+<table>
+<thead><tr><th>方法 · 路径</th><th>作用</th><th>鉴权</th><th>母版</th></tr></thead>
+<tbody>
+<tr><td class="mono">POST /api/jobs</td><td>提交作业，返回 <code>job_id</code>（前端发起路径）</td><td>JWT header</td><td>—</td></tr>
+<tr><td class="mono">GET /api/jobs</td><td>作业列表，过滤 <code>?kind=&status=&org_id=&mine=1</code>，分页</td><td>JWT header</td><td>rpt 列表</td></tr>
+<tr><td class="mono">GET /api/jobs/{id}</td><td>作业详情（含完整 ProgressSnapshot + 结果/错误）</td><td>JWT header</td><td>rpt 详情</td></tr>
+<tr><td class="mono">GET /api/jobs/{id}/events</td><td><b>SSE 事件流</b>（订阅单作业实时进度）</td><td>query <code>access_token</code> + 白名单</td><td><code>/api/ai/events</code></td></tr>
+<tr><td class="mono">GET /api/jobs/events</td><td><b>SSE 汇总流</b>（订阅「我可见的所有作业」状态变化，供列表页实时刷新）</td><td>query <code>access_token</code> + 白名单</td><td>同上，扇出维度=user/org</td></tr>
+<tr><td class="mono">POST /api/jobs/{id}/pause</td><td>暂停</td><td>JWT header</td><td>ai abort</td></tr>
+<tr><td class="mono">POST /api/jobs/{id}/resume</td><td>恢复</td><td>JWT header</td><td>—</td></tr>
+<tr><td class="mono">POST /api/jobs/{id}/cancel</td><td>停止</td><td>JWT header</td><td>ai abort</td></tr>
+<tr><td class="mono">POST /api/jobs/{id}/restart</td><td>重启（fresh / resume）</td><td>JWT header</td><td>—</td></tr>
+<tr><td class="mono">DELETE /api/jobs/{id}</td><td>删除作业记录（仅终态；清订阅+日志）</td><td>JWT header</td><td>ai delete_session</td></tr>
+</tbody>
+</table>
+
+<div class="callout info"><b>SSE 鉴权沿用现成解法</b>：浏览器 <code>EventSource</code> 无法发 <code>Authorization</code> 头，故 <code>/api/jobs/*/events</code> 与 <code>/api/jobs/events</code> 通过 query <code>access_token</code> 传 JWT，并加入 <code>mw_auth</code> 白名单让中间件放行、handler 内由已注入的 <code>AuthContext</code> 校验归属。这与 <code>cmx-ai</code> 的 <code>subscribe_events</code> 完全同构——白名单在 <code>[auth].whitelist</code> 追加两条正则即可。</div>
+
+<h3>6.2 SSE 事件协议</h3>
+<p>事件用 SSE 的 <code>event:</code> 字段区分类型，<code>data:</code> 载 JSON。对齐 <code>AiSseEvent{event_name, payload}</code>。</p>
+<table>
+<thead><tr><th>event</th><th>时机</th><th>data 载荷（要点）</th></tr></thead>
+<tbody>
+<tr><td class="mono">snapshot</td><td>订阅建立时首帧</td><td>完整 <code>ProgressSnapshot</code> + status，供前端初始化全貌</td></tr>
+<tr><td class="mono">state</td><td>状态机跃迁</td><td><code>{status, rev, at}</code>：pending→running→paused→…</td></tr>
+<tr><td class="mono">progress</td><td>进度推进（去抖后）</td><td>diff：<code>{done,total,ok,failed,phase,message,eta_ms,rev}</code></td></tr>
+<tr><td class="mono">item</td><td>明细行变化</td><td>变化的 <code>ProgressItem</code>（前端按 key upsert）</td></tr>
+<tr><td class="mono">log</td><td>业务日志</td><td><code>{level, text, at}</code>：INFO/WARN/ERROR（对齐 CmxErrCode）</td></tr>
+<tr><td class="mono">result</td><td>成功完成</td><td>结果摘要（如「42 张成功，落库 1.3 万单元格」）</td></tr>
+<tr><td class="mono">error</td><td>失败</td><td><code>{code, message, violations?}</code>：对齐 DCT/DOC 结构化 violations</td></tr>
+<tr><td class="mono">done</td><td>流终结（任何终态后）</td><td>空；提示前端可关闭 EventSource</td></tr>
+</tbody>
+</table>
+
+<pre><code><span class="c">// 前端最小消费（对齐 AI 前端 EventSource 用法）</span>
+<span class="k">const</span> es = <span class="k">new</span> <span class="t">EventSource</span>(<span class="s">`/api/jobs/</span>${id}<span class="s">/events?access_token=</span>${token}<span class="s">`</span>)
+es.addEventListener(<span class="s">'snapshot'</span>, e =&gt; renderAll(<span class="t">JSON</span>.parse(e.data)))
+es.addEventListener(<span class="s">'progress'</span>, e =&gt; updateBar(<span class="t">JSON</span>.parse(e.data)))
+es.addEventListener(<span class="s">'item'</span>,     e =&gt; upsertRow(<span class="t">JSON</span>.parse(e.data)))
+es.addEventListener(<span class="s">'log'</span>,      e =&gt; appendLog(<span class="t">JSON</span>.parse(e.data)))
+es.addEventListener(<span class="s">'done'</span>,     () =&gt; es.close())</code></pre>
+
+<div class="callout warn"><b>为什么是 SSE 而非 WebSocket</b>：进度是<b>单向</b>后端→前端推送，控制走独立 HTTP POST 即可，无需双向长连。SSE 更轻、自动重连、走标准 HTTP、库内已有成熟母版与鉴权解法。WebSocket 的双向能力在此是过度设计。若未来出现「前端高频回传」需求（如交互式调参），再局部引入 WS 不迟。</div>
+
+<h3>6.3 断线重连</h3>
+<p><code>EventSource</code> 原生自动重连。重连后 handler 端 <code>subscribe</code> 会重新发一帧 <code>snapshot</code>，前端整体对齐，无需 <code>Last-Event-ID</code> 复杂补偿。作业终态后仍可 <code>GET /api/jobs/{id}</code> 拉最终快照，SSE 只是「活跃期」的加速通道。</p>
+
+<!-- ══════════════════════════════ 7 ══════════════════════════════ -->
+<h2 id="s7">7 · 后端架构：crate 分层与核心抽象</h2>
+
+<h3>7.1 crate 群（对标 cmx-rpt 三分层）</h3>
+<table>
+<thead><tr><th>crate</th><th>职责</th><th>依赖</th><th>母版</th></tr></thead>
+<tbody>
+<tr><td class="mono">cmx-job-core</td><td>领域模型、<code>JobStatus</code> 状态机、<code>JobHandler</code>/<code>JobContext</code> trait、<code>JobManager</code>、<code>JobEventHub</code>、<code>JobRegistry</code>（inventory）</td><td>仅 cmx-core / cmx-traits / tokio / serde，<b>零业务依赖</b></td><td>cmx-rpt-model + cmx-flow 引擎</td></tr>
+<tr><td class="mono">cmx-job-store-pg</td><td>作业/日志/断点持久化（tokio-postgres，主库 cmx），快照落库去抖，历史查询</td><td>cmx-job-core + cmx-database-pg</td><td>cmx-rpt-store-pg</td></tr>
+<tr><td class="mono">cmx-job-api</td><td>薄 axum handler + SSE，<code>JobModule: ModuleRoutes</code></td><td>cmx-job-core + cmx-job-store-pg + cmx-api</td><td>cmx-rpt-api / cmx-flow-api</td></tr>
+</tbody>
+</table>
+
+<h3>7.2 破环：与 ReportModule 完全一致</h3>
+<p><code>cmx-api</code> <b>不</b>依赖 <code>cmx-job-*</code>；由 <code>web-server</code> 在 <code>routes.rs</code> 合并：</p>
+<pre><code><span class="c">// crates/web/web-server/src/routes.rs（新增一行，同 ReportModule）</span>
+<span class="k">pub fn</span> <span class="t">routes</span>() -&gt; <span class="t">Router</span>&lt;<span class="t">CmxAppState</span>&gt; {
+    api_routes()
+        .merge(<span class="t">ReportModule</span>.routes())
+        .merge(<span class="t">FlowModule</span>.routes())
+        .merge(<span class="t">DocModule</span>.routes())
+        .merge(<span class="t">DctModule</span>.routes())
+        .merge(<span class="t">JobModule</span>.routes())        <span class="c">// ← 新增：异步任务中心</span>
+}</code></pre>
+<p>业务 crate（<code>cmx-rpt</code> 等）反过来<b>依赖 <code>cmx-job-core</code></b> 来实现 <code>JobHandler</code>——依赖方向单向向下，无环。这正是库内 <code>ReportModule</code>「web-server 合并、cmx-api 不反向依赖」的翻版。</p>
+
+<h3>7.3 全局单例与初始化</h3>
+<pre><code><span class="c">// cmx-job-core：OnceCell 单例，对齐 cmx-ai::init_ai_subsystem / cmx-flow 引擎单例</span>
+<span class="k">static</span> <span class="t">MANAGER</span>: <span class="t">OnceCell</span>&lt;<span class="t">JobManager</span>&gt; = <span class="t">OnceCell</span>::const_new();
+
+<span class="k">pub async fn</span> <span class="t">init_job_subsystem</span>(cfg: <span class="t">JobConfig</span>, db: <span class="t">DbId</span>) {
+    <span class="k">let</span> mgr = <span class="t">JobManager</span>::new(cfg, <span class="t">Box</span>::new(<span class="t">PgJobStore</span>::new(db)));
+    mgr.recover_orphans().<span class="k">await</span>;      <span class="c">// 崩溃恢复：把 running→failed/pending（见 §8.3）</span>
+    mgr.start_workers();                 <span class="c">// 启动 worker pool（并发闸）</span>
+    <span class="k">let</span> _ = <span class="t">MANAGER</span>.set(mgr);
+}
+<span class="k">pub fn</span> <span class="t">manager</span>() -&gt; <span class="t">Option</span>&lt;&<span class="k">'static</span> <span class="t">JobManager</span>&gt; { <span class="t">MANAGER</span>.get() }</code></pre>
+<p>在 <code>web-server/main.rs</code> 的启动序列中，于 <code>init_datasources()</code> 之后调用 <code>cmx_job_core::init_job_subsystem(...)</code>——与 <code>cmx_flow_api::spawn_timer_poller()</code>、<code>cmx_ai::init_ai_subsystem()</code> 并列，位置一致（依赖数据源，故在其后）。</p>
+
+<h3>7.4 JobHandler / JobContext —— 业务唯一接触面</h3>
+<pre><code><span class="c">// 业务方只实现这个 trait（一次报表计算的真实逻辑）</span>
+<span class="k">#[async_trait]</span>
+<span class="k">pub trait</span> <span class="t">JobHandler</span>: <span class="t">Send</span> + <span class="t">Sync</span> {
+    <span class="k">fn</span> kind(&<span class="k">self</span>) -&gt; &<span class="k">'static</span> <span class="k">str</span>;              <span class="c">// "rpt.compute"</span>
+    <span class="k">fn</span> capabilities(&<span class="k">self</span>) -&gt; <span class="t">JobCaps</span> {          <span class="c">// 声明能力：可暂停? 幂等? 可断点续跑?</span>
+        <span class="t">JobCaps</span>{ pausable:<span class="k">true</span>, restart:<span class="t">Restart</span>::<span class="n">Fresh</span>, idempotent:<span class="k">true</span> }
+    }
+    <span class="k">fn</span> plan(&<span class="k">self</span>, params:&<span class="t">Value</span>) -&gt; <span class="t">Result&lt;JobPlan&gt;</span>;<span class="c">// 预估 total/阶段/标题（提交时先跑，给进度条基数）</span>
+    <span class="k">async fn</span> run(&<span class="k">self</span>, ctx:&<span class="t">JobContext</span>, params:<span class="t">Value</span>) -&gt; <span class="t">Result&lt;Value, JobError&gt;</span>;
+}
+
+<span class="c">// 框架注入的句柄（进度上报 + 控制响应），业务只调不实现</span>
+<span class="k">impl</span> <span class="t">JobContext</span> {
+    <span class="k">pub async fn</span> checkpoint(&<span class="k">self</span>) -&gt; <span class="t">Result&lt;(), JobCancelled&gt;</span>;  <span class="c">// §4.2 暂停/取消/心跳</span>
+    <span class="k">pub fn</span> set_phase(&<span class="k">self</span>, idx:<span class="t">u32</span>, total:<span class="t">u32</span>, name:&<span class="k">str</span>);
+    <span class="k">pub fn</span> progress_inc(&<span class="k">self</span>, n:<span class="t">u64</span>);
+    <span class="k">pub fn</span> item_running(&<span class="k">self</span>, key:&<span class="k">str</span>, detail:&<span class="k">str</span>);
+    <span class="k">pub fn</span> item_ok(&<span class="k">self</span>, key:&<span class="k">str</span>, elapsed_ms:<span class="t">u64</span>);
+    <span class="k">pub fn</span> item_fail(&<span class="k">self</span>, key:&<span class="k">str</span>, err:&<span class="k">dyn</span> <span class="t">Display</span>);
+    <span class="k">pub fn</span> log(&<span class="k">self</span>, level:<span class="t">LogLevel</span>, text:<span class="k">impl</span> <span class="t">Into&lt;String&gt;</span>);
+    <span class="k">pub async fn</span> save_checkpoint(&<span class="k">self</span>, cursor:<span class="t">Value</span>);          <span class="c">// 断点续跑用（可选）</span>
+}</code></pre>
+
+<h3>7.5 注册：一条 inventory::submit!</h3>
+<pre><code><span class="c">// 对齐 cmx-rpt-formula 的函数注册（inventory::submit!{ RegisteredRptFn{...} }）</span>
+<span class="k">pub struct</span> <span class="t">RegisteredJob</span> { <span class="k">pub</span> make: <span class="k">fn</span>() -&gt; <span class="t">Box&lt;dyn JobHandler&gt;</span> }
+<span class="k">inventory</span>::collect!(<span class="t">RegisteredJob</span>);
+
+<span class="c">// 业务侧（cmx-rpt 内）：</span>
+<span class="k">inventory</span>::submit!{ <span class="t">RegisteredJob</span>{ make: || <span class="t">Box</span>::new(<span class="t">RptComputeJob</span>) } }
+<span class="c">// JobManager 启动时 inventory::iter 收集所有 handler，建 kind→make 映射。新增业务零框架改动。</span></code></pre>
+
+<!-- ══════════════════════════════ 8 ══════════════════════════════ -->
+<h2 id="s8">8 · 持久化设计：表结构与断点续跑</h2>
+
+<h3>8.1 三张表（主库 cmx，前缀 cmx_job_）</h3>
+<pre><code><span class="c">-- 作业主表：一行一作业，状态/进度快照/结果</span>
+<span class="k">CREATE TABLE</span> cmx_job (
+  id            <span class="t">BIGINT</span> <span class="k">PRIMARY KEY</span>,          <span class="c">-- 后端铸号（对齐 bigint 主键后端生成）</span>
+  kind          <span class="t">VARCHAR</span>(<span class="n">64</span>)  <span class="k">NOT NULL</span>,
+  title         <span class="t">VARCHAR</span>(<span class="n">256</span>) <span class="k">NOT NULL</span>,
+  status        <span class="t">VARCHAR</span>(<span class="n">16</span>)  <span class="k">NOT NULL</span>,      <span class="c">-- pending/running/paused/cancelling/cancelled/completed/failed</span>
+  params        <span class="t">JSONB</span>        <span class="k">NOT NULL</span>,
+  progress      <span class="t">JSONB</span>,                     <span class="c">-- ProgressSnapshot 去抖落库（非每次）</span>
+  result        <span class="t">JSONB</span>, error <span class="t">JSONB</span>,
+  priority      <span class="t">SMALLINT</span>     <span class="k">NOT NULL DEFAULT</span> <span class="n">0</span>,
+  origin        <span class="t">VARCHAR</span>(<span class="n">16</span>),                <span class="c">-- frontend/backend</span>
+  trigger       <span class="t">VARCHAR</span>(<span class="n">64</span>),                <span class="c">-- 后端发起时的触发源（timer:xxx / event:yyy）</span>
+  org_id        <span class="t">BIGINT</span>, created_by <span class="t">BIGINT</span>,
+  created_at    <span class="t">BIGINT</span> <span class="k">NOT NULL</span>, started_at <span class="t">BIGINT</span>, finished_at <span class="t">BIGINT</span>,
+  node_id       <span class="t">VARCHAR</span>(<span class="n">64</span>)                 <span class="c">-- 归属实例（M3 分布式用；M1 恒为本机）</span>
+);
+<span class="k">CREATE INDEX</span> ix_cmx_job_status  <span class="k">ON</span> cmx_job(status, created_at <span class="k">DESC</span>);
+<span class="k">CREATE INDEX</span> ix_cmx_job_kind    <span class="k">ON</span> cmx_job(kind, status);
+<span class="k">CREATE INDEX</span> ix_cmx_job_org     <span class="k">ON</span> cmx_job(org_id, created_at <span class="k">DESC</span>);
+
+<span class="c">-- 日志/事件流水（可选异步批量插；活跃期主要走 SSE，落库供事后审计）</span>
+<span class="k">CREATE TABLE</span> cmx_job_log (
+  id      <span class="t">BIGSERIAL</span> <span class="k">PRIMARY KEY</span>,
+  job_id  <span class="t">BIGINT</span> <span class="k">NOT NULL</span>, seq <span class="t">BIGINT</span> <span class="k">NOT NULL</span>,  <span class="c">-- seq 单调，回放顺序</span>
+  level   <span class="t">VARCHAR</span>(<span class="n">8</span>), event <span class="t">VARCHAR</span>(<span class="n">16</span>), text <span class="t">TEXT</span>, data <span class="t">JSONB</span>, at <span class="t">BIGINT</span>
+);
+<span class="k">CREATE INDEX</span> ix_cmx_job_log ON cmx_job_log(job_id, seq);
+
+<span class="c">-- 断点：断点续跑作业周期性存游标（哪些明细已完成）</span>
+<span class="k">CREATE TABLE</span> cmx_job_checkpoint (
+  job_id  <span class="t">BIGINT</span> <span class="k">PRIMARY KEY</span>,
+  cursor  <span class="t">JSONB</span> <span class="k">NOT NULL</span>,               <span class="c">-- 业务自定义（如 {done_codes:[...], phase:2}）</span>
+  rev     <span class="t">BIGINT</span>, at <span class="t">BIGINT</span>
+);</code></pre>
+
+<h3>8.2 落库策略：省写、抗风暴</h3>
+<ul class="tight">
+  <li><b>状态跃迁必落</b>——pending/running/paused/终态，每次 UPDATE status（低频、必须准）。</li>
+  <li><b>进度快照去抖落</b>——阶段切换、完成、失败、或每 N 秒/每 N 条才写 <code>progress</code> JSONB。活跃进度的高频细节交给 SSE（内存态），DB 只保留「够用来恢复展示」的粗粒度。</li>
+  <li><b>日志异步批插</b>——<code>cmx_job_log</code> 用有界 channel + 批量 flush，不阻塞 handler。溢出时优先保 ERROR/WARN，丢弃冗余 INFO（记一条「日志被截断」）。</li>
+</ul>
+
+<h3>8.3 崩溃恢复（recover_orphans）</h3>
+<p>进程重启时，DB 里可能残留 <code>running/paused</code> 的「孤儿作业」（内存态已随进程消失）。启动时统一处理：</p>
+<table>
+<thead><tr><th>原状态</th><th>处理</th><th>依据</th></tr></thead>
+<tbody>
+<tr><td>running / paused / cancelling</td><td>幂等作业 → 置 <code>pending</code> 重新入队自动续跑；非幂等 → 置 <code>failed</code>（error=「进程重启中断，请人工重启」）</td><td>handler <code>capabilities().idempotent</code></td></tr>
+<tr><td>pending</td><td>直接重新入队</td><td>尚未开始，无副作用</td></tr>
+</tbody>
+</table>
+<div class="callout info">这与 <code>cmx-flow</code> 引擎「启动期从库装载已发布定义 + 定时器 poller 找 due jobs」的恢复思路一致——状态在库、进程无状态可重建。</div>
+
+<!-- ══════════════════════════════ 9 ══════════════════════════════ -->
+<h2 id="s9">9 · 业务接入：以「报表计算」为样例</h2>
+
+<p>把现有同步的 <code>report_design_compute</code> 改造为一个 <code>JobHandler</code>。<b>业务逻辑不变，只是包进 job 外壳并埋进度点。</b></p>
+
+<pre><code><span class="c">// cmx-rpt 内新增 rpt_compute_job.rs（依赖 cmx-job-core）</span>
+<span class="k">pub struct</span> <span class="t">RptComputeJob</span>;
+
+<span class="k">#[async_trait]</span>
+<span class="k">impl</span> <span class="t">JobHandler</span> <span class="k">for</span> <span class="t">RptComputeJob</span> {
+    <span class="k">fn</span> kind(&<span class="k">self</span>) -&gt; &<span class="k">'static str</span> { <span class="s">"rpt.compute"</span> }
+    <span class="k">fn</span> capabilities(&<span class="k">self</span>) -&gt; <span class="t">JobCaps</span> { <span class="t">JobCaps</span>{ pausable:<span class="k">true</span>, restart:<span class="t">Restart</span>::<span class="n">Fresh</span>, idempotent:<span class="k">true</span> } }
+
+    <span class="k">fn</span> plan(&<span class="k">self</span>, p:&<span class="t">Value</span>) -&gt; <span class="t">Result&lt;JobPlan&gt;</span> {           <span class="c">// 提交时预估，给进度条基数</span>
+        <span class="k">let</span> codes = p[<span class="s">"report_codes"</span>].as_array()...;
+        <span class="n">Ok</span>(<span class="t">JobPlan</span>{ total: codes.len(), title: <span class="k">format!</span>(<span class="s">"计算 {} · {} · {} 张报表"</span>, org, period, codes.len()), ... })
+    }
+
+    <span class="k">async fn</span> run(&<span class="k">self</span>, ctx:&<span class="t">JobContext</span>, p:<span class="t">Value</span>) -&gt; <span class="t">Result&lt;Value, JobError&gt;</span> {
+        ctx.set_phase(<span class="n">1</span>, <span class="n">3</span>, <span class="s">"装载模板"</span>);
+        <span class="k">let</span> snaps = load_snapshots(&codes).<span class="k">await</span>?;         <span class="c">// 复用既有装载</span>
+        ctx.log(<span class="t">INFO</span>, <span class="k">format!</span>(<span class="s">"装载 {} 张报表模板"</span>, snaps.len()));
+
+        ctx.set_phase(<span class="n">2</span>, <span class="n">3</span>, <span class="s">"求值"</span>);
+        <span class="k">let mut</span> results = vec![];
+        <span class="k">for</span> snap <span class="k">in</span> snaps {
+            ctx.checkpoint().<span class="k">await</span>?;                     <span class="c">// ← 唯一的控制配合点</span>
+            ctx.item_running(&snap.code, <span class="s">"求值中"</span>);
+            <span class="k">match</span> compute_report(&snap, &provider, periods, org_parent).<span class="k">await</span> {  <span class="c">// 复用 cmx-rpt-formula</span>
+                <span class="n">Ok</span>(out) =&gt; { ctx.item_ok(&snap.code, out.elapsed); results.push(out); }
+                <span class="n">Err</span>(e)  =&gt; { ctx.item_fail(&snap.code, &e); <span class="c">/* 策略:续算 */</span> }
+            }
+            ctx.progress_inc(<span class="n">1</span>);
+        }
+
+        ctx.set_phase(<span class="n">3</span>, <span class="n">3</span>, <span class="s">"落库"</span>);
+        <span class="k">let</span> n = persist_cells(&results, org, period).<span class="k">await</span>?;   <span class="c">// 复用既有 cr_cell_data 落库</span>
+        <span class="k">if</span> ctx.checkpoint_dirty() { ctx.save_checkpoint(cursor).<span class="k">await</span>; }
+        <span class="n">Ok</span>(<span class="k">json!</span>({ <span class="s">"reports"</span>: results.len(), <span class="s">"cells"</span>: n }))
+    }
+}
+<span class="k">inventory</span>::submit!{ <span class="t">RegisteredJob</span>{ make: || <span class="t">Box</span>::new(<span class="t">RptComputeJob</span>) } }</code></pre>
+
+<table>
+<thead><tr><th>接入清单（每个新业务）</th><th>工作量</th></tr></thead>
+<tbody>
+<tr><td>① 实现 <code>JobHandler</code>（把已有逻辑包进 <code>run</code>，埋 checkpoint + 进度上报）</td><td>核心，~半天</td></tr>
+<tr><td>② 一条 <code>inventory::submit!</code> 注册</td><td>1 行</td></tr>
+<tr><td>③（可选）保留原同步端点作兼容，或改为「POST /api/jobs {kind:'rpt.compute'}」薄封装</td><td>可选</td></tr>
+</tbody>
+</table>
+
+<h3>9.1 首批接入对象</h3>
+<table>
+<thead><tr><th>JobKind</th><th>业务</th><th>现状端点/位置</th><th>幂等/重启</th></tr></thead>
+<tbody>
+<tr><td class="mono">rpt.compute</td><td>报表计算</td><td><code>report_design_compute</code> / <code>rpt_compute</code></td><td>幂等（org+period 覆盖）→ Fresh</td></tr>
+<tr><td class="mono">rpt.verify</td><td>报表校验</td><td>校验逻辑（对齐 dataset/validate）</td><td>幂等 → Fresh</td></tr>
+<tr><td class="mono">doc.post</td><td>凭证记账</td><td><code>cmx-doc</code> 批量落库/过账</td><td>需断点（代价高）→ Resume</td></tr>
+<tr><td class="mono">sc.rollup</td><td>销售汇总</td><td><code>sc/</code> 汇总</td><td>幂等 → Fresh</td></tr>
+</tbody>
+</table>
+
+<!-- ══════════════════════════════ 10 ══════════════════════════════ -->
+<h2 id="s10">10 · 前端设计：任务中心工作台</h2>
+
+<p>沿用库内 native-pages 惯例：四区/三栏工作台 + 多实例监控页，注册进 <code>index.json</code>，对标 <code>portal.rpt.report-app-workbench</code> + <code>portal.rpt.report-applier</code> 的「工作台 + 应用器」双页模式。</p>
+
+<h3>10.1 页面注册（index.json，新增两项）</h3>
+<table>
+<thead><tr><th>id</th><th>名称</th><th>职责</th></tr></thead>
+<tbody>
+<tr><td class="mono">portal.job.center</td><td>任务中心工作台</td><td>explorer：种类/状态过滤树；content：作业列表（实时刷新，每行进度条+控制按钮）；property：选中作业摘要。订阅 <code>GET /api/jobs/events</code> 汇总流刷新列表。</td></tr>
+<tr><td class="mono">portal.job.monitor</td><td>任务监控器（多实例）</td><td>单作业深度视图：大进度条+阶段、明细流（虚拟滚动）、实时日志、暂停/停止/重启控制条。订阅 <code>GET /api/jobs/{id}/events</code>。可多标签页并行监控不同作业。</td></tr>
+</tbody>
+</table>
+
+<h3>10.2 监控器布局</h3>
+<div class="flow">┌──────────────────────────────────────────────────────────────────────────┐
+│ 计算 2026-07 · 总部 · 42 张报表          <span class="st st-run">running</span>   [⏸ 暂停] [⏹ 停止] [↻ 重启] │
+├──────────────────────────────────────────────────────────────────────────┤
+│ 阶段 2/3 · 求值      ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░  68%   28/42  ✔26 ✖2   ETA ~40s  │
+├───────────────────────────── 明细流（虚拟滚动）────────────────────────────┤
+│  资产负债表      <span class="st st-done">✔</span> 1.2s          利润表          <span class="st st-run">⟳</span> 求值中…            │
+│  现金流量表      <span class="st st-fail">✖</span> 除零@B12       所有者权益表    <span class="st st-pend">…</span> 排队              │
+│  …（余 36 行，按 key upsert，失败行可点开看 violations）                     │
+├────────────────────────────────── 日志 ───────────────────────────────────┤
+│  12:04:01 [INFO] 装载 42 张报表模板                                         │
+│  12:04:07 [WARN] 现金流量表 B12 取数为 0，触发除零                          │
+└──────────────────────────────────────────────────────────────────────────┘</div>
+
+<h3>10.3 复用既有前端资产</h3>
+<ul class="tight">
+  <li><b>专业对话框</b>——失败/冲突弹 <code>cmx-message-dialog</code>（三级别 light/dark），错误 <code>violations</code> 对齐 DCT/DOC 的结构化展示（<code>presentDocError</code> 母版）。</li>
+  <li><b>SSE 消费</b>——EventSource 用法对齐 AI 前端；断线自动重连 + <code>snapshot</code> 首帧对齐。</li>
+  <li><b>控制按钮</b>——乐观 UI：点暂停立即置灰+显示「暂停中」，待 <code>state:paused</code> 事件坐实（呼应 <code>Cancelling</code> 中间态）。</li>
+  <li><b>入口</b>——报表工作台「计算/校验」按钮改为「提交作业 → 弹监控器」；其它工作台同理。任务中心作为全局入口聚合所有种类。</li>
+</ul>
+
+<!-- ══════════════════════════════ 11 ══════════════════════════════ -->
+<h2 id="s11">11 · 两条发起路径：前端发起 / 后端发起</h2>
+
+<div class="cols2">
+<div>
+<h4>① 前端发起</h4>
+<div class="flow">用户点「计算」
+   │ POST /api/jobs
+   │  { kind:"rpt.compute",
+   │    params:{org,period,codes} }
+   ▼
+JobManager::submit()
+   │ plan() 预估 → 建 Job(pending)
+   │ 落库 + 入队 + 返回 job_id
+   ▼
+前端拿 job_id → 打开监控器
+   → EventSource 订阅进度</div>
+</div>
+<div>
+<h4>② 后端发起</h4>
+<div class="flow">定时器 / GlobalEventBus / 其它服务
+   │ 例：期末自动结账、夜间批量汇总
+   │ cmx_job_core::manager()
+   │        .submit(kind, params,
+   │         Origin::Backend{trigger})
+   ▼
+JobManager::submit()  ← 同一入口
+   │ 建 Job(pending, origin=backend)
+   ▼
+自动执行；无人监控也照跑
+   → 任何前端可事后进任务中心查看
+   → 失败可配置告警（见 §12）</div>
+</div>
+</div>
+
+<div class="callout good"><b>统一入口是关键</b>：无论谁发起，都汇聚到 <code>JobManager::submit()</code>，共享同一套状态机、进度、控制、持久化、监控 UI。后端发起只是 <code>origin=Backend</code> 且无人实时盯着——但作业照样落库、照样可被任何有权限的前端进任务中心「补看」进度与历史。对齐库内 <code>cmx-flow</code> 定时器 poller、<code>GlobalEventBus</code> 既有设施，后端触发天然可接。</div>
+
+<!-- ══════════════════════════════ 12 ══════════════════════════════ -->
+<h2 id="s12">12 · 扩展性与未来演进</h2>
+
+<table>
+<thead><tr><th>方向</th><th>预留设计</th><th>落地时机</th></tr></thead>
+<tbody>
+<tr><td><b>优先级调度</b></td><td><code>priority</code> 字段已在表/模型；worker 取队列时按 (priority DESC, created_at) 出队。M1 先 FIFO，切换只改出队排序。</td><td>M2</td></tr>
+<tr><td><b>并发编排 / 子作业</b></td><td><code>parent_job_id</code> 预留。一个「批量计算」父作业 fan-out 出多个子作业，父进度 = 子进度聚合。母版参考 <code>cmx-flow</code> 子流程（callActivity、逐层唤醒）。</td><td>M2/M3</td></tr>
+<tr><td><b>DAG 依赖</b></td><td>「先算子公司→再合并」这类有序编排。可用子作业 + <code>depends_on</code>；或直接复用 <code>cmx-flow</code> 引擎把作业编排成流程（两系统互补：flow 管编排、job 管单步长任务）。</td><td>M3+</td></tr>
+<tr><td><b>分布式多实例</b></td><td><code>node_id</code> + DB 抢占锁（<code>SELECT … FOR UPDATE SKIP LOCKED</code> 领作业）。SSE 跨节点用 PG <code>LISTEN/NOTIFY</code> 或 Redis pub/sub 转发事件到订阅所在节点。M1 单机，接口不变。</td><td>M3+</td></tr>
+<tr><td><b>定时/周期作业</b></td><td>复用 <code>cmx-flow</code> 定时器母版（可注入时钟、find_due_jobs、ISO8601），到点 <code>submit()</code>。「每月末自动结账」即一条 cron 定义。</td><td>M2</td></tr>
+<tr><td><b>失败告警 / 通知</b></td><td>终态事件挂钩 <code>GlobalEventBus</code>：失败→发消息/邮件/站内信；成功→通知发起人。事件已有，接消费者即可。</td><td>M2</td></tr>
+<tr><td><b>限流 / 配额</b></td><td>按 kind / org 限并发（如「记账同一账套串行」）。<code>JobManager</code> 加 per-key 信号量，对齐 AI 的 session 级活跃锁（<code>try_acquire_session</code>）。</td><td>M2</td></tr>
+<tr><td><b>可观测性</b></td><td>作业指标（时长/成功率/队列深度）导出 Prometheus；日志接现有 tracing。</td><td>M2+</td></tr>
+<tr><td><b>结果产物 / 附件</b></td><td>大结果（导出文件）存对象存储，作业只存引用。对齐库内 storage 抽象。</td><td>按需</td></tr>
+</tbody>
+</table>
+
+<div class="callout info"><b>与 cmx-flow 的边界</b>：<b>Job 管「一个长任务的执行、进度、控制」</b>（计算密集、单步很重）；<b>Flow 管「多步骤的业务编排、审批、分支」</b>（人+系统协作、状态流转）。二者正交可组合——流程节点里可以 <code>submit</code> 一个 job 并等其完成。不要用 job 重造 flow 的编排，也不要用 flow 承载重计算的细粒度进度。</div>
+
+<!-- ══════════════════════════════ 13 ══════════════════════════════ -->
+<h2 id="s13">13 · 落地清单：接入锚点与里程碑</h2>
+
+<h3>13.1 精确接入锚点（对齐库内既有惯例）</h3>
+<table>
+<thead><tr><th>接入点</th><th>文件 / 位置</th><th>动作</th><th>母版</th></tr></thead>
+<tbody>
+<tr><td>新 crate 群</td><td><code>crates/libs/cmx-job/{core,store-pg,api}</code></td><td>三分层建 crate</td><td>cmx-rpt</td></tr>
+<tr><td>路由合并</td><td><code>crates/web/web-server/src/routes.rs</code></td><td><code>.merge(JobModule.routes())</code></td><td>ReportModule 那行</td></tr>
+<tr><td>子系统初始化</td><td><code>crates/web/web-server/src/main.rs</code>（init_datasources 之后）</td><td><code>cmx_job_core::init_job_subsystem(...)</code></td><td>init_ai_subsystem / spawn_timer_poller</td></tr>
+<tr><td>SSE 白名单</td><td>TOML <code>[auth].whitelist</code>（dev-local/dev/dev-vpn）</td><td>加 <code>/api/jobs/.*/events</code>、<code>/api/jobs/events</code></td><td><code>/api/ai/events</code> 白名单</td></tr>
+<tr><td>建表</td><td>migration（主库 cmx）</td><td>cmx_job / cmx_job_log / cmx_job_checkpoint + 幂等补列</td><td>cr_* 建表 + 幂等补列坑</td></tr>
+<tr><td>主键铸号</td><td>id 后端生成</td><td>52 位 JS 安全算法或 bigint 生成器</td><td>bigint 主键后端生成</td></tr>
+<tr><td>业务 handler</td><td><code>cmx-rpt</code> / <code>cmx-doc</code> / sc 内</td><td>实现 JobHandler + inventory::submit!</td><td>cmx-rpt-formula 函数注册</td></tr>
+<tr><td>前端页面</td><td><code>data/native-pages/sources/portal/job/*.js</code> + <code>index.json</code></td><td>center + monitor 两页，注册三处</td><td>report-app-workbench / report-applier</td></tr>
+<tr><td>错误码</td><td>CmxErrCode</td><td>补 job 相关错误码（超时/取消/handler 未注册）</td><td>DCT/DOC 错误码库</td></tr>
+</tbody>
+</table>
+
+<h3>13.2 里程碑</h3>
+<table>
+<thead><tr><th>里程碑</th><th>范围</th><th>验收</th></tr></thead>
+<tbody>
+<tr><td><b>M1 · 内存态跑通</b></td><td>core（状态机/Manager/Context/EventHub）+ api（端点+SSE）+ 单业务 <code>rpt.compute</code> 接入 + monitor 页。作业状态先只在内存，进程重启即丢。暂停占槽。</td><td>前端提交计算 → 实时看到 42 张逐张进度 → 暂停/恢复/停止均生效 → 完成弹结果。E2E 全绿。</td></tr>
+<tr><td><b>M2 · 持久化+多业务+触发</b></td><td>store-pg（落库+崩溃恢复+断点）+ 汇总 SSE 流 + center 页 + 接入 verify/rollup/post + 优先级/限流/定时触发/失败告警。</td><td>进程重启后历史作业可见、running 作业按幂等策略恢复；后端定时发起的作业可在任务中心补看；记账断点续跑生效。</td></tr>
+<tr><td><b>M3 · 分布式+编排</b></td><td>多实例（SKIP LOCKED 抢占 + LISTEN/NOTIFY 跨节点 SSE）+ 子作业/DAG + 与 cmx-flow 互调。</td><td>多 web-server 实例共享作业池不重复执行；父子作业进度聚合；流程节点可提交并等待 job。</td></tr>
+</tbody>
+</table>
+
+<!-- ══════════════════════════════ 14 ══════════════════════════════ -->
+<h2 id="s14">14 · 风险、权衡与非目标</h2>
+
+<h3>14.1 关键权衡</h3>
+<table>
+<thead><tr><th>议题</th><th>选择</th><th>理由 / 代价</th></tr></thead>
+<tbody>
+<tr><td>控制方式</td><td>协作式（checkpoint）</td><td>Rust async 不能安全强杀。代价：业务需埋点；不可中断的原子段有响应延迟。已用 Cancelling 中间态表达。</td></tr>
+<tr><td>进度事实源</td><td>内存快照为准，DB 去抖备份</td><td>SSE 要实时（内存），审计要持久（DB）。代价：崩溃丢失最后几秒未落库的细粒度进度——可接受（恢复后重算/续跑）。</td></tr>
+<tr><td>推送协议</td><td>SSE</td><td>单向推送 + 有成熟母版 + 自动重连。放弃 WS 的双向能力（当前不需要）。</td></tr>
+<tr><td>暂停占槽</td><td>M1 占槽 + 超时兜底</td><td>实现简单、语义清晰。代价：长暂停占并发；靠最大暂停时长自动取消防饿死。M2+ 再做让位。</td></tr>
+<tr><td>框架 vs 业务</td><td>trait + 单向依赖 + inventory</td><td>零框架改动接新业务。代价：业务要按约定埋点（换取解耦与一致监控）。</td></tr>
+</tbody>
+</table>
+
+<h3>14.2 非目标（本期不做）</h3>
+<ul class="tight">
+  <li><b>不做通用工作流编排</b>——多步审批/分支交给 <code>cmx-flow</code>，job 专注单个长任务。</li>
+  <li><b>不做抢占式强杀</b>——不追求「点停止瞬间线程消失」，只保证下一个安全点停下。</li>
+  <li><b>M1 不做分布式</b>——单 web-server 实例内跑；接口按分布式预留，但不实现跨节点。</li>
+  <li><b>不重造消息队列</b>——不引入 Kafka/RabbitMQ；进程内队列 + PG 持久化足够当前规模，规模化时 M3 再评估。</li>
+</ul>
+
+<h3>14.3 已知风险与缓解</h3>
+<table>
+<thead><tr><th>风险</th><th>缓解</th></tr></thead>
+<tbody>
+<tr><td>业务忘埋 checkpoint → 停不下来</td><td>capabilities 声明 pausable；未声明则 UI 隐藏暂停/停止按钮，只允许「请求取消（尽力）」并提示不保证即时。lint/文档强调循环内必埋。</td></tr>
+<tr><td>SSE 连接泄漏（前端不关）</td><td>作业终态发 <code>done</code> 前端主动 close；服务端 keep-alive + 空闲超时清理；订阅数上限保护（对齐 ai 多标签页）。</td></tr>
+<tr><td>进度事件风暴</td><td>Hub 去抖合并（100–200ms）；明细裁剪（只推变化行）；日志有界 channel + 溢出降级。</td></tr>
+<tr><td>孤儿作业（崩溃残留 running）</td><td>启动 recover_orphans 按幂等策略重入队/置失败（§8.3）。</td></tr>
+<tr><td>非幂等作业被误重启</td><td>capabilities 强制声明幂等级别；非幂等 restart 需人工二次确认，不自动执行。</td></tr>
+</tbody>
+</table>
+
+<div class="foot">
+  <b>异步任务中心方案</b> · 仅设计不动代码 · 复用 cmx-ai SSE 母版 + cmx-rpt 分层母版 + cmx-flow 恢复/定时/子作业母版<br>
+  首批接入：报表计算 / 报表校验 / 凭证记账 / 销售汇总 · 双向发起 · 协作式可控 · 快照优先进度 · 三里程碑渐进落地
+</div>
+
+</div>
+</body>
+</html>

@@ -46,6 +46,9 @@ members = [
     "crates/libs/cmx-rpt/cmx-rpt-formula",
     "crates/libs/cmx-rpt/cmx-rpt-store-pg",
     "crates/libs/cmx-rpt/cmx-rpt-api",
+    "crates/libs/cmx-job/cmx-job-core",
+    "crates/libs/cmx-job/cmx-job-store-pg",
+    "crates/libs/cmx-job/cmx-job-api",
     "crates/libs/cmx-doc/cmx-doc-model",
     "crates/libs/cmx-doc/cmx-doc-store-pg",
     "crates/libs/cmx-doc/cmx-doc-api",
@@ -150,6 +153,12 @@ cmx-rpt-formula = { path = "crates/libs/cmx-rpt/cmx-rpt-formula", version = "0.1
 cmx-rpt-store-pg = { path = "crates/libs/cmx-rpt/cmx-rpt-store-pg", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 报表模块 HTTP 层（薄 handler + ReportModule 路由）
 cmx-rpt-api = { path = "crates/libs/cmx-rpt/cmx-rpt-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 异步任务中心内核（作业状态机 + JobHandler/JobContext + JobManager + SSE 扇出，语义中立无 DB）
+cmx-job-core = { path = "crates/libs/cmx-job/cmx-job-core", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 异步任务中心 PG 持久化（cmx_job_* 三表读写 + 崩溃恢复 + 历史查询）
+cmx-job-store-pg = { path = "crates/libs/cmx-job/cmx-job-store-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 异步任务中心 HTTP 层（薄 handler + SSE + JobModule 路由，web-server 合并，避免 cmx-api⇄cmx-job 环）
+cmx-job-api = { path = "crates/libs/cmx-job/cmx-job-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 业务单据（DOC）中立模型（DocMetaView/DocQuery/formula/rule/sql_builder，DB-free）
 cmx-doc-model = { path = "crates/libs/cmx-doc/cmx-doc-model", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 业务单据（DOC）PG 持久化/服务层（cv_* 表装载/回存 + ZmcDataSet 零拷贝 + 版本化）

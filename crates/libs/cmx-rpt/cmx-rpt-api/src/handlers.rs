@@ -172,6 +172,50 @@ pub async fn report_design_functions(
 }
 
 // ============================================================================
+// 协同编辑 B 档：操作日志（提交语义操作 + 增量拉取追平）。
+// ============================================================================
+
+/// 提交一批语义操作：咨询锁串行化 → 幂等/冲突判定 → 投影增量 UPSERT → append op_log。
+/// body: { version, ops: [{type,target,payload,baseSeq,clientOpId}] }。actor 取 AuthContext。
+pub async fn report_design_apply_ops(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    body: Json<Value>,
+) -> Result<Json<ApiResp<Value>>> {
+    let (actor_id, actor_name) = match ctx.auth_context.as_ref() {
+        Some(a) => (a.user_id.clone(), a.username.clone()),
+        None => (String::new(), String::new()),
+    };
+    Ok(Json(ApiResp::ok(
+        store::apply_ops(&code, &body.0, &actor_id, &actor_name).await?,
+    )))
+}
+
+/// 拉取操作日志增量：seq > since（打开重放 + 编辑中追平轮询）。
+#[derive(Debug, Deserialize)]
+pub struct OpsQuery {
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub since: Option<i64>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+pub async fn report_design_list_ops(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    Query(q): Query<OpsQuery>,
+) -> Result<Json<ApiResp<Value>>> {
+    let version = q.version.unwrap_or_default(); // ''=默认版本，与 layout 端点一致
+    Ok(Json(ApiResp::ok(
+        store::list_ops(&code, &version, q.since.unwrap_or(0), q.limit.unwrap_or(500)).await?,
+    )))
+}
+
+// ============================================================================
 // 旧报表设计器兼容计算接口（stub，无 DB）：恢复历史 html 预览入口避免 404。
 // ============================================================================
 

@@ -22,10 +22,47 @@ pub use cmx_api_types::{Error, Result};
 
 pub mod compute;
 pub use compute::compute_report_service;
+pub mod ops;
+pub use ops::{apply_ops, list_ops};
+pub mod rpt_job;
+pub use rpt_job::{KIND_RPT_COMPUTE, KIND_RPT_VERIFY, RptComputeJob, RptVerifyJob};
 
 /// 构造报表业务错误（BizError → cmx_api_types::Error）。
 pub fn api_err(msg: &str) -> Error {
     cmx_biz::BizError::business(msg.to_string()).into()
+}
+
+/// 从 `cmx_database_pg::Error` 里抽出 **PostgreSQL 真实错误明细**（SQLSTATE 文案 + DETAIL + 约束名）。
+///
+/// 背景：tokio-postgres 的 `Error` 顶层 `Display` 恒为无信息的 `db error`——真正的
+/// message/detail/constraint 藏在 `as_db_error()` 里。若直接 `format!("{e}")` 会把
+/// 「唯一键冲突」这类可翻译错误塌缩成 `db error`，前端无从判断。
+///
+/// 本函数把三段拼成一个完整串，交给 [`cmx_biz::BizError::from_db_error`] 归类成
+/// [`CmxErrCode`](cmx_biz::errcode::CmxErrCode) + 优雅中文（对齐 DOC/DCT 落库错误机制）。
+/// 拼接保证含 `unique constraint "..."` / `foreign key` 等稳定子串，令 `classify_db_error`
+/// 命中；`brief_db_detail` 再从中抽约束名脱敏展示。非 PG 错误（连接/池）回退顶层 Display。
+fn pg_detail(e: &cmx_database_pg::Error) -> String {
+    if let cmx_database_pg::Error::Postgres(pg) = e
+        && let Some(db) = pg.as_db_error()
+    {
+        let mut s = db.message().to_string();
+        if let Some(d) = db.detail() {
+            s.push(' ');
+            s.push_str(d);
+        }
+        if let Some(c) = db.constraint() {
+            s.push_str(&format!(" constraint \"{c}\""));
+        }
+        return s;
+    }
+    e.to_string()
+}
+
+/// 把 DB 执行错误翻译成优雅业务错误（PG 明细 → `CmxErrCode` 中文 + 稳定码），
+/// 绝不把 PG 英文原文/SQL 暴露给前端。与 DOC saver（`from_db_error`）机制一致。
+fn db_err(e: cmx_database_pg::Error) -> Error {
+    cmx_biz::BizError::from_db_error(&pg_detail(&e)).into()
 }
 
 // ============================================================================
@@ -51,7 +88,8 @@ async fn execute(sql: &str, params: Value) -> Result<()> {
     let mm = get_default_pg_db_manager();
     mm.execute_sql_with_json(RPT_DB_ID, None, sql, params)
         .await
-        .map_err(|e| api_err(&format!("报表设计数据写入失败: {e}")))?;
+        // 落库失败：翻译成优雅提示 + 稳定错误码，不暴露 PG 英文原文（对齐 DOC saver）。
+        .map_err(db_err)?;
     Ok(())
 }
 
@@ -60,7 +98,9 @@ pub(crate) async fn exec_dv(txn_id: &str, sql: &str, params: Vec<DataValue>) -> 
     let mm = get_default_pg_db_manager();
     mm.execute_sql_with_datavalues(RPT_DB_ID, Some(txn_id), sql, params)
         .await
-        .map_err(|e| api_err(&format!("报表写入失败: {e}")))?;
+        // 落库失败：把 PG 原始错误翻译成优雅提示 + 稳定错误码（唯一键/外键/非空等），
+        // 不再暴露英文原文 + SQL（对齐 DOC saver 机制）。
+        .map_err(db_err)?;
     Ok(())
 }
 
@@ -152,15 +192,59 @@ fn col_letter_of(idx: usize) -> String {
     if s.is_empty() { "A".to_string() } else { s }
 }
 
-/// 解析行列 id：真号(纯数字/数字)原样用；临时(空/非数字串/缺失)铸新 next_pk_id。
-fn resolve_id(v: Option<&Value>) -> i64 {
+/// B1 稳定 id：解析行列/单元格 id，按业务键复用既有真号，避免先删后插每次重铸切断外部引用。
+///
+/// 优先级：① 前端回传真实数字 id → 原样用；② 业务键命中既有(preload) → 复用旧 id
+/// （前端总回传临时 `t:...` 串，故此路是常态）；③ 全新对象 → 铸新 next_pk_id。
+fn resolve_or_reuse(v: Option<&Value>, reuse: &HashMap<String, i64>, bkey: &str) -> i64 {
     match v {
-        Some(Value::Number(n)) => n.as_i64().unwrap_or_else(cmx_utils::next_pk_id),
-        Some(Value::String(s)) if s.chars().all(|c| c.is_ascii_digit()) && !s.is_empty() => {
-            s.parse::<i64>().unwrap_or_else(|_| cmx_utils::next_pk_id())
+        Some(Value::Number(n)) => {
+            if let Some(x) = n.as_i64() {
+                return x;
+            }
         }
-        _ => cmx_utils::next_pk_id(),
+        Some(Value::String(s)) if !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()) => {
+            if let Ok(x) = s.parse::<i64>() {
+                return x;
+            }
+        }
+        _ => {}
     }
+    if !bkey.is_empty()
+        && let Some(&id) = reuse.get(bkey)
+    {
+        return id;
+    }
+    cmx_utils::next_pk_id()
+}
+
+/// 预载既有「业务键 → 真实 id」映射（B1）：先删后插前读出旧 id，重插时复用。
+/// 业务键 = `sheet_code|region_code|{key_col}`（key_col 对行=code、列=code、单元格=cell_ref）。
+/// 在事务 DELETE 之前调用（走独立连接读已提交的旧态，不受本事务未提交删除影响）。
+async fn preload_id_map(
+    code: &str,
+    version: &str,
+    table: &str,
+    key_col: &str,
+) -> Result<HashMap<String, i64>> {
+    let sql = format!(
+        "SELECT sheet_code, region_code, {key_col} AS bkey, id \
+         FROM {table} WHERE report_code=$1 AND version_code=$2"
+    );
+    let rows = query_rows(&sql, json!([code, version]), "rpt_preload_ids").await?;
+    let mut m = HashMap::new();
+    for r in &rows {
+        let sheet = r.get("sheet_code").and_then(|v| v.as_str()).unwrap_or("");
+        let region = r.get("region_code").and_then(|v| v.as_str()).unwrap_or("");
+        let bkey = r.get("bkey").and_then(|v| v.as_str()).unwrap_or("");
+        if bkey.is_empty() {
+            continue;
+        }
+        if let Some(id) = r.get("id").and_then(|v| v.as_i64()) {
+            m.insert(format!("{sheet}|{region}|{bkey}"), id);
+        }
+    }
+    Ok(m)
 }
 
 // ============================================================================
@@ -853,7 +937,13 @@ async fn save_layout_apply(
     )
     .await?;
 
-    // 2) 重建关系投影：先删本 report+version 全部，再批量插入（幂等）
+    // 2) 重建关系投影：先删本 report+version 全部，再批量插入（幂等）。
+    //    B1 稳定 id：删除前先预载既有「业务键→真实 id」映射，重插时复用旧 id——
+    //    避免行/列/单元格 id 每次保存重铸而切断 cr_cell_data 等外部引用（协同的前置地基）。
+    let row_reuse = preload_id_map(code, version, "cr_report_row", "code").await?;
+    let col_reuse = preload_id_map(code, version, "cr_report_col", "code").await?;
+    let cell_reuse = preload_id_map(code, version, "cr_cell_element_map", "cell_ref").await?;
+
     for tbl in [
         "cr_report_sheet",
         "cr_report_region",
@@ -957,7 +1047,11 @@ async fn save_layout_apply(
             .filter(|c| !c.is_empty())
             .unwrap_or_else(|| DEFAULT_REGION.to_string());
         let row_code = s(rw, "code").unwrap_or_default();
-        let real_id = resolve_id(rw.get("id"));
+        let real_id = resolve_or_reuse(
+            rw.get("id"),
+            &row_reuse,
+            &format!("{sheet_code}|{region_code}|{row_code}"),
+        );
         id_map.insert(
             format!("row|{sheet_code}|{region_code}|{row_code}"),
             json!(real_id),
@@ -1005,7 +1099,11 @@ async fn save_layout_apply(
             .filter(|c| !c.is_empty())
             .unwrap_or_else(|| DEFAULT_REGION.to_string());
         let col_code = s(cl, "code").unwrap_or_default();
-        let real_id = resolve_id(cl.get("id"));
+        let real_id = resolve_or_reuse(
+            cl.get("id"),
+            &col_reuse,
+            &format!("{sheet_code}|{region_code}|{col_code}"),
+        );
         id_map.insert(
             format!("col|{sheet_code}|{region_code}|{col_code}"),
             json!(real_id),
@@ -1061,6 +1159,25 @@ async fn save_layout_apply(
         }
     };
     for (idx, cm) in arr(body, "cellMap").iter().enumerate() {
+        // B1 稳定 id：单元格映射按 sheet|region|cell_ref 复用既有 id，避免每次保存重铸。
+        let cm_sheet = s(cm, "sheetCode").unwrap_or_default();
+        let cm_region = s(cm, "regionCode")
+            .filter(|c| !c.is_empty())
+            .unwrap_or_else(|| DEFAULT_REGION.to_string());
+        let cm_ref = s(cm, "cellRef").unwrap_or_default();
+        let cm_bkey = if cm_ref.is_empty() {
+            String::new()
+        } else {
+            format!("{cm_sheet}|{cm_region}|{cm_ref}")
+        };
+        let cm_id = if cm_bkey.is_empty() {
+            cmx_utils::next_pk_id()
+        } else {
+            cell_reuse
+                .get(&cm_bkey)
+                .copied()
+                .unwrap_or_else(cmx_utils::next_pk_id)
+        };
         exec_dv(
             txn_id,
             r#"INSERT INTO cr_cell_element_map
@@ -1069,7 +1186,7 @@ async fn save_layout_apply(
                 number_format, sort_no, status, create_time, update_time)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"#,
             vec![
-                DataValue::Int(cmx_utils::next_pk_id()),
+                DataValue::Int(cm_id),
                 dv_str_def(s(cm, "cellRef").as_deref(), &format!("CM{}", idx + 1)),
                 DataValue::String(code.to_string()),
                 DataValue::String(version.to_string()),

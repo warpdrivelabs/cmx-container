@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cmx-container 工程项目详细评估报告 v8</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #5f6b7a;
+      --line: #d9e1ea;
+      --primary: #1d6f8f;
+      --primary-dark: #12495f;
+      --good: #16794c;
+      --warn: #a26205;
+      --risk: #b42318;
+      --soft-good: #e8f5ee;
+      --soft-warn: #fff4df;
+      --soft-risk: #fdecea;
+      --soft-blue: #e9f3f7;
+      --code: #243447;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+    }
+    header {
+      background: linear-gradient(135deg, #17384a 0%, #1d6f8f 70%, #2f8b7c 100%);
+      color: #fff;
+      padding: 40px 32px 34px;
+    }
+    header .wrap, main {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 32px;
+      letter-spacing: 0;
+      line-height: 1.25;
+    }
+    .subtitle {
+      max-width: 900px;
+      margin: 0;
+      color: rgba(255,255,255,.86);
+      font-size: 15px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 22px;
+    }
+    .meta span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 3px 10px;
+      border: 1px solid rgba(255,255,255,.32);
+      border-radius: 6px;
+      color: rgba(255,255,255,.92);
+      font-size: 13px;
+      background: rgba(255,255,255,.10);
+    }
+    main { padding: 28px 24px 56px; }
+    section {
+      margin-top: 22px;
+      padding: 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(23, 32, 51, .05);
+    }
+    h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 17px;
+    }
+    p { margin: 8px 0; }
+    ul, ol { margin: 8px 0 0 20px; padding: 0; }
+    li { margin: 6px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #eef4f7;
+      color: #183344;
+      font-weight: 700;
+    }
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #eef2f5;
+      color: var(--code);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: #172033;
+      color: #eef7fb;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .metric {
+      min-height: 108px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+    }
+    .metric .num {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--primary-dark);
+      font-size: 30px;
+      line-height: 1.15;
+      font-weight: 800;
+    }
+    .metric .label {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .score {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 18px;
+      align-items: center;
+      margin-top: 16px;
+    }
+    .score-badge {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      width: 164px;
+      height: 164px;
+      border-radius: 50%;
+      background: conic-gradient(var(--primary) 0 78%, #d8e4ea 78% 100%);
+      position: relative;
+    }
+    .score-badge::after {
+      content: "";
+      position: absolute;
+      inset: 13px;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .score-badge strong, .score-badge span {
+      position: relative;
+      z-index: 1;
+    }
+    .score-badge strong {
+      font-size: 38px;
+      line-height: 1;
+      color: var(--primary-dark);
+    }
+    .score-badge span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .tag {
+      display: inline-block;
+      margin: 2px 5px 2px 0;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: #f7fafc;
+      color: #314253;
+    }
+    .good { background: var(--soft-good); color: var(--good); border-color: #b9dfcb; }
+    .warn { background: var(--soft-warn); color: var(--warn); border-color: #f2d69c; }
+    .risk { background: var(--soft-risk); color: var(--risk); border-color: #f4b8b3; }
+    .blue { background: var(--soft-blue); color: var(--primary-dark); border-color: #b8dce8; }
+    .note {
+      padding: 12px 14px;
+      border-left: 4px solid var(--primary);
+      background: #f2f8fb;
+      border-radius: 6px;
+      color: #274050;
+    }
+    .risk-list li strong { color: var(--risk); }
+    .roadmap td:first-child { width: 140px; font-weight: 700; color: var(--primary-dark); }
+    .small { color: var(--muted); font-size: 13px; }
+    @media (max-width: 860px) {
+      header { padding: 30px 20px; }
+      main { padding: 20px 14px 42px; }
+      section { padding: 18px; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .score { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      .grid { grid-template-columns: 1fr; }
+      h1 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>cmx-container 工程项目详细评估报告 v8</h1>
+      <p class="subtitle">面向架构、工程质量、测试资产、数据库治理、运行部署与后续演进的综合评估。评估基于本地仓库静态扫描、Cargo Workspace 元数据、SQL 资产盘点与一次完整 <code>cargo check --workspace</code> 验证。</p>
+      <div class="meta">
+        <span>评估日期：2026-07-20</span>
+        <span>仓库：/Users/nanomesh/Workspace/presentation/cmx-container</span>
+        <span>分支：cmx-rpt-flow</span>
+        <span>版本：workspace 0.1.12</span>
+        <span>Rust Edition：2024</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>一、执行摘要</h2>
+      <div class="score">
+        <div class="score-badge"><strong>78</strong><span>综合评分 / 100</span></div>
+        <div>
+          <p><strong>总体判断：</strong><code>cmx-container</code> 已经从单一后端服务演进为大型 Rust 平台型工程，覆盖插件运行时、认证授权、流程引擎、报表、字典/单据数据服务、数据库抽象、缓存、存储、审计、RPC 与配置注册中心。项目的模块拆分、文档资产、SQL 迁移体系与编译健康度较好，具备继续平台化建设的基础。</p>
+          <p><strong>主要约束：</strong>工程规模已经达到 50+ crate、21 万行以上 Rust 源码，长期维护风险开始从“单点实现质量”转向“模块边界、依赖治理、集群一致性、测试分层与发布纪律”。</p>
+          <p>
+            <span class="tag good">cargo check 通过</span>
+            <span class="tag good">测试资产较丰富</span>
+            <span class="tag blue">平台能力完整</span>
+            <span class="tag warn">部分大文件需拆分</span>
+            <span class="tag warn">unwrap/panic 需分级治理</span>
+            <span class="tag warn">迁移 up/down 数量不完全对称</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>二、关键量化指标</h2>
+      <div class="grid">
+        <div class="metric"><span class="num">54</span><span class="label">Cargo workspace 成员</span></div>
+        <div class="metric"><span class="num">215,408</span><span class="label">Rust 源码行数（crates/**/*.rs）</span></div>
+        <div class="metric"><span class="num">1,061</span><span class="label">Rust/Cargo 文件数（crates 下）</span></div>
+        <div class="metric"><span class="num">1,200</span><span class="label">测试标记数量（#[test]/#[tokio::test]/#[rstest]）</span></div>
+        <div class="metric"><span class="num">78</span><span class="label">测试相关 Rust 文件</span></div>
+        <div class="metric"><span class="num">28 / 20</span><span class="label">SQL 迁移 up/down 文件数</span></div>
+        <div class="metric"><span class="num">219</span><span class="label">init_ddl 中建表/索引语句数量</span></div>
+        <div class="metric"><span class="num">0</span><span class="label">cargo check 编译错误</span></div>
+      </div>
+      <p class="small">注：统计命令在本地执行，未进行全量 <code>cargo test --workspace</code>，因为部分测试依赖 PostgreSQL/Redis/外部配置环境。</p>
+    </section>
+
+    <section>
+      <h2>三、架构与模块评估</h2>
+      <h3>3.1 架构分层</h3>
+      <table>
+        <thead><tr><th>层次</th><th>代表 crate / 目录</th><th>评价</th></tr></thead>
+        <tbody>
+          <tr><td>入口层</td><td><code>crates/web/web-server</code></td><td>以 Axum 为统一 HTTP 入口，聚合 API 模块，符合单一服务入口的部署模型。</td></tr>
+          <tr><td>API 层</td><td><code>cmx-api</code>、<code>cmx-flow-api</code>、<code>cmx-rpt-api</code>、<code>cmx-doc-api</code>、<code>cmx-dct-api</code></td><td>模块化程度较高，业务专属 API 逐步从总 API 中拆出，有利于避免依赖环。</td></tr>
+          <tr><td>领域层</td><td><code>cmx-plugin</code>、<code>cmx-iam</code>、<code>cmx-service</code>、<code>cmx-flow-*</code>、<code>cmx-rpt-*</code>、<code>cmx-doc-*</code></td><td>业务能力覆盖完整，但部分服务文件已经超过 1000 行，需要继续做职责收敛。</td></tr>
+          <tr><td>基础设施层</td><td><code>cmx-database</code>、<code>cmx-database-pg</code>、<code>cmx-buffer</code>、<code>cmx-storage</code>、<code>cmx-auth</code>、<code>cmx-audit</code>、<code>cmx-rpc</code></td><td>基础能力抽象齐全，已具备数据库、缓存、对象存储、认证、审计、RPC 的平台底座。</td></tr>
+          <tr><td>共享模型/工具</td><td><code>cmx-core</code>、<code>cmx-utils</code>、<code>cmx-traits</code>、<code>cmx-api-types</code></td><td>跨模块复用清晰；应持续控制共享层膨胀，避免核心包变成隐式大杂烩。</td></tr>
+        </tbody>
+      </table>
+
+      <h3>3.2 主要优势</h3>
+      <ul>
+        <li><strong>平台功能完整：</strong>插件、流程、报表、数据字典、业务单据、认证授权、审计和基础设施层能力均已落位。</li>
+        <li><strong>Workspace 治理意识较强：</strong>根 <code>Cargo.toml</code> 集中管理成员与依赖，内部依赖注释较充分。</li>
+        <li><strong>领域拆分趋势正确：</strong><code>cmx-flow</code>、<code>cmx-rpt</code>、<code>cmx-doc</code>、<code>cmx-dct</code> 按 model/store/api 拆层，利于隔离 HTTP、DB 与核心语义。</li>
+        <li><strong>文档资产丰富：</strong><code>README.md</code>、SQL 文档、部署分析、迁移方案、API JSON 与多份专项设计文档共同构成较完整的知识库。</li>
+      </ul>
+
+      <h3>3.3 架构风险</h3>
+      <ul class="risk-list">
+        <li><strong>模块数量与依赖关系复杂：</strong>54 个 workspace 成员已接近需要自动化依赖拓扑检查的规模。</li>
+        <li><strong>大文件集中：</strong><code>cmx-model-center/src/lib.rs</code> 约 3269 行，<code>cmx-doc-store-pg/src/saver.rs</code> 约 2075 行，<code>cmx-api/src/handlers/portal/handler.rs</code> 约 1933 行，建议优先拆分。</li>
+        <li><strong>历史与当前实现并存：</strong>README 与 Cargo 成员中能看到停用/注释模块、迁移说明与新老实现并行痕迹，需要以版本边界逐步清理。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>四、工程质量评估</h2>
+      <table>
+        <thead><tr><th>维度</th><th>评分</th><th>结论</th><th>依据</th></tr></thead>
+        <tbody>
+          <tr><td>可编译性</td><td>90</td><td><span class="tag good">优秀</span></td><td><code>cargo check --workspace</code> 完整通过，当前工作区无编译错误。</td></tr>
+          <tr><td>模块化</td><td>80</td><td><span class="tag good">良好</span></td><td>业务域已拆分为插件、IAM、Flow、RPT、DOC、DCT 等 crate；个别大文件仍需拆分。</td></tr>
+          <tr><td>错误处理</td><td>70</td><td><span class="tag warn">需治理</span></td><td>规范要求生产代码禁止裸 <code>unwrap()</code>，静态扫描命中 <code>unwrap/panic/todo/unimplemented</code> 约 1492 处，其中测试占较大比例，但生产代码仍需分级复核。</td></tr>
+          <tr><td>依赖治理</td><td>78</td><td><span class="tag good">较好</span></td><td>根 workspace 统一依赖；但随着模块增多，需要增加 <code>cargo deny</code>、重复依赖与 license 检查。</td></tr>
+          <tr><td>测试资产</td><td>82</td><td><span class="tag good">良好</span></td><td>约 1200 个测试标记，流程测试覆盖 m1 到 m5 系列；建议区分单元、集成、数据库、慢测试 profile。</td></tr>
+          <tr><td>数据库治理</td><td>76</td><td><span class="tag good">较好</span></td><td>存在 init 与 migrations 双轨资产；扫描未发现真实外键约束，仅有“无 FOREIGN KEY”注释命中。up/down 数量不对称需补齐策略。</td></tr>
+          <tr><td>集群/无状态适配</td><td>72</td><td><span class="tag warn">需持续验证</span></td><td>设计上使用 Redis Pub/Sub、分布式锁、外部存储等；仍需对本地缓存、OnceCell/LazyLock/Mutex 使用场景逐项确认。</td></tr>
+          <tr><td>可运维性</td><td>75</td><td><span class="tag good">较好</span></td><td>具备 Docker、K8s、配置模板、部署文档；建议补充健康检查、就绪探针与优雅停机自动化验证。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>五、测试与验证结论</h2>
+      <div class="note">
+        <strong>已执行验证：</strong><code>cargo check --workspace</code> 在 dev profile 下通过，耗时约 8.42 秒。该结果证明当前 workspace 的类型检查、依赖解析与基础编译链路是健康的。
+      </div>
+      <h3>测试资产观察</h3>
+      <ul>
+        <li><code>crates/tests/cmx-flow-tests</code> 覆盖流程引擎从内存、PG、并行、取消、多实例、候选人、抄送、转签、子流程、多挂载等阶段性能力。</li>
+        <li><code>cmx-doc-store-pg</code>、<code>cmx-database</code>、<code>cmx-database-pg</code> 等模块存在数据库相关测试，适合纳入独立集成测试流水线。</li>
+        <li>测试标记数量较多，但需要进一步统计“可离线运行测试”和“依赖外部服务测试”的比例。</li>
+      </ul>
+      <h3>建议的测试分层</h3>
+      <table>
+        <thead><tr><th>层级</th><th>触发时机</th><th>建议命令/策略</th></tr></thead>
+        <tbody>
+          <tr><td>快速静态检查</td><td>每次提交前</td><td><code>cargo fmt --check</code>、<code>cargo check --workspace</code></td></tr>
+          <tr><td>单元测试</td><td>每次提交前或 MR</td><td><code>cargo test --workspace --lib</code>，隔离无需 DB/Redis 的测试。</td></tr>
+          <tr><td>集成测试</td><td>MR 或夜间</td><td>启动 PostgreSQL/Redis/Nacos/S3 mock 后运行带 feature/profile 的集成测试。</td></tr>
+          <tr><td>流程引擎回归</td><td>Flow 模块变更时</td><td>固定运行 <code>cmx-flow-tests</code> 的 m1-m5 场景，形成引擎兼容性基线。</td></tr>
+          <tr><td>部署冒烟</td><td>发布前</td><td>容器启动、<code>/health</code>、<code>/ready</code>、SIGTERM 优雅停机、迁移初始化全链路。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>六、数据库与迁移评估</h2>
+      <p>项目 SQL 资产位于 <code>docs/sql</code>，包含 <code>init/init_ddl.sql</code>、<code>init/init_dml.sql</code>、<code>init/init_menu.sql</code> 与 <code>migrations</code> 增量文件。当前扫描结果显示：</p>
+      <ul>
+        <li><code>migrations</code> 中 <code>.up.sql</code> 28 个，<code>.down.sql</code> 20 个，建议确认是否存在只允许前进的迁移；如果没有，应补齐 down 文件或在迁移规范中显式标注不可逆。</li>
+        <li><code>init_ddl.sql</code> 中建表/索引相关语句约 219 条，说明数据库初始化资产较完整。</li>
+        <li>静态扫描 <code>FOREIGN KEY</code> 命中均为“无 FOREIGN KEY”的注释说明，未发现真实外键约束，符合项目“关联字段 + 索引替代”的数据库规范。</li>
+        <li>流程相关迁移在 20260717-20260718 较集中，建议将流程引擎表结构作为重点回归对象，确保 init 与 migrations 长期一致。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>七、集群部署与无状态评估</h2>
+      <p>从 README 与模块命名看，项目已经具备集群化设计意识：插件运行时通过 Redis Pub/Sub 做集群同步，缓存和分布式锁放在 <code>cmx-buffer</code>，文件存储通过 <code>cmx-storage</code> 接入本地/S3，配置注册中心通过 <code>cmx-registry-config</code> 抽象 Nacos/Mock。</p>
+      <h3>需要重点验证的点</h3>
+      <ul>
+        <li>本地缓存是否只缓存可重建数据；字典、权限、插件元数据更新后是否能广播或失效全集群。</li>
+        <li>流程定时任务、异步 job、插件同步 worker 是否具有幂等性和多节点竞争保护。</li>
+        <li><code>OnceCell</code>、<code>LazyLock</code>、<code>Mutex</code>、<code>RwLock</code> 的 131 处静态命中应分为“基础设施只读状态”和“业务可变状态”两类治理。</li>
+        <li>容器层是否已完整覆盖 <code>/health</code>、<code>/ready</code>、SIGTERM drain、连接池关闭、任务取消与滚动升级。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>八、主要问题与优先级</h2>
+      <table>
+        <thead><tr><th>优先级</th><th>问题</th><th>影响</th><th>建议动作</th></tr></thead>
+        <tbody>
+          <tr><td><span class="tag risk">P0</span></td><td>关键路径中的 <code>unwrap/panic</code> 未分级</td><td>可能在生产请求、任务、插件执行中触发进程级失败。</td><td>先排除 tests/examples，再对 API、DB、插件、流程引擎模块建立清单，生产路径改为 <code>Result</code> 或有业务说明的 <code>expect</code>。</td></tr>
+          <tr><td><span class="tag risk">P0</span></td><td>集群一致性缺少自动化验证矩阵</td><td>多节点部署下可能出现缓存不一致、重复消费、重复同步或任务竞争。</td><td>为插件发布、权限变更、流程 job、字典配置更新设计多节点集成测试。</td></tr>
+          <tr><td><span class="tag warn">P1</span></td><td>SQL 迁移 up/down 不对称</td><td>回滚策略不清晰，生产发布风险上升。</td><td>补齐 down 或显式标记不可逆迁移；增加迁移文件命名和配对检查脚本。</td></tr>
+          <tr><td><span class="tag warn">P1</span></td><td>大文件/大 handler 影响可维护性</td><td>代码审查难、测试定位慢、职责边界变模糊。</td><td>优先拆分超过 1000 行的 handler/service/store 文件，按 DTO、校验、SQL、事务、路由分层。</td></tr>
+          <tr><td><span class="tag warn">P1</span></td><td>缺少自动依赖/许可证/安全扫描信号</td><td>供应链风险和重复依赖风险难以及时发现。</td><td>引入 <code>cargo deny</code>、<code>cargo audit</code>、<code>cargo machete</code> 或等价 CI 步骤。</td></tr>
+          <tr><td><span class="tag blue">P2</span></td><td>文档丰富但容易分散</td><td>新人入口和版本事实来源可能不一致。</td><td>为 README、AGENTS、SQL、部署、模块方案建立“当前有效/历史归档”索引。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>九、改进路线图</h2>
+      <table class="roadmap">
+        <thead><tr><th>阶段</th><th>目标</th><th>交付物</th></tr></thead>
+        <tbody>
+          <tr><td>1-2 周</td><td>建立质量基线，降低显性风险。</td><td><code>cargo fmt/check/clippy</code> CI；unwrap/panic 生产路径清单；SQL up/down 配对检查；大文件拆分计划。</td></tr>
+          <tr><td>3-4 周</td><td>补齐集成测试与发布回滚能力。</td><td>PostgreSQL/Redis 集成测试 profile；流程 m1-m5 回归套件；迁移 apply/rollback 验证；容器健康检查脚本。</td></tr>
+          <tr><td>1-2 月</td><td>强化平台边界和集群一致性。</td><td>依赖拓扑图；跨模块 API 契约测试；插件/权限/字典配置全集群失效测试；任务幂等与分布式竞争测试。</td></tr>
+          <tr><td>持续</td><td>提升长期可维护性。</td><td>模块 README 模板、架构决策记录 ADR、不可逆迁移登记表、安全扫描报告、性能基准报告。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>十、证据附录</h2>
+      <h3>执行过的关键命令</h3>
+      <pre><code>git rev-parse --show-toplevel
+git status -sb
+cargo metadata --no-deps --format-version 1
+find crates -type f -name '*.rs' | xargs wc -l
+rg -n "#\[tokio::test\]|#\[test\]|#\[rstest\]" crates | wc -l
+rg -n "\.unwrap\(\)|todo!\(|unimplemented!\(|panic!\(" crates --glob '*.rs' | wc -l
+rg -n "OnceCell|LazyLock|lazy_static|static mut|Mutex&lt;|RwLock&lt;" crates --glob '*.rs' | wc -l
+find docs/sql/migrations -type f -name '*.up.sql' | wc -l
+find docs/sql/migrations -type f -name '*.down.sql' | wc -l
+rg -n "CREATE TABLE|CREATE INDEX|CREATE UNIQUE INDEX" docs/sql/init/init_ddl.sql | wc -l
+cargo check --workspace</code></pre>
+
+      <h3>最大文件样本</h3>
+      <table>
+        <thead><tr><th>文件</th><th>行数</th><th>建议</th></tr></thead>
+        <tbody>
+          <tr><td><code>crates/libs/cmx-model-center/src/lib.rs</code></td><td>3269</td><td>按初始化、部署台账、服务接口、错误处理拆分。</td></tr>
+          <tr><td><code>crates/libs/cmx-doc/cmx-doc-store-pg/src/saver.rs</code></td><td>2075</td><td>按校验、SQL 构造、事务回存、版本处理拆分。</td></tr>
+          <tr><td><code>crates/libs/cmx-api/src/handlers/portal/handler.rs</code></td><td>1933</td><td>按资源域拆 handler，保持 HTTP 层薄。</td></tr>
+          <tr><td><code>crates/libs/cmx-flow/cmx-flow-engine/src/engine.rs</code></td><td>1829</td><td>按令牌推进、等待态、边界事件、多实例/子流程拆分。</td></tr>
+          <tr><td><code>crates/libs/cmx-plugin/src/security/validator.rs</code></td><td>1697</td><td>按签名、manifest、权限、沙箱策略拆分。</td></tr>
+        </tbody>
+      </table>
+
+      <h3>结论说明</h3>
+      <p>本报告是工程级评估，不等同于安全审计或性能压测报告。当前已验证“可编译性”和部分静态质量信号；安全、性能、集群一致性、数据库迁移回滚仍需通过专项测试进一步确认。</p>
+    </section>
+  </main>
+</body>
+</html>
