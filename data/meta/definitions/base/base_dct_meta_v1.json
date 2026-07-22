@@ -23,7 +23,17 @@
             "zh_CN": "字典项主键"
           },
           "dimType": "attribute",
-          "isPrimaryKey": 1
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "120px",
+          "frozen": true,
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "VARCHAR",
@@ -35,8 +45,16 @@
             "zh_CN": "字典项编码"
           },
           "edit": {
-            "mode": "input"
-          }
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "VARCHAR",
@@ -48,8 +66,16 @@
             "zh_CN": "字典项名称"
           },
           "edit": {
-            "mode": "input"
-          }
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "180px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "INT",
@@ -63,8 +89,18 @@
             "zh_CN": "排序号"
           },
           "edit": {
-            "mode": "number"
-          }
+            "mode": "cmx-number-input",
+            "required": true
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 0,
+            "thousandSeparator": true,
+            "align": "right"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "right"
         },
         {
           "dataType": "TINYINT",
@@ -78,8 +114,16 @@
             "zh_CN": "启用状态(1启用0停用)"
           },
           "edit": {
-            "mode": "checkbox"
-          }
+            "mode": "checkbox",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "center"
         }
       ]
     },
@@ -96,9 +140,16 @@
             "zh_CN": "字典项编码"
           },
           "edit": {
-            "mode": "input"
+            "mode": "readonly"
           },
-          "isPrimaryKey": 1
+          "isPrimaryKey": 1,
+          "display": {
+            "mode": "text"
+          },
+          "width": "140px",
+          "frozen": true,
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "VARCHAR",
@@ -110,8 +161,16 @@
             "zh_CN": "字典项名称"
           },
           "edit": {
-            "mode": "input"
-          }
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "180px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "INT",
@@ -125,8 +184,18 @@
             "zh_CN": "排序号"
           },
           "edit": {
-            "mode": "number"
-          }
+            "mode": "cmx-number-input",
+            "required": true
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 0,
+            "thousandSeparator": true,
+            "align": "right"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "right"
         },
         {
           "dataType": "TINYINT",
@@ -140,8 +209,16 @@
             "zh_CN": "启用状态(1启用0停用)"
           },
           "edit": {
-            "mode": "checkbox"
-          }
+            "mode": "checkbox",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "center"
         }
       ]
     },
@@ -158,7 +235,16 @@
           "name": "parent_id",
           "caption": {
             "zh_CN": "上级字典项ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "VARCHAR",
@@ -168,7 +254,18 @@
           "name": "full_path",
           "caption": {
             "zh_CN": "物化路径(.分隔)"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "TINYINT",
@@ -180,7 +277,18 @@
           "name": "level_no",
           "caption": {
             "zh_CN": "层级深度(1~N)"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "center"
         },
         {
           "dataType": "TINYINT",
@@ -192,7 +300,18 @@
           "name": "is_leaf",
           "caption": {
             "zh_CN": "是否末级"
-          }
+          },
+          "edit": {
+            "mode": "checkbox",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "center"
         }
       ]
     },
@@ -207,7 +326,17 @@
           "name": "parent_code",
           "caption": {
             "zh_CN": "上级字典code"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "VARCHAR",
@@ -217,7 +346,18 @@
           "name": "full_path",
           "caption": {
             "zh_CN": "物化路径(.分隔)"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "TINYINT",
@@ -229,7 +369,18 @@
           "name": "level_no",
           "caption": {
             "zh_CN": "层级深度(1~N)"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "center"
         },
         {
           "dataType": "TINYINT",
@@ -241,7 +392,18 @@
           "name": "is_leaf",
           "caption": {
             "zh_CN": "是否末级"
-          }
+          },
+          "edit": {
+            "mode": "checkbox",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "center"
         }
       ]
     },
@@ -258,7 +420,17 @@
           "name": "create_by",
           "caption": {
             "zh_CN": "创建人ID"
-          }
+          },
+          "edit": {
+            "mode": "none"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "DATETIME",
@@ -268,7 +440,18 @@
           "name": "create_time",
           "caption": {
             "zh_CN": "创建时间"
-          }
+          },
+          "edit": {
+            "mode": "none"
+          },
+          "display": {
+            "mode": "text",
+            "format": "datetime:YYYY-MM-DD HH:mm:ss",
+            "align": "center"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "center"
         },
         {
           "dataType": "BIGINT",
@@ -280,7 +463,17 @@
           "name": "update_by",
           "caption": {
             "zh_CN": "最后修改人ID"
-          }
+          },
+          "edit": {
+            "mode": "none"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "DATETIME",
@@ -290,7 +483,18 @@
           "name": "update_time",
           "caption": {
             "zh_CN": "最后修改时间"
-          }
+          },
+          "edit": {
+            "mode": "none"
+          },
+          "display": {
+            "mode": "text",
+            "format": "datetime:YYYY-MM-DD HH:mm:ss",
+            "align": "center"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "center"
         }
       ]
     },
@@ -305,7 +509,18 @@
           "name": "scope_type",
           "caption": {
             "zh_CN": "适用范围(global全局/acct_entity核算主体)"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "BIGINT",
@@ -320,6 +535,21 @@
           "name": "entity_id",
           "caption": {
             "zh_CN": "适用核算主体ID(scope_type=acct_entity时填写)"
+          },
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择适用核算主体ID(scope_type=acct_entity时填写)",
+            "showClear": true
           }
         }
       ]
@@ -335,7 +565,19 @@
           "name": "effective_from",
           "caption": {
             "zh_CN": "生效日期"
-          }
+          },
+          "edit": {
+            "mode": "cmx-date-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "format": "date:YYYY-MM-DD",
+            "align": "center"
+          },
+          "width": "130px",
+          "required": true,
+          "align": "center"
         },
         {
           "dataType": "DATE",
@@ -345,7 +587,18 @@
           "name": "effective_to",
           "caption": {
             "zh_CN": "失效日期"
-          }
+          },
+          "edit": {
+            "mode": "cmx-date-input"
+          },
+          "display": {
+            "mode": "text",
+            "format": "date:YYYY-MM-DD",
+            "align": "center"
+          },
+          "width": "130px",
+          "required": false,
+          "align": "center"
         }
       ]
     },
@@ -360,7 +613,17 @@
           "name": "disabled_reason",
           "caption": {
             "zh_CN": "停用原因"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "DATETIME",
@@ -370,7 +633,18 @@
           "name": "disabled_time",
           "caption": {
             "zh_CN": "停用时间"
-          }
+          },
+          "edit": {
+            "mode": "cmx-datetime-input"
+          },
+          "display": {
+            "mode": "text",
+            "format": "datetime:YYYY-MM-DD HH:mm:ss",
+            "align": "center"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "center"
         }
       ]
     },
@@ -387,7 +661,18 @@
           "name": "is_system",
           "caption": {
             "zh_CN": "是否系统预置(1是0否)"
-          }
+          },
+          "edit": {
+            "mode": "checkbox",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "center"
         }
       ]
     },
@@ -402,7 +687,18 @@
           "name": "dict_code",
           "caption": {
             "zh_CN": "数据字典编码"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "BIGINT",
@@ -411,7 +707,17 @@
           "name": "ancestor_id",
           "caption": {
             "zh_CN": "祖先节点 ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly",
+            "required": true
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": true,
+          "visible": false
         },
         {
           "dataType": "BIGINT",
@@ -420,7 +726,17 @@
           "name": "descendant_id",
           "caption": {
             "zh_CN": "后代节点 ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly",
+            "required": true
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": true,
+          "visible": false
         },
         {
           "dataType": "INT",
@@ -429,7 +745,20 @@
           "name": "depth",
           "caption": {
             "zh_CN": "祖先到后代相隔层数"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input",
+            "required": true
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 0,
+            "thousandSeparator": true,
+            "align": "right"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "right"
         }
       ]
     },
@@ -444,7 +773,17 @@
           "caption": {
             "zh_CN": "关系ID"
           },
-          "isPrimaryKey": 1
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "120px",
+          "frozen": true,
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "VARCHAR",
@@ -456,8 +795,16 @@
             "zh_CN": "关系编码"
           },
           "edit": {
-            "mode": "input"
-          }
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "left"
         },
         {
           "id": "name",
@@ -467,7 +814,18 @@
           },
           "dataType": "VARCHAR",
           "fieldLength": 128,
-          "nullable": false
+          "nullable": false,
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "180px",
+          "required": true,
+          "align": "left"
         },
         {
           "id": "master_id",
@@ -477,7 +835,17 @@
           },
           "dataType": "BIGINT",
           "nullable": false,
-          "dimType": "dimension"
+          "dimType": "dimension",
+          "edit": {
+            "mode": "readonly",
+            "required": true
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": true,
+          "visible": false
         },
         {
           "dataType": "VARCHAR",
@@ -490,7 +858,18 @@
           "caption": {
             "zh_CN": "主字典节点编码"
           },
-          "dimType": "attribute"
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "VARCHAR",
@@ -502,8 +881,16 @@
             "zh_CN": "主字典节点名称"
           },
           "edit": {
-            "mode": "input"
-          }
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "180px",
+          "required": true,
+          "align": "left"
         },
         {
           "id": "aux_id",
@@ -513,7 +900,17 @@
           },
           "dataType": "BIGINT",
           "nullable": false,
-          "dimType": "dimension"
+          "dimType": "dimension",
+          "edit": {
+            "mode": "readonly",
+            "required": true
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": true,
+          "visible": false
         },
         {
           "dataType": "VARCHAR",
@@ -525,7 +922,18 @@
           "name": "aux_code",
           "caption": {
             "zh_CN": "辅字典条目编码"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "VARCHAR",
@@ -537,11 +945,19 @@
             "zh_CN": "辅字典条目名称"
           },
           "edit": {
-            "mode": "input"
-          }
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "180px",
+          "required": true,
+          "align": "left"
         }
       ]
     }
   },
-  "updatedAt": "2026-07-12T01:31:02.113Z"
+  "updatedAt": "2026-07-22T03:54:32.520Z"
 }

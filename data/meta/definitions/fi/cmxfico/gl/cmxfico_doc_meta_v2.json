@@ -155,7 +155,22 @@
           "refDict": "client",
           "refField": "code",
           "displayField": "name",
-          "physicalField": "MANDT"
+          "physicalField": "MANDT",
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择客户端",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -187,7 +202,9 @@
           "display": {
             "mode": "text",
             "decimalDigits": 0
-          }
+          },
+          "width": "100px",
+          "required": false
         },
         {
           "dataType": "VARCHAR",
@@ -201,7 +218,22 @@
           "caption": {
             "zh_CN": "账本"
           },
-          "fieldLength": 2
+          "fieldLength": 2,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择账本",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -215,7 +247,22 @@
           "caption": {
             "zh_CN": "会计期间"
           },
-          "fieldLength": 7
+          "fieldLength": 7,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择会计期间",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -226,7 +273,17 @@
           "caption": {
             "zh_CN": "凭证来源"
           },
-          "fieldLength": 20
+          "fieldLength": 20,
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "VARCHAR",
@@ -237,7 +294,17 @@
           "caption": {
             "zh_CN": "余额类型(A实际)"
           },
-          "fieldLength": 1
+          "fieldLength": 1,
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "VARCHAR",
@@ -248,7 +315,18 @@
           "caption": {
             "zh_CN": "凭证批名称"
           },
-          "fieldLength": 50
+          "fieldLength": 50,
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "180px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "DATE",
@@ -259,7 +337,18 @@
           "name": "posting_date",
           "caption": {
             "zh_CN": "过账日期"
-          }
+          },
+          "edit": {
+            "mode": "cmx-date-input"
+          },
+          "display": {
+            "mode": "text",
+            "format": "date:YYYY-MM-DD",
+            "align": "center"
+          },
+          "width": "130px",
+          "required": false,
+          "align": "center"
         },
         {
           "dataType": "VARCHAR",
@@ -270,7 +359,51 @@
           "caption": {
             "zh_CN": "批状态(U/P)"
           },
-          "fieldLength": 1
+          "fieldLength": 1,
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "badge",
+            "badgeMap": {
+              "draft": {
+                "text": "草稿",
+                "color": "#7f7f7f"
+              },
+              "posted": {
+                "text": "已过账",
+                "color": "#2b7a2b"
+              },
+              "reversed": {
+                "text": "已冲销",
+                "color": "#a04545"
+              },
+              "approved": {
+                "text": "已审核",
+                "color": "#1f6feb"
+              },
+              "rejected": {
+                "text": "已驳回",
+                "color": "#a04545"
+              },
+              "closed": {
+                "text": "已关闭",
+                "color": "#5a5a5a"
+              },
+              "parked": {
+                "text": "预制",
+                "color": "#c47c00"
+              },
+              "simulating": {
+                "text": "模拟",
+                "color": "#6a4ea0"
+              }
+            },
+            "align": "center"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "center"
         },
         {
           "dataType": "DECIMAL",
@@ -284,7 +417,21 @@
           "name": "control_total",
           "caption": {
             "zh_CN": "控制总额"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -299,7 +446,21 @@
           "name": "entered_dr",
           "caption": {
             "zh_CN": "输入币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -314,7 +475,21 @@
           "name": "entered_cr",
           "caption": {
             "zh_CN": "输入币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -329,7 +504,21 @@
           "name": "local_dr",
           "caption": {
             "zh_CN": "公司代码本位币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -344,7 +533,21 @@
           "name": "local_cr",
           "caption": {
             "zh_CN": "公司代码本位币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -359,7 +562,21 @@
           "name": "group_dr",
           "caption": {
             "zh_CN": "集团币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -374,7 +591,21 @@
           "name": "group_cr",
           "caption": {
             "zh_CN": "集团币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         }
       ],
       "remark": "参考 Oracle GL_JE_BATCHES 并补齐 SAP 组织隔离口径:客户端、公司代码、分类账、期间、来源、状态、控制总额 + 6 币种合计(由凭证头上卷)。",
@@ -417,7 +648,22 @@
           "refDict": "client",
           "refField": "code",
           "displayField": "name",
-          "physicalField": "MANDT"
+          "physicalField": "MANDT",
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择客户端",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -434,7 +680,22 @@
           },
           "fieldLength": 20,
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -446,7 +707,17 @@
           "caption": {
             "zh_CN": "会计年度"
           },
-          "fieldLength": 4
+          "fieldLength": 4,
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "TINYINT",
@@ -460,7 +731,17 @@
           "name": "posting_period",
           "caption": {
             "zh_CN": "记账期间"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
         },
         {
           "dataType": "VARCHAR",
@@ -475,7 +756,22 @@
           "caption": {
             "zh_CN": "凭证货币(交易币)"
           },
-          "fieldLength": 5
+          "fieldLength": 5,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择凭证货币(交易币)",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -489,7 +785,22 @@
           "caption": {
             "zh_CN": "集团货币"
           },
-          "fieldLength": 5
+          "fieldLength": 5,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择集团货币",
+            "showClear": true
+          }
         },
         {
           "dataType": "DECIMAL",
@@ -503,7 +814,20 @@
           "name": "exchange_rate",
           "caption": {
             "zh_CN": "交易币→本位币汇率"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 5,
+            "thousandSeparator": false,
+            "align": "right",
+            "negativeColor": true
+          },
+          "width": "110px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -516,7 +840,20 @@
           "name": "group_rate",
           "caption": {
             "zh_CN": "本位币→集团币汇率"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 5,
+            "thousandSeparator": false,
+            "align": "right",
+            "negativeColor": true
+          },
+          "width": "110px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DATE",
@@ -528,7 +865,18 @@
           "name": "posting_date",
           "caption": {
             "zh_CN": "过账日期"
-          }
+          },
+          "edit": {
+            "mode": "cmx-date-input"
+          },
+          "display": {
+            "mode": "text",
+            "format": "date:YYYY-MM-DD",
+            "align": "center"
+          },
+          "width": "130px",
+          "required": false,
+          "align": "center"
         },
         {
           "dataType": "DATE",
@@ -540,7 +888,18 @@
           "name": "doc_date_in",
           "caption": {
             "zh_CN": "凭证日期"
-          }
+          },
+          "edit": {
+            "mode": "cmx-date-input"
+          },
+          "display": {
+            "mode": "text",
+            "format": "date:YYYY-MM-DD",
+            "align": "center"
+          },
+          "width": "130px",
+          "required": false,
+          "align": "center"
         },
         {
           "dataType": "VARCHAR",
@@ -552,7 +911,17 @@
           "caption": {
             "zh_CN": "参考号"
           },
-          "fieldLength": 16
+          "fieldLength": 16,
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "VARCHAR",
@@ -564,7 +933,17 @@
           "caption": {
             "zh_CN": "抬头文本"
           },
-          "fieldLength": 25
+          "fieldLength": 25,
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "VARCHAR",
@@ -579,7 +958,22 @@
           "caption": {
             "zh_CN": "分类账"
           },
-          "fieldLength": 2
+          "fieldLength": 2,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择分类账",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -591,7 +985,17 @@
           "caption": {
             "zh_CN": "制单人"
           },
-          "fieldLength": 12
+          "fieldLength": 12,
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "DECIMAL",
@@ -606,7 +1010,21 @@
           "name": "entered_dr",
           "caption": {
             "zh_CN": "输入币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -621,7 +1039,21 @@
           "name": "entered_cr",
           "caption": {
             "zh_CN": "输入币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -636,7 +1068,21 @@
           "name": "local_dr",
           "caption": {
             "zh_CN": "公司代码本位币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -651,7 +1097,21 @@
           "name": "local_cr",
           "caption": {
             "zh_CN": "公司代码本位币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -666,7 +1126,21 @@
           "name": "group_dr",
           "caption": {
             "zh_CN": "集团币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -681,7 +1155,21 @@
           "name": "group_cr",
           "caption": {
             "zh_CN": "集团币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "BIGINT",
@@ -695,7 +1183,22 @@
           "caption": {
             "zh_CN": "单据类型ID"
           },
-          "refDict": "doc_type"
+          "refDict": "doc_type",
+          "edit": {
+            "mode": "cmx-dict-selct",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": true,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择单据类型ID"
+          }
         },
         {
           "dataType": "BIGINT",
@@ -709,7 +1212,22 @@
           "caption": {
             "zh_CN": "业务主体"
           },
-          "refDict": "comp_unit"
+          "refDict": "comp_unit",
+          "edit": {
+            "mode": "cmx-dict-selct",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": true,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择业务主体"
+          }
         }
       ],
       "remark": "参考 SAP BKPF:客户端/公司代码/凭证类型/日期/参考/抬头文本/分类账/汇率 + 6 币种合计(由科目行上卷)。凭证头不承载会计科目,会计科目从 L3 科目行开始。",
@@ -760,7 +1278,22 @@
           "refDict": "client",
           "refField": "code",
           "displayField": "name",
-          "physicalField": "MANDT"
+          "physicalField": "MANDT",
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择客户端",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -777,7 +1310,22 @@
           "displayField": "name",
           "physicalField": "BUKRS",
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -794,7 +1342,22 @@
           },
           "fieldLength": 20,
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择总账科目",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -809,7 +1372,22 @@
           "caption": {
             "zh_CN": "记账码"
           },
-          "fieldLength": 2
+          "fieldLength": 2,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择记账码",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -824,7 +1402,22 @@
           "caption": {
             "zh_CN": "借贷标志"
           },
-          "fieldLength": 1
+          "fieldLength": 1,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择借贷标志",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -839,7 +1432,22 @@
           "caption": {
             "zh_CN": "税码"
           },
-          "fieldLength": 2
+          "fieldLength": 2,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择税码",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -854,7 +1462,22 @@
           "caption": {
             "zh_CN": "特别总账标识"
           },
-          "fieldLength": 1
+          "fieldLength": 1,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择特别总账标识",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -866,7 +1489,17 @@
           "caption": {
             "zh_CN": "行项目文本"
           },
-          "fieldLength": 50
+          "fieldLength": 50,
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "DECIMAL",
@@ -881,7 +1514,21 @@
           "name": "entered_dr",
           "caption": {
             "zh_CN": "输入币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -896,7 +1543,21 @@
           "name": "entered_cr",
           "caption": {
             "zh_CN": "输入币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -911,7 +1572,21 @@
           "name": "local_dr",
           "caption": {
             "zh_CN": "公司代码本位币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -926,7 +1601,21 @@
           "name": "local_cr",
           "caption": {
             "zh_CN": "公司代码本位币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -941,7 +1630,21 @@
           "name": "group_dr",
           "caption": {
             "zh_CN": "集团币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -956,7 +1659,21 @@
           "name": "group_cr",
           "caption": {
             "zh_CN": "集团币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         }
       ],
       "remark": "科目行承载客户端、公司代码、总账科目、记账码、借贷标志、税码、特别总账标识和 6 币种金额。管理会计/客商等辅助维度下沉到 L4 辅助核算行;若科目不启用辅助核算,可只保留 L3 金额。",
@@ -1007,7 +1724,22 @@
           "refDict": "client",
           "refField": "code",
           "displayField": "name",
-          "physicalField": "MANDT"
+          "physicalField": "MANDT",
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择客户端",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1027,6 +1759,16 @@
           "decimalDigits": 0,
           "display": {
             "mode": "text"
+          },
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "width": "100px",
+          "required": false,
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
           }
         },
         {
@@ -1042,6 +1784,21 @@
           "name": "ledger_code",
           "caption": {
             "zh_CN": "分类账"
+          },
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择分类账",
+            "showClear": true
           }
         },
         {
@@ -1059,7 +1816,22 @@
             "zh_CN": "成本控制范围"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择成本控制范围",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1076,7 +1848,22 @@
             "zh_CN": "利润中心"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择利润中心",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1093,7 +1880,22 @@
             "zh_CN": "成本中心"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择成本中心",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1110,7 +1912,24 @@
             "zh_CN": "段"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct",
+            "parent": "parent_id"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "hierarchical": true,
+            "dictTitle": "选择段",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1127,7 +1946,22 @@
             "zh_CN": "业务范围"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择业务范围",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1144,7 +1978,22 @@
             "zh_CN": "功能范围"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择功能范围",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1161,7 +2010,22 @@
             "zh_CN": "贸易伙伴"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择贸易伙伴",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1178,7 +2042,22 @@
             "zh_CN": "内部订单"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择内部订单",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1195,7 +2074,22 @@
             "zh_CN": "WBS元素"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择WBS元素",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1212,7 +2106,22 @@
             "zh_CN": "业务伙伴"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择业务伙伴",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1229,7 +2138,22 @@
             "zh_CN": "客户"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择客户",
+            "showClear": true
+          }
         },
         {
           "dataType": "BIGINT",
@@ -1246,7 +2170,22 @@
             "zh_CN": "供应商"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择供应商",
+            "showClear": true
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -1261,6 +2200,21 @@
           "name": "pay_terms_code",
           "caption": {
             "zh_CN": "付款条件"
+          },
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择付款条件",
+            "showClear": true
           }
         },
         {
@@ -1276,6 +2230,21 @@
           "name": "pay_method_code",
           "caption": {
             "zh_CN": "付款方式"
+          },
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择付款方式",
+            "showClear": true
           }
         },
         {
@@ -1293,7 +2262,22 @@
             "zh_CN": "开户行/银行"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择开户行/银行",
+            "showClear": true
+          }
         },
         {
           "dataType": "DECIMAL",
@@ -1308,7 +2292,21 @@
           "name": "entered_dr",
           "caption": {
             "zh_CN": "输入币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -1323,7 +2321,21 @@
           "name": "entered_cr",
           "caption": {
             "zh_CN": "输入币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -1338,7 +2350,21 @@
           "name": "local_dr",
           "caption": {
             "zh_CN": "公司代码本位币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -1353,7 +2379,21 @@
           "name": "local_cr",
           "caption": {
             "zh_CN": "公司代码本位币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -1368,7 +2408,21 @@
           "name": "group_dr",
           "caption": {
             "zh_CN": "集团币借方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         },
         {
           "dataType": "DECIMAL",
@@ -1383,7 +2437,21 @@
           "name": "group_cr",
           "caption": {
             "zh_CN": "集团币贷方"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": true,
+            "zeroAsBlank": true,
+            "negativeColor": true,
+            "align": "right"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "right"
         }
       ],
       "remark": "辅助核算明细(科目行 1:N):直接用具体维度列(成本中心/利润中心/段/业务范围/功能范围/客商/内部订单/WBS 等)承载,无通用维度类型/取值列;并各带 6 币种借贷金额。client/公司代码/总账科目 与父科目行贯穿。",
@@ -2500,7 +3568,7 @@
       }
     ]
   },
-  "updatedAt": "2026-07-17T06:28:43.375Z",
+  "updatedAt": "2026-07-22T03:54:32.693Z",
   "validationRules": [
     {
       "code": "voucher_local_balance",

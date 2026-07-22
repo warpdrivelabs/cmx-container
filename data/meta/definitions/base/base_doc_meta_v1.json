@@ -21,7 +21,17 @@
           "name": "create_by",
           "caption": {
             "zh_CN": "创建人ID"
-          }
+          },
+          "edit": {
+            "mode": "none"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "DATETIME",
@@ -31,7 +41,18 @@
           "name": "create_time",
           "caption": {
             "zh_CN": "创建时间"
-          }
+          },
+          "edit": {
+            "mode": "none"
+          },
+          "display": {
+            "mode": "text",
+            "format": "datetime:YYYY-MM-DD HH:mm:ss",
+            "align": "center"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "center"
         },
         {
           "dataType": "BIGINT",
@@ -43,7 +64,17 @@
           "name": "update_by",
           "caption": {
             "zh_CN": "更新人ID"
-          }
+          },
+          "edit": {
+            "mode": "none"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "DATETIME",
@@ -53,7 +84,18 @@
           "name": "update_time",
           "caption": {
             "zh_CN": "更新时间"
-          }
+          },
+          "edit": {
+            "mode": "none"
+          },
+          "display": {
+            "mode": "text",
+            "format": "datetime:YYYY-MM-DD HH:mm:ss",
+            "align": "center"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "center"
         },
         {
           "dataType": "TINYINT",
@@ -65,7 +107,17 @@
           "name": "delete_flag",
           "caption": {
             "zh_CN": "逻辑删除标识(0正常1删除)"
-          }
+          },
+          "edit": {
+            "mode": "none"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
         }
       ]
     },
@@ -81,7 +133,19 @@
           "name": "doc_date",
           "caption": {
             "zh_CN": "单据日期"
-          }
+          },
+          "edit": {
+            "mode": "cmx-date-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "format": "date:YYYY-MM-DD",
+            "align": "center"
+          },
+          "width": "130px",
+          "required": true,
+          "align": "center"
         },
         {
           "dataType": "BIGINT",
@@ -94,7 +158,17 @@
           "name": "doc_type_id",
           "caption": {
             "zh_CN": "单据类型ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly",
+            "required": true
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": true,
+          "visible": false
         },
         {
           "dataType": "VARCHAR",
@@ -105,7 +179,18 @@
           "name": "doc_no",
           "caption": {
             "zh_CN": "单据编码/单据号"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "160px",
+          "required": true,
+          "align": "left"
         },
         {
           "dataType": "BIGINT",
@@ -118,7 +203,17 @@
           "name": "entity_id",
           "caption": {
             "zh_CN": "业务主体"
-          }
+          },
+          "edit": {
+            "mode": "readonly",
+            "required": true
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": true,
+          "visible": false
         }
       ]
     },
@@ -135,7 +230,16 @@
           "name": "source_doc_id",
           "caption": {
             "zh_CN": "来源单据ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "BIGINT",
@@ -147,7 +251,16 @@
           "name": "source_doc_type_id",
           "caption": {
             "zh_CN": "来源单据类型ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "VARCHAR",
@@ -157,7 +270,17 @@
           "name": "source_doc_no",
           "caption": {
             "zh_CN": "来源单据号"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "BIGINT",
@@ -169,7 +292,16 @@
           "name": "source_line_id",
           "caption": {
             "zh_CN": "来源单据行ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "BIGINT",
@@ -181,7 +313,16 @@
           "name": "ref_doc_id",
           "caption": {
             "zh_CN": "引用/关联单据ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "BIGINT",
@@ -193,7 +334,16 @@
           "name": "ref_doc_type_id",
           "caption": {
             "zh_CN": "引用/关联单据类型ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "VARCHAR",
@@ -203,7 +353,17 @@
           "name": "ref_doc_no",
           "caption": {
             "zh_CN": "引用/关联单据号"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "BIGINT",
@@ -215,7 +375,16 @@
           "name": "reverse_doc_id",
           "caption": {
             "zh_CN": "冲销/红冲原单ID"
-          }
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": false,
+          "visible": false
         }
       ]
     },
@@ -231,7 +400,52 @@
           "name": "doc_status",
           "caption": {
             "zh_CN": "单据状态"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "badge",
+            "badgeMap": {
+              "draft": {
+                "text": "草稿",
+                "color": "#7f7f7f"
+              },
+              "posted": {
+                "text": "已过账",
+                "color": "#2b7a2b"
+              },
+              "reversed": {
+                "text": "已冲销",
+                "color": "#a04545"
+              },
+              "approved": {
+                "text": "已审核",
+                "color": "#1f6feb"
+              },
+              "rejected": {
+                "text": "已驳回",
+                "color": "#a04545"
+              },
+              "closed": {
+                "text": "已关闭",
+                "color": "#5a5a5a"
+              },
+              "parked": {
+                "text": "预制",
+                "color": "#c47c00"
+              },
+              "simulating": {
+                "text": "模拟",
+                "color": "#6a4ea0"
+              }
+            },
+            "align": "center"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "center"
         },
         {
           "dataType": "VARCHAR",
@@ -242,7 +456,51 @@
           "name": "business_status",
           "caption": {
             "zh_CN": "业务状态/处理状态"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "badge",
+            "badgeMap": {
+              "draft": {
+                "text": "草稿",
+                "color": "#7f7f7f"
+              },
+              "posted": {
+                "text": "已过账",
+                "color": "#2b7a2b"
+              },
+              "reversed": {
+                "text": "已冲销",
+                "color": "#a04545"
+              },
+              "approved": {
+                "text": "已审核",
+                "color": "#1f6feb"
+              },
+              "rejected": {
+                "text": "已驳回",
+                "color": "#a04545"
+              },
+              "closed": {
+                "text": "已关闭",
+                "color": "#5a5a5a"
+              },
+              "parked": {
+                "text": "预制",
+                "color": "#c47c00"
+              },
+              "simulating": {
+                "text": "模拟",
+                "color": "#6a4ea0"
+              }
+            },
+            "align": "center"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "center"
         },
         {
           "dataType": "INT",
@@ -255,7 +513,17 @@
           "name": "attach_count",
           "caption": {
             "zh_CN": "附件张数"
-          }
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "left"
         },
         {
           "dataType": "VARCHAR",
@@ -266,7 +534,17 @@
           "name": "remark",
           "caption": {
             "zh_CN": "备注说明"
-          }
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
         }
       ]
     },
@@ -293,7 +571,17 @@
           "caption": {
             "zh_CN": "主键ID"
           },
-          "isPrimaryKey": 1
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "120px",
+          "frozen": true,
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "BIGINT",
@@ -306,7 +594,16 @@
           "caption": {
             "zh_CN": "上级单据主键"
           },
-          "dimType": "attribute"
+          "dimType": "attribute",
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "100px",
+          "required": false,
+          "visible": false
         },
         {
           "dataType": "INT",
@@ -319,10 +616,23 @@
           "caption": {
             "zh_CN": "行号"
           },
-          "dimType": "attribute"
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-number-input",
+            "required": true
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 0,
+            "thousandSeparator": true,
+            "align": "right"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "right"
         }
       ]
     }
   },
-  "updatedAt": "2026-06-21T06:10:14.124Z"
+  "updatedAt": "2026-07-22T03:54:32.563Z"
 }
