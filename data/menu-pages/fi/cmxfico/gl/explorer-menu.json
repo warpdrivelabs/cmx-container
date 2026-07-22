@@ -704,6 +704,28 @@
           }
         },
         {
+          "id": "fi-gl-voucher-flex",
+          "name": "voucher-flex",
+          "caption": "会计凭证（弹性组合）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/forms",
+          "workspace": {
+            "content": {
+              "caption": "会计凭证（弹性组合）",
+              "icon": "form",
+              "views": [
+                {
+                  "tabLabel": "凭证",
+                  "icon": "form",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.voucher-flex"
+                }
+              ]
+            }
+          }
+        },
+        {
           "id": "fi-gl-dict-editor-demo",
           "name": "dict-editor-demo",
           "caption": "字典选择编辑器演示",

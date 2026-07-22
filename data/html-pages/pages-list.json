@@ -1295,6 +1295,17 @@
       "page": "rpt-spreadjs-designer-prop",
       "pageId": "fi.cmxfico.gl.rpt-spreadjs-designer-prop",
       "relPath": "fi/cmxfico/gl/rpt-spreadjs-designer-prop.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.voucher-flex",
+      "name": "会计凭证（弹性组合）",
+      "details": "表单视图版会计凭证；选科目行→辅助核算明细列随弹性组合动态变化（scenario=account）；底部明细 cmx-ui5-form 单行编辑 + 首/上/下/末导航",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "voucher-flex",
+      "relPath": "fi/cmxfico/gl/voucher-flex.html",
+      "latestHtmlFile": "voucher-flex.html"
     }
   ]
 }
