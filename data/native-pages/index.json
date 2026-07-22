@@ -196,6 +196,13 @@
       "details": "native_pages 多实例报表应用器：content SpreadJS 画布(取数/存数/导出) + property 报表属性/数据状态；按 org+period 装载存储 cr_cell_data。与设计器互不影响。",
       "sourceType": "js",
       "relPath": "portal/rpt/report-applier.js"
+    },
+    {
+      "id": "portal.dct.data-editor",
+      "name": "通用字典数据维护",
+      "details": "元数据驱动：根据 dictCode 加载 DictView，支持平级/树形字典的查询/搜索/分页/新增/编辑/删除，changeset 显式保存。审计列只读显示，派生层级列隐藏。",
+      "sourceType": "js",
+      "relPath": "portal/dct/data-editor.js"
     }
   ]
 }
