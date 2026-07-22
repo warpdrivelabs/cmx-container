@@ -2549,9 +2549,7 @@ pub async fn deploy_plan_stream(
             }
         };
         let version = src
-            .get("docMeta")
-            .or_else(|| src.get("dctMeta"))
-            .or_else(|| src.get("seedMeta"))
+            .get("moduleMeta")
             .and_then(|m| m.get("version"))
             .and_then(|v| v.as_i64())
             .unwrap_or(1);
@@ -2761,16 +2759,12 @@ async fn deploy_with_events(
             }
         };
         let version = src
-            .get("docMeta")
-            .or_else(|| src.get("dctMeta"))
-            .or_else(|| src.get("seedMeta"))
+            .get("moduleMeta")
             .and_then(|m| m.get("version"))
             .and_then(|v| v.as_i64())
             .unwrap_or(1);
         let module_name = src
-            .get("docMeta")
-            .or_else(|| src.get("dctMeta"))
-            .or_else(|| src.get("seedMeta"))
+            .get("moduleMeta")
             .and_then(|m| m.get("metaName"))
             .and_then(|v| v.as_str())
             .unwrap_or(module)

@@ -1,6 +1,7 @@
 {
-  "docMeta": {
-    "docCode": "cmxfico",
+  "moduleMeta": {
+    "moduleCode": "cmxfico",
+    "moduleName": "cmx-fico 总账",
     "metaName": "cmx-fico 会计凭证单据元数据",
     "metaKind": "DOC",
     "version": 1,

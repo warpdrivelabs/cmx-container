@@ -1,8 +1,9 @@
 {
-  "dctMeta": {
+  "moduleMeta": {
     "metaName": "cmx-fico 会计凭证数据字典元数据",
     "metaKind": "DCT",
-    "dctGroupCode": "FICO",
+    "moduleCode": "FICO",
+    "moduleName": "cmx-fico 总账",
     "version": 3,
     "versionName": "",
     "designStyle": "separate-dictionary-tables",

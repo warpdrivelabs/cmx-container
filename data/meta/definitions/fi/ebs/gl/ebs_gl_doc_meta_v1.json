@@ -1,6 +1,7 @@
 {
-  "docMeta": {
-    "docCode": "ebs_gl",
+  "moduleMeta": {
+    "moduleCode": "ebs_gl",
+    "moduleName": "总账(Oracle EBS)",
     "metaName": "Oracle EBS GL 会计凭证单据元数据",
     "metaKind": "DOC",
     "version": 1,

@@ -1,6 +1,8 @@
 {
-  "baseMeta": {
-    "metaCode": "base_dct_meta",
+  "moduleMeta": {
+    "moduleCode": "base_dct_meta",
+    "moduleName": "基础字典",
+    "metaKind": "BASE",
     "metaName": "基础数据字典元数据",
     "version": 1,
     "remark": "跨模块复用的数据字典基础 fieldSet。业务模块通过 baseDctMetaRef 引用，避免重复维护字典基础列、层级列、审计列、组织范围、有效期、停用信息和系统预置标识。"

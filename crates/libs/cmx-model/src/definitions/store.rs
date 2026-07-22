@@ -30,7 +30,7 @@ pub struct DefRef {
     #[serde(default)]
     pub id: Option<String>,
     /// 定义类型（"DOC" / "DCT" / "BASE"）。批量加载时用于判断 id 为业务编码（非 .json）时
-    /// 走哪种反查：DOC 按 docCode、DCT 按 dictCode（并过滤只返回命中单表）。
+    /// 走哪种反查：DOC 按 moduleCode、DCT 按 dictCode（并过滤只返回命中单表）。
     #[serde(default)]
     pub kind: Option<String>,
 }
@@ -141,12 +141,9 @@ pub async fn get_definition(r: &DefRef) -> PortalResult<serde_json::Value> {
     }
 }
 
-/// 取定义文件的业务元信息节点（docMeta / dctMeta / seedMeta），三键探测。
-/// BASE 用 baseMeta，由调用方单独处理，不走此函数。
+/// 取定义文件的业务元信息节点（moduleMeta，DOC/DCT/BASE 三类统一顶层键）。
 fn meta_node(doc: &serde_json::Value) -> Option<&serde_json::Value> {
-    doc.get("docMeta")
-        .or_else(|| doc.get("dctMeta"))
-        .or_else(|| doc.get("seedMeta"))
+    doc.get("moduleMeta")
 }
 
 /// 由文档推断 base 文件名（DCT→baseDctMetaRef.file，DOC→baseDocMetaRef.file）。
@@ -180,7 +177,7 @@ fn infer_base_file(doc: &serde_json::Value) -> Option<String> {
 
 /// 文档 kind 判定（DCT/DOC/BASE/UNKNOWN）。
 ///
-/// 优先取 `meta_node(doc).metaKind`；否则按是否含 `baseMeta` 判 BASE；都不匹配返回 UNKNOWN。
+/// 从 `moduleMeta.metaKind` 取；无则返回 UNKNOWN。
 fn doc_kind(doc: &serde_json::Value) -> String {
     if let Some(k) = meta_node(doc)
         .and_then(|m| m.get("metaKind"))
@@ -188,12 +185,7 @@ fn doc_kind(doc: &serde_json::Value) -> String {
     {
         return k.to_string();
     }
-    // 无 docMeta/dctMeta/seedMeta.metaKind：含 baseMeta 判为 BASE，否则 UNKNOWN
-    if doc.get("baseMeta").is_some() {
-        "BASE".to_string()
-    } else {
-        "UNKNOWN".to_string()
-    }
+    "UNKNOWN".to_string()
 }
 
 /// 批量读取定义 + 附带 base 字段集（去重）。
@@ -349,23 +341,17 @@ fn summarize(
 ) -> serde_json::Value {
     let mm = meta_node(doc).cloned().unwrap_or(json!({}));
     let kind = doc_kind(doc);
-    // 版本号：优先 docMeta/dctMeta/seedMeta.version，其次 baseMeta.version，缺省为 1
-    let version = mm
-        .get("version")
-        .or_else(|| doc.get("baseMeta").and_then(|b| b.get("version")))
-        .cloned()
-        .unwrap_or(json!(1));
-    // 版本名称（多版本下拉展示用，文件名承载不了，存 docMeta/dctMeta/seedMeta/baseMeta.versionName）。
+    // 版本号：从 moduleMeta.version 取，缺省为 1
+    let version = mm.get("version").cloned().unwrap_or(json!(1));
+    // 版本名称（多版本下拉展示用，文件名承载不了，存 moduleMeta.versionName）。
     let version_name = mm
         .get("versionName")
-        .or_else(|| doc.get("baseMeta").and_then(|b| b.get("versionName")))
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
     // 是否默认版本（多版本管理用，同 stem 组内至多一个为 true）。
     let is_default = mm
         .get("isDefault")
-        .or_else(|| doc.get("baseMeta").and_then(|b| b.get("isDefault")))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     // 最后修改时间（save 时写入，供版本管理列表展示）。
@@ -394,9 +380,9 @@ fn summarize(
                 json!(mm.get("metaName").and_then(|v| v.as_str()).unwrap_or(file)),
             );
             obj.insert(
-                "dctGroupCode".into(),
+                "moduleCode".into(),
                 json!(
-                    mm.get("dctGroupCode")
+                    mm.get("moduleCode")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                 ),
@@ -440,8 +426,8 @@ fn summarize(
                 json!(mm.get("metaName").and_then(|v| v.as_str()).unwrap_or(file)),
             );
             obj.insert(
-                "docCode".into(),
-                json!(mm.get("docCode").and_then(|v| v.as_str()).unwrap_or("")),
+                "moduleCode".into(),
+                json!(mm.get("moduleCode").and_then(|v| v.as_str()).unwrap_or("")),
             );
             obj.insert(
                 "remark".into(),
@@ -479,18 +465,17 @@ fn summarize(
         }
         // BASE 字段集模板：字段集数量取自 fieldSets
         "BASE" => {
-            let bm = doc.get("baseMeta").cloned().unwrap_or(json!({}));
             obj.insert(
                 "title".into(),
-                json!(bm.get("metaName").and_then(|v| v.as_str()).unwrap_or(file)),
+                json!(mm.get("metaName").and_then(|v| v.as_str()).unwrap_or(file)),
             );
             obj.insert(
-                "metaCode".into(),
-                json!(bm.get("metaCode").and_then(|v| v.as_str()).unwrap_or("")),
+                "moduleCode".into(),
+                json!(mm.get("moduleCode").and_then(|v| v.as_str()).unwrap_or("")),
             );
             obj.insert(
                 "remark".into(),
-                json!(bm.get("remark").and_then(|v| v.as_str()).unwrap_or("")),
+                json!(mm.get("remark").and_then(|v| v.as_str()).unwrap_or("")),
             );
             obj.insert(
                 "fieldSetCount".into(),
@@ -687,21 +672,14 @@ pub async fn save_definition(
     Ok(merged)
 }
 
-/// 在文档的业务元信息节点（docMeta/dctMeta/seedMeta，或 baseMeta）上写 isDefault 标记，返回是否有改动。
+/// 在文档的业务元信息节点（moduleMeta）上写 isDefault 标记，返回是否有改动。
 ///
-/// 按 kind 选键：DOC→docMeta、DCT→dctMeta、SEED→seedMeta、BASE→baseMeta。
+/// DOC/DCT/BASE 三类统一写 moduleMeta（与新顶层键一致）。
 fn set_doc_default_flag(doc: &mut serde_json::Value, value: bool) -> bool {
-    // 先判 kind 决定写哪个键：DOC/DCT/SEED 写对应业务节点，BASE 写 baseMeta。
-    let key = match doc_kind(doc).as_str() {
-        "DOC" => "docMeta",
-        "DCT" => "dctMeta",
-        "SEED" => "seedMeta",
-        _ => "baseMeta",
-    };
     let obj = doc.as_object_mut();
     let Some(obj) = obj else { return false };
     // 确保 meta 节点存在且为对象
-    let meta = obj.entry(key).or_insert_with(|| json!({}));
+    let meta = obj.entry("moduleMeta").or_insert_with(|| json!({}));
     let Some(meta) = meta.as_object_mut() else {
         return false;
     };

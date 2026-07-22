@@ -1,10 +1,9 @@
 {
-  "dctMeta": {
+  "moduleMeta": {
     "moduleCode": "REPORT",
     "moduleName": "报表",
     "metaKind": "DCT",
     "metaName": "报表数据字典元数据",
-    "dctGroupCode": "REPORT",
     "version": 1,
     "versionName": "初始版本",
     "isDefault": true,
