@@ -9,7 +9,7 @@
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use cmx_core::model::cell::DataValue;
+use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 
 // ============================================================================
 // 请求参数
@@ -118,6 +118,66 @@ pub fn base_fieldset<'a>(base: &'a Value, set_name: &str) -> Option<&'a Vec<Valu
 /// 校验标识符是否为该字典的合法列（防 SQL 注入；只允许已知列）。
 pub fn valid_col(view: &DictView, name: &str) -> bool {
     view.columns.iter().any(|c| c.name == name)
+}
+
+/// 按列类型把 JSON 值转成 DataValue（供 execute_sql_with_datavalues 绑定）。
+///
+/// 核心解决的问题（参见 cmx-sql-execution 技能）：
+/// - **NULL 必须带类型**：tokio-postgres 严格类型校验，`None::<String>` 绑 BIGINT/DATE 列
+///   会 WrongType。这里按列 `data_type` 派发到对应的 `NullTyped(SqlTypeMarker)`，
+///   让绑定层用正确类型的 `None::<T>`。
+/// - **整型列字符串数字 coerce**：前端 grid 编辑器回传的值可能是字符串形态数字（如 `"1"`），
+///   整型列（INT/BIGINT/TINYINT）下转 `DataValue::Int`，避开 WrongType。
+pub fn to_dv_by_col(view: &DictView, col_name: &str, v: &Value) -> DataValue {
+    let dt = view
+        .columns
+        .iter()
+        .find(|c| c.name == col_name)
+        .map(|c| c.data_type.to_uppercase())
+        .unwrap_or_default();
+    if v.is_null() {
+        // 按列类型派发 NullTyped（绑定层据此用 None::<T>）
+        let marker = sql_type_marker_of(&dt);
+        return DataValue::NullTyped(marker);
+    }
+    // 非 null：整型列的字符串数字转 Int
+    if dt.contains("INT") {
+        if let Some(s) = v.as_str()
+            && let Ok(n) = s.parse::<i64>()
+        {
+            return DataValue::Int(n);
+        }
+        if let Some(n) = v.as_i64() {
+            return DataValue::Int(n);
+        }
+    }
+    // 其余按 JSON 值类型自然映射（Number→Int/Float、String→String、Bool→Bool）
+    json_to_datavalue(v)
+}
+
+/// 取列的 SqlTypeMarker（从物理 dataType 字符串派发）。
+pub fn sql_type_marker_of(dt: &str) -> SqlTypeMarker {
+    let dt = dt.to_uppercase();
+    if dt.contains("INT") {
+        SqlTypeMarker::Int
+    } else if dt.contains("DECIMAL") || dt.contains("NUMERIC") {
+        SqlTypeMarker::Decimal
+    } else if dt.contains("DATETIME") || dt.contains("TIMESTAMP") {
+        SqlTypeMarker::Timestamp
+    } else if dt == "DATE" {
+        SqlTypeMarker::Date
+    } else if dt == "BOOLEAN" || dt == "BOOL" {
+        SqlTypeMarker::Bool
+    } else if dt.contains("UUID") {
+        SqlTypeMarker::Uuid
+    } else if dt.contains("JSON") {
+        SqlTypeMarker::Json
+    } else if dt.contains("BYTEA") || dt.contains("BINARY") {
+        SqlTypeMarker::Binary
+    } else {
+        // VARCHAR/TEXT/未知 → Text（None::<String> 兼容）
+        SqlTypeMarker::Text
+    }
 }
 
 // ============================================================================
@@ -347,12 +407,18 @@ pub const SERVER_FILLED_COLS: &[&str] = &[
 pub const SERVER_REPLACED_COLS: &[&str] = &["id", "create_time", "update_time"];
 
 /// 构造单行 upsert 的 (sql, params)。列白名单 + 服务端强填 NOT NULL 常见列。
-/// dct_upsert 与 dct_save 的 inserted/updated 共用。
-pub fn build_upsert_sql(
+/// DataValue 版（推荐，供 execute_sql_with_datavalues）。
+///
+/// 与旧 `build_upsert_sql`（已移除）的差异：
+/// - **null 用占位符 + NullTyped**（不再用 SQL NULL 字面量跳过参数位）：按列类型派发
+///   `NullTyped(SqlTypeMarker)`，让绑定层用正确类型的 `None::<T>`，避开 tokio-postgres
+///   对裸 NULL 参数无法推断列类型的问题（参见 cmx-sql-execution 技能）。
+/// - **整型列字符串数字 coerce**：`to_dv_by_col` 把 `"1"` 转 `DataValue::Int(1)`。
+/// - params 类型为 `Vec<DataValue>`，配合 `execute_sql_with_datavalues` 绑定。
+pub fn build_upsert_sql_dv(
     view: &DictView,
     obj: &serde_json::Map<String, Value>,
-) -> Option<(String, Vec<Value>)> {
-    // 跳过非法列 + 服务端托管列（create_time/update_time 由 backfill 用 now() 填，不接受客户端值）。
+) -> Option<(String, Vec<DataValue>)> {
     let cols: Vec<&String> = obj
         .keys()
         .filter(|k| valid_col(view, k) && !is_server_managed_col(k))
@@ -360,29 +426,22 @@ pub fn build_upsert_sql(
     if cols.is_empty() {
         return None;
     }
-    let mut params: Vec<Value> = Vec::new();
+    let mut params: Vec<DataValue> = Vec::new();
     let mut col_names: Vec<String> = Vec::new();
     let mut placeholders: Vec<String> = Vec::new();
     let mut updates: Vec<String> = Vec::new();
     let mut i = 0usize;
     for c in &cols {
         col_names.push(format!("\"{}\"", c));
-        // null 值用 SQL NULL 字面量，不占参数位 —— tokio-postgres 无法为「裸 NULL 参数」推断列
-        // 类型（bigint 等），会报 "error serializing parameter"。用字面量让 PG 按列类型取 NULL。
-        // 典型场景：自分级字典根级新建行 parent_id=null。
-        if obj[*c].is_null() {
-            placeholders.push("NULL".to_string());
-        } else {
-            i += 1;
-            placeholders.push(format!("${}", i));
-            params.push(obj[*c].clone());
-        }
+        // null 也用占位符，配合 NullTyped 参数（按列类型推断 NULL 类型）
+        i += 1;
+        placeholders.push(format!("${}", i));
+        params.push(to_dv_by_col(view, c, &obj[*c]));
         if **c != view.pk {
             updates.push(format!("\"{}\" = EXCLUDED.\"{}\"", c, c));
         }
     }
-    // 服务端强填 NOT NULL 无默认值的常见列（客户端未给时）：审计时间 + 状态/排序/系统标识 +
-    // 自分级派生列。避免新建行因缺列被 PG 拒绝（db error）。用 SQL 字面量，不占参数位。
+    // 服务端强填 NOT NULL 无默认值的常见列（客户端未给时）。用 SQL 字面量，不占参数位。
     let provided: std::collections::HashSet<&str> = cols.iter().map(|c| c.as_str()).collect();
     let backfill: &[(&str, &str, bool)] = &[
         ("create_time", "now()", false),
@@ -403,7 +462,7 @@ pub fn build_upsert_sql(
             }
         }
     }
-    // full_path 缺失时用 code 值兜底（自分级根级；深层路径前端算）。复用 code 的参数值再绑一次。
+    // full_path 缺失时用 code 值兜底。复用 code 的 DataValue 再绑一次。
     if valid_col(view, "full_path")
         && !provided.contains("full_path")
         && let Some(code_v) = obj.get(&view.code_field)
@@ -411,7 +470,7 @@ pub fn build_upsert_sql(
         i += 1;
         col_names.push("\"full_path\"".to_string());
         placeholders.push(format!("${}", i));
-        params.push(code_v.clone());
+        params.push(to_dv_by_col(view, &view.code_field, code_v));
     }
     let update_clause = if updates.is_empty() {
         "NOTHING".to_string()

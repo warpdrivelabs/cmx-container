@@ -12,12 +12,13 @@
 use serde_json::{Value, json};
 
 use cmx_api_types::Result;
+use cmx_core::model::cell::DataValue;
 use cmx_database_pg::{DatabaseManager, get_default_pg_db_manager};
 
 use cmx_dct_model::{
     DctQuery, DictColumn, DictView, SERVER_FILLED_COLS, SERVER_REPLACED_COLS, base_fieldset,
-    build_search_sql, build_upsert_sql, is_server_managed_col, json_to_datavalue,
-    mint_ids_for_inserts, pk_is_generated, row_fields, valid_col,
+    build_search_sql, build_upsert_sql_dv, is_server_managed_col, json_to_datavalue,
+    mint_ids_for_inserts, pk_is_generated, row_fields, to_dv_by_col, valid_col,
 };
 
 // ============================================================================
@@ -321,20 +322,22 @@ async fn load_base(doc: &Value) -> Value {
 /// 装载字典数据（分页 + 计数）。返回 `{rows,total,page,pageSize}`。
 pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> {
     let (sql, count_sql, params) = build_search_sql(view, raw);
+    // JSON params → DataValue（走 datavalues 绑定，与 cmx-sql-execution 规范一致）。
+    let dv_params: Vec<DataValue> = params.iter().map(json_to_datavalue).collect();
 
     let mm = get_default_pg_db_manager();
     let ds = mm
-        .query_sql_with_json(
+        .query_sql_with_datavalues(
             db_id,
             None,
             &sql,
-            Value::Array(params.clone()),
+            dv_params.clone(),
             &view.dict_code,
         )
         .await
         .map_err(|e| api_err(&format!("字典查询失败: {e}")))?;
     let total_ds = mm
-        .query_sql_with_json(db_id, None, &count_sql, Value::Array(params), "cnt")
+        .query_sql_with_datavalues(db_id, None, &count_sql, dv_params, "cnt")
         .await
         .map_err(|e| api_err(&format!("字典计数失败: {e}")))?;
 
@@ -442,9 +445,9 @@ pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertO
     let mm = get_default_pg_db_manager();
     let mut affected = 0u64;
     for obj in &rows {
-        if let Some((sql, params)) = build_upsert_sql(view, obj) {
+        if let Some((sql, params)) = build_upsert_sql_dv(view, obj) {
             let n = mm
-                .execute_sql_with_json(db_id, None, &sql, Value::Array(params))
+                .execute_sql_with_datavalues(db_id, None, &sql, params)
                 .await
                 .map_err(|e| api_err_db(&e.to_string()))?;
             affected += n;
@@ -464,27 +467,12 @@ pub async fn delete(view: &DictView, id: &str, db_id: &str) -> Result<Value> {
         "DELETE FROM \"{}\" WHERE \"{}\" = $1",
         view.table_name, view.pk
     );
-    // pk 是整数还是字符串：按 pk 列类型决定 JSON 参数（execute_sql_with_json 按值类型绑定）。
-    let pk_is_int = view
-        .columns
-        .iter()
-        .find(|c| c.name == view.pk)
-        .map(|c| {
-            let dt = c.data_type.to_uppercase();
-            dt.contains("INT")
-        })
-        .unwrap_or(false);
-    let param = if pk_is_int {
-        id.parse::<i64>()
-            .map(|n| json!(n))
-            .unwrap_or_else(|_| json!(id))
-    } else {
-        json!(id)
-    };
+    // 按 pk 列类型构造 DataValue（整型列的字符串 id 转 Int），走 datavalues 绑定。
+    let params = vec![to_dv_by_col(view, &view.pk, &json!(id))];
 
     let mm = get_default_pg_db_manager();
     let n = mm
-        .execute_sql_with_json(db_id, None, &sql, json!([param]))
+        .execute_sql_with_datavalues(db_id, None, &sql, params)
         .await
         .map_err(|e| api_err_db(&e.to_string()))?;
 
@@ -634,8 +622,9 @@ async fn save_apply(
                 "DELETE FROM \"{}\" WHERE \"{}\" = $1",
                 view.table_name, view.pk
             );
+            let params = vec![to_dv_by_col(view, &view.pk, id)];
             let n = mm
-                .execute_sql_with_json(db_id, Some(txn_id), &sql, json!([id]))
+                .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                 .await
                 .map_err(|e| api_err_db(&e.to_string()))?;
             affected += n;
@@ -650,9 +639,9 @@ async fn save_apply(
             id_map = mint_ids_for_inserts(view, &mut rows);
         }
         for o in &rows {
-            if let Some((sql, params)) = build_upsert_sql(view, o) {
+            if let Some((sql, params)) = build_upsert_sql_dv(view, o) {
                 let n = mm
-                    .execute_sql_with_json(db_id, Some(txn_id), &sql, Value::Array(params))
+                    .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                     .await
                     .map_err(|e| api_err_db(&e.to_string()))?;
                 affected += n;
@@ -673,8 +662,10 @@ async fn save_apply(
                 _ => continue,
             };
             // 只更新白名单列（排除 pk 自身 + 服务端托管的时间列）。
+            // null 与非 null 统一用占位符，配合 to_dv_by_col 产生的 DataValue（null→NullTyped
+            // 按列类型，整型列字符串数字→Int），走 execute_sql_with_datavalues 绑定。
             let mut set_parts: Vec<String> = Vec::new();
-            let mut params: Vec<Value> = Vec::new();
+            let mut params: Vec<DataValue> = Vec::new();
             let mut i = 0usize;
             for (k, v) in fields {
                 if !valid_col(view, k) || k == &view.pk || is_server_managed_col(k) {
@@ -682,7 +673,7 @@ async fn save_apply(
                 }
                 i += 1;
                 set_parts.push(format!("\"{}\" = ${}", k, i));
-                params.push(v.clone());
+                params.push(to_dv_by_col(view, k, v));
             }
             if set_parts.is_empty() {
                 continue;
@@ -691,15 +682,15 @@ async fn save_apply(
             if valid_col(view, "update_time") {
                 set_parts.push("\"update_time\" = now()".to_string());
             }
-            // pk 参数。
+            // pk 参数（按 pk 列类型，避免字符串 id 绑整型列报 WrongType）。
             i += 1;
             let pk_ph = i;
-            params.push(id.clone());
+            params.push(to_dv_by_col(view, &view.pk, &id));
             // 乐观锁：baseline 存在 + 有 update_time 列 → 加 AND update_time = baseline。
             let baseline = row.get("baseline").filter(|b| !b.is_null()).cloned();
             let lock_clause = if let Some(b) = baseline.filter(|_| valid_col(view, "update_time")) {
                 i += 1;
-                params.push(b);
+                params.push(to_dv_by_col(view, "update_time", &b));
                 format!(" AND \"update_time\" = ${}", i)
             } else {
                 String::new()
@@ -713,7 +704,7 @@ async fn save_apply(
                 lock_clause
             );
             let n = mm
-                .execute_sql_with_json(db_id, Some(txn_id), &sql, Value::Array(params))
+                .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                 .await
                 .map_err(|e| api_err_db(&e.to_string()))?;
             if n == 0 && !lock_clause.is_empty() {
@@ -727,8 +718,9 @@ async fn save_apply(
                     "SELECT \"update_time\" AS ut FROM \"{}\" WHERE \"{}\" = $1",
                     view.table_name, view.pk
                 );
+                let q_params = vec![to_dv_by_col(view, &view.pk, &id)];
                 if let Ok(ds) = mm
-                    .query_sql_with_json(db_id, Some(txn_id), &q, json!([id]), "ut")
+                    .query_sql_with_datavalues(db_id, Some(txn_id), &q, q_params, "ut")
                     .await
                     && let Ok(v) = serde_json::to_value(&ds)
                     && let Some(ut) = v
