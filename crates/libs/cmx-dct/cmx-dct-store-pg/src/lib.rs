@@ -201,6 +201,10 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
         }
     }
 
+    // 显示列序：Common 字段集（baseFieldSet）在前、Audit 字段集（auditFieldSet）置尾，
+    // 其余居中保持合并相对顺序。仅影响 /dct/meta 投影，不影响物理表 DDL。
+    reorder_columns(&mut columns, &base, t);
+
     // 主键：优先 isPrimaryKey 标记列；否则 idField（若存在于列中）；再否则 codeField。
     let id_field = dm
         .get("idField")
@@ -289,6 +293,45 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
         pk,
         spec,
     })
+}
+
+/// 按显示约定重排列顺序：baseFieldSet（Common 字段集）置前、auditFieldSet（Audit 字段集）
+/// 置尾，其余列居中保持合并相对顺序。仅影响 `/dct/meta` 投影的显示列序，不影响物理表 DDL
+/// 与校验规范（后者按字段名查，与顺序无关）。
+fn reorder_columns(columns: &mut Vec<DictColumn>, base: &Value, table_def: &Value) {
+    /// 取 table_def 上某 `*FieldSet` 引用（值=base 字段集名）的字段名集合。
+    fn names_of(base: &Value, table_def: &Value, key: &str) -> std::collections::HashSet<String> {
+        table_def
+            .get(key)
+            .and_then(|v| v.as_str())
+            .and_then(|set_name| base_fieldset(base, set_name))
+            .map(|fields| {
+                fields
+                    .iter()
+                    .filter_map(|f| f.get("name").and_then(|v| v.as_str()).map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    let common = names_of(base, table_def, "baseFieldSet");
+    let audit = names_of(base, table_def, "auditFieldSet");
+    if common.is_empty() && audit.is_empty() {
+        return;
+    }
+    // 三分组，组内保持原合并相对顺序（drain 顺序遍历）。
+    let (mut head, mut mid, mut tail) = (Vec::new(), Vec::new(), Vec::new());
+    for c in columns.drain(..) {
+        if common.contains(&c.name) {
+            head.push(c);
+        } else if audit.contains(&c.name) {
+            tail.push(c);
+        } else {
+            mid.push(c);
+        }
+    }
+    columns.extend(head);
+    columns.extend(mid);
+    columns.extend(tail);
 }
 
 /// 从 baseDctMetaRef.file 读 base 字段集定义（无则空对象）。
@@ -736,4 +779,95 @@ async fn save_apply(
     }
 
     Ok((affected, updated_at, false, id_map))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// 造一个只设 name 的列（其余字段默认，足够测列序）。
+    fn col(name: &str) -> DictColumn {
+        DictColumn {
+            name: name.to_string(),
+            caption: name.to_string(),
+            data_type: "VARCHAR".to_string(),
+            is_pk: false,
+            nullable: true,
+            dim_type: String::new(),
+            ref_dict: String::new(),
+            display_field: String::new(),
+            ref_field: String::new(),
+            physical_field: String::new(),
+            edit: None,
+            edit_settings: None,
+            display: None,
+        }
+    }
+
+    /// base 字段集定义（含 Common 无 ID + Audit）。
+    fn base_meta() -> Value {
+        json!({
+            "fieldSets": {
+                "dictionaryCommonNoIDFields": { "fields": [
+                    {"name": "code"}, {"name": "name"}, {"name": "sort_no"}, {"name": "status"}
+                ]},
+                "dictionaryAuditFields": { "fields": [
+                    {"name": "create_by"}, {"name": "create_time"},
+                    {"name": "update_by"}, {"name": "update_time"}
+                ]}
+            }
+        })
+    }
+
+    #[test]
+    fn reorder_columns_common_first_audit_last() {
+        let base = base_meta();
+        let table_def = json!({
+            "baseFieldSet": "dictionaryCommonNoIDFields",
+            "auditFieldSet": "dictionaryAuditFields"
+        });
+        // 模拟 resolve_dict 合并后顺序：自定义 -> Common -> Audit。
+        let mut columns = vec![
+            col("custom1"), col("custom2"),
+            col("code"), col("name"), col("sort_no"), col("status"),
+            col("create_by"), col("create_time"), col("update_by"), col("update_time"),
+        ];
+        reorder_columns(&mut columns, &base, &table_def);
+        let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec![
+            "code", "name", "sort_no", "status",
+            "custom1", "custom2",
+            "create_by", "create_time", "update_by", "update_time",
+        ]);
+    }
+
+    #[test]
+    fn reorder_columns_no_fieldset_refs_noop() {
+        // 无 baseFieldSet/auditFieldSet 引用 -> 不重排。
+        let base = base_meta();
+        let table_def = json!({});
+        let mut columns = vec![col("a"), col("b"), col("c")];
+        reorder_columns(&mut columns, &base, &table_def);
+        let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn reorder_columns_common_with_id() {
+        // dictionaryCommonFields（含 id）场景：id 也排前。
+        let base = json!({
+            "fieldSets": {
+                "dictionaryCommonFields": { "fields": [
+                    {"name": "id"}, {"name": "code"}, {"name": "name"}
+                ]}
+            }
+        });
+        let table_def = json!({ "baseFieldSet": "dictionaryCommonFields" });
+        let mut columns = vec![col("custom"), col("id"), col("code"), col("name"), col("create_time")];
+        reorder_columns(&mut columns, &base, &table_def);
+        let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+        // Common[id,code,name] -> mid[custom,create_time] -> audit[]（无 audit 引用）
+        assert_eq!(names, vec!["id", "code", "name", "custom", "create_time"]);
+    }
 }
