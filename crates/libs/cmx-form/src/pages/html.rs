@@ -415,7 +415,7 @@ pub struct HtmlPageInput {
     /// 模块（缺省由 id 命名空间推导）。
     #[serde(default)]
     pub module: Option<String>,
-    /// 单据编码 docCode（绑定页面加载的业务单据；缺省无）。
+    /// 单据模块编码 moduleCode（绑定页面加载的业务单据；缺省无）。
     #[serde(default)]
     pub doc: Option<String>,
 }

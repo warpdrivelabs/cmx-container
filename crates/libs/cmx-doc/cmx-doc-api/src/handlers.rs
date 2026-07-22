@@ -44,7 +44,7 @@ pub struct DocDataQuery {
     /// 在 domain/app/module 下自动选默认/最高版本。
     #[serde(default)]
     pub file: Option<String>,
-    /// 单据编码（docMeta.docCode，取值通常为定义文件 stem 中 `_doc_meta` 前段，如 cmxfico / gl_md）；缺失时盲选默认文件，有值时按 docCode 精确定位。
+    /// 单据模块编码（moduleMeta.moduleCode，取值通常为定义文件 stem 中 `_doc_meta` 前段，如 cmxfico / gl_md）；缺失时盲选默认文件，有值时按 moduleCode 精确定位。
     #[serde(default)]
     pub doc: Option<String>,
     /// GET 便捷：根层过滤 `col:value`（简单等值）
@@ -580,7 +580,7 @@ fn project_doc_meta(meta: &DocMetaView) -> Value {
         .collect();
 
     serde_json::json!({
-        "docCode": meta.doc_code,
+        "moduleCode": meta.module_code,
         "version": meta.version,
         "layerOrder": meta.layer_order,
         "layers": layers,
@@ -1035,7 +1035,7 @@ async fn resolve_doc_meta(
     file: Option<&str>,
     doc: Option<&str>,
 ) -> Result<Arc<DocMetaView>> {
-    // file 兜底：缺失/空/脏值（"undefined"/"null" 等）时自动解析（按 doc 盲选或 docCode 精确定位）。
+    // file 兜底：缺失/空/脏值（"undefined"/"null" 等）时自动解析（按 doc 盲选或 moduleCode 精确定位）。
     let file = match file {
         Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.to_string(),
         _ => resolve_doc_file(domain, app, module, doc).await?,

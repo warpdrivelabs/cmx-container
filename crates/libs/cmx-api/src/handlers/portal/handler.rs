@@ -840,7 +840,7 @@ pub async fn definitions_list(
 ///
 /// 定位段取 `file` 优先、`id` 兜底（与 DefRef::file_value 一致）：
 /// - 以 `.json` 结尾（含 base 字段集、显式文件名）→ 直接按文件路径读。
-/// - 非 `.json`（业务编码：DOC 的 docCode / DCT 的 dictCode）→ 按 kind 反查默认/最新版本文件：
+/// - 非 `.json`（业务编码：DOC 的 moduleCode / DCT 的 dictCode）→ 按 kind 反查默认/最新版本文件：
 ///   DOC 调 resolve_doc_file；DCT 调 resolve_dict_file 并过滤 dictionaryTables 只返回命中单表。
 pub async fn definitions_get(
     State(_s): State<CmxAppState>,
@@ -898,7 +898,7 @@ pub async fn definitions_get(
                 },
             )
             .await?;
-            // 单表化：只保留命中的那张字典表（dictCode/tableName 任一匹配），保留 dctMeta 头与 baseDctMetaRef
+            // 单表化：只保留命中的那张字典表（dictCode/tableName 任一匹配），保留 moduleMeta 头与 baseDctMetaRef
             if let Some(tables) = d.get_mut("dictionaryTables").and_then(|v| v.as_array_mut()) {
                 tables.retain(|t| cmx_portal::definitions::resolve::dict_matches(t, code));
             }
@@ -929,7 +929,7 @@ pub async fn definitions_save(
 /// `POST /api/definitions/batch` —— 批量读 + base 字段集。
 ///
 /// ref 的定位段（file/id）为业务编码（非 .json）时按 kind 反查：
-/// DOC 按 docCode、DCT 按 dictCode（且结果只保留命中单表）。
+/// DOC 按 moduleCode、DCT 按 dictCode（且结果只保留命中单表）。
 /// 反查在 handler 层完成（改写成 .json ref 后交给 store），DCT 单表过滤在结果回写后做。
 pub async fn definitions_batch(
     State(_s): State<CmxAppState>,

@@ -1,6 +1,7 @@
 {
-  "docMeta": {
-    "docCode": "gl_md",
+  "moduleMeta": {
+    "moduleCode": "gl_md",
+    "moduleName": "总账",
     "metaName": "总账业务单据元数据",
     "metaKind": "DOC",
     "version": 1,

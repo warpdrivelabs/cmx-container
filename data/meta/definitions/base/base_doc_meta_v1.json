@@ -1,6 +1,8 @@
 {
-  "baseMeta": {
-    "metaCode": "base_doc_meta",
+  "moduleMeta": {
+    "moduleCode": "base_doc_meta",
+    "moduleName": "基础单据",
+    "metaKind": "BASE",
     "metaName": "基础业务单据元数据",
     "version": 1,
     "remark": "跨模块复用的业务单据基础 fieldSet。业务模块通过 baseDocMetaRef 引用，覆盖单据技术审计、业务标识、来源引用、生命周期、附件和备注等公共字段。"

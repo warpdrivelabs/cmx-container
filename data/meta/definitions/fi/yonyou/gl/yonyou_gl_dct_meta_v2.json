@@ -1,8 +1,9 @@
 {
-  "dctMeta": {
+  "moduleMeta": {
     "metaName": "用友 ERP GL 会计凭证数据字典元数据",
     "metaKind": "DCT",
-    "dctGroupCode": "GL",
+    "moduleCode": "GL",
+    "moduleName": "总账(用友 ERP)",
     "version": 2,
     "versionName": "",
     "designStyle": "separate-dictionary-tables",

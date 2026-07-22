@@ -55,7 +55,7 @@ mod tests {
     #[test]
     fn put_get_invalidate() {
         let doc = json!({
-            "docMeta": { "docCode": "T", "version": 1 },
+            "moduleMeta": { "moduleCode": "T", "version": 1 },
             "voucherSchema": { "schema": [[{"id":"t","level":"L1"}]], "relations": [] },
             "voucherTables": [ { "level":"L1", "tableName":"t",
                 "fields":[{"name":"id","dataType":"BIGINT","isPrimaryKey":1}] } ]

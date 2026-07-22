@@ -49,15 +49,15 @@ pub fn dict_matches(t: &Value, target: &str) -> bool {
         || m.get("tableName").and_then(|v| v.as_str()) == Some(target)
 }
 
-/// 判断一份 DOC 定义是否命中目标编码：`docMeta.docCode` 等于 `target`。
+/// 判断一份 DOC 定义是否命中目标编码：`moduleMeta.moduleCode` 等于 `target`。
 pub fn doc_matches(doc: &Value, target: &str) -> bool {
-    doc.get("docMeta")
-        .and_then(|m| m.get("docCode"))
+    doc.get("moduleMeta")
+        .and_then(|m| m.get("moduleCode"))
         .and_then(|v| v.as_str())
         == Some(target)
 }
 
-/// 解析 DOC 定义文件：`doc` 有值时按 `docMeta.docCode` 精确定位；缺失时盲选默认/最高版本。
+/// 解析 DOC 定义文件：`doc` 有值（URL query 中传入的 moduleCode）时按 `moduleMeta.moduleCode` 精确定位；缺失时盲选默认/最高版本。
 pub async fn resolve_doc_file(
     domain: &str,
     app: &str,
@@ -109,18 +109,18 @@ pub async fn resolve_doc_file(
             .max_by_key(|(_, _, v)| *v)
             .map(|(f, _, _)| f.clone())
     };
-    // doc 有值：仿 DCT resolve_dict_file，逐候选文件读 docMeta.docCode 验证匹配（精确定位）。
-    if let Some(doc_code) = doc.filter(|d| !d.is_empty()) {
+    // doc 有值：仿 DCT resolve_dict_file，逐候选文件读 moduleMeta.moduleCode 验证匹配（精确定位）。
+    if let Some(module_code) = doc.filter(|d| !d.is_empty()) {
         // 收集候选文件（每组代表优先）。
         let candidates: Vec<String> = groups.values().filter_map(|arr| pick(arr)).collect();
-        // 代表都没命中时，回退扫描该 stem 组其余版本（防 isDefault 版本恰好 docCode 不符）。
+        // 代表都没命中时，回退扫描该 stem 组其余版本（防 isDefault 版本恰好 moduleCode 不符）。
         let mut fallback: Vec<String> = Vec::new();
         for (_, file, _, _) in &entries {
             if !candidates.contains(file) {
                 fallback.push(file.clone());
             }
         }
-        // 逐候选验证 docCode，收集所有命中的（同 docCode 多文件时按 isDefault/version 选最优）。
+        // 逐候选验证 moduleCode，收集所有命中的（同 moduleCode 多文件时按 isDefault/version 选最优）。
         let mut hits: Vec<(String, bool, u64)> = Vec::new();
         let entry_meta = |file: &str| -> (bool, u64) {
             entries
@@ -143,7 +143,7 @@ pub async fn resolve_doc_file(
                 Ok(d) => d,
                 Err(_) => continue,
             };
-            if doc_matches(&doc_json, doc_code) {
+            if doc_matches(&doc_json, module_code) {
                 let (is_default, version) = entry_meta(f);
                 hits.push((f.clone(), is_default, version));
             }
@@ -156,7 +156,7 @@ pub async fn resolve_doc_file(
             return Ok(resolved);
         }
         return Err(not_found(format!(
-            "未在 {domain}/{app}/{module} 下找到 docCode={doc_code} 的 DOC 定义文件"
+            "未在 {domain}/{app}/{module} 下找到 moduleCode={module_code} 的 DOC 定义文件"
         )));
     }
     // doc 缺失：盲选默认（向后兼容）。收集各组代表，再做一次全局选代表（跨 stem 取 isDefault 优先 / version 最大）。

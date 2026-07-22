@@ -1,6 +1,7 @@
 {
-  "docMeta": {
-    "docCode": "sap_fi",
+  "moduleMeta": {
+    "moduleCode": "sap_fi",
+    "moduleName": "财务会计(SAP)",
     "metaName": "SAP FI 会计凭证单据元数据",
     "metaKind": "DOC",
     "version": 1,

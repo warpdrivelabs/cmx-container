@@ -43,7 +43,7 @@ async function apiJson (url, options = {}) {
 
 function ensureShape () {
   if (!state.doc || typeof state.doc !== 'object') state.doc = {}
-  if (!state.doc.baseMeta || typeof state.doc.baseMeta !== 'object') state.doc.baseMeta = {}
+  if (!state.doc.moduleMeta || typeof state.doc.moduleMeta !== 'object') state.doc.moduleMeta = {}
   if (!state.doc.fieldSets || typeof state.doc.fieldSets !== 'object') state.doc.fieldSets = {}
 }
 
@@ -184,13 +184,13 @@ function setPath (obj, path, value, type = '') {
   else node[leaf] = value
 }
 
-function updateBaseMeta (field, value) {
+function updateModuleMeta (field, value) {
   ensureShape()
   if (field === 'version') {
     const n = Number(value)
-    state.doc.baseMeta.version = Number.isFinite(n) ? n : value
-  } else if (value === '') delete state.doc.baseMeta[field]
-  else state.doc.baseMeta[field] = value
+    state.doc.moduleMeta.version = Number.isFinite(n) ? n : value
+  } else if (value === '') delete state.doc.moduleMeta[field]
+  else state.doc.moduleMeta[field] = value
   markDirty()
 }
 
@@ -420,7 +420,7 @@ function headerHtml (title) {
 function bindCommon (root) {
   root.querySelector('[data-action="save"]')?.addEventListener('click', saveDoc)
   root.querySelector('[data-action="reload"]')?.addEventListener('click', reloadDoc)
-  root.querySelectorAll('[data-base-meta]').forEach((el) => el.addEventListener('input', () => updateBaseMeta(el.getAttribute('data-base-meta'), el.value)))
+  root.querySelectorAll('[data-module-meta]').forEach((el) => el.addEventListener('input', () => updateModuleMeta(el.getAttribute('data-module-meta'), el.value)))
   root.querySelectorAll('[data-fs-prop]').forEach((el) => el.addEventListener('input', () => updateFieldSetProp(el.getAttribute('data-fs-prop'), el.value)))
   root.querySelectorAll('[data-field-index][data-field-prop]').forEach((el) => {
     const event = el.type === 'checkbox' ? 'change' : 'input'
@@ -501,7 +501,7 @@ function managerHtml () {
 }
 
 function listHtml () {
-  const meta = state.doc?.baseMeta || {}
+  const meta = state.doc?.moduleMeta || {}
   return `<div class="bdn-wrap">
     <div class="bdn-card flex" style="border:0;border-radius:0">
       <div class="bdn-card-head"><span class="bdn-card-title">基础文件</span><span class="bdn-spacer"></span><button class="bdn-btn" data-action="reload-list">刷新</button></div>
@@ -510,10 +510,10 @@ function listHtml () {
       <div class="bdn-scroll"><div class="bdn-list">${fieldSetListHtml()}</div></div>
       <div class="bdn-card-head"><span class="bdn-card-title">元数据属性</span></div>
       <div class="bdn-form">
-        <label>编码</label><input data-base-meta="metaCode" value="${esc(meta.metaCode || '')}">
-        <label>名称</label><input data-base-meta="metaName" value="${esc(meta.metaName || '')}">
-        <label>版本</label><input data-base-meta="version" type="number" value="${esc(meta.version ?? '')}">
-        <label>说明</label><input data-base-meta="remark" value="${esc(meta.remark || '')}">
+        <label>编码</label><input data-module-meta="moduleCode" value="${esc(meta.moduleCode || '')}">
+        <label>名称</label><input data-module-meta="metaName" value="${esc(meta.metaName || '')}">
+        <label>版本</label><input data-module-meta="version" type="number" value="${esc(meta.version ?? '')}">
+        <label>说明</label><input data-module-meta="remark" value="${esc(meta.remark || '')}">
       </div>
       <div class="bdn-status">${esc(state.message || '')}</div>
     </div>

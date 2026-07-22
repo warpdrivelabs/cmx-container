@@ -303,7 +303,7 @@ pub fn public_tool_schemas() -> Value {
             "name": "apply_json_patch", "description": "审批后应用 JSON Pointer 补丁", "requiresApproval": true,
             "inputSchema": { "type": "object", "properties": {
                 "path": { "type": "string" },
-                "pointer": { "type": "string", "description": "JSON Pointer，如 /baseMeta/status" },
+                "pointer": { "type": "string", "description": "JSON Pointer，如 /moduleMeta/isDefault" },
                 "value": { "description": "要写入的 JSON 值" }
             }, "required": ["path", "pointer", "value"] }
         },

@@ -65,7 +65,7 @@ async function ensureReady () {
 
 function ensureShape () {
   if (!state.doc || typeof state.doc !== 'object') state.doc = {}
-  if (!state.doc.baseMeta || typeof state.doc.baseMeta !== 'object') state.doc.baseMeta = {}
+  if (!state.doc.moduleMeta || typeof state.doc.moduleMeta !== 'object') state.doc.moduleMeta = {}
   if (!state.doc.fieldSets || typeof state.doc.fieldSets !== 'object') state.doc.fieldSets = {}
 }
 

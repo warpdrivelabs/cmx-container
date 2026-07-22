@@ -1,6 +1,7 @@
 {
-  "docMeta": {
-    "docCode": "kingdee_gl",
+  "moduleMeta": {
+    "moduleCode": "kingdee_gl",
+    "moduleName": "总账(金蝶 ERP)",
     "metaName": "金蝶 ERP GL 会计凭证单据元数据",
     "metaKind": "DOC",
     "version": 1,

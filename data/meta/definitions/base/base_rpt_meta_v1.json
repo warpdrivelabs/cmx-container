@@ -1,6 +1,8 @@
 {
-  "baseMeta": {
-    "metaCode": "base_rpt_meta",
+  "moduleMeta": {
+    "moduleCode": "base_rpt_meta",
+    "moduleName": "基础报表",
+    "metaKind": "BASE",
     "metaName": "基础财务报表元数据",
     "version": 1,
     "remark": "跨模块复用的财务报表基础元数据。报表模板通过 baseRptMetaRef 引用。storageTables 定义报表数据落地的三张共享物理表（cr_report_instance 实例头 / cr_cell_value 单元格值 / cr_report_snapshot 版本快照），由 compile_rpt 一次性建出，全部报表模板共用。fieldSets.reportAuditFields 为三表共用的审计列。"
@@ -17,7 +19,9 @@
           "decimalDigits": 0,
           "id": "create_by",
           "name": "create_by",
-          "caption": { "zh_CN": "创建人ID" }
+          "caption": {
+            "zh_CN": "创建人ID"
+          }
         },
         {
           "dataType": "DATETIME",
@@ -25,7 +29,9 @@
           "nullable": true,
           "id": "create_time",
           "name": "create_time",
-          "caption": { "zh_CN": "创建时间" }
+          "caption": {
+            "zh_CN": "创建时间"
+          }
         },
         {
           "dataType": "BIGINT",
@@ -35,7 +41,9 @@
           "decimalDigits": 0,
           "id": "update_by",
           "name": "update_by",
-          "caption": { "zh_CN": "更新人ID" }
+          "caption": {
+            "zh_CN": "更新人ID"
+          }
         },
         {
           "dataType": "DATETIME",
@@ -43,7 +51,9 @@
           "nullable": true,
           "id": "update_time",
           "name": "update_time",
-          "caption": { "zh_CN": "更新时间" }
+          "caption": {
+            "zh_CN": "更新时间"
+          }
         },
         {
           "dataType": "TINYINT",
@@ -53,7 +63,9 @@
           "nullable": false,
           "id": "delete_flag",
           "name": "delete_flag",
-          "caption": { "zh_CN": "逻辑删除标识(0正常1删除)" }
+          "caption": {
+            "zh_CN": "逻辑删除标识(0正常1删除)"
+          }
         }
       ]
     }
@@ -66,60 +78,152 @@
       "remark": "报表实例头：一次出表一行。唯一键(tpl_code, org_id, period_code, scope) 保证同口径不重复。",
       "auditFieldSet": "reportAuditFields",
       "uniqueKeys": [
-        ["tpl_code", "org_id", "period_code", "scope"]
+        [
+          "tpl_code",
+          "org_id",
+          "period_code",
+          "scope"
+        ]
       ],
       "fields": [
         {
-          "dataType": "BIGINT", "fieldLength": 20, "nullable": false, "intDigits": 20, "decimalDigits": 0,
-          "id": "id", "name": "id", "caption": { "zh_CN": "实例主键" }, "isPrimaryKey": 1
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "实例主键"
+          },
+          "isPrimaryKey": 1
         },
         {
-          "dataType": "BIGINT", "fieldLength": 20, "nullable": false, "intDigits": 20, "decimalDigits": 0,
-          "id": "tpl_id", "name": "tpl_id", "caption": { "zh_CN": "报表模板定义ID" }
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "tpl_id",
+          "name": "tpl_id",
+          "caption": {
+            "zh_CN": "报表模板定义ID"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 64, "nullable": false,
-          "id": "tpl_code", "name": "tpl_code", "caption": { "zh_CN": "报表编码" }
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "id": "tpl_code",
+          "name": "tpl_code",
+          "caption": {
+            "zh_CN": "报表编码"
+          }
         },
         {
-          "dataType": "INT", "fieldLength": 11, "nullable": false, "intDigits": 11, "decimalDigits": 0,
-          "id": "tpl_version", "name": "tpl_version", "caption": { "zh_CN": "模板版本" }
+          "dataType": "INT",
+          "fieldLength": 11,
+          "nullable": false,
+          "intDigits": 11,
+          "decimalDigits": 0,
+          "id": "tpl_version",
+          "name": "tpl_version",
+          "caption": {
+            "zh_CN": "模板版本"
+          }
         },
         {
-          "dataType": "BIGINT", "fieldLength": 20, "nullable": false, "intDigits": 20, "decimalDigits": 0,
-          "id": "org_id", "name": "org_id", "caption": { "zh_CN": "组织机构ID" }
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "org_id",
+          "name": "org_id",
+          "caption": {
+            "zh_CN": "组织机构ID"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 32, "nullable": false,
-          "id": "period_code", "name": "period_code", "caption": { "zh_CN": "会计期间" }
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": false,
+          "id": "period_code",
+          "name": "period_code",
+          "caption": {
+            "zh_CN": "会计期间"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 16, "nullable": false,
-          "id": "scope", "name": "scope", "caption": { "zh_CN": "口径(single单体/rollup汇总/consol合并)" }
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "id": "scope",
+          "name": "scope",
+          "caption": {
+            "zh_CN": "口径(single单体/rollup汇总/consol合并)"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 16, "nullable": true,
-          "id": "currency_code", "name": "currency_code", "caption": { "zh_CN": "币种" }
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "币种"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 16, "nullable": false,
-          "id": "status", "name": "status", "caption": { "zh_CN": "状态(draft编制/final定版/archived归档)" }
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "状态(draft编制/final定版/archived归档)"
+          }
         },
         {
-          "dataType": "JSON", "nullable": true,
-          "id": "param_json", "name": "param_json", "caption": { "zh_CN": "出表参数快照" }
+          "dataType": "JSON",
+          "nullable": true,
+          "id": "param_json",
+          "name": "param_json",
+          "caption": {
+            "zh_CN": "出表参数快照"
+          }
         },
         {
-          "dataType": "JSON", "nullable": true,
-          "id": "check_result", "name": "check_result", "caption": { "zh_CN": "勾稽校验结果" }
+          "dataType": "JSON",
+          "nullable": true,
+          "id": "check_result",
+          "name": "check_result",
+          "caption": {
+            "zh_CN": "勾稽校验结果"
+          }
         },
         {
-          "dataType": "DATETIME", "fieldLength": 19, "nullable": true,
-          "id": "calc_at", "name": "calc_at", "caption": { "zh_CN": "计算时间" }
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true,
+          "id": "calc_at",
+          "name": "calc_at",
+          "caption": {
+            "zh_CN": "计算时间"
+          }
         },
         {
-          "dataType": "BIGINT", "fieldLength": 20, "nullable": true, "intDigits": 20, "decimalDigits": 0,
-          "id": "calc_by", "name": "calc_by", "caption": { "zh_CN": "计算人ID" }
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "calc_by",
+          "name": "calc_by",
+          "caption": {
+            "zh_CN": "计算人ID"
+          }
         }
       ]
     },
@@ -130,52 +234,131 @@
       "remark": "报表单元格值（稀疏存储，仅有值单元格入库）。表间取数/汇总/合并的读取对象。",
       "auditFieldSet": "reportAuditFields",
       "uniqueKeys": [
-        ["instance_id", "cell_addr"]
+        [
+          "instance_id",
+          "cell_addr"
+        ]
       ],
       "fields": [
         {
-          "dataType": "BIGINT", "fieldLength": 20, "nullable": false, "intDigits": 20, "decimalDigits": 0,
-          "id": "id", "name": "id", "caption": { "zh_CN": "单元格值主键" }, "isPrimaryKey": 1
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "单元格值主键"
+          },
+          "isPrimaryKey": 1
         },
         {
-          "dataType": "BIGINT", "fieldLength": 20, "nullable": false, "intDigits": 20, "decimalDigits": 0,
-          "id": "instance_id", "name": "instance_id", "caption": { "zh_CN": "所属报表实例ID" }
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "instance_id",
+          "name": "instance_id",
+          "caption": {
+            "zh_CN": "所属报表实例ID"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 16, "nullable": false,
-          "id": "cell_addr", "name": "cell_addr", "caption": { "zh_CN": "单元格坐标(如C3)" }
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "id": "cell_addr",
+          "name": "cell_addr",
+          "caption": {
+            "zh_CN": "单元格坐标(如C3)"
+          }
         },
         {
-          "dataType": "INT", "fieldLength": 11, "nullable": false, "intDigits": 11, "decimalDigits": 0,
-          "id": "row_no", "name": "row_no", "caption": { "zh_CN": "行号" }
+          "dataType": "INT",
+          "fieldLength": 11,
+          "nullable": false,
+          "intDigits": 11,
+          "decimalDigits": 0,
+          "id": "row_no",
+          "name": "row_no",
+          "caption": {
+            "zh_CN": "行号"
+          }
         },
         {
-          "dataType": "INT", "fieldLength": 11, "nullable": false, "intDigits": 11, "decimalDigits": 0,
-          "id": "col_no", "name": "col_no", "caption": { "zh_CN": "列号" }
+          "dataType": "INT",
+          "fieldLength": 11,
+          "nullable": false,
+          "intDigits": 11,
+          "decimalDigits": 0,
+          "id": "col_no",
+          "name": "col_no",
+          "caption": {
+            "zh_CN": "列号"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 64, "nullable": true,
-          "id": "block_id", "name": "block_id", "caption": { "zh_CN": "所属区块" }
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "id": "block_id",
+          "name": "block_id",
+          "caption": {
+            "zh_CN": "所属区块"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 64, "nullable": true,
-          "id": "cell_name", "name": "cell_name", "caption": { "zh_CN": "命名项(表间取数/勾稽用)" }
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "id": "cell_name",
+          "name": "cell_name",
+          "caption": {
+            "zh_CN": "命名项(表间取数/勾稽用)"
+          }
         },
         {
-          "dataType": "DECIMAL", "fieldLength": 28, "intDigits": 22, "decimalDigits": 6, "nullable": true,
-          "id": "num_value", "name": "num_value", "caption": { "zh_CN": "数值" }
+          "dataType": "DECIMAL",
+          "fieldLength": 28,
+          "intDigits": 22,
+          "decimalDigits": 6,
+          "nullable": true,
+          "id": "num_value",
+          "name": "num_value",
+          "caption": {
+            "zh_CN": "数值"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 1024, "nullable": true,
-          "id": "str_value", "name": "str_value", "caption": { "zh_CN": "文本值" }
+          "dataType": "VARCHAR",
+          "fieldLength": 1024,
+          "nullable": true,
+          "id": "str_value",
+          "name": "str_value",
+          "caption": {
+            "zh_CN": "文本值"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 1024, "nullable": true,
-          "id": "formula_snapshot", "name": "formula_snapshot", "caption": { "zh_CN": "公式快照" }
+          "dataType": "VARCHAR",
+          "fieldLength": 1024,
+          "nullable": true,
+          "id": "formula_snapshot",
+          "name": "formula_snapshot",
+          "caption": {
+            "zh_CN": "公式快照"
+          }
         },
         {
-          "dataType": "JSON", "nullable": true,
-          "id": "drill_key", "name": "drill_key", "caption": { "zh_CN": "下钻回溯键(取数过滤条件)" }
+          "dataType": "JSON",
+          "nullable": true,
+          "id": "drill_key",
+          "name": "drill_key",
+          "caption": {
+            "zh_CN": "下钻回溯键(取数过滤条件)"
+          }
         }
       ]
     },
@@ -186,44 +369,111 @@
       "remark": "报表版本快照：定版/归档时冻结实例全部单元格值 + 模板版本，不可变，供审计与期间对比。",
       "auditFieldSet": "reportAuditFields",
       "uniqueKeys": [
-        ["instance_id", "seq"]
+        [
+          "instance_id",
+          "seq"
+        ]
       ],
       "fields": [
         {
-          "dataType": "BIGINT", "fieldLength": 20, "nullable": false, "intDigits": 20, "decimalDigits": 0,
-          "id": "id", "name": "id", "caption": { "zh_CN": "快照主键" }, "isPrimaryKey": 1
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "快照主键"
+          },
+          "isPrimaryKey": 1
         },
         {
-          "dataType": "BIGINT", "fieldLength": 20, "nullable": false, "intDigits": 20, "decimalDigits": 0,
-          "id": "instance_id", "name": "instance_id", "caption": { "zh_CN": "所属报表实例ID" }
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "instance_id",
+          "name": "instance_id",
+          "caption": {
+            "zh_CN": "所属报表实例ID"
+          }
         },
         {
-          "dataType": "INT", "fieldLength": 11, "nullable": false, "intDigits": 11, "decimalDigits": 0,
-          "id": "seq", "name": "seq", "caption": { "zh_CN": "快照序号" }
+          "dataType": "INT",
+          "fieldLength": 11,
+          "nullable": false,
+          "intDigits": 11,
+          "decimalDigits": 0,
+          "id": "seq",
+          "name": "seq",
+          "caption": {
+            "zh_CN": "快照序号"
+          }
         },
         {
-          "dataType": "DATETIME", "fieldLength": 19, "nullable": false,
-          "id": "snapshot_at", "name": "snapshot_at", "caption": { "zh_CN": "快照时间" }
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false,
+          "id": "snapshot_at",
+          "name": "snapshot_at",
+          "caption": {
+            "zh_CN": "快照时间"
+          }
         },
         {
-          "dataType": "BIGINT", "fieldLength": 20, "nullable": true, "intDigits": 20, "decimalDigits": 0,
-          "id": "operator_id", "name": "operator_id", "caption": { "zh_CN": "操作人ID" }
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "operator_id",
+          "name": "operator_id",
+          "caption": {
+            "zh_CN": "操作人ID"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 128, "nullable": true,
-          "id": "operator_name", "name": "operator_name", "caption": { "zh_CN": "操作人姓名" }
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true,
+          "id": "operator_name",
+          "name": "operator_name",
+          "caption": {
+            "zh_CN": "操作人姓名"
+          }
         },
         {
-          "dataType": "INT", "fieldLength": 11, "nullable": false, "intDigits": 11, "decimalDigits": 0,
-          "id": "tpl_version", "name": "tpl_version", "caption": { "zh_CN": "冻结时模板版本" }
+          "dataType": "INT",
+          "fieldLength": 11,
+          "nullable": false,
+          "intDigits": 11,
+          "decimalDigits": 0,
+          "id": "tpl_version",
+          "name": "tpl_version",
+          "caption": {
+            "zh_CN": "冻结时模板版本"
+          }
         },
         {
-          "dataType": "TEXT", "nullable": true,
-          "id": "frozen_cells", "name": "frozen_cells", "caption": { "zh_CN": "冻结单元格(列式/明细)" }
+          "dataType": "TEXT",
+          "nullable": true,
+          "id": "frozen_cells",
+          "name": "frozen_cells",
+          "caption": {
+            "zh_CN": "冻结单元格(列式/明细)"
+          }
         },
         {
-          "dataType": "VARCHAR", "fieldLength": 128, "nullable": true,
-          "id": "signature", "name": "signature", "caption": { "zh_CN": "校验签名" }
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true,
+          "id": "signature",
+          "name": "signature",
+          "caption": {
+            "zh_CN": "校验签名"
+          }
         }
       ]
     }
