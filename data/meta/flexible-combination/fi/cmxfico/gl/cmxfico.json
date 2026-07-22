@@ -8,70 +8,15 @@
   "module": "gl",
   "title": "会计凭证",
   "anchorDimensions": [],
-  "description": "科目辅助核算：anchor=[account]，按科目/科目类目细分辅助核算维度",
+  "description": "最小化弹性组合：按 L3 总账科目 ID 直接匹配，展示不同的 L4 辅助核算字段",
   "status": "draft",
   "tags": [],
   "dimensions": {
-    "fiscal_period": {
-      "name": "会计期间",
-      "attributes": [
-        "item_name"
-      ],
-      "dict": {
-        "dictId": "fiscal_period",
-        "dictCode": "fiscal_period",
-        "idCol": "id",
-        "codeCol": "item_code",
-        "labelCol": "item_name",
-        "parentCol": "parent_id",
-        "hierarchical": true,
-        "helpLayout": "grid",
-        "valueField": "item_code",
-        "displayMode": "code-label",
-        "dictTitle": "选择会计期间",
-        "filters": null,
-        "pageSize": 50,
-        "writeBack": null,
-        "columns": [
-          {
-            "id": "item_code",
-            "caption": "编码",
-            "type": "text",
-            "width": "130px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "item_name",
-            "caption": "名称",
-            "type": "text",
-            "width": "180px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "id",
-            "caption": "ID",
-            "type": "text",
-            "width": "110px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "status",
-            "caption": "状态",
-            "type": "number",
-            "width": "70px",
-            "editMode": "readonly"
-          }
-        ]
-      },
-      "valueType": "dict-select"
-    },
     "gl_account": {
-      "name": "科目ID",
+      "name": "总账科目",
       "attributes": [
         "item_name",
-        "item_code",
-        "account_type",
-        "cashflow_related"
+        "item_code"
       ],
       "dict": {
         "dictId": "gl_account",
@@ -84,7 +29,7 @@
         "helpLayout": "grid",
         "valueField": "item_code",
         "displayMode": "code-label",
-        "dictTitle": "选择科目ID",
+        "dictTitle": "选择总账科目",
         "filters": null,
         "pageSize": 50,
         "writeBack": null,
@@ -120,465 +65,12 @@
         ]
       },
       "valueType": "dict-select"
-    },
-    "profit_center": {
-      "name": "利润中心",
-      "attributes": [
-        "item_name"
-      ],
-      "dict": {
-        "dictId": "profit_ctr",
-        "dictCode": "profit_ctr",
-        "idCol": "id",
-        "codeCol": "item_code",
-        "labelCol": "item_name",
-        "parentCol": "parent_id",
-        "hierarchical": true,
-        "helpLayout": "grid",
-        "valueField": "item_code",
-        "displayMode": "code-label",
-        "dictTitle": "选择利润中心",
-        "filters": null,
-        "pageSize": 50,
-        "writeBack": null,
-        "columns": [
-          {
-            "id": "item_code",
-            "caption": "编码",
-            "type": "text",
-            "width": "130px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "item_name",
-            "caption": "名称",
-            "type": "text",
-            "width": "180px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "id",
-            "caption": "ID",
-            "type": "text",
-            "width": "110px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "status",
-            "caption": "状态",
-            "type": "number",
-            "width": "70px",
-            "editMode": "readonly"
-          }
-        ]
-      },
-      "valueType": "dict-select"
-    },
-    "cost_center": {
-      "name": "成本中心",
-      "attributes": [
-        "item_name"
-      ],
-      "dict": {
-        "dictId": "cost_center",
-        "dictCode": "cost_center",
-        "idCol": "id",
-        "codeCol": "item_code",
-        "labelCol": "item_name",
-        "parentCol": "parent_id",
-        "hierarchical": true,
-        "helpLayout": "grid",
-        "valueField": "item_code",
-        "displayMode": "code-label",
-        "dictTitle": "选择成本中心",
-        "filters": null,
-        "pageSize": 50,
-        "writeBack": null,
-        "columns": [
-          {
-            "id": "item_code",
-            "caption": "编码",
-            "type": "text",
-            "width": "130px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "item_name",
-            "caption": "名称",
-            "type": "text",
-            "width": "180px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "id",
-            "caption": "ID",
-            "type": "text",
-            "width": "110px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "status",
-            "caption": "状态",
-            "type": "number",
-            "width": "70px",
-            "editMode": "readonly"
-          }
-        ]
-      },
-      "valueType": "dict-select"
-    },
-    "project": {
-      "name": "项目",
-      "attributes": [
-        "item_name"
-      ],
-      "dict": {
-        "dictId": "project",
-        "dictCode": "project",
-        "idCol": "id",
-        "codeCol": "item_code",
-        "labelCol": "item_name",
-        "parentCol": "parent_id",
-        "hierarchical": true,
-        "helpLayout": "grid",
-        "valueField": "item_code",
-        "displayMode": "code-label",
-        "dictTitle": "选择项目",
-        "filters": null,
-        "pageSize": 50,
-        "writeBack": null,
-        "columns": [
-          {
-            "id": "item_code",
-            "caption": "编码",
-            "type": "text",
-            "width": "130px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "item_name",
-            "caption": "名称",
-            "type": "text",
-            "width": "180px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "id",
-            "caption": "ID",
-            "type": "text",
-            "width": "110px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "status",
-            "caption": "状态",
-            "type": "number",
-            "width": "70px",
-            "editMode": "readonly"
-          }
-        ]
-      },
-      "valueType": "dict-select"
-    },
-    "partner": {
-      "name": "合作伙伴(客户/供应商)",
-      "attributes": [
-        "item_name"
-      ],
-      "dict": {
-        "dictId": "bus_partner",
-        "dictCode": "bus_partner",
-        "idCol": "id",
-        "codeCol": "item_code",
-        "labelCol": "item_name",
-        "parentCol": "parent_id",
-        "hierarchical": true,
-        "helpLayout": "grid",
-        "valueField": "item_code",
-        "displayMode": "code-label",
-        "dictTitle": "选择合作伙伴(客户/供应商)",
-        "filters": null,
-        "pageSize": 50,
-        "writeBack": null,
-        "columns": [
-          {
-            "id": "item_code",
-            "caption": "编码",
-            "type": "text",
-            "width": "130px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "item_name",
-            "caption": "名称",
-            "type": "text",
-            "width": "180px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "id",
-            "caption": "ID",
-            "type": "text",
-            "width": "110px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "status",
-            "caption": "状态",
-            "type": "number",
-            "width": "70px",
-            "editMode": "readonly"
-          }
-        ]
-      },
-      "valueType": "dict-select"
-    },
-    "contract": {
-      "name": "合同",
-      "attributes": [
-        "item_name"
-      ],
-      "dict": {
-        "dictId": "contract",
-        "dictCode": "contract",
-        "idCol": "id",
-        "codeCol": "item_code",
-        "labelCol": "item_name",
-        "parentCol": null,
-        "hierarchical": false,
-        "helpLayout": "grid",
-        "valueField": "item_code",
-        "displayMode": "code-label",
-        "dictTitle": "选择合同",
-        "filters": null,
-        "pageSize": 50,
-        "writeBack": null,
-        "columns": [
-          {
-            "id": "item_code",
-            "caption": "编码",
-            "type": "text",
-            "width": "130px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "item_name",
-            "caption": "名称",
-            "type": "text",
-            "width": "180px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "id",
-            "caption": "ID",
-            "type": "text",
-            "width": "110px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "status",
-            "caption": "状态",
-            "type": "number",
-            "width": "70px",
-            "editMode": "readonly"
-          }
-        ]
-      },
-      "valueType": "dict-select"
-    },
-    "bank": {
-      "name": "银行/账户",
-      "attributes": [
-        "item_name"
-      ],
-      "dict": {
-        "dictId": "house_bank",
-        "dictCode": "house_bank",
-        "idCol": "id",
-        "codeCol": "item_code",
-        "labelCol": "item_name",
-        "parentCol": "parent_id",
-        "hierarchical": true,
-        "helpLayout": "grid",
-        "valueField": "item_code",
-        "displayMode": "code-label",
-        "dictTitle": "选择银行/账户",
-        "filters": null,
-        "pageSize": 50,
-        "writeBack": null,
-        "columns": [
-          {
-            "id": "item_code",
-            "caption": "编码",
-            "type": "text",
-            "width": "130px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "item_name",
-            "caption": "名称",
-            "type": "text",
-            "width": "180px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "id",
-            "caption": "ID",
-            "type": "text",
-            "width": "110px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "status",
-            "caption": "状态",
-            "type": "number",
-            "width": "70px",
-            "editMode": "readonly"
-          }
-        ]
-      },
-      "valueType": "dict-select"
-    },
-    "cashflow_item": {
-      "name": "现金流量项目",
-      "attributes": [
-        "item_name"
-      ],
-      "dict": {
-        "dictId": "cashflow_item",
-        "dictCode": "cashflow_item",
-        "idCol": "id",
-        "codeCol": "item_code",
-        "labelCol": "item_name",
-        "parentCol": "parent_id",
-        "hierarchical": true,
-        "helpLayout": "grid",
-        "valueField": "item_code",
-        "displayMode": "code-label",
-        "dictTitle": "选择现金流量项目",
-        "filters": null,
-        "pageSize": 50,
-        "writeBack": null,
-        "columns": [
-          {
-            "id": "item_code",
-            "caption": "编码",
-            "type": "text",
-            "width": "130px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "item_name",
-            "caption": "名称",
-            "type": "text",
-            "width": "180px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "id",
-            "caption": "ID",
-            "type": "text",
-            "width": "110px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "status",
-            "caption": "状态",
-            "type": "number",
-            "width": "70px",
-            "editMode": "readonly"
-          }
-        ]
-      },
-      "valueType": "dict-select"
-    },
-    "currency": {
-      "name": "币种",
-      "attributes": [
-        "item_name"
-      ],
-      "dict": {
-        "dictId": "currency",
-        "dictCode": "currency",
-        "idCol": "id",
-        "codeCol": "item_code",
-        "labelCol": "item_name",
-        "parentCol": null,
-        "hierarchical": false,
-        "helpLayout": "grid",
-        "valueField": "item_code",
-        "displayMode": "code-label",
-        "dictTitle": "选择币种",
-        "filters": null,
-        "pageSize": 50,
-        "writeBack": null,
-        "columns": [
-          {
-            "id": "item_code",
-            "caption": "编码",
-            "type": "text",
-            "width": "130px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "item_name",
-            "caption": "名称",
-            "type": "text",
-            "width": "180px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "id",
-            "caption": "ID",
-            "type": "text",
-            "width": "110px",
-            "editMode": "readonly"
-          },
-          {
-            "id": "status",
-            "caption": "状态",
-            "type": "number",
-            "width": "70px",
-            "editMode": "readonly"
-          }
-        ]
-      },
-      "valueType": "dict-select"
-    },
-    "ext_dim1": {
-      "name": "扩展维度槽位1(由gl_ext_dimension绑定)",
-      "attributes": [
-        "item_name"
-      ]
-    },
-    "ext_dim2": {
-      "name": "扩展维度槽位2",
-      "attributes": [
-        "item_name"
-      ]
-    },
-    "ext_dim3": {
-      "name": "扩展维度槽位3",
-      "attributes": [
-        "item_name"
-      ]
-    },
-    "ext_dim4": {
-      "name": "扩展维度槽位4",
-      "attributes": [
-        "item_name"
-      ]
-    },
-    "ext_dim5": {
-      "name": "扩展维度槽位5",
-      "attributes": [
-        "item_name"
-      ]
     }
   },
   "rules": [
     {
-      "id": "fi-cash",
+      "id": "fi-receivable",
+      "caption": "应收账款",
       "anchor": {
         "dimensions": [
           "gl_account"
@@ -587,97 +79,10 @@
           "gl_account_id"
         ],
         "match": {
-          "gl_account.account_type": "AC004",
-          "gl_account.cashflow_related": "true"
+          "gl_account": "2000013"
         }
       },
       "panel": "cv_acc_line",
-      "caption": "现金",
-      "detail": {
-        "table": "cv_acc_line",
-        "use": "*",
-        "fields": []
-      }
-    },
-    {
-      "id": "fi-bank",
-      "anchor": {
-        "dimensions": [
-          "gl_account"
-        ],
-        "columns": [
-          "gl_account_id"
-        ],
-        "match": {}
-      },
-      "detail": {
-        "table": "cv_acc_line",
-        "pick": [
-          {
-            "ref": "cv_aux_line.house_bank_id",
-            "over": {
-              "caption": {
-                "zh_CN": "银行账户"
-              },
-              "edit": {
-                "mode": "select",
-                "required": true
-              }
-            }
-          },
-          {
-            "ref": "cv_acc_line.item_text",
-            "over": {
-              "caption": {
-                "zh_CN": "备注"
-              }
-            }
-          },
-          {
-            "ref": "cv_acc_line.entered_dr",
-            "over": {
-              "caption": {
-                "zh_CN": "金额"
-              },
-              "display": {
-                "decimalDigits": 2,
-                "thousandSeparator": true,
-                "negativeColor": true
-              }
-            }
-          }
-        ],
-        "groups": [
-          {
-            "caption": "辅助核算",
-            "members": [
-              "house_bank_id"
-            ]
-          },
-          {
-            "caption": "金额信息",
-            "members": [
-              "item_text",
-              "entered_dr"
-            ]
-          }
-        ],
-        "fields": []
-      },
-      "panel": "cv_acc_line",
-      "caption": "银行"
-    },
-    {
-      "id": "fi-receivable",
-      "anchor": {
-        "dimensions": [
-          "gl_account"
-        ],
-        "columns": [
-          "gl_account_id"
-        ],
-        "match": {}
-      },
       "detail": {
         "table": "cv_acc_line",
         "pick": [
@@ -688,19 +93,8 @@
                 "zh_CN": "客户"
               },
               "edit": {
-                "mode": "select",
+                "mode": "cmx-dict-select",
                 "required": true
-              }
-            }
-          },
-          {
-            "ref": "cv_aux_line.cost_center_id",
-            "over": {
-              "caption": {
-                "zh_CN": "部门"
-              },
-              "edit": {
-                "mode": "select"
               }
             }
           },
@@ -708,7 +102,7 @@
             "ref": "cv_acc_line.item_text",
             "over": {
               "caption": {
-                "zh_CN": "备注"
+                "zh_CN": "摘要"
               }
             }
           },
@@ -720,8 +114,7 @@
               },
               "display": {
                 "decimalDigits": 2,
-                "thousandSeparator": true,
-                "negativeColor": true
+                "thousandSeparator": true
               }
             }
           }
@@ -730,18 +123,7 @@
           {
             "caption": "辅助核算",
             "members": [
-              {
-                "caption": "对方信息",
-                "members": [
-                  "customer_id"
-                ]
-              },
-              {
-                "caption": "归集部门",
-                "members": [
-                  "cost_center_id"
-                ]
-              }
+              "customer_id"
             ]
           },
           {
@@ -752,13 +134,130 @@
             ]
           }
         ],
-        "fields": []
-      },
-      "panel": "cv_acc_line",
-      "caption": "应收"
+        "fields": [
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "DMBTR_DR",
+            "id": "local_dr",
+            "name": "local_dr",
+            "caption": {
+              "zh_CN": "公司代码本位币借方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          },
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "DMBTR_CR",
+            "id": "local_cr",
+            "name": "local_cr",
+            "caption": {
+              "zh_CN": "公司代码本位币贷方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          },
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "DMBE2_DR",
+            "id": "group_dr",
+            "name": "group_dr",
+            "caption": {
+              "zh_CN": "集团币借方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          },
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "DMBE2_CR",
+            "id": "group_cr",
+            "name": "group_cr",
+            "caption": {
+              "zh_CN": "集团币贷方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          }
+        ],
+        "fieldTabs": []
+      }
     },
     {
       "id": "fi-payable",
+      "caption": "应付/税/薪酬",
       "anchor": {
         "dimensions": [
           "gl_account"
@@ -766,8 +265,15 @@
         "columns": [
           "gl_account_id"
         ],
-        "match": {}
+        "match": {
+          "gl_account": [
+            "2000058",
+            "2000064",
+            "2000067"
+          ]
+        }
       },
+      "panel": "cv_acc_line",
       "detail": {
         "table": "cv_acc_line",
         "pick": [
@@ -778,7 +284,7 @@
                 "zh_CN": "供应商"
               },
               "edit": {
-                "mode": "dict-select",
+                "mode": "cmx-dict-select",
                 "required": true
               }
             }
@@ -787,10 +293,10 @@
             "ref": "cv_aux_line.cost_center_id",
             "over": {
               "caption": {
-                "zh_CN": "部门"
+                "zh_CN": "成本中心"
               },
               "edit": {
-                "mode": "select"
+                "mode": "cmx-dict-select"
               }
             }
           },
@@ -798,7 +304,7 @@
             "ref": "cv_acc_line.item_text",
             "over": {
               "caption": {
-                "zh_CN": "备注"
+                "zh_CN": "摘要"
               }
             }
           },
@@ -810,8 +316,7 @@
               },
               "display": {
                 "decimalDigits": 2,
-                "thousandSeparator": true,
-                "negativeColor": true
+                "thousandSeparator": true
               }
             }
           }
@@ -833,12 +338,11 @@
           }
         ],
         "fields": []
-      },
-      "panel": "cv_acc_line",
-      "caption": "应付"
+      }
     },
     {
-      "id": "fi-expense",
+      "id": "fi-bank",
+      "caption": "银行存款",
       "anchor": {
         "dimensions": [
           "gl_account"
@@ -846,32 +350,23 @@
         "columns": [
           "gl_account_id"
         ],
-        "match": {}
+        "match": {
+          "gl_account": "2000004"
+        }
       },
       "panel": "cv_acc_line",
       "detail": {
         "table": "cv_acc_line",
         "pick": [
           {
-            "ref": "cv_aux_line.cost_center_id",
+            "ref": "cv_aux_line.house_bank_id",
             "over": {
               "caption": {
-                "zh_CN": "部门"
+                "zh_CN": "银行账户"
               },
               "edit": {
-                "mode": "select",
+                "mode": "cmx-dict-select",
                 "required": true
-              }
-            }
-          },
-          {
-            "ref": "cv_aux_line.profit_ctr_id",
-            "over": {
-              "caption": {
-                "zh_CN": "利润中心"
-              },
-              "edit": {
-                "mode": "select"
               }
             }
           },
@@ -879,7 +374,7 @@
             "ref": "cv_acc_line.item_text",
             "over": {
               "caption": {
-                "zh_CN": "备注"
+                "zh_CN": "摘要"
               }
             }
           },
@@ -891,8 +386,7 @@
               },
               "display": {
                 "decimalDigits": 2,
-                "thousandSeparator": true,
-                "negativeColor": true
+                "thousandSeparator": true
               }
             }
           }
@@ -901,8 +395,7 @@
           {
             "caption": "辅助核算",
             "members": [
-              "cost_center_id",
-              "profit_ctr_id"
+              "house_bank_id"
             ]
           },
           {
@@ -917,7 +410,8 @@
       }
     },
     {
-      "id": "fi-default",
+      "id": "fi-inventory",
+      "caption": "存货/资产",
       "anchor": {
         "dimensions": [
           "gl_account"
@@ -925,16 +419,34 @@
         "columns": [
           "gl_account_id"
         ],
-        "match": {}
+        "match": {
+          "gl_account": [
+            "2000028",
+            "2000031",
+            "2000049"
+          ]
+        }
       },
+      "panel": "cv_acc_line",
       "detail": {
         "table": "cv_acc_line",
         "pick": [
           {
+            "ref": "cv_aux_line.cost_center_id",
+            "over": {
+              "caption": {
+                "zh_CN": "成本中心"
+              },
+              "edit": {
+                "mode": "cmx-dict-select"
+              }
+            }
+          },
+          {
             "ref": "cv_acc_line.item_text",
             "over": {
               "caption": {
-                "zh_CN": "备注"
+                "zh_CN": "摘要"
               }
             }
           },
@@ -946,18 +458,262 @@
               },
               "display": {
                 "decimalDigits": 2,
-                "thousandSeparator": true,
-                "negativeColor": true
+                "thousandSeparator": true
               }
             }
           }
         ],
-        "fields": []
+        "groups": [
+          {
+            "caption": "辅助核算",
+            "members": [
+              "cost_center_id",
+              {
+                "caption": "子分组",
+                "members": [
+                  "group_dr",
+                  "entered_dr"
+                ]
+              }
+            ]
+          },
+          {
+            "caption": "金额信息",
+            "members": [
+              "item_text",
+              "entered_dr"
+            ]
+          }
+        ],
+        "fields": [
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "WRBTR_DR",
+            "id": "entered_dr",
+            "name": "entered_dr",
+            "caption": {
+              "zh_CN": "输入币借方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          },
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "WRBTR_CR",
+            "id": "entered_cr",
+            "name": "entered_cr",
+            "caption": {
+              "zh_CN": "输入币贷方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          },
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "DMBTR_DR",
+            "id": "local_dr",
+            "name": "local_dr",
+            "caption": {
+              "zh_CN": "公司代码本位币借方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          },
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "DMBTR_CR",
+            "id": "local_cr",
+            "name": "local_cr",
+            "caption": {
+              "zh_CN": "公司代码本位币贷方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          },
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "DMBE2_DR",
+            "id": "group_dr",
+            "name": "group_dr",
+            "caption": {
+              "zh_CN": "集团币借方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          },
+          {
+            "dataType": "DECIMAL",
+            "fieldLength": 23,
+            "intDigits": 21,
+            "decimalDigits": 2,
+            "nullable": true,
+            "dimType": "measure",
+            "agg": "sum",
+            "physicalField": "DMBE2_CR",
+            "id": "group_cr",
+            "name": "group_cr",
+            "caption": {
+              "zh_CN": "集团币贷方"
+            },
+            "edit": {
+              "mode": "cmx-number-input"
+            },
+            "display": {
+              "mode": "number",
+              "decimalDigits": 2,
+              "thousandSeparator": true,
+              "zeroAsBlank": true,
+              "negativeColor": true,
+              "align": "right"
+            },
+            "width": "140px",
+            "required": false,
+            "align": "right"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fi-default",
+      "caption": "通用兜底",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "gl_account_id"
+        ],
+        "match": {}
       },
-      "panel": "cv_acc_line"
+      "panel": "cv_acc_line",
+      "detail": {
+        "table": "cv_acc_line",
+        "pick": [
+          {
+            "ref": "cv_acc_line.item_text",
+            "over": {
+              "caption": {
+                "zh_CN": "摘要"
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.entered_dr",
+            "over": {
+              "caption": {
+                "zh_CN": "金额"
+              },
+              "display": {
+                "decimalDigits": 2,
+                "thousandSeparator": true
+              }
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "金额信息",
+            "members": [
+              "item_text",
+              "entered_dr"
+            ]
+          }
+        ],
+        "fields": []
+      }
     }
   ],
-  "updatedAt": "2026-07-22T05:36:58.745Z",
+  "updatedAt": "2026-07-22T12:42:29.012Z",
   "docRef": {
     "domain": "fi",
     "application": "cmxfico",

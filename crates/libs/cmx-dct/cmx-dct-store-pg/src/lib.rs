@@ -365,8 +365,9 @@ async fn load_base(doc: &Value) -> Value {
 /// 装载字典数据（分页 + 计数）。返回 `{rows,total,page,pageSize}`。
 pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> {
     let (sql, count_sql, params) = build_search_sql(view, raw);
-    // JSON params → DataValue（走 datavalues 绑定，与 cmx-sql-execution 规范一致）。
+    // JSON params -> DataValue（走 datavalues 绑定，与 cmx-sql-execution 规范一致）。
     let dv_params: Vec<DataValue> = params.iter().map(json_to_datavalue).collect();
+    tracing::warn!("[DCT-DEBUG] search sql={}, db_id={}, table={}", sql, db_id, view.table_name);
 
     let mm = get_default_pg_db_manager();
     let ds = mm
@@ -378,7 +379,7 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
             &view.dict_code,
         )
         .await
-        .map_err(|e| api_err(&format!("字典查询失败: {e}")))?;
+        .map_err(|e| { tracing::error!("[DCT-DEBUG] search failed: sql={}, err={:?}", sql, e); api_err(&format!("字典查询失败: {e}")) })?;
     let total_ds = mm
         .query_sql_with_datavalues(db_id, None, &count_sql, dv_params, "cnt")
         .await
