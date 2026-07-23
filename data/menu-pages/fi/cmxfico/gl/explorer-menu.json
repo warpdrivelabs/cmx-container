@@ -1317,7 +1317,7 @@
               "type": "native_pages",
               "native_page": "portal.job.monitor",
               "id": "job-center-model",
-              "view": "content"
+              "view": "active"
             },
             "explorer": {
               "caption": "概览 / 新建 / 过滤",
@@ -1338,12 +1338,20 @@
               "icon": "process",
               "views": [
                 {
-                  "id": "job-center-content",
-                  "tabLabel": "监控",
+                  "id": "job-center-active",
+                  "tabLabel": "活跃作业",
                   "icon": "process",
                   "type": "native_pages",
                   "native_page": "portal.job.monitor",
-                  "view": "content"
+                  "view": "active"
+                },
+                {
+                  "id": "job-center-history",
+                  "tabLabel": "历史作业",
+                  "icon": "history",
+                  "type": "native_pages",
+                  "native_page": "portal.job.monitor",
+                  "view": "history"
                 }
               ]
             },

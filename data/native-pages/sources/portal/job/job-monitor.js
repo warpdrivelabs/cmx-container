@@ -20,18 +20,21 @@
 
 const state = {
   kinds: [],            // 已注册作业种类（后端返回）
+  kindsMeta: {},        // 种类 → 元数据 {kindClass,singleton,pausable}（后端 kindsMeta，识别 service）
+  throughput: new Map(),// jobId → 吞吐采样 {samples:[{t,done}], rate} —— 从 done 差分算速率/火花线
   jobs: [],             // 作业列表（GET /api/jobs，合并内存热态+持久化历史）
   filterKind: '',       // 过滤：种类
   filterStatus: '',     // 过滤：状态
   filterText: '',       // 过滤：关键字（标题/id/节点）
-  selectedId: '',       // 当前监控的作业 id
-  detail: null,         // 选中作业详情快照（Job JSON）
-  items: new Map(),     // 明细行 key → item（SSE item 事件 upsert）
-  logs: [],             // 实时日志（SSE log 事件，环形截断）
+  selectedId: '',       // 活跃视图：当前监控的作业 id（含 SSE 实时流）
+  detail: null,         // 活跃视图：选中作业详情快照
+  items: new Map(),     // 活跃视图：明细行 key → item（SSE item upsert）
+  logs: [],             // 活跃视图：实时日志（SSE log，环形截断）
+  // 历史视图独立选中槽（只读，无 SSE）——与活跃视图分离，避免两 workspace tab 共享选中态互相覆盖闪动。
+  histSel: { selectedId: '', detail: null, items: new Map() },
   listLoading: false,
   message: '',
   msgKind: 'info',      // info | ok | warn
-  tab: 'active',        // content 左栏 tab：active=活跃作业 | history=历史作业（已归档）
   history: [],          // 历史作业列表（GET /api/jobs/history，当前页）
   historyTotal: 0,      // 历史作业总数（当前过滤下）
   historyPage: 1,       // 历史当前页码（1-based）
@@ -55,11 +58,16 @@ const state = {
     rptPeriod: '',
     rptVersion: '',
     rptCodes: '',
+    conBatchMs: 800,
+    conBatchSize: 5,
+    conEmptyEvery: 0,
+    conBusinessKey: '',
     rawParams: '{}',
   },
 }
 
 const MAX_LOGS = 400
+const MAX_ITEMS = 50   // 最近处理明细最多保留 50 条（常驻消费者防内存泄漏 + 只看最近）
 
 const STATUS_META = {
   pending:    { label: '排队中', cls: 'st-pend' },
@@ -83,6 +91,7 @@ const ITEM_META = {
 // 已知业务种类的中文名（未知种类回退原 id）。
 const KIND_LABEL = {
   'job.demo': '演示作业',
+  'job.consumer': '消息消费者',
   'rpt.compute': '报表计算',
   'rpt.verify': '报表校验',
 }
@@ -131,12 +140,48 @@ async function loadJobs () {
     const data = await apiJson('/api/jobs?limit=300')
     state.jobs = Array.isArray(data.items) ? data.items : []
     if (Array.isArray(data.kinds) && data.kinds.length) state.kinds = data.kinds
+    captureKindsMeta(data)
+    // 采样吞吐（service 作业按 done 差分算速率），供仪表/火花线。
+    for (const j of state.jobs) sampleThroughput(j)
   } catch (e) {
     setMsg(`列表加载失败：${e.message}`, 'warn')
   } finally {
     state.listLoading = false
     refreshAll()
   }
+}
+
+// 后端 kindsMeta → state.kindsMeta 映射（kind → {kindClass,singleton,pausable}）。
+function captureKindsMeta (data) {
+  if (Array.isArray(data.kindsMeta)) {
+    for (const m of data.kindsMeta) if (m && m.kind) state.kindsMeta[m.kind] = m
+  }
+}
+
+// 是否常驻服务（消费者）作业——决定用吞吐仪表还是进度条。
+function isService (j) {
+  if (!j) return false
+  if (j.kindClass) return j.kindClass === 'service'          // 单作业 JSON 直接带
+  return state.kindsMeta[j.kind]?.kindClass === 'service'    // 回落 kindsMeta 查
+}
+
+// 采样一次吞吐：记录 (时刻, 累计done)，保留最近 30 个点，算最新速率(msg/s)。
+function sampleThroughput (j) {
+  if (!isService(j)) return
+  const id = String(j.id)
+  const done = Number(j.progress?.done || 0)
+  const t = Date.now()
+  let s = state.throughput.get(id)
+  if (!s) { s = { samples: [], rate: 0 }; state.throughput.set(id, s) }
+  const last = s.samples[s.samples.length - 1]
+  // 去重：done 未变且间隔太近则跳过（避免 0 速率噪声）。
+  if (last && last.done === done && t - last.t < 400) return
+  s.samples.push({ t, done })
+  if (s.samples.length > 30) s.samples.shift()
+  // 速率 = 最近窗口 Δdone / Δt。
+  const first = s.samples[0]
+  const dt = (t - first.t) / 1000
+  s.rate = dt > 0.3 ? Math.max(0, Math.round((done - first.done) / dt)) : 0
 }
 
 function buildParams () {
@@ -154,6 +199,15 @@ function buildParams () {
     if (f.rptVersion.trim()) p.version = f.rptVersion.trim()
     const codes = f.rptCodes.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean)
     if (codes.length) p.reportCodes = codes
+    return p
+  }
+  if (kind === 'job.consumer') {
+    const p = {
+      batchMs: Number(f.conBatchMs) || 800,
+      batchSize: Number(f.conBatchSize) || 5,
+    }
+    if (Number(f.conEmptyEvery) > 0) p.emptyEvery = Number(f.conEmptyEvery)
+    if (f.conBusinessKey.trim()) p.businessKey = f.conBusinessKey.trim()
     return p
   }
   // 未知种类：走原始 JSON 入参。
@@ -204,7 +258,7 @@ async function archiveJob (id) {
     setMsg(`已归档作业 #${id}（转入历史）`, 'ok')
     if (String(id) === state.selectedId) { closeEs(); state.selectedId = ''; state.detail = null; state.items = new Map(); state.logs = [] }
     await loadJobs()
-    if (state.tab === 'history') await loadHistory()
+    if (historyMounted()) await loadHistory()
   } catch (e) {
     setMsg(`归档失败：${e.message}`, 'warn')
     refreshAll()
@@ -224,6 +278,7 @@ async function loadHistory () {
     }
     const data = await apiJson(`/api/jobs/history?${qs.join('&')}`)
     state.history = Array.isArray(data.items) ? data.items : []
+    captureKindsMeta(data)
     state.historyTotal = data.total || 0
     state.historyTotalPages = data.totalPages || 0
     if (typeof data.page === 'number') state.historyPage = data.page
@@ -251,27 +306,29 @@ function gotoHistoryPage (p) {
   loadHistory()
 }
 
-// 过滤/统计卡片变更后刷新当前 tab：
-//   活跃 tab —— 过滤纯前端(visibleJobs)，只需重渲；顺带 loadJobs 保持全量新鲜(统计概览用)。
-//   历史 tab —— 过滤在服务端，回第 1 页重新拉取。
+// 过滤/统计卡片变更后刷新：活跃列表纯前端过滤(loadJobs 保持全量新鲜)；历史视图已挂载则回第1页重拉。
 function reloadCurrent () {
-  if (state.tab === 'history') { state.historyPage = 1; loadHistory() }
-  else { loadJobs() }
+  loadJobs()
+  if (historyMounted()) { state.historyPage = 1; loadHistory() }
 }
 
-// 打开历史作业详情（只读，走 /api/jobs/history/{id}，不订阅 SSE）。
+// 是否有历史内容视图当前已挂载（决定过滤/归档后要不要重拉历史）。
+function historyMounted () {
+  for (const host of state.hosts) if ((host.__jcView) === 'history') return true
+  return false
+}
+
+// 打开历史作业详情（只读，走 /api/jobs/history/{id}，不订阅 SSE；写历史独立选中槽）。
 async function openHistoryDetail (id) {
   if (!id) return
-  closeEs()
-  state.selectedId = String(id)
-  state.logs = []
+  state.histSel.selectedId = String(id)
   try {
-    state.detail = await apiJson(`/api/jobs/history/${id}`)
-    state.items = new Map((state.detail?.progress?.items || []).map((it) => [it.key, it]))
+    state.histSel.detail = await apiJson(`/api/jobs/history/${id}`)
+    state.histSel.items = new Map((state.histSel.detail?.progress?.items || []).map((it) => [it.key, it]))
   } catch (e) {
     setMsg(`历史详情加载失败：${e.message}`, 'warn')
   }
-  refreshAll()
+  refreshMonitor('history') // 只刷历史内容 + 属性区
 }
 
 async function refreshDetail (id) {
@@ -283,7 +340,7 @@ async function refreshDetail (id) {
   } catch (e) {
     setMsg(`详情加载失败：${e.message}`, 'warn')
   }
-  refreshAll()
+  refreshMonitor('active') // 详情到手只刷活跃内容 + 属性区
 }
 
 // ───────────────────────── SSE 订阅（方案 §6.2）─────────────────────────
@@ -308,11 +365,12 @@ function subscribeSummary () {
       : { ...j, progress: summaryProgress(j) }
     if (idx >= 0) state.jobs[idx] = merged
     else state.jobs.unshift(merged)
+    sampleThroughput(merged) // service 作业：按 done 差分采样，驱动列表吞吐行/火花线
     if (String(j.id) === state.selectedId && state.detail) {
       state.detail.status = j.status
       if (state.detail.progress) Object.assign(state.detail.progress, summaryProgress(j))
     }
-    refreshMonitor()
+    refreshMonitor('active')
   })
 }
 
@@ -327,7 +385,7 @@ function openMonitor (id) {
   state.logs = []
   refreshDetail(id)
   subscribe(id)
-  refreshAll()
+  refreshMonitor('active')
 }
 
 function subscribe (id) {
@@ -345,38 +403,47 @@ function subscribe (id) {
       applyProgress(d.progress)
       if (Array.isArray(d.progress.items)) state.items = new Map(d.progress.items.map((it) => [it.key, it]))
     }
-    refreshMonitor()
+    refreshMonitor('active')
   })
   es.addEventListener('state', (e) => {
     const d = safeParse(e.data)
     if (d && state.detail) { state.detail.status = d.status }
-    refreshMonitor()
+    refreshMonitor('active')
     if (d && ['completed', 'failed', 'cancelled'].includes(d.status)) { loadJobs() }
   })
   es.addEventListener('progress', (e) => {
     const d = safeParse(e.data)
     if (d) applyProgress(d)
-    refreshMonitor()
+    if (state.detail) sampleThroughput(state.detail) // 详情 service 作业：采样驱动仪表
+    refreshMonitor('active')
   })
   es.addEventListener('item', (e) => {
     const it = safeParse(e.data)
-    if (it && it.key) state.items.set(it.key, it)
-    refreshMonitor()
+    if (it && it.key) {
+      // 最新的移到末尾（Map 保持插入序）：先删再插，确保 key 复用时也更新顺序。
+      state.items.delete(it.key)
+      state.items.set(it.key, it)
+      // 最近处理只留最近 MAX_ITEMS 条（常驻消费者明细无限增长 → 截断防泄漏）。
+      while (state.items.size > MAX_ITEMS) {
+        state.items.delete(state.items.keys().next().value) // 删最旧（Map 头部）
+      }
+    }
+    refreshMonitor('active')
   })
   es.addEventListener('log', (e) => {
     const d = safeParse(e.data)
     if (d) { state.logs.push(d); if (state.logs.length > MAX_LOGS) state.logs.splice(0, state.logs.length - MAX_LOGS) }
-    refreshMonitor()
+    refreshMonitor('active')
   })
   es.addEventListener('result', (e) => {
     const d = safeParse(e.data)
     if (state.detail) state.detail.result = d
-    refreshMonitor()
+    refreshMonitor('active')
   })
   es.addEventListener('error', (e) => {
     const d = safeParse(e.data)
     if (d && state.detail) state.detail.error = d
-    refreshMonitor()
+    refreshMonitor('active')
   })
   es.addEventListener('done', () => { closeEs(); loadJobs() })
 }
@@ -397,6 +464,51 @@ function percentOf (p) {
   if (typeof p.percent === 'number') return p.percent
   if (p.total > 0) return Math.round((Math.min(p.done, p.total) / p.total) * 100)
   return 0
+}
+
+// ───── 吞吐仪表派生（常驻消费者作业方案 §7）─────
+
+// 取某 service 作业的吞吐视图：速率、累计、成功/失败、运行时长、火花线数据。
+function throughputOf (j) {
+  const p = j.progress || {}
+  const s = state.throughput.get(String(j.id))
+  const rate = s ? s.rate : 0
+  const runMs = j.startedAt ? (Number(j.finishedAt || Date.now()) - Number(j.startedAt)) : 0
+  return {
+    rate,
+    processed: Number(p.done || 0),
+    ok: Number(p.ok || 0),
+    failed: Number(p.failed || 0),
+    runMs,
+    idle: p.phase === '空闲等待',
+    samples: s ? s.samples : [],
+  }
+}
+
+// 运行时长人读（2h13m / 45s）。
+function fmtRun (ms) {
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60), h = Math.floor(m / 60)
+  if (h > 0) return `${h}h${m % 60}m`
+  return `${m}m${s % 60}s`
+}
+
+// 速率火花线（inline SVG，随主题变量着色）。samples=[{t,done}] → 每段速率归一化高度。
+function sparkline (samples, color) {
+  if (!samples || samples.length < 2) return '<span class="spark-empty">—</span>'
+  const rates = []
+  for (let i = 1; i < samples.length; i++) {
+    const dt = (samples[i].t - samples[i - 1].t) / 1000
+    rates.push(dt > 0 ? Math.max(0, (samples[i].done - samples[i - 1].done) / dt) : 0)
+  }
+  const max = Math.max(1, ...rates)
+  const W = 108, H = 26, n = rates.length
+  const step = n > 1 ? W / (n - 1) : W
+  const pts = rates.map((r, i) => `${(i * step).toFixed(1)},${(H - (r / max) * (H - 3) - 1).toFixed(1)}`).join(' ')
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`
 }
 
 // 过滤 + 排序后的作业列表（活跃优先，其次创建时间倒序）。
@@ -517,6 +629,32 @@ function styleCss () {
   .st-cancel{background:color-mix(in srgb,var(--jc-cancel) 18%,transparent);color:var(--jc-cancel)}
   .jc .jobrow .top .st{flex:none}
   .jc .meta{font-size:11px;color:var(--jc-dim);margin-top:6px;line-height:1.5}
+  /* ── service 常驻消费者：列表吞吐行 ── */
+  .jc .jobrow.svc{border-left:2px solid color-mix(in srgb,var(--jc-info) 55%,var(--jc-border))}
+  .jc .svc-line{display:flex;align-items:baseline;gap:7px;margin:9px 0 2px;font-size:12px;flex-wrap:wrap}
+  .jc .svc-rate{font-family:"SF Mono",Menlo,monospace;font-weight:800;font-size:16px;color:var(--jc-dim);letter-spacing:.3px}
+  .jc .svc-rate.live{color:var(--jc-info)}
+  .jc .svc-rate em{font-style:normal;font-size:10.5px;font-weight:600;color:var(--jc-dim);margin-left:2px}
+  .jc .svc-sep{color:var(--jc-border)}
+  .jc .svc-acc{color:var(--jc-txt);font-family:"SF Mono",Menlo,monospace}
+  .jc .svc-fail{color:var(--jc-err);font-family:"SF Mono",Menlo,monospace}
+  .jc .svc-run{margin-left:auto;color:var(--jc-dim);font-family:"SF Mono",Menlo,monospace;font-size:11px}
+  /* ── service 详情吞吐仪表 ── */
+  .jc .gauge{background:var(--jc-sunken);border:1px solid var(--jc-border);border-radius:10px;padding:14px 16px;margin:2px 0 6px}
+  .jc .gauge-main{display:flex;align-items:center;justify-content:space-between;gap:14px}
+  .jc .gauge-rate{display:flex;align-items:baseline;gap:6px}
+  .jc .gauge-rate .gv{font-family:"SF Mono",Menlo,monospace;font-weight:800;font-size:34px;line-height:1;color:var(--jc-dim);letter-spacing:.5px}
+  .jc .gauge-rate.live .gv{color:var(--jc-info)}
+  .jc .gauge-rate .gu{font-size:12px;color:var(--jc-dim);font-weight:600}
+  .jc .gauge-spark{flex:none}
+  .jc .gauge-spark .spark{display:block;opacity:.9}
+  .jc .gauge-spark .spark-empty{color:var(--jc-dim);font-family:"SF Mono",Menlo,monospace}
+  .jc .gauge-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+  .jc .gc{text-align:center;padding:8px 4px;background:var(--jc-card);border:1px solid var(--jc-border);border-radius:8px}
+  .jc .gc-n{font-family:"SF Mono",Menlo,monospace;font-weight:700;font-size:17px;color:var(--jc-txt);line-height:1.1}
+  .jc .gc-n.ok{color:var(--jc-ok)}.jc .gc-n.fail{color:var(--jc-err)}
+  .jc .gc-l{font-size:10.5px;color:var(--jc-dim);margin-top:4px}
+  .jc .svc-hint{font-size:11.5px;color:var(--jc-info);background:color-mix(in srgb,var(--jc-info) 10%,transparent);border:1px solid color-mix(in srgb,var(--jc-info) 30%,var(--jc-border));border-radius:6px;padding:7px 10px;margin:8px 0}
   .jc .tags{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-top:8px}
   .jc .tag{font-size:10.5px;font-family:"SF Mono",Menlo,monospace;background:var(--jc-sunken);border:1px solid var(--jc-border);border-radius:20px;padding:2px 9px;color:var(--jc-dim)}
   .jc .tags .arch-slot{margin-left:auto}
@@ -611,14 +749,30 @@ function jobRowHtml (j) {
   // 归档按钮不单独占行：放进 tags 行靠右（margin-left:auto）。其余控制按钮留在 ctrlbar。
   const archBtn = canDelete ? `<button class="mini danger arch" data-del="${esc(j.id)}">归档</button>` : ''
   const ctrl = ctrlButtons(j, true, /*withDelete*/ false)
-  return `<div class="jobrow${sel}" data-job="${esc(j.id)}">
+  // service（常驻消费者）：用吞吐行代替百分比进度条（方案 §7）。
+  const svc = isService(j)
+  let body
+  if (svc) {
+    const t = throughputOf(j)
+    const live = j.status === 'running' && !t.idle
+    body = `<div class="svc-line">
+      <span class="svc-rate ${live ? 'live' : ''}">${t.idle ? '空闲' : t.rate} <em>${t.idle ? '' : 'msg/s'}</em></span>
+      <span class="svc-sep">·</span>
+      <span class="svc-acc">累计 ${t.processed.toLocaleString()}</span>
+      ${t.failed ? `<span class="svc-fail">✖${t.failed}</span>` : ''}
+      ${j.startedAt ? `<span class="svc-run">${fmtRun(t.runMs)}</span>` : ''}
+    </div>`
+  } else {
+    body = `<div class="bar ${barClass(j.status)}"><i style="width:${pct}%"></i></div>
+    <div class="meta">${pct}% · ${p.done || 0}/${p.total || 0} ${p.ok ? `✔${p.ok}` : ''} ${p.failed ? `✖${p.failed}` : ''} ${esc(p.message || '')}</div>`
+  }
+  return `<div class="jobrow${sel}${svc ? ' svc' : ''}" data-job="${esc(j.id)}">
     <div class="top">
       <span class="title">${esc(j.title)}</span>
       ${statusBadge(j.status)}
     </div>
-    <div class="kind">${esc(j.kind)} · #${esc(j.id)}</div>
-    <div class="bar ${barClass(j.status)}"><i style="width:${pct}%"></i></div>
-    <div class="meta">${pct}% · ${p.done || 0}/${p.total || 0} ${p.ok ? `✔${p.ok}` : ''} ${p.failed ? `✖${p.failed}` : ''} ${esc(p.message || '')}</div>
+    <div class="kind">${svc ? '◆ ' : ''}${esc(j.kind)} · #${esc(j.id)}</div>
+    ${body}
     <div class="tags">
       ${node ? `<span class="tag node">▣ ${esc(node)}</span>` : ''}
       ${prio !== 0 ? `<span class="tag prio">优先级 ${prio}</span>` : ''}
@@ -629,11 +783,14 @@ function jobRowHtml (j) {
   </div>`
 }
 
-function monitorHtml () {
-  const d = state.detail
-  if (!d || !state.selectedId) return `<div class="empty">点击左侧作业查看实时监控</div>`
-  // 活跃 tab：选中作业被当前过滤排除时，不显示旧详情（bug：过滤后列表空仍显示上次详情）。
-  if (state.tab === 'active' && !visibleJobs().some((j) => String(j.id) === state.selectedId)) {
+function monitorHtml (mode) {
+  const isHist = mode === 'history'
+  // 按 mode 取各自选中槽（活跃=state.selectedId/detail/items/logs；历史=state.histSel）。
+  const d = isHist ? state.histSel.detail : state.detail
+  const selId = isHist ? state.histSel.selectedId : state.selectedId
+  if (!d || !selId) return `<div class="empty">${isHist ? '点击左侧历史作业查看详情' : '点击左侧作业查看实时监控'}</div>`
+  // 活跃视图：选中作业被当前过滤排除时，不显示旧详情。
+  if (!isHist && !visibleJobs().some((j) => String(j.id) === selId)) {
     return `<div class="empty">当前过滤下无选中作业</div>`
   }
   const p = d.progress || {}
@@ -643,18 +800,21 @@ function monitorHtml () {
   const canCancel = ['pending', 'running', 'paused'].includes(d.status)
   const canRestart = ['failed', 'cancelled'].includes(d.status)
   const canDelete = ['completed', 'failed', 'cancelled'].includes(d.status)
-  const items = Array.from(state.items.values())
+  // 明细流：service 常驻消费者按「最新在前」展示最近 MAX_ITEMS 条（截最近，不显示最早）。
+  // 批处理仍按处理顺序（旧→新）展示。
+  const svcDetail = isService(d)
+  const rawItems = Array.from((isHist ? state.histSel.items : state.items).values())
+  const items = svcDetail ? rawItems.slice(-MAX_ITEMS).reverse() : rawItems
   const itemsHtml = items.length
     ? items.map((it) => {
         const m = ITEM_META[it.state] || ITEM_META.queued
         return `<div class="it ${m.cls}"><span class="ic">${m.icon}</span><span class="k">${esc(it.label || it.key)}</span><span class="d">${esc(it.detail || '')}</span></div>`
       }).join('')
     : `<div class="empty">暂无明细</div>`
-  const logsHtml = state.logs.length
+  const logsHtml = (!isHist && state.logs.length)
     ? state.logs.map((l) => `<div class="lg ${esc(l.level)}">[${esc(l.level)}] ${esc(l.text)}</div>`).join('')
     : `<div class="empty">暂无日志</div>`
   const eta = p.etaMs ? ` · 预计剩余 ${Math.ceil(p.etaMs / 1000)}s` : ''
-  const isHist = state.tab === 'history'
   const ctrl = isHist
     ? `<div class="arch-note">📁 该作业已归档（历史只读）。归档于 ${esc(fmtTime(d.archivedAt))}</div>`
     : `<div class="ctrlbar" data-stop>
@@ -667,24 +827,46 @@ function monitorHtml () {
   return `<div class="monitor">
     <div class="big">${esc(d.title || '')} ${statusBadge(d.status)}</div>
     <div class="phase">${p.phaseTotal ? `阶段 ${p.phaseIndex}/${p.phaseTotal} · ${esc(p.phase || '')}` : esc(p.phase || '')} — ${esc(p.message || '')}</div>
-    <div class="bar ${barClass(d.status)}"><i style="width:${pct}%"></i></div>
-    <div class="meta">${pct}% · ${p.done || 0}/${p.total || 0}${p.ok ? ` · 成功 ${p.ok}` : ''}${p.failed ? ` · 失败 ${p.failed}` : ''}${eta}</div>
+    ${isService(d) ? gaugeHtml(d) : `<div class="bar ${barClass(d.status)}"><i style="width:${pct}%"></i></div>
+    <div class="meta">${pct}% · ${p.done || 0}/${p.total || 0}${p.ok ? ` · 成功 ${p.ok}` : ''}${p.failed ? ` · 失败 ${p.failed}` : ''}${eta}</div>`}
     ${ctrl}
-    <h4>明细流 (${items.length})</h4>
+    <h4>${isService(d) ? '最近处理' : '明细流'} (${items.length})</h4>
     <div class="items">${itemsHtml}</div>
-    <h4 style="margin-top:12px">${isHist ? '日志' : '实时日志'} (${state.logs.length})</h4>
+    <h4 style="margin-top:12px">${isHist ? '日志' : '实时日志'} (${isHist ? 0 : state.logs.length})</h4>
     <div class="logs">${logsHtml}</div>
+  </div>`
+}
+
+// 吞吐仪表面板（service 作业详情，替代百分比进度条）。方案 §7。
+function gaugeHtml (d) {
+  const t = throughputOf(d)
+  const live = d.status === 'running' && !t.idle
+  const accent = 'var(--jc-info)'
+  return `<div class="gauge">
+    <div class="gauge-main">
+      <div class="gauge-rate ${live ? 'live' : ''}">
+        <span class="gv">${t.idle ? '—' : t.rate}</span><span class="gu">${t.idle ? '空闲等待' : 'msg/s'}</span>
+      </div>
+      <div class="gauge-spark">${sparkline(t.samples, live ? '#8fc0ef' : '#8b98a5')}</div>
+    </div>
+    <div class="gauge-grid">
+      <div class="gc"><div class="gc-n">${t.processed.toLocaleString()}</div><div class="gc-l">累计处理</div></div>
+      <div class="gc"><div class="gc-n ok">${t.ok.toLocaleString()}</div><div class="gc-l">成功</div></div>
+      <div class="gc"><div class="gc-n ${t.failed ? 'fail' : ''}">${t.failed}</div><div class="gc-l">失败/死信</div></div>
+      <div class="gc"><div class="gc-n">${d.startedAt ? fmtRun(t.runMs) : '—'}</div><div class="gc-l">运行时长</div></div>
+    </div>
   </div>`
 }
 
 function explorerHtml () {
   const f = state.form
   const c = stats()
-  const kindOpts = ['job.demo', 'rpt.compute', 'rpt.verify']
-    .concat(state.kinds.filter((k) => !['job.demo', 'rpt.compute', 'rpt.verify'].includes(k)))
+  const known = ['job.demo', 'job.consumer', 'rpt.compute', 'rpt.verify']
+  const kindOpts = known.concat(state.kinds.filter((k) => !known.includes(k)))
   const isDemo = f.kind === 'job.demo'
+  const isConsumer = f.kind === 'job.consumer'
   const isRpt = f.kind === 'rpt.compute' || f.kind === 'rpt.verify'
-  const isRaw = !isDemo && !isRpt
+  const isRaw = !isDemo && !isConsumer && !isRpt
   const statBox = (key, label) => `<div class="stat ${state.filterStatus === key ? 'on' : ''}" data-statf="${key}"><div class="n ${STATUS_META[key] ? STATUS_META[key].cls.replace('st-', 'st-') : ''}">${c[key] || 0}</div><div class="l">${label}</div></div>`
   return `<div class="jc">
     <div class="card">
@@ -712,6 +894,15 @@ function explorerHtml () {
         </div>
         <label>失败于第几步（留空不失败）</label><input data-f="demoFailAt" type="number" value="${esc(f.demoFailAt)}">
         <label class="inline"><input data-f="demoFailWhole" type="checkbox" ${f.demoFailWhole ? 'checked' : ''}> 整体失败（触发失败告警）</label>
+      ` : ''}
+      ${isConsumer ? `
+        <div class="svc-hint">◆ 常驻消费者：启动后持续消费直至手动关闭（单例，进度显示为吞吐仪表）</div>
+        <div class="row">
+          <div><label>每批间隔 ms</label><input data-f="conBatchMs" type="number" value="${esc(f.conBatchMs)}"></div>
+          <div><label>每批条数</label><input data-f="conBatchSize" type="number" value="${esc(f.conBatchSize)}"></div>
+        </div>
+        <label>业务键 businessKey（区分同种类多个消费者，留空=default）</label><input data-f="conBusinessKey" value="${esc(f.conBusinessKey)}" placeholder="如 orders / payments">
+        <label>每隔几轮模拟一次空闲（0=不模拟）</label><input data-f="conEmptyEvery" type="number" value="${esc(f.conEmptyEvery)}">
       ` : ''}
       ${isRpt ? `
         <div class="row">
@@ -742,7 +933,7 @@ function explorerHtml () {
 function historyRowHtml (j) {
   const p = j.progress || {}
   const pct = percentOf(p)
-  const sel = String(j.id) === state.selectedId ? ' sel' : ''
+  const sel = String(j.id) === state.histSel.selectedId ? ' sel' : ''
   return `<div class="jobrow${sel}" data-hist="${esc(j.id)}">
     <div class="top">
       <span class="title">${esc(j.title)}</span>
@@ -771,16 +962,14 @@ function historyPagerHtml () {
   </div>`
 }
 
-function contentHtml () {
-  const isHist = state.tab === 'history'
-  const tabBar = `<div class="tabs">
-    <button class="tab ${!isHist ? 'on' : ''}" data-tab="active">活跃作业</button>
-    <button class="tab ${isHist ? 'on' : ''}" data-tab="history">历史作业 (${state.historyTotal || 0})</button>
-  </div>`
+function contentHtml (mode) {
+  const isHist = mode === 'history'
+  // 不再写全局 state.tab（两 host 同时渲染会互相覆盖 → 选中态振荡闪动）。mode 显式下传。
   let listHtml
   let head
   let headExtra = ''
   if (isHist) {
+    autoSelectFirst('history') // 历史列表非空且未选 → 默认选第一个
     const rows = state.history.length
       ? state.history.map(historyRowHtml).join('')
       : `<div class="empty">${state.historyLoading ? '加载中…' : '暂无历史作业（归档后转入此处）'}</div>`
@@ -788,28 +977,58 @@ function contentHtml () {
     listHtml = rows
     headExtra = historyPagerHtml() // 靠右对齐放在标题行
   } else {
+    autoSelectFirst('active') // 活跃列表非空且未选 → 默认选第一个
     const vis = visibleJobs()
     const rows = vis.length
       ? vis.map(jobRowHtml).join('')
       : `<div class="empty">${state.listLoading ? '加载中…' : '无匹配作业'}</div>`
-    head = `作业列表 · 实时 (${vis.length}/${state.jobs.length})`
+    head = `活跃作业 · 实时 (${vis.length}/${state.jobs.length})`
     listHtml = rows
   }
   return `<div class="jc content-grid" style="display:grid;grid-template-columns:minmax(300px,1fr) minmax(340px,1.25fr);gap:20px;align-items:stretch">
     <div>
-      ${tabBar}
       <div class="listhead"><h4>${head}</h4>${headExtra}</div>
       <div class="list">${listHtml}</div>
     </div>
     <div>
       <h4>${isHist ? '历史详情（只读）' : '监控详情'}</h4>
-      ${monitorHtml()}
+      ${monitorHtml(mode)}
     </div>
   </div>`
 }
 
+// 列表非空且当前未选中（或选中项已不在列表）时，默认选中第一个作业并打开其详情。
+// 活跃/历史各用独立选中槽，互不干扰（否则两 host 交替渲染会来回改选中造成闪动）。
+function autoSelectFirst (mode) {
+  if (mode === 'history') {
+    if (!state.history.length) return
+    const cur = state.histSel.selectedId
+    const inList = cur && state.history.some((j) => String(j.id) === cur)
+    if (!inList) {
+      queueAutoSelect('history', () => openHistoryDetail(String(state.history[0].id)))
+    }
+  } else {
+    const vis = visibleJobs()
+    if (!vis.length) return
+    const cur = state.selectedId
+    const inList = cur && vis.some((j) => String(j.id) === cur)
+    if (!inList) {
+      queueAutoSelect('active', () => openMonitor(String(vis[0].id)))
+    }
+  }
+}
+
+// 把自动选中推迟到当前渲染栈之外，避免"渲染中改状态又触发渲染"的重入。按 mode 各自去重。
+const _autoSelPending = { active: false, history: false }
+function queueAutoSelect (mode, fn) {
+  if (_autoSelPending[mode]) return
+  _autoSelPending[mode] = true
+  setTimeout(() => { _autoSelPending[mode] = false; fn() }, 0)
+}
+
 function propertyHtml () {
-  const d = state.detail
+  // 属性区无 mode：优先展示活跃选中，回落历史选中。
+  const d = state.detail || state.histSel.detail
   if (!d) return `<div class="jc"><div class="empty">未选中作业</div></div>`
   const p = d.progress || {}
   const origin = d.origin || {}
@@ -846,7 +1065,9 @@ function propertyHtml () {
 function viewHtml (view) {
   if (view === 'explorer') return explorerHtml()
   if (view === 'property') return propertyHtml()
-  return contentHtml()
+  // active / history / content(兼容旧) 均走 contentHtml，按 view 定 mode。
+  const mode = view === 'history' ? 'history' : 'active'
+  return contentHtml(mode)
 }
 
 // ───────────────────────── 事件绑定 & 挂载 ─────────────────────────
@@ -865,23 +1086,12 @@ function bind (root, view) {
     root.querySelector('[data-submit]')?.addEventListener('click', submitJob)
     root.querySelector('[data-filter-kind]')?.addEventListener('change', (e) => { state.filterKind = e.target.value; reloadCurrent() })
     root.querySelector('[data-filter-status]')?.addEventListener('change', (e) => { state.filterStatus = e.target.value; reloadCurrent() })
-    root.querySelector('[data-filter-text]')?.addEventListener('input', (e) => { state.filterText = e.target.value; refreshMonitor() })
+    root.querySelector('[data-filter-text]')?.addEventListener('input', (e) => { state.filterText = e.target.value; refreshMonitor('active') })
     root.querySelector('[data-refresh]')?.addEventListener('click', reloadCurrent)
     root.querySelectorAll('[data-statf]').forEach((el) => el.addEventListener('click', () => {
       state.filterStatus = el.getAttribute('data-statf'); reloadCurrent()
     }))
-  } else if (view === 'content') {
-    // tab 切换（活跃 / 历史）
-    root.querySelectorAll('[data-tab]').forEach((el) => el.addEventListener('click', () => {
-      const t = el.getAttribute('data-tab')
-      if (t === state.tab) return
-      state.tab = t
-      // 切到历史清空当前选中（活跃/历史详情来源不同）
-      state.selectedId = ''; state.detail = null; state.items = new Map(); state.logs = []
-      closeEs()
-      if (t === 'history') loadHistory(); else refreshMonitor()
-      refreshMonitor()
-    }))
+  } else if (view === 'active' || view === 'history' || view === 'content') {
     // 活跃作业行点击 → 实时监控
     root.querySelectorAll('.jobrow[data-job]').forEach((el) => el.addEventListener('click', (ev) => {
       if (ev.target.closest('[data-stop]')) return
@@ -927,10 +1137,25 @@ function renderInto (host, view) {
   // 保留列表滚动位置：整块 innerHTML 重渲会把 .list 滚回顶部（bug：点 item 列表跳顶）。
   const prevList = root.querySelector('.list')
   const savedTop = prevList ? prevList.scrollTop : 0
+  // 保留表单输入焦点：explorer 定时/事件重渲会打断正在输入的表单（bug：所有区域刷新致失焦）。
+  const active = root.activeElement || (root.getRootNode && root.getRootNode().activeElement)
+  let focusKey = null; let selStart = null; let selEnd = null
+  if (active && active.hasAttribute && active.hasAttribute('data-f')) {
+    focusKey = active.getAttribute('data-f')
+    try { selStart = active.selectionStart; selEnd = active.selectionEnd } catch (_) {}
+  }
   root.innerHTML = `<style>${styleCss()}</style>${viewHtml(view)}`
   bind(root, view)
   const newList = root.querySelector('.list')
   if (newList && savedTop) newList.scrollTop = savedTop
+  // 恢复焦点（同 data-f 的输入框）。
+  if (focusKey) {
+    const el = root.querySelector(`[data-f="${focusKey}"]`)
+    if (el) {
+      el.focus()
+      if (selStart != null) { try { el.setSelectionRange(selStart, selEnd) } catch (_) {} }
+    }
+  }
 }
 
 function refreshAll () {
@@ -946,11 +1171,20 @@ function refreshView (which) {
   }
 }
 
-// 只重渲监控相关视图（content/property），避免打断 explorer 表单输入焦点。
-function refreshMonitor () {
+// 只重渲监控相关视图（active/history/content/property），避免打断 explorer 表单输入焦点。
+// 重渲监控相关视图。onlyMode 指定时只刷该内容模式 host（+property），避免选活跃时连带刷历史内容。
+// 不传则刷全部内容/属性区。永不刷 explorer（保表单焦点）。
+function refreshMonitor (onlyMode) {
   for (const host of Array.from(state.hosts)) {
-    const v = host.__jcView || 'content'
-    if (v === 'content' || v === 'property') renderInto(host, v)
+    const v = host.__jcView || 'active'
+    if (v === 'property') { renderInto(host, v); continue }
+    const isContent = v === 'active' || v === 'history' || v === 'content'
+    if (!isContent) continue
+    if (onlyMode) {
+      const hostMode = v === 'history' ? 'history' : 'active'
+      if (hostMode !== onlyMode) continue
+    }
+    renderInto(host, v)
   }
 }
 
@@ -964,14 +1198,18 @@ function mount (ctx, view) {
     subscribeSummary()
     state.pollTimer = setInterval(() => { if (state.hosts.size) loadJobs() }, 30000)
   }
+  // 历史视图挂载时拉取历史数据（首次进入即有内容 + 默认选中第一个）。
+  if (view === 'history') loadHistory()
   return `<style>${styleCss()}</style>${viewHtml(view)}`
 }
 
 export default {
-  defaultView: 'content',
+  defaultView: 'active',
   views: {
     async explorer (ctx) { return mount(ctx, 'explorer') },
-    async content (ctx) { return mount(ctx, 'content') },
+    async active (ctx) { return mount(ctx, 'active') },
+    async history (ctx) { return mount(ctx, 'history') },
+    async content (ctx) { return mount(ctx, 'active') }, // 兼容旧 view 名，等同活跃
     async property (ctx) { return mount(ctx, 'property') },
   },
 }

@@ -97,6 +97,7 @@ impl JobHandler for RptComputeJob {
             pausable: true,
             restart: Restart::Fresh,
             idempotent: true,
+            ..JobCaps::default()
         }
     }
 
@@ -220,6 +221,7 @@ impl JobHandler for RptVerifyJob {
             pausable: true,
             restart: Restart::Fresh,
             idempotent: true,
+            ..JobCaps::default()
         }
     }
 

@@ -80,6 +80,9 @@ struct Inner {
     progress_persist_mark: DashMap<JobId, u64>,
     /// 日志 seq 递增：`{job_id → 下一条日志 seq}`。
     log_seq: DashMap<JobId, i64>,
+    /// 常驻/单例作业的活跃锁：`{singleton_key → job_id}`。同 key 已有活跃实例时，
+    /// 重复提交返回 409（常驻消费者作业方案 §6.1，母版 = cmx-ai session 活跃锁）。
+    active_singletons: DashMap<String, JobId>,
     /// 终态回调（M3 失败告警）：作业进入终态时同步触发，由 web-server 注入（接 GlobalEventBus）。
     /// core 不依赖 event_bus（避免拖入 extism 等重依赖），以回调解耦。
     on_terminal: Option<TerminalHook>,
@@ -122,6 +125,7 @@ impl JobManager {
                 cfg,
                 progress_persist_mark: DashMap::new(),
                 log_seq: DashMap::new(),
+                active_singletons: DashMap::new(),
                 on_terminal: None,
             }),
         }
@@ -196,6 +200,23 @@ impl JobManager {
         v
     }
 
+    /// 某作业种类的能力声明（用于前端识别 Service 类作业、渲染吞吐视图 / 单例约束提示）。
+    pub fn caps_of(&self, kind: &str) -> Option<crate::model::JobCaps> {
+        self.inner.registry.get(kind).map(|make| make().capabilities())
+    }
+
+    /// 已注册种类 + 元数据（class / singleton / pausable）。前端据此区分批处理与常驻消费者。
+    pub fn kinds_meta(&self) -> Vec<(&'static str, crate::model::JobCaps)> {
+        let mut v: Vec<_> = self
+            .inner
+            .registry
+            .iter()
+            .map(|(k, make)| (*k, make().capabilities()))
+            .collect();
+        v.sort_by_key(|(k, _)| *k);
+        v
+    }
+
     // ───────────────────────── 提交 ─────────────────────────
 
     /// 提交一个作业。前端 POST /api/jobs 与后端自发起共用此入口（方案 §11）。
@@ -211,6 +232,37 @@ impl JobManager {
                 JobError::new(400, format!("未注册的作业种类: {}", req.kind))
             })?;
         let handler = make();
+        let caps = handler.capabilities();
+
+        // 单例约束（常驻消费者作业方案 §6.1）：同 singleton_key 已有活跃实例 → 拒绝（409 语义）。
+        // key = kind [+ params.businessKey]，允许同种类按业务键并存多个单例消费者。
+        let singleton_key = if caps.singleton {
+            Some(singleton_key_of(&req.kind, &req.params))
+        } else {
+            None
+        };
+        if let Some(key) = &singleton_key {
+            use dashmap::mapref::entry::Entry;
+            match self.inner.active_singletons.entry(key.clone()) {
+                Entry::Occupied(e) => {
+                    let existing = *e.get();
+                    // 二次校验存在的作业确实还活着；若已是终态残留（异常）则放行覆盖。
+                    let alive = self
+                        .inner
+                        .table
+                        .get(&existing)
+                        .map(|j| !j.status.is_terminal())
+                        .unwrap_or(false);
+                    if alive {
+                        return Err(JobError::new(
+                            409,
+                            format!("该作业已有活跃实例（#{existing}），单例约束拒绝重复启动"),
+                        ));
+                    }
+                }
+                Entry::Vacant(_) => {}
+            }
+        }
 
         // 提交期预估：total（进度条基数）+ 标题。plan 失败即拒绝提交（参数非法早暴露）。
         let plan = handler.plan(&req.params)?;
@@ -248,6 +300,10 @@ impl JobManager {
             finished_at: None,
         };
         self.inner.table.insert(id, job.clone());
+        // 占用单例锁（提交成功即登记；finish 时释放）。
+        if let Some(key) = &singleton_key {
+            self.inner.active_singletons.insert(key.clone(), id);
+        }
         tracing::info!(job_id = id, kind = %req.kind, distributed = self.inner.cfg.distributed, "作业已提交入队");
         self.emit_summary(&job);
 
@@ -445,6 +501,8 @@ impl JobManager {
         self.persist_finish(snap.clone());
         self.inner.progress_persist_mark.remove(&id);
         self.inner.log_seq.remove(&id);
+        // 释放单例锁（若本作业持有）：移除所有指向本 id 的 singleton 条目，放行下次启动。
+        self.inner.active_singletons.retain(|_, v| *v != id);
         // 终态回调（失败告警等）：同步触发，回调内部自行 spawn 异步发布。
         if let Some(hook) = &self.inner.on_terminal {
             hook(&snap);
@@ -948,5 +1006,17 @@ impl JobManager {
                 job.progress.rev += 1;
             }
         }
+    }
+}
+
+/// 单例锁 key：kind [+ params.businessKey]。允许同种类按业务键并存多个单例。
+fn singleton_key_of(kind: &str, params: &Value) -> String {
+    let bk = params
+        .get("businessKey")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
+    match bk {
+        Some(b) => format!("{kind}::{b}"),
+        None => kind.to_string(),
     }
 }
