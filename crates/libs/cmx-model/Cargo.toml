@@ -26,3 +26,5 @@ serde_json = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 # 正则（字典/定义 ID 与编码校验）
 regex = { workspace = true }
+# 日志（definitions::resolve 检测脏状态时输出 warn；与 AGENTS §2 一致）
+tracing = { workspace = true }
