@@ -169,7 +169,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择客户端",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -232,7 +237,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择账本",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -261,7 +271,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择会计期间",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -628,7 +643,14 @@
         "period_code": {
           "refDict": "fisc_period"
         }
-      }
+      },
+      "fieldSetOrder": [
+        "documentLevelFields",
+        "own",
+        "documentIdentityFields",
+        "documentLifecycleFields",
+        "documentTechnicalFields"
+      ]
     },
     {
       "level": "L2",
@@ -662,7 +684,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择客户端",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -694,7 +721,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择公司代码",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -770,7 +802,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择凭证货币(交易币)",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -799,7 +836,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择集团货币",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -972,7 +1014,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择分类账",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1197,7 +1244,12 @@
           "align": "left",
           "editSettings": {
             "helpLayout": "classify",
-            "dictTitle": "选择单据类型ID"
+            "dictTitle": "选择单据类型ID",
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1226,7 +1278,12 @@
           "align": "left",
           "editSettings": {
             "helpLayout": "classify",
-            "dictTitle": "选择业务主体"
+            "dictTitle": "选择业务主体",
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         }
       ],
@@ -1292,7 +1349,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择客户端",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1324,7 +1386,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择公司代码",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1356,7 +1423,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择总账科目",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1386,7 +1458,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择记账码",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1416,7 +1493,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择借贷标志",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1446,7 +1528,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择税码",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1476,7 +1563,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择特别总账标识",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1738,7 +1830,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择客户端",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1768,7 +1865,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择公司代码",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1798,7 +1900,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择分类账",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1830,7 +1937,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择成本控制范围",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1862,7 +1974,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择利润中心",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1894,7 +2011,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择成本中心",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1928,7 +2050,12 @@
             "helpLayout": "grid",
             "hierarchical": true,
             "dictTitle": "选择段",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1960,7 +2087,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择业务范围",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -1992,7 +2124,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择功能范围",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -2024,7 +2161,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择贸易伙伴",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -2056,7 +2198,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择内部订单",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -2088,7 +2235,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择WBS元素",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -2120,7 +2272,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择业务伙伴",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -2152,7 +2309,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择客户",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -2184,7 +2346,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择供应商",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -2214,7 +2381,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择付款条件",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -2244,7 +2416,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择付款方式",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -2276,7 +2453,12 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择开户行/银行",
-            "showClear": true
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
           }
         },
         {
@@ -3568,7 +3750,7 @@
       }
     ]
   },
-  "updatedAt": "2026-07-22T03:54:32.693Z",
+  "updatedAt": "2026-07-23T07:47:00.324Z",
   "validationRules": [
     {
       "code": "voucher_local_balance",

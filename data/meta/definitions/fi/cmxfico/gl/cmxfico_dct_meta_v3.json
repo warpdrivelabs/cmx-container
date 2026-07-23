@@ -257,6 +257,13 @@
         [
           "code"
         ]
+      ],
+      "fieldSetOrder": [
+        "dictionaryCommonFields",
+        "own",
+        "dictionaryAuditFields",
+        "dictionaryEffectiveFields",
+        "dictionaryDisableFields"
       ]
     },
     {
@@ -4513,5 +4520,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-07-22T03:54:32.629Z"
+  "updatedAt": "2026-07-23T07:45:58.483Z"
 }
