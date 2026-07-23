@@ -1,0 +1,31 @@
+[package]
+name = "cmx-job-store-pg"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 异步任务中心的 PostgreSQL 持久化层（M2）：作业主表 cmx_job / 日志 cmx_job_log / 断点 cmx_job_checkpoint
+# 的读写（主库 primary），自 DDL（幂等 IF NOT EXISTS + 补列，母版 cmx-flow-store-pg::ddl）、
+# 崩溃恢复 recover_orphans（进程重启把残留 running/paused 按幂等策略重入队或置失败）、历史查询。
+# 实现 cmx-job-core 的 JobStore trait（core 定义 trait，本 crate 提供 PG 实现；core 不依赖 DB，无环）。
+
+[dependencies]
+# 内部依赖 - 任务中心内核（JobStore trait + 模型 Job/JobStatus/ProgressSnapshot）
+cmx-job-core = { workspace = true }
+# 内部依赖 - tokio-postgres 并行 DB 层（execute/query 门面 + 全局 manager）
+cmx-database-pg = { workspace = true }
+# 内部依赖 - 业务错误翻译（可选：PG 错误 → 优雅提示）
+cmx-api-types = { workspace = true }
+# 内部依赖 - 主键铸号（日志行 id）
+cmx-utils = { workspace = true }
+
+# 异步 trait（JobStore 实现）
+async-trait = { workspace = true }
+# JSON（params/progress/result JSONB 交换）
+serde = { workspace = true }
+serde_json = { workspace = true }
+# 日志
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

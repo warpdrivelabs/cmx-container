@@ -24,6 +24,8 @@ cmx-utils = { workspace = true }
 cmx-biz = { workspace = true }
 # 内部依赖 - API 通用类型（Error/Result 信封，与 cmx-api 保持同一错误类型）
 cmx-api-types = { workspace = true }
+# 内部依赖 - 异步任务中心内核（RptComputeJob 实现 JobHandler + inventory 注册；批量报表计算作业化）
+cmx-job-core = { workspace = true }
 
 # 报表版式 BLOB：base64 编解码、SHA-256 内容哈希、Decimal 数值绑定
 base64 = { workspace = true }
@@ -33,5 +35,9 @@ rust_decimal = { workspace = true }
 serde_json = { workspace = true }
 # 异步 trait（PgProvider 实现 DataProvider）
 async-trait = { workspace = true }
+# 编译期注册（RptComputeJob 经 inventory::submit! 注册到任务中心）
+inventory = { workspace = true }
+# 计时（单报表耗时统计）+ 作业内 sleep（无，纯计算）
+tokio = { workspace = true }
 # 日志追踪
 tracing = { workspace = true }

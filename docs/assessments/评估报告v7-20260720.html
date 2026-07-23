@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>cmx-container 工程质量评估报告（v7 · 2026-07-20）</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#1a1e33; --card2:#222843; --ink:#e8ebf5; --muted:#9aa3c0;
+    --line:#2c3350; --accent:#6c8cff; --accent2:#9a6cff;
+    --good:#3ecf8e; --warn:#f5a623; --bad:#ff5c7a; --info:#46b1ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c0f1c,#0f1220 240px);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.65;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px 80px}
+  header.hero{padding:54px 22px 40px;background:
+    radial-gradient(900px 380px at 20% -10%,rgba(62,207,142,.24),transparent 60%),
+    radial-gradient(700px 360px at 95% 0%,rgba(108,140,255,.22),transparent 55%);
+    border-bottom:1px solid var(--line)}
+  .hero-inner{max-width:1080px;margin:0 auto;padding:0 22px}
+  .eyebrow{letter-spacing:.32em;text-transform:uppercase;font-size:12px;color:var(--good);font-weight:700}
+  h1{font-size:40px;margin:10px 0 6px;font-weight:800;letter-spacing:-.5px}
+  .sub{color:var(--muted);font-size:16px;max-width:860px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;color:var(--muted)}
+  .chip b{color:var(--ink)}
+  h2{font-size:26px;margin:54px 0 8px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:12px}
+  h2 .n{font-size:15px;color:var(--accent);background:rgba(108,140,255,.12);border:1px solid rgba(108,140,255,.3);
+    width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;font-weight:700}
+  h3{font-size:18px;margin:28px 0 6px;font-weight:700}
+  p{margin:10px 0}
+  .lead{color:var(--muted);margin-bottom:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin:16px 0}
+  .grid{display:grid;gap:16px}
+  .g5{grid-template-columns:repeat(5,1fr)}
+  @media(max-width:920px){.g5{grid-template-columns:repeat(2,1fr)}}
+  .gauge{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;text-align:center}
+  .ring{width:110px;height:110px;border-radius:50%;margin:4px auto 10px;display:grid;place-items:center;position:relative}
+  .ring::before{content:"";position:absolute;inset:11px;background:var(--card);border-radius:50%}
+  .ring span{position:relative;font-size:28px;font-weight:800}
+  .gauge .lab{font-size:14px;color:var(--muted);font-weight:600}
+  .gauge .delta{font-size:12px;font-weight:700;margin-top:2px}
+  .big-score{display:flex;align-items:center;gap:26px;flex-wrap:wrap}
+  .big-ring{width:168px;height:168px;border-radius:50%;display:grid;place-items:center;position:relative;flex:0 0 auto}
+  .big-ring::before{content:"";position:absolute;inset:15px;background:var(--card);border-radius:50%}
+  .big-ring .v{position:relative;font-size:50px;font-weight:850;line-height:1}
+  .big-ring .v small{font-size:18px;color:var(--muted)}
+  .verdict{flex:1;min-width:260px}
+  .verdict .tag{display:inline-block;background:rgba(62,207,142,.14);color:var(--good);border:1px solid rgba(62,207,142,.35);
+    padding:4px 12px;border-radius:999px;font-weight:700;font-size:13px;margin-bottom:8px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+  th{color:var(--muted);font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  code{background:#0c0f1c;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12.5px;
+    font-family:"SF Mono", Menlo,Consolas,monospace;color:#cdd6ff}
+  .badge{display:inline-block;padding:2px 9px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap}
+  .b-good{background:rgba(62,207,142,.15);color:var(--good);border:1px solid rgba(62,207,142,.3)}
+  .b-part{background:rgba(245,166,35,.15);color:var(--warn);border:1px solid rgba(245,166,35,.3)}
+  .b-hi{background:rgba(255,92,122,.15);color:var(--bad);border:1px solid rgba(255,92,122,.3)}
+  .b-mid{background:rgba(245,166,35,.15);color:var(--warn);border:1px solid rgba(245,166,35,.3)}
+  .b-lo{background:rgba(70,177,255,.15);color:var(--info);border:1px solid rgba(70,177,255,.3)}
+  .b-done{background:rgba(62,207,142,.15);color:var(--good);border:1px solid rgba(62,207,142,.3)}
+  .b-pending{background:rgba(154,108,255,.15);color:var(--accent2);border:1px solid rgba(154,108,255,.3)}
+  ul.clean{margin:8px 0;padding-left:20px}
+  ul.clean li{margin:6px 0}
+  .callout{border-left:4px solid var(--accent);background:var(--card2);border-radius:0 12px 12px 0;padding:14px 18px;margin:16px 0}
+  .callout.bad{border-color:var(--bad)}
+  .callout.warn{border-color:var(--warn)}
+  .callout.good{border-color:var(--good)}
+  .callout.info{border-color:var(--info)}
+  .delta{font-size:12px;font-weight:700;margin-left:6px}
+  .d-up{color:var(--good)}
+  .d-down{color:var(--bad)}
+  .pri{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .pri:last-child{border-bottom:0}
+  .pri .rank{flex:0 0 auto;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-weight:800;
+    background:rgba(108,140,255,.14);color:var(--accent);border:1px solid rgba(108,140,255,.3)}
+  .muted{color:var(--muted)}
+  .foot{margin-top:50px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+  .timeline{display:flex;align-items:center;gap:0;margin:26px 0 6px;flex-wrap:wrap}
+  .tl-node{flex:1;min-width:105px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 10px;text-align:center}
+  .tl-node .t{font-size:11.5px;color:var(--muted);font-weight:700}
+  .tl-node .s{font-size:26px;font-weight:850;margin:2px 0}
+  .tl-node .d{font-size:11px;color:var(--muted)}
+  .tl-arrow{flex:0 0 auto;color:var(--muted);padding:0 6px;font-size:16px}
+  .vf{font-size:22px;font-weight:800}
+  .ok{color:var(--good)}
+  .no{color:var(--bad)}
+  .num{font-variant-numeric:tabular-nums;font-weight:700}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Rust Workspace · 评估报告 v7（代码修复后复核 · 含口径更正）</div>
+    <h1>cmx-container 工程质量评估</h1>
+    <p class="sub">对照 v6（2026-07-19，83 分）。本轮三个提交（<code>7509a29e</code> 加固落地 / <code>d043f740</code> 全量 rustfmt + clippy 清零 + CI 转硬失败 / <code>3fc7cafa</code> model_center 抽 crate）将 v6 指出的「成果悬空」问题彻底闭环。实测验证：<b>fmt ✓ / clippy 0 告警 ✓ / check ✓</b>，但 <b>cargo test --lib 存在 1 个既有失败</b>——CI test 硬门禁当前即红。另按用户指正完成统计口径更正：cell.rs 的 panic!/unwrap 全部位于 <code>#[cfg(test)]</code> 测试模块内，v3 的「生产 panic 20 处」指控正式撤销。</p>
+    <div class="meta-row">
+      <span class="chip"><b>~215,322</b> 行 Rust</span>
+      <span class="chip"><b>54</b> 个 crate</span>
+      <span class="chip"><b>1,176</b> 测试函数</span>
+      <span class="chip"><b>917</b> 次提交</span>
+      <span class="chip">fmt <b class="ok">✓</b> · clippy <b class="ok">0 告警</b> · check <b class="ok">✓</b></span>
+      <span class="chip">test --lib <b class="no">✗ 1 失败</b></span>
+      <span class="chip">HEAD <b>3fc7cafa</b>（全部已提交）</span>
+      <span class="chip">评估日期 <b>2026-07-20</b></span>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+
+<h2><span class="n">★</span>总体结论</h2>
+<div class="card">
+  <div class="big-score">
+    <div class="big-ring" style="background:conic-gradient(var(--good) 0 89%,var(--line) 89% 100%)">
+      <div class="v">89<small>/100</small></div>
+    </div>
+    <div class="verdict">
+      <span class="tag">成熟度：生产级，一处门禁待转绿 <span class="delta d-up">83→89</span></span>
+      <p>v6 的核心扣分项「加固成果未提交」已闭环，且本轮新增两项实质进展：<b>cmx-api 手写 SQL 正式清零</b>（AGENTS.md 第 8 章从「有例外」变「无例外」）、<b>fmt/clippy 双双清零并转硬门禁</b>（实测复跑确认）。按口径更正后，真实生产代码比此前三轮报告刻画的更干净——运行时生产 panic 仅 <b>2 处</b>（builder 契约 + demo 二进制）。</p>
+      <p class="muted">唯一硬伤：<b>CI test 硬门禁从未绿过</b>——<code>count_optimizer</code> 一个 07-02 就存在的既有失败未被「清零专项」捕获。门禁上线前应先跑一次全量验证，否则第一次推送就会红。</p>
+    </div>
+  </div>
+</div>
+
+<div class="timeline">
+  <div class="tl-node"><div class="t">v2 · 06-27</div><div class="s" style="color:var(--good)">91</div><div class="d">加固高点</div></div>
+  <div class="tl-arrow">→</div>
+  <div class="tl-node"><div class="t">v3 · 07-19 上午</div><div class="s" style="color:var(--warn)">80</div><div class="d">增长稀释</div></div>
+  <div class="tl-arrow">→</div>
+  <div class="tl-node"><div class="t">v4 · 07-19 晚</div><div class="s" style="color:var(--warn)">82</div><div class="d">DCT/DOC 重构</div></div>
+  <div class="tl-arrow">→</div>
+  <div class="tl-node"><div class="t">v5 · 07-19 深夜</div><div class="s" style="color:var(--accent)">87</div><div class="d">战略债闭环<br/>（磁盘视角）</div></div>
+  <div class="tl-arrow">→</div>
+  <div class="tl-node"><div class="t">v6 · 07-19 复核</div><div class="s" style="color:var(--warn)">83</div><div class="d">悬空未提交<br/>口径校正</div></div>
+  <div class="tl-arrow">→</div>
+  <div class="tl-node" style="border-color:var(--good)"><div class="t">v7 · 07-20</div><div class="s" style="color:var(--good)">89</div><div class="d">全部提交<br/>一处门禁待绿</div></div>
+</div>
+
+<div class="grid g5" style="margin-top:22px">
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 92%,var(--line) 92% 100%)"><span>92</span></div>
+    <div class="lab">架构设计</div>
+    <div class="delta d-up">90→92</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 87%,var(--line) 87% 100%)"><span>87</span></div>
+    <div class="lab">代码质量</div>
+    <div class="delta d-up">82→87</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--warn) 0 78%,var(--line) 78% 100%)"><span>78</span></div>
+    <div class="lab">测试与验证</div>
+    <div class="delta d-down">84→78</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 90%,var(--line) 90% 100%)"><span>90</span></div>
+    <div class="lab">安全</div>
+    <div class="delta d-up">72→90</div>
+  </div>
+  <div class="gauge">
+    <div class="ring" style="background:conic-gradient(var(--good) 0 92%,var(--line) 92% 100%)"><span>92</span></div>
+    <div class="lab">工程化</div>
+    <div class="delta d-up">78→92</div>
+  </div>
+</div>
+
+<h2><span class="n">0</span>口径更正（应用户指正）</h2>
+<div class="callout info">
+  <b>v3 报告的「cell.rs 生产 panic! 20 处，全工程之最」系统计口径错误，正式撤销。</b><br/>
+  实测：<code>cell.rs</code>（1,213 行）的 <code>#[cfg(test)]</code> 起于第 738 行，全部 20 处 <code>panic!</code>（763–1210 行）与全部 18 处 <code>.unwrap()</code> 均位于测试模块内——<b>该文件生产段 panic/unwrap 双零</b>。v3 的「unwrap/panic 热点 TOP10」中，<code>version.rs</code>（46 处）、<code>config_impl.rs</code>（43 处）等同样全部位于测试模块。用户指正成立，测试代码中的断言式 panic 符合工程规范（AGENTS.md 1.4 明确允许），无需修改。
+</div>
+<h3>更正后的全工程精确口径（以首个 #[cfg(test)] 为界，排除 tests/ 目录与测试模块文件）</h3>
+<table>
+  <tr><th>指标</th><th class="num">生产代码</th><th class="num">测试代码</th><th>说明</th></tr>
+  <tr><td><b>panic!</b></td><td class="num">15（其中运行时仅 <b>2</b>）</td><td class="num">87</td><td>11 处位于 <code>modql-macros</code> proc-macro（编译期汇报「不支持的类型」，宏 crate 标准做法，含 2 处注释内）；运行时 2 处 = <code>dataset/builder.rs</code>（已文档化的 builder 契约）+ <code>cmx-flow-demo/main.rs</code>（demo 二进制）</td></tr>
+  <tr><td><b>.unwrap()</b></td><td class="num">~119</td><td class="num">1,257</td><td>生产段分布于 infra/handler「基本不失败」路径，面广但单点低危，治理优先级降为「低」</td></tr>
+</table>
+<p class="muted">结论：<b>生产路径 panic 治理项从「中级告警」正式摘除</b>。v3–v5 三轮报告一直在追打测试代码里的幽灵，本轮起以更正后口径为准。</p>
+
+<h2><span class="n">1</span>v6 问题闭环对照</h2>
+<table>
+  <tr><th style="width:36%">v6 问题</th><th>本轮处置与实测</th><th style="width:12%">状态</th></tr>
+  <tr>
+    <td><b>🔴 加固成果全部悬空未提交</b>（v6 头号发现）</td>
+    <td>三个提交落地：<code>7509a29e</code>（.env 出库 / CI / toolchain / IAM store 下沉等 19 文件 + 新目录）、<code>d043f740</code>（fmt+clippy 清零）、<code>3fc7cafa</code>（model_center 抽 crate）。<code>git status</code> 干净，HEAD = <code>3fc7cafa</code>。v6 指出的「编译一致性缺口」（未追踪目录支撑编译）随之消除。</td>
+    <td><span class="badge b-done">闭环</span></td>
+  </tr>
+  <tr>
+    <td><b>model_center.rs 最后的手写 SQL 据点</b>（3,235 行 / 24 条 SQL / 52 处 format! 拼接）</td>
+    <td>抽出为 <code>cmx-model-center</code> crate；<code>cmx-api/src/handlers/portal/mod.rs</code> 以 <code>pub use cmx_model_center as model_center;</code> 再导出，调用路径零改动。实测 <code>grep execute_sql|query_sql crates/libs/cmx-api/src/handlers</code> <b>零命中</b>——cmx-api 纯 HTTP 适配层目标达成。</td>
+    <td><span class="badge b-done">闭环</span></td>
+  </tr>
+  <tr>
+    <td><b>fmt / clippy 观察项转硬失败</b></td>
+    <td>全量 rustfmt（186 文件）+ clippy 44→0（自动修 37 + 手工修/放行 7）已完成，CI 两项均 <code>allow_failure: false</code>。本轮实测复跑：<code>cargo fmt --all -- --check</code> exit 0；<code>cargo clippy --workspace --all-targets</code> exit 0，零告警。</td>
+    <td><span class="badge b-done">闭环 ✓实测</span></td>
+  </tr>
+  <tr>
+    <td><b>.env 历史凭据轮换</b>（人工作业）</td>
+    <td>代码侧无变化，仍待运维轮换 NACOS / 测试库凭据。</td>
+    <td><span class="badge b-pending">待人工</span></td>
+  </tr>
+</table>
+
+<h2><span class="n">2</span>实测验证矩阵（本轮全部亲跑复验）</h2>
+<div class="card">
+<table>
+  <tr><th>验证项</th><th>命令</th><th>结果</th><th>结论</th></tr>
+  <tr><td>编译</td><td><code>cargo check --workspace</code></td><td class="vf ok">✓</td><td>16s 增量通过</td></tr>
+  <tr><td>格式化</td><td><code>cargo fmt --all -- --check</code></td><td class="vf ok">✓</td><td>exit 0，全量合规</td></tr>
+  <tr><td>静态检查</td><td><code>cargo clippy --workspace --all-targets</code></td><td class="vf ok">✓</td><td>exit 0，<b>零告警</b>（与提交声明 44→0 一致）</td></tr>
+  <tr><td>单元测试</td><td><code>cargo test --workspace --lib</code></td><td class="vf no">✗</td><td><b>1 失败</b>：<code>cmx-database crud::count_optimizer::tests::test_left_join_optimization</code></td></tr>
+</table>
+</div>
+
+<h2><span class="n">3</span>本轮唯一硬伤：CI test 硬门禁当前即红</h2>
+<div class="callout bad">
+  <b>失败测试</b>：<code>crates/libs/cmx-infra/cmx-database/src/crud/count_optimizer.rs</code> 的 <code>test_left_join_optimization</code>（断言生成的 COUNT SQL 不含 <code>left join orders</code>，实际含）。<br/><br/>
+  <b>根因</b>：测试 SQL 以 PostgreSQL <b>保留字 <code>user</code></b> 作表名（<code>FROM user u LEFT JOIN orders o ...</code>），<code>sqlparser</code> PG 方言解析失败 → <code>try_generate_optimized_count_sql</code> 返回 Err → 走 <code>wrap_count_sql</code> 兜底（原样保留 left join）→ 断言失败。同文件另 3 个测试通过，部分还是兜底路径的「巧合」通过。<br/>
+  <b>定性</b>：<b>既有失败，非本轮回归</b>——该文件最后修改于 2026-07-02（<code>d6965fb3</code>），本轮三个提交均未触碰。此前无 CI 跑 <code>--lib</code> 全量，失败潜伏至今。<br/>
+  <b>影响</b>：CI 中 <code>cargo test --workspace --lib</code> 为 <code>allow_failure: false</code> 硬门禁——<b>首次推送即红</b>。「清零专项」跑了 fmt/clippy 却漏跑 test，门禁上线前缺一次全量自验。
+</div>
+<p><b>修复建议</b>（任选其一，均为小改）：</p>
+<ul class="clean">
+  <li>测试用例表名改为非保留字（如 <code>users</code>）或加引号 <code>"user"</code>；同时审查优化器对保留字表名的真实生产影响（生产 SQL 若用保留字表名，优化会静默退化为兜底，功能正确但失去 JOIN 优化）；</li>
+  <li>优化器兜底路径增加可观测性（当前仅 <code>warn!</code> 一次，建议加 metric 计数，便于发现「优化静默失效」）。</li>
+</ul>
+
+<h2><span class="n">4</span>架构进展确认</h2>
+<ul class="clean">
+  <li><b>cmx-api 纯适配层达成</b>：手写 SQL 文件 5 → <b>0</b>。AGENTS.md 第八章「现状有违规渗入」的注记可以删除了。</li>
+  <li><b>能力 crate 版图完整</b>：<code>cmx-flow-*</code> / <code>cmx-rpt-*</code> / <code>cmx-dct-*</code> / <code>cmx-doc-*</code> / <code>cmx-model-center</code>，54 个 crate 全部通过编译与 clippy。</li>
+  <li><b>model-center 抽离手法干净</b>：<code>pub use cmx_model_center as model_center;</code> 保持既有调用路径零改动，是值得记录的低成本重构范式。</li>
+</ul>
+
+<h2><span class="n">5</span>剩余事项（按优先级）</h2>
+<div class="card">
+  <div class="pri"><div class="rank">1</div><div><b>修复 count_optimizer 失败测试，让 CI test 门禁转绿（立即）。</b><span class="muted"> 小改（见 §3），但这是当前唯一阻断项；修复后顺手在流水线确认首绿。</span></div></div>
+  <div class="pri"><div class="rank">2</div><div><b>轮换 git 历史中的 NACOS / 测试库凭据（人工，勿再拖）。</b><span class="muted"> 已连续三轮报告列出；代码侧早已闭环，剩运维动作。</span></div></div>
+  <div class="pri"><div class="rank">3</div><div><b>（低危）生产段 ~119 处 unwrap 择机收敛。</b><span class="muted"> 口径更正后降为「低」优先级；随业务迭代顺手改，无需专门运动。</span></div></div>
+  <div class="pri"><div class="rank">4</div><div><b>集成测试进流水线。</b><span class="muted"> GitLab CI 挂 postgres service 跑全量（含 *_pg_test），或 pytest e2e 纳入夜间任务；当前 --lib 只覆盖纯单测。</span></div></div>
+</div>
+
+<div class="foot">
+  评估方法：复核本轮三个提交；实测 <code>cargo fmt --check</code> / <code>clippy --workspace --all-targets</code> / <code>check --workspace</code> / <code>test --workspace --lib</code>；以首个 <code>#[cfg(test)]</code> 为界 + 排除 tests/ 目录与测试模块文件，重新精确统计 unwrap/panic 生产/测试分布；对失败测试做根因分析（git blame + 源码走读）。<br/>
+  报告谱系：v2（06-27，91）→ v3（07-19，80）→ v4（07-19，82）→ v5（07-19，87）→ v6（07-19，83）→ <b>v7（07-20，89）</b>。v3 的 cell.rs 指控经用户指正后于本版正式更正。
+</div>
+
+</div>
+</body>
+</html>

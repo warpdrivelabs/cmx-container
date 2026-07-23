@@ -78,6 +78,11 @@ impl ModuleRoutes for ReportModule {
                 "/report-design/functions",
                 get(handlers::report_design_functions),
             )
+            // 协同编辑 B 档：语义操作提交（POST）+ 增量拉取追平（GET ?version=&since=）。
+            .route(
+                "/report-design/reports/{code}/ops",
+                get(handlers::report_design_list_ops).post(handlers::report_design_apply_ops),
+            )
             // 旧 html 报表设计器预览兼容接口；新工作台不使用。
             .route("/rpt/compute", post(handlers::rpt_compute))
     }

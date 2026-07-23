@@ -1,0 +1,32 @@
+[package]
+name = "cmx-job-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 异步任务中心的 HTTP 层：薄 axum handler（提交/列表/详情/控制）+ SSE 端点（按 job_id 扇出实时进度）
+# + JobModule(impl cmx_api::ModuleRoutes) 路由表。依赖 cmx-api 拿 CmxAppState/CmxSvrContext/ApiResp；
+# 由 web-server 合并 JobModule.routes()（cmx-api 不反向依赖本 crate，避免环）。
+# 端点：/jobs、/jobs/{id}、/jobs/{id}/events(SSE)、/jobs/{id}/pause|resume|cancel|restart（/api 前缀由 web-server nest 加）。
+
+[dependencies]
+# 内部依赖 - 任务中心内核（JobManager 单例 + 事件 + 模型）
+cmx-job-core = { workspace = true }
+# 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / routes::traits::ModuleRoutes / ApiResp/Result/Error）
+cmx-api = { workspace = true }
+
+# Web 框架（handler 提取器 + Router + SSE）
+axum = { workspace = true }
+# SSE 流：mpsc receiver → stream::unfold（母版同 cmx-ai handler）
+futures = { workspace = true }
+# 跨节点 SSE 轮询合成流（tokio::time::sleep）
+tokio = { workspace = true }
+# 请求 DTO 反序列化
+serde = { workspace = true }
+# JSON 载荷
+serde_json = { workspace = true }
+# 日志
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
