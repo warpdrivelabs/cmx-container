@@ -29,7 +29,7 @@ VALUES ('portal', 'portal', '门户',           'Portal',                  'home
 --            id = {domain}_{短id}（物理主键，保证全局唯一，ON CONFLICT 幂等）
 -- =============================================
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('portal_portal',  'portal',  'portal', '门户',         'Portal',                'home',                          '门户平台应用。',           1, 0, 0);
+VALUES ('portal_portal',  'portal',  'portal', '门户',         'Portal',                'home',                          '门户平台应用。',           0, 0, 8);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
 VALUES ('fi_cmxfico',     'cmxfico', 'fi',     '会计核算',     'CMX FICO',              'expense-report',                '自研会计核算应用。',       1, 0, 1);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
@@ -58,7 +58,7 @@ VALUES ('sc_datalake',    'datalake','sc',     '数据湖',       '',           
 -- aliases → tags（JSON 数组字符串）
 -- =============================================
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('portal_portal_overview', 'overview', 'portal', 'portal', '平台总览', '门户平台总览', 'home', '门户平台使用入门与总览帮助。', '[]', 'portal/portal/overview', 'modules/portal/portal/overview/module.json', 1, 0, 0);
+VALUES ('portal_portal_overview', 'overview', 'portal', 'portal', '平台总览', '门户平台总览', 'home', '门户平台使用入门与总览帮助。', '[]', 'portal/portal/overview', 'modules/portal/portal/overview/module.json', 0, 0, 0);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
 VALUES ('fi_cmxfico_gl', 'gl', 'fi', 'cmxfico', '总账', '会计核算管理 / 总账', 'activity-items', '会计核算管理、ERP 凭证、总账科目、辅助核算等资源。', '["fi.cmxfico.gl","cmxfico.gl"]', 'fi/cmxfico/gl', 'modules/fi/cmxfico/gl/module.json', 1, 0, 1);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)

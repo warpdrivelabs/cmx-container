@@ -8,17 +8,17 @@
   "resources": {
     "metaDefinitions": [
       {
-        "path": "meta/definitions/fi/ebs/kingdee_gl"
+        "path": "meta/definitions/fi/ebs/ebs_gl"
       }
     ],
     "dictEntries": [
       {
-        "path": "dict/entries/fi/ebs/kingdee_gl"
+        "path": "dict/entries/fi/ebs/ebs_gl"
       }
     ],
     "facts": [
       {
-        "path": "fact/fi/ebs/kingdee_gl"
+        "path": "fact/fi/ebs/ebs_gl"
       }
     ]
   }

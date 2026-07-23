@@ -98,7 +98,7 @@ VALUES
     ('dr',     'dr',     '数据资源管理',   'data Resources',          'database',       '',                                       1, 0, 4),
     ('sc',     'sc',     '生产资源管理',   '生产资源管理',             'machine',        '',                                       1, 0, 5),
     -- 补录：applications/modules 引用 domain=portal 但 registry domains 缺失
-    ('portal', 'portal', '门户',           'Portal',                  'home',           '门户平台域。',                            0, 0, 0)
+    ('portal', 'portal', '门户',           'Portal',                  'home',           '门户平台域。',                            0, 0, 8)
 ON CONFLICT (id) DO UPDATE SET
     code = EXCLUDED.code, name = EXCLUDED.name, title = EXCLUDED.title,
     icon = EXCLUDED.icon, description = EXCLUDED.description,
@@ -107,7 +107,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- 3.2 应用数据（10 条，code = 纯净短码，id = {domain}_{短码}）
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
 VALUES
-    ('portal_portal',  'portal',  'portal', '门户',         'Portal',                'home',                          '门户平台应用。',           1, 0, 0),
+    ('portal_portal',  'portal',  'portal', '门户',         'Portal',                'home',                          '门户平台应用。',           0, 0, 8),
     ('fi_cmxfico',     'cmxfico', 'fi',     '会计核算',     'CMX FICO',              'expense-report',                '自研会计核算应用。',       1, 0, 1),
     ('fi_sap',         'sap',     'fi',     'SAP',          'SAP FI',                'business-objects-experience',   'SAP 总账样例资源。',       1, 0, 2),
     ('fi_ebs',         'ebs',     'fi',     'Oracle EBS',   'Oracle EBS',            'decrease-line-height',          'Oracle EBS 总账样例资源。', 1, 0, 3),
@@ -130,7 +130,7 @@ INSERT INTO cmx_module
 VALUES
     ('portal_portal_overview', 'overview', 'portal', 'portal',
      '平台总览', '门户平台总览', 'home', '门户平台使用入门与总览帮助。',
-     '[]', 'portal/portal/overview', 'modules/portal/portal/overview/module.json', 1, 0, 0),
+     '[]', 'portal/portal/overview', 'modules/portal/portal/overview/module.json', 0, 0, 8),
 
     ('fi_cmxfico_gl', 'gl', 'fi', 'cmxfico',
      '总账', '会计核算管理 / 总账', 'activity-items', '会计核算管理、ERP 凭证、总账科目、辅助核算等资源。',
