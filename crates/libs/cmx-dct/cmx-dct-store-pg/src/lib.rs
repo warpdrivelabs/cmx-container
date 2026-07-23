@@ -364,10 +364,14 @@ async fn load_base(doc: &Value) -> Value {
 
 /// 装载字典数据（分页 + 计数）。返回 `{rows,total,page,pageSize}`。
 pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> {
+    tracing::info!(
+        "[DCT-DEBUG] search view: dict_code={}, dict_name={}, table_name={}, id_field={}, code_field={}, label_field={}, parent_field={:?}, pk={}, columns={}, raw={}, db_id={}",
+        view.dict_code, view.dict_name, view.table_name, view.id_field, view.code_field, view.label_field, view.parent_field, view.pk, view.columns.len(), raw, db_id
+    );
     let (sql, count_sql, params) = build_search_sql(view, raw);
     // JSON params -> DataValue（走 datavalues 绑定，与 cmx-sql-execution 规范一致）。
     let dv_params: Vec<DataValue> = params.iter().map(json_to_datavalue).collect();
-    tracing::warn!("[DCT-DEBUG] search sql={}, db_id={}, table={}", sql, db_id, view.table_name);
+    tracing::info!("[DCT-DEBUG] search sql={}, db_id={}, table={}", sql, db_id, view.table_name);
 
     let mm = get_default_pg_db_manager();
     let ds = mm
@@ -415,6 +419,10 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
 
 /// 零拷贝装载：tokio-postgres + ZmcDataSet + 列式二进制。返回列式包字节（handler 包 msgpack 信封）。
 pub async fn search_zmc(view: &DictView, raw: &Value, db_id: &str) -> Result<Vec<u8>> {
+    tracing::info!(
+        "[DCT-DEBUG] search_zmc view: dict_code={}, dict_name={}, table_name={}, id_field={}, code_field={}, label_field={}, parent_field={:?}, pk={}, columns={}, raw={}, db_id={}",
+        view.dict_code, view.dict_name, view.table_name, view.id_field, view.code_field, view.label_field, view.parent_field, view.pk, view.columns.len(), raw, db_id
+    );
     let (sql, _count_sql, params) = build_search_sql(view, raw);
     let dv_params: Vec<cmx_core::model::cell::DataValue> =
         params.iter().map(json_to_datavalue).collect();
@@ -424,7 +432,13 @@ pub async fn search_zmc(view: &DictView, raw: &Value, db_id: &str) -> Result<Vec
     let zmc = mm
         .query_sql_zmc_with_datavalues(db_id, &sql, dv_params, &view.dict_code)
         .await
-        .map_err(|e| api_err(&format!("字典零拷贝查询失败: {e}")))?;
+        .map_err(|e| {
+            tracing::error!(
+                "[DCT-DEBUG] search_zmc failed: dict_code={}, table_name={}, sql={}, db_id={}, err={:?}",
+                view.dict_code, view.table_name, sql, db_id, e
+            );
+            api_err(&format!("字典零拷贝查询失败: {e}"))
+        })?;
     let mut buf = Vec::new();
     zmc.encode_columnar_binary(&mut buf);
     Ok(buf)
