@@ -284,6 +284,22 @@ pub enum Restart {
     Resume,
 }
 
+/// 作业分型（常驻消费者作业方案 §3.1）。决定进度语义、恢复策略、并发归属、UI 呈现。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JobClass {
+    /// 批处理作业（默认）：有界，跑到底落终态，进度 = done/total 百分比。
+    Batch,
+    /// 常驻服务作业：消费循环/无自然终点，直至手动关闭；进度 = 吞吐/积压，占独立并发预算。
+    Service,
+}
+
+impl Default for JobClass {
+    fn default() -> Self {
+        Self::Batch
+    }
+}
+
 /// Handler 能力声明：框架据此决定 UI 按钮可见性与重启策略（方案 §14.3）。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct JobCaps {
@@ -293,6 +309,13 @@ pub struct JobCaps {
     pub restart: Restart,
     /// 是否幂等（重启/崩溃恢复的前提）。
     pub idempotent: bool,
+    /// 作业分型：Batch（默认，批处理）| Service（常驻消费者）。
+    #[serde(default)]
+    pub kind_class: JobClass,
+    /// 全局单实例约束：同 kind（可细化到 business_key）仅允许一个活跃实例，重复提交 409。
+    /// 常驻消费者作业通常置 true，避免重复消费（方案 §6.1）。
+    #[serde(default)]
+    pub singleton: bool,
 }
 
 impl Default for JobCaps {
@@ -301,6 +324,8 @@ impl Default for JobCaps {
             pausable: true,
             restart: Restart::Fresh,
             idempotent: true,
+            kind_class: JobClass::Batch,
+            singleton: false,
         }
     }
 }

@@ -48,10 +48,18 @@ fn control_response(out: ControlOutcome) -> Response {
 }
 
 /// Job → 列表/详情 JSON（camelCase 字段，前端直接消费）。
-fn job_json(j: &Job) -> Value {
+/// `kindClass`/`singleton` 从 handler 能力查出（供前端区分批处理 vs 常驻消费者，渲染吞吐视图）。
+fn job_json(j: &Job, mgr: &cmx_job_core::JobManager) -> Value {
+    let caps = mgr.caps_of(&j.kind);
+    let kind_class = match caps.map(|c| c.kind_class) {
+        Some(cmx_job_core::JobClass::Service) => "service",
+        _ => "batch",
+    };
     json!({
         "id": j.id.to_string(),           // i64 → string，避免 JS 大整数精度丢失
         "kind": j.kind,
+        "kindClass": kind_class,
+        "singleton": caps.map(|c| c.singleton).unwrap_or(false),
         "title": j.title,
         "status": j.status.as_str(),
         "progress": j.progress,
@@ -63,6 +71,23 @@ fn job_json(j: &Job) -> Value {
         "startedAt": j.started_at,
         "finishedAt": j.finished_at,
     })
+}
+
+/// 已注册种类 + 元数据（前端下拉/识别 Service 类）。
+fn kinds_meta_json(mgr: &cmx_job_core::JobManager) -> Value {
+    let arr: Vec<Value> = mgr
+        .kinds_meta()
+        .into_iter()
+        .map(|(k, caps)| {
+            json!({
+                "kind": k,
+                "kindClass": if matches!(caps.kind_class, cmx_job_core::JobClass::Service) { "service" } else { "batch" },
+                "singleton": caps.singleton,
+                "pausable": caps.pausable,
+            })
+        })
+        .collect();
+    Value::Array(arr)
 }
 
 /// 解析路径里的 job id（非法 → 400）。
@@ -90,7 +115,10 @@ pub async fn submit_job(
     let id = mgr
         .submit(req, JobOrigin::Frontend { user })
         .await
-        .map_err(|e| cmx_api::Error::BadRequest(e.message))?;
+        .map_err(|e| match e.code {
+            409 => cmx_api::Error::Conflict(e.message),   // 单例约束：已有活跃实例
+            _ => cmx_api::Error::BadRequest(e.message),
+        })?;
     Ok(Json(ApiResp::ok(json!({ "id": id.to_string() }))))
 }
 
@@ -116,10 +144,11 @@ pub async fn list_jobs(
     let jobs = mgr
         .list(q.kind.as_deref(), status, q.limit.unwrap_or(200))
         .await;
-    let items: Vec<Value> = jobs.iter().map(job_json).collect();
+    let items: Vec<Value> = jobs.iter().map(|j| job_json(j, mgr)).collect();
     Ok(Json(ApiResp::ok(json!({
         "items": items,
         "kinds": mgr.kinds(),
+        "kindsMeta": kinds_meta_json(mgr),
     }))))
 }
 
@@ -132,7 +161,7 @@ pub async fn get_job(
     let mgr = require_manager()?;
     let id = parse_id(&id)?;
     match mgr.get(id).await {
-        Some(j) => Ok(Json(ApiResp::ok(job_json(&j)))),
+        Some(j) => Ok(Json(ApiResp::ok(job_json(&j, mgr)))),
         None => Err(cmx_api::Error::NotFound(format!("作业 {id} 不存在"))),
     }
 }
@@ -265,7 +294,7 @@ pub async fn list_history(
         .await;
     let total = mgr.count_history(q.kind.as_deref(), status).await;
     let total_pages = if total == 0 { 0 } else { (total as usize).div_ceil(page_size) };
-    let items: Vec<Value> = jobs.iter().map(job_json).collect();
+    let items: Vec<Value> = jobs.iter().map(|j| job_json(j, mgr)).collect();
     Ok(Json(ApiResp::ok(json!({
         "items": items,
         "total": total,
@@ -273,6 +302,7 @@ pub async fn list_history(
         "pageSize": page_size,
         "totalPages": total_pages,
         "kinds": mgr.kinds(),
+        "kindsMeta": kinds_meta_json(mgr),
     }))))
 }
 
@@ -285,7 +315,7 @@ pub async fn get_history(
     let mgr = require_manager()?;
     let id = parse_id(&id)?;
     match mgr.get_history(id).await {
-        Some(j) => Ok(Json(ApiResp::ok(job_json(&j)))),
+        Some(j) => Ok(Json(ApiResp::ok(job_json(&j, mgr)))),
         None => Err(cmx_api::Error::NotFound(format!("历史作业 {id} 不存在"))),
     }
 }

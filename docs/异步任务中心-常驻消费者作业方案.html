@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>异步任务中心 · 常驻消费者作业方案</title>
+<style>
+  :root{
+    --design:#4a90d9; --calc:#42a86b; --apply:#f0b429; --warn:#e0857a;
+    --bg:#0f1419; --card:#1a2028; --card2:#232b35; --txt:#e6edf3; --dim:#8b98a5;
+    --line:#2d3742; --accent:#f0b429; --code:#a9c7e8;
+    --run:#4a90d9; --pause:#f0b429; --done:#42a86b; --fail:#e0857a; --pend:#8b98a5; --cancel:#b072d0;
+    --svc:#5ec8c8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:44px 28px 96px}
+  h1{font-size:27px;margin:0 0 6px;letter-spacing:.3px}
+  .lead{color:var(--dim);font-size:14px;margin:0 0 30px}
+  h2{font-size:20px;margin:44px 0 14px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:26px 0 10px;color:var(--accent)}
+  p{margin:11px 0}
+  code{background:#0d1117;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font:13px/1 "SF Mono",Menlo,Consolas,monospace;color:var(--code)}
+  pre{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:15px 17px;overflow:auto;font:12.5px/1.6 "SF Mono",Menlo,Consolas,monospace;color:var(--code)}
+  .pill{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:20px;padding:2px 11px;font-size:12.5px;margin:2px 4px 2px 0}
+  .pill.ok{border-color:var(--done);color:#8fe3b0}
+  .pill.new{border-color:var(--svc);color:#9fe0e0}
+  .pill.warn{border-color:var(--warn);color:#eaa}
+  .callout{border-left:3px solid var(--accent);background:var(--card);border-radius:0 9px 9px 0;padding:13px 17px;margin:18px 0}
+  .callout.info{border-color:var(--design)}
+  .callout.good{border-color:var(--done)}
+  .callout.warn{border-color:var(--warn)}
+  .callout .t{font-weight:700;margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+  td.k{color:var(--svc);white-space:nowrap;font-family:"SF Mono",Menlo,monospace;font-size:12.5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px 17px}
+  .box h4{margin:0 0 8px;font-size:14px}
+  .flow{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow:auto;font:12.5px/1.55 "SF Mono",Menlo,monospace;color:#b9c8d6;white-space:pre;margin:16px 0}
+  .st{display:inline-block;border-radius:5px;padding:1px 8px;font-size:12px;font-weight:600}
+  .st.run{background:rgba(74,144,217,.16);color:#8fc0ef}
+  .st.pause{background:rgba(240,180,41,.16);color:#f0cd76}
+  .st.done{background:rgba(66,168,107,.16);color:#7fd4a3}
+  .st.svc{background:rgba(94,200,200,.16);color:#9fe0e0}
+  ul{margin:10px 0;padding-left:22px}
+  li{margin:6px 0}
+  .tag{color:var(--dim);font-size:12.5px}
+  .num{color:var(--accent);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>异步任务中心 · 常驻消费者作业方案</h1>
+<p class="lead">Long-Running Consumer Jobs — 消息队列消费型、循环处理、无自然终点、直至手动关闭的后端作业，如何在现有任务中心体系中<b>运行 · 监控 · 管理</b>。附录于《异步任务中心方案》。纯设计，不动代码。</p>
+
+<div class="callout info">
+<div class="t">一句话结论</div>
+这类作业与现有框架的<b>唯一冲突</b>是一个隐含假设：<b>「作业有终点」</b>。破除它只需 <b>1 处必需的模型标记</b> + <b>4 处语义重新赋义</b>；协作式控制、SSE 实时进度、分布式崩溃自愈这三块核心能力<b>零改动直接可用</b>。所以本质是<b>一种使用模式（pattern），而非一类新作业</b>。
+</div>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>1 · 问题：常驻循环作业为何"格格不入"</h2>
+<p>现有任务中心（报表计算 / 校验 / 记账 / 汇总）默认作业是<b>有界的</b>：提交 → 跑到底 → 落终态。而一个"消费消息队列直到手动关闭"的作业是<b>无界的</b>：</p>
+
+<div class="flow">批处理作业（现有）          常驻消费者作业（本方案）
+  submit                     submit / 系统启动自动拉起
+    │                          │
+  处理 N 条 ── 进度 done/total  ┌─▶ 拉一批消息
+    │           = 百分比       │     处理 · ack
+  完成(Completed) ✔           │     checkpoint（响应暂停/关闭）
+                              └──┘ 队列空 → 空闲等待下一批
+                                 │  ……永不自然结束……
+                              手动关闭 → 优雅排空 → 正常终态</div>
+
+<p>五个隐含假设在这里破裂：</p>
+<table>
+<thead><tr><th>#</th><th>现有假设</th><th>常驻作业的现实</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>进度 = <code>done/total</code> 百分比</td><td>没有 <code>total</code>。要看的是<b>吞吐速率、队列积压、运行时长</b>，不是完成度</td></tr>
+<tr><td>B</td><td>终态 = 完成/失败/取消</td><td><b>手动关闭是正常终态</b>，不是错误；崩溃不该"报失败"，该<b>自动重新拉起</b></td></tr>
+<tr><td>C</td><td>作业跑完即释放 worker 槽</td><td>永久占一个槽。4 个消费者吃满 <code>max_concurrency=4</code> → 批处理全饿死</td></tr>
+<tr><td>D</td><td>可多实例并发（分区抢占）</td><td>通常必须<b>全局单实例</b>，否则重复消费</td></tr>
+<tr><td>E</td><td>明细 <code>items</code> 全量保留</td><td>永远增长 → 内存泄漏。必须<b>滚动窗口</b>只留最近 N 条</td></tr>
+</tbody>
+</table>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>2 · 契合点：什么已经现成可用（零改动）</h2>
+<p>好消息占大头——框架为"协作式长任务"设计的核心机制，恰好就是常驻消费者需要的：</p>
+
+<div class="grid2">
+<div class="box">
+<h4><span class="pill ok">现成</span> 暂停 / 关闭 = checkpoint</h4>
+<p class="tag">消费循环每批之间调 <code>ctx.checkpoint().await?</code>：</p>
+<ul>
+<li><b>暂停</b> → 循环在此<b>真挂起</b>（<code>watch::changed().await</code>，零 CPU），停止拉取新消息、连接保持。恢复 → 零延迟继续。</li>
+<li><b>关闭</b> → checkpoint 返回 <code>JobCancelled</code>，handler 用 <code>?</code> 跳出循环、做收尾。</li>
+</ul>
+<p class="tag">这正是消费者"停拉/续拉/优雅停"所需，一行不改。</p>
+</div>
+<div class="box">
+<h4><span class="pill ok">现成</span> 实时监控 = SSE 推送</h4>
+<p class="tag">同一套 <code>progress</code> / <code>log</code> / <code>item</code> 事件流，按 <code>job_id</code> 扇出。消费者把每批的速率、积压、明细通过现有上报方法推给前端，<code>GET /api/jobs/{id}/events</code> 实时可见。</p>
+</div>
+<div class="box">
+<h4><span class="pill ok">现成</span> 崩溃自愈 = 心跳 + reaper</h4>
+<p class="tag">M3 分布式：属主节点每 10s 刷 <code>heartbeat_at</code>；节点宕机 → reaper 发现心跳超时 → 作业重置 <code>pending</code> → 另一节点 <code>SKIP LOCKED</code> 重领 → <code>run()</code> 再次进入消费循环。<b>这天然就是消费者的高可用</b>：换个节点继续消费。</p>
+</div>
+<div class="box">
+<h4><span class="pill ok">现成</span> 管理端点 + 持久化 + 历史</h4>
+<p class="tag">pause/resume/cancel/restart 端点、状态落库、关闭后归档进 <code>cmx_job_hi</code> 历史表——全部复用。进度采样器每 1s 落库，正是常驻作业"重启后看得到状态"的保证。</p>
+</div>
+</div>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>3 · 核心设计：一个标记 + 四处赋义</h2>
+<p>不新增作业类型。在现有 <code>JobHandler</code> / <code>JobCaps</code> / <code>ProgressSnapshot</code> 上加最小扩展：</p>
+
+<h3>3.1 <span class="pill new">必需·唯一模型扩展</span> 作业种类分型：batch vs service</h3>
+<p>给 <code>JobCaps</code> 增一个标志（或给 <code>JobKind</code> 元数据加一维）：</p>
+<pre>JobCaps {
+    pausable:   true,          // 已有
+    restart:    Restart::Fresh,// 已有
+    idempotent: true,          // 已有
+    <span style="color:#9fe0e0">kind_class: JobClass::Service</span>,   // 新增：Batch(默认) | Service(常驻)
+    <span style="color:#9fe0e0">singleton:  true</span>,             // 新增：全局单实例约束（见 §6）
+}</pre>
+<p>这一个标志驱动下游全部差异化行为——进度展示、恢复策略、并发归属、UI 呈现。<b>它是唯一必须落到模型层的改动</b>，其余都是语义约定与 handler 侧实现。</p>
+
+<h3>3.2 四处语义重新赋义（零模型改动）</h3>
+<table>
+<thead><tr><th>维度</th><th>批处理原义</th><th>常驻作业赋义（复用同字段）</th></tr></thead>
+<tbody>
+<tr><td class="k">progress.phase</td><td>"求值"/"落库"</td><td>"消费中" / "空闲等待" / "背压暂停"</td></tr>
+<tr><td class="k">progress.done</td><td>已完成明细数</td><td><b>累计已处理消息数</b>（单调增，u64 永不溢出）</td></tr>
+<tr><td class="k">progress.total</td><td>总明细数</td><td>恒 <code>0</code>（= 无基数，<code>percent()</code> 自动返回 0，不显示百分比）</td></tr>
+<tr><td class="k">progress.ok/failed</td><td>成功/失败项</td><td>累计消费成功 / 失败（死信）计数</td></tr>
+<tr><td class="k">progress.message</td><td>一句话状态</td><td><b>"速率 120 msg/s · 积压 340 · 运行 2h13m · 上批 15 条"</b></td></tr>
+<tr><td class="k">progress.eta_ms</td><td>预估剩余</td><td>恒 <code>None</code>（无终点）</td></tr>
+<tr><td class="k">progress.items</td><td>全量明细行</td><td><b>滚动窗口</b>：只留最近 N 条处理记录（约束 E，防内存泄漏）</td></tr>
+</tbody>
+</table>
+<div class="callout good">
+<div class="t">关键：<code>total=0</code> 是现成的"无进度基数"语义</div>
+现有 <code>ProgressSnapshot::percent()</code> 在 <code>total==0</code> 时已返回 0。所以常驻作业<b>不需要改进度模型</b>，前端只要识别 service 类作业、把"进度条"换成"吞吐仪表"即可（§7）。
+</div>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>4 · 运行：消费循环骨架</h2>
+<p>handler 的 <code>run()</code> 就是消费循环。checkpoint 埋在每批之间，兼顾暂停、关闭、心跳与背压：</p>
+<pre>async fn run(ctx, params) -> Result&lt;Value, JobError&gt; {
+    let mq = connect_queue(&params).await?;        // 连接 MQ
+    ctx.set_phase("消费中");
+    let mut processed = 0u64;
+
+    loop {
+        ctx.checkpoint().await?;                   // ← 暂停在此挂起；关闭在此返回 JobCancelled
+
+        let batch = mq.poll(BATCH, POLL_TIMEOUT).await?;
+        if batch.is_empty() {
+            ctx.phase("空闲等待"); ctx.rate(0);     // 队列空：上报空闲，继续 loop
+            continue;
+        }
+        ctx.phase("消费中");
+        for msg in batch {
+            match handle(msg).await {              // 业务处理
+                Ok(_)  => { ctx.ok();  mq.ack(msg).await?; }
+                Err(e) => { ctx.fail(&e); mq.dead_letter(msg).await?; }  // 死信,不中断
+            }
+            processed += 1;
+        }
+        ctx.progress_add(batch.len());             // done += n → SSE progress 事件
+        ctx.item_window(recent);                   // 滚动窗口明细（只留最近 N）
+        ctx.rate(throughput); ctx.lag(mq.backlog());// 速率/积压 → message
+    }
+    // checkpoint 抛 JobCancelled 经 ? 跳出：优雅排空
+}</pre>
+<div class="callout info">
+<div class="t">优雅关闭 = drain（本方案关键约定）</div>
+"停止"对批处理是"尽快停"；对消费者要区分两种（§5.2）。<b>优雅关闭</b>：收到信号 → 停止 poll → 处理完手头这批 → ack → 关连接 → 返回 <code>Ok(摘要)</code>。因为 <code>checkpoint()</code> 在<b>每批之间</b>而非批中途返回错误，手头这批天然处理完，drain 语义自动成立。handler 只需在 <code>run()</code> 返回前（或 <code>?</code> 传播路径上）做连接清理。
+</div>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>5 · 生命周期与状态机（复用现有状态，重新赋义）</h2>
+
+<h3>5.1 状态映射</h3>
+<table>
+<thead><tr><th>现有状态</th><th>常驻作业含义</th></tr></thead>
+<tbody>
+<tr><td><span class="st run">Running</span></td><td>进程活着：<b>正在消费</b> 或 <b>空闲等待</b>（都算 Running，用 <code>phase</code> 区分）</td></tr>
+<tr><td><span class="st pause">Paused</span></td><td><b>暂停拉取</b>：连接保持、不消费。用户手动或背压触发</td></tr>
+<tr><td><span class="st done">Completed</span></td><td><b>手动正常关闭</b>：优雅排空后 handler 返回 <code>Ok</code> → 携带摘要（"共处理 12345 条，正常关闭"）</td></tr>
+<tr><td><span class="st" style="background:rgba(176,114,208,.2);color:#cfa3e0">Cancelled</span></td><td><b>强制停止</b>：不等排空，立即中断（连接/位点可能不干净，重启时靠 MQ 重投）</td></tr>
+<tr><td><span class="st" style="background:rgba(224,133,122,.16);color:#eaa79d">Failed</span></td><td>不可恢复错误：连接永久失败、错误率超阈值熔断等。→ 触发告警 + 自愈重拉</td></tr>
+</tbody>
+</table>
+
+<h3>5.2 两种"停止"（本方案唯一的控制语义扩展）</h3>
+<div class="grid2">
+<div class="box">
+<h4>优雅关闭 <span class="tag">graceful close → Completed</span></h4>
+<p class="tag">停止拉新 → 处理完手头批 → ack → 关连接 → 正常终态（Completed，带摘要）。日常关闭走这个。前端按钮：<b>「关闭」</b>。</p>
+</div>
+<div class="box">
+<h4>强制停止 <span class="tag">force cancel → Cancelled</span></h4>
+<p class="tag">复用现有 cancel 语义，尽快中断。用于卡死/异常场景。前端按钮：<b>「强制停止」</b>（次要、危险色）。</p>
+</div>
+</div>
+<p class="tag">实现上：现有 <code>Control</code> 是 <code>{Run, Pause, Cancel}</code>。优雅关闭可用一个<b>约定</b>实现而不必扩枚举——handler 收到 <code>Cancel</code> 后，若是 service 作业则默认走 drain 返回 <code>Ok</code>（Completed）；"强制"另配一个"跳过 drain"标志（或复用一次 cancel=优雅、二次 cancel=强制）。是否扩 <code>Control::Close</code> 视实现口味定，语义上二者已足够表达。</p>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>6 · 单实例约束与并发预算（约束 C + D）</h2>
+
+<h3>6.1 全局单实例锁</h3>
+<p>约束 D：一个消费者逻辑名全局只允许一个活跃实例，否则重复消费。母版现成——<b>复用 AI 子系统的 session 级活跃锁</b>（<code>SessionRegistry::try_acquire_session</code> / 409 冲突）：</p>
+<ul>
+<li><b>单机</b>：内存 <code>DashMap</code> 按 <code>kind + business_key</code> 加锁，重复提交返回 409。</li>
+<li><b>分布式</b>：DB 唯一约束 / PG advisory lock 按逻辑名加锁——保证跨节点全局仅一个活跃实例。崩溃 reaper 回收后锁释放，才允许别处重领（正好串起 §2 的自愈）。</li>
+</ul>
+
+<h3>6.2 并发预算隔离</h3>
+<p>约束 C：常驻作业永久占槽，不能和批处理抢同一个 <code>max_concurrency</code> 池。</p>
+<div class="callout warn">
+<div class="t">心智模型转变：service 作业是"部署"，不是"排队"</div>
+批处理走 <b>queue-drain</b>（<code>SKIP LOCKED</code> 抢一个跑一个）；service 作业走 <b>desired-state</b>（"这个消费者应该有 1 个实例常驻"）。二者应分属<b>独立并发预算</b>：
+<ul>
+<li>配置分离：<code>max_concurrency</code>（批处理池） + <code>max_services</code>（常驻池），互不挤占。</li>
+<li>claim 循环对 service 作业按"期望运行集合"领取（保持单例即可），而非按队列深度抢占。</li>
+</ul>
+</div>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>7 · 监控：前端 service 作业视图</h2>
+<p>任务中心识别 <code>kind_class=Service</code>，把"进度条 + 百分比"换成"吞吐仪表 + 运行态"。同一套 SSE 流，不同呈现：</p>
+<div class="flow">┌ 订单消息消费者  <span class="st svc">SERVICE</span> <span class="st run">运行中·消费中</span>  运行 2h13m ┐
+│  速率 <span class="num">120</span> msg/s   积压 <span class="num">340</span>   累计 <span class="num">1,284,905</span>   失败 <span class="num">12</span>  │
+│  ▁▂▃▅▇▆▄▃▂▃▅▇  ← 速率火花线（滚动窗口）                       │
+│  最近处理:  #a91f ✔ 8ms   #a920 ✔ 12ms   #a921 ✖ 反序列化   │  ← items 滚动窗口
+│  [⏸ 暂停拉取]  [关闭]  [强制停止]  [重启]                     │
+└──────────────────────────────────────────────────────────┘</div>
+<table>
+<thead><tr><th>监控项</th><th>数据来源</th><th>健康判读</th></tr></thead>
+<tbody>
+<tr><td>运行时长</td><td><code>now − started_at</code></td><td>—</td></tr>
+<tr><td>吞吐速率 msg/s</td><td>handler 上报 <code>message</code> / 扩展字段</td><td>持续 0 且有积压 = <b>卡住</b></td></tr>
+<tr><td>队列积压 lag</td><td>handler 查 MQ 上报</td><td>持续攀升 = <b>消费跟不上</b></td></tr>
+<tr><td>成功/失败(死信)</td><td><code>ok</code> / <code>failed</code></td><td>失败率突升 = 上游数据异常</td></tr>
+<tr><td>空闲时长</td><td><code>phase="空闲等待"</code> 持续时间</td><td>长期空闲 = 正常（等数据）</td></tr>
+</tbody>
+</table>
+<div class="callout good"><div class="t">关键健康信号 = 速率 × 积压 组合</div>
+<span class="pill">速率&gt;0</span> 正常消费 · <span class="pill">速率0 + 积压0</span> 空闲待命（健康）· <span class="pill warn">速率0 + 积压&gt;0</span> 卡住/宕（告警）· <span class="pill warn">速率&gt;0 + 积压持续涨</span> 消费能力不足（扩容信号）。</div>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>8 · 管理：启动、关闭、恢复、位点</h2>
+
+<h3>8.1 两种发起方式</h3>
+<table>
+<thead><tr><th>方式</th><th>场景</th></tr></thead>
+<tbody>
+<tr><td><b>用户启动</b></td><td>前端任务中心"启动消费者"，POST 提交 service 作业</td></tr>
+<tr><td><b>系统自动拉起</b></td><td>desired-state：声明为常驻的消费者，在 <code>init_job_subsystem</code> 后由系统自动 submit（配合单例锁，保证只拉起一个）。这对应"服务应常驻"的心智</td></tr>
+</tbody>
+</table>
+
+<h3>8.2 消费位点谁负责（关键边界）</h3>
+<div class="callout warn">
+<div class="t">框架只保证"作业会被重新拉起"，不保证"从哪条消息继续"</div>
+崩溃/换节点重启后，<b>消费位点（offset / ack 状态）必须由消息队列自身或作业自持久化</b>（可复用 <code>cmx_job_checkpoint</code> 表存游标），<b>不能依赖框架的进度快照</b>——进度快照是给人看的监控数据，不是精确位点。
+<ul>
+<li>MQ 支持消费组/手动 ack（Kafka/RabbitMQ/Pulsar）→ 位点交给 MQ，重启从上次 ack 后继续，天然 at-least-once。</li>
+<li>MQ 无位点语义（如轮询库表）→ 作业用 <code>cmx_job_checkpoint</code> 存"处理到哪"，重启读回。</li>
+</ul>
+</div>
+
+<h3>8.3 归档与历史</h3>
+<p>常驻作业只有<b>关闭后</b>（Completed / Cancelled）才进历史表 <code>cmx_job_hi</code>——正在运行的消费者不可归档（先关闭）。历史里记录本次运行的累计吞吐、起止、关闭原因，供审计。</p>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>9 · 落地清单：零改动复用 vs 最小扩展</h2>
+<table>
+<thead><tr><th>能力</th><th>状态</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>暂停 / 恢复 / 停止（checkpoint）</td><td><span class="pill ok">零改动</span></td><td>消费循环埋 <code>checkpoint()</code> 即得</td></tr>
+<tr><td>SSE 实时进度推送</td><td><span class="pill ok">零改动</span></td><td>复用 progress/log/item 事件</td></tr>
+<tr><td>崩溃自愈（心跳 + reaper + 重领）</td><td><span class="pill ok">零改动</span></td><td>M3 分布式 HA 直接就是消费者高可用</td></tr>
+<tr><td>持久化 / 历史归档 / 管理端点</td><td><span class="pill ok">零改动</span></td><td>全部复用</td></tr>
+<tr><td>进度字段重新赋义（吞吐/积压）</td><td><span class="pill ok">仅约定</span></td><td>handler 侧上报，模型不改</td></tr>
+<tr><td>明细滚动窗口（约束 E）</td><td><span class="pill ok">仅约定</span></td><td>handler 只保留最近 N 条</td></tr>
+<tr><td><code>JobClass::Service</code> + <code>singleton</code> 标志</td><td><span class="pill new">最小扩展</span></td><td>唯一必需的模型层改动</td></tr>
+<tr><td>独立并发预算 <code>max_services</code></td><td><span class="pill new">最小扩展</span></td><td>配置项 + claim 循环分流</td></tr>
+<tr><td>单实例锁（分布式 advisory lock）</td><td><span class="pill new">扩展·有母版</span></td><td>复用 AI session 锁思路</td></tr>
+<tr><td>优雅关闭 vs 强制停止两态</td><td><span class="pill new">扩展·可约定实现</span></td><td>drain→Completed / force→Cancelled</td></tr>
+<tr><td>前端 service 视图（吞吐仪表）</td><td><span class="pill new">前端扩展</span></td><td>识别 kind_class 换呈现</td></tr>
+<tr><td>desired-state 自动拉起</td><td><span class="pill new">扩展</span></td><td>init 后按声明 submit 常驻作业</td></tr>
+</tbody>
+</table>
+
+<!-- ─────────────────────────────────────────── -->
+<h2>10 · 风险与非目标</h2>
+<ul>
+<li><span class="pill warn">at-least-once</span> 崩溃重启依赖 MQ 重投 + 手动 ack，语义是<b>至少一次</b>。业务处理需<b>幂等</b>（去重键），否则强制停止/崩溃时可能重复处理手头批。这与框架 <code>idempotent</code> 声明一脉相承。</li>
+<li><span class="pill warn">非目标</span> 不做消息队列本身（连接/分区/重平衡由 MQ 客户端负责）。任务中心只做"承载消费循环 + 监控 + 生命周期管理"。</li>
+<li><span class="pill warn">非目标</span> 不做多实例分区并行消费（本方案定位单实例常驻）。若需水平扩展，是"多个不同 business_key 的单例作业"，或交给 MQ 消费组 + 多节点各跑一个——那是部署编排，超出本附录。</li>
+<li><span class="pill warn">背压</span> 消费跟不上时，handler 可主动 <code>Pause</code> 自己（phase="背压暂停"）或降速，避免拖垮下游。属 handler 策略，框架提供 checkpoint 挂起能力即可。</li>
+</ul>
+
+<div class="callout info" style="margin-top:26px">
+<div class="t">总结</div>
+常驻消费者作业 = 现有协作式长任务框架的<b>自然延伸</b>。<b>运行</b>靠消费循环 + checkpoint；<b>监控</b>靠同一套 SSE 换个吞吐仪表呈现；<b>管理</b>靠现有控制端点 + 单例锁 + 两态停止。真正必需的新东西只有一个 <code>JobClass::Service</code> 标志和一个独立并发预算——其余全是既有能力的复用与语义赋义。
+</div>
+
+</div>
+</body>
+</html>

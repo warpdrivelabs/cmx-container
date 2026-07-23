@@ -74,6 +74,21 @@ function instanceKey (props) {
   return `${props.reportCode || 'UNKNOWN'}@@${props.version || ''}`
 }
 
+/**
+ * 回收一个报表实例状态：清掉全部计时器 + 从 instances Map 移除——仅当该实例已无任何存活宿主
+ * （content/property 全部关闭）。防止「开过的报表状态 + 30s 轮询」永久驻留（关闭后仍打 /ops）。
+ */
+function reapInstanceIfDead (st) {
+  if (!st) return false
+  const anyLive = Array.from(st.hosts).some((h) => h && h.isConnected)
+  if (anyLive) return false
+  try { if (st.opPollTimer) { clearInterval(st.opPollTimer); st.opPollTimer = null } } catch (_) {}
+  try { if (st.__rdSelPoll) { clearInterval(st.__rdSelPoll); st.__rdSelPoll = null } } catch (_) {}
+  try { if (st.opFlushTimer) { clearTimeout(st.opFlushTimer); st.opFlushTimer = null } } catch (_) {}
+  try { instances.delete(instanceKey(st.props || {})) } catch (_) {}
+  return true
+}
+
 function slug (s) {
   return String(s || 'default').trim().replace(/[^A-Za-z0-9_-]+/g, '_') || 'default'
 }
@@ -2391,7 +2406,13 @@ async function initOpsSync (st) {
     if (typeof res?.curSeq === 'number') st.opSeq = res.curSeq
   } catch (_) { /* op_log 表未部署时静默降级为单人模式 */ }
   if (!st.opPollTimer) {
-    st.opPollTimer = setInterval(() => { pollOps(st).catch(() => {}) }, 30000)
+    st.opPollTimer = setInterval(() => {
+      // 只在有 content 宿主活着时轮询；报表关闭（宿主全断）则自停——否则关闭后仍每 30s 打 /ops。
+      // 与选区轮询 __rdSelPoll 同构的自终止模式。
+      const hasContent = Array.from(st.hosts).some((h) => h && h.isConnected && h.__rptDesignerNativeView === 'content')
+      if (!hasContent) { clearInterval(st.opPollTimer); st.opPollTimer = null; reapInstanceIfDead(st); return }
+      pollOps(st).catch(() => {})
+    }, 30000)
   }
 }
 
@@ -3663,7 +3684,7 @@ function bindSelectionSync (sheet, st, root, tries = 0) {
     st.__rdSelPoll = setInterval(() => {
       // 只在有 content 宿主活着时轮询；实例全关则停
       const hasContent = Array.from(st.hosts).some((h) => h && h.isConnected && h.__rptDesignerNativeView === 'content')
-      if (!hasContent) { clearInterval(st.__rdSelPoll); st.__rdSelPoll = null; return }
+      if (!hasContent) { clearInterval(st.__rdSelPoll); st.__rdSelPoll = null; reapInstanceIfDead(st); return }
       onSelect()
     }, 250)
   }
