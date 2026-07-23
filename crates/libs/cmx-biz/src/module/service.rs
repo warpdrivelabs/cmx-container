@@ -48,10 +48,10 @@ impl ModuleService {
                 .await?;
 
         // 文件副作用：确保模块资源目录存在
-        // module code = {domain}_{app}_{module_id}，资源目录用原始的 domain/app/module_id 三段
-        let parts: Vec<&str> = data.code.splitn(3, '_').collect();
-        if parts.len() == 3
-            && let Err(e) = DamAssetService::ensure_module_dirs(parts[0], parts[1], parts[2]).await
+        // data.code / data.domain_code / data.application_code 均为短码，直接作为目录段
+        if let Err(e) =
+            DamAssetService::ensure_module_dirs(&data.domain_code, &data.application_code, &data.code)
+                .await
         {
             tx.rollback()
                 .await
@@ -88,17 +88,12 @@ impl ModuleService {
             .await
             .map_err(|e| BizError::internal(format!("开启事务失败: {}", e)))?;
 
-        // 读取旧记录，提取 code（module code = {domain}_{app}_{module_id}）
+        // 读取旧记录，提取 code/domain_code/application_code（均为短码）
         let old_ds =
             GenericCrudService::<ModuleBmc>::get(mm, db_id, Some(tx.txn_id()), id.clone()).await?;
         let old_code = Self::get_field(&old_ds, "code").unwrap_or_default();
-        // 从旧 code 拆出 [domain, app, module_id] 三段（用于文件目录路径）
-        let old_parts: Vec<&str> = old_code.splitn(3, '_').collect();
-        let (old_domain, old_app, old_module_id) = (
-            old_parts.first().copied().unwrap_or("").to_string(),
-            old_parts.get(1).copied().unwrap_or("").to_string(),
-            old_parts.get(2).copied().unwrap_or("").to_string(),
-        );
+        let old_domain = Self::get_field(&old_ds, "domain_code").unwrap_or_default();
+        let old_app = Self::get_field(&old_ds, "application_code").unwrap_or_default();
 
         let result = GenericCrudService::<ModuleBmc>::update(
             mm,
@@ -109,24 +104,22 @@ impl ModuleService {
         )
         .await?;
 
-        // 从新记录的 code 拆出三段，判断是否改名
+        // 从新记录提取三段（短码），判断是否改名
         let new_code = Self::get_field(&result, "code").unwrap_or_else(|| old_code.clone());
-        let new_parts: Vec<&str> = new_code.splitn(3, '_').collect();
-        let (new_domain, new_app, new_module_id) = (
-            new_parts.first().copied().unwrap_or("").to_string(),
-            new_parts.get(1).copied().unwrap_or("").to_string(),
-            new_parts.get(2).copied().unwrap_or("").to_string(),
-        );
+        let new_domain = Self::get_field(&result, "domain_code").unwrap_or_else(|| old_domain.clone());
+        let new_app = Self
+            ::get_field(&result, "application_code")
+            .unwrap_or_else(|| old_app.clone());
 
-        // 若 domain/app/module_id 任一变更 → 搬目录
-        if (old_domain != new_domain || old_app != new_app || old_module_id != new_module_id)
+        // 若 domain/app/module 任一变更 → 搬目录
+        if (old_domain != new_domain || old_app != new_app || old_code != new_code)
             && let Err(e) = DamAssetService::on_module_renamed(
                 &old_domain,
                 &old_app,
-                &old_module_id,
+                &old_code,
                 &new_domain,
                 &new_app,
-                &new_module_id,
+                &new_code,
             )
             .await
         {

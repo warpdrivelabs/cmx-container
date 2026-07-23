@@ -25,53 +25,56 @@ VALUES ('portal', 'portal', '门户',           'Portal',                  'home
 -- =============================================
 -- 2. 应用数据
 -- 来源：data/dam-registry/registry.json
--- code 规则：app = {domain}_{id}；id = code
+-- code 规则：code = 原始短 id（纯净短码，如 cmxfico）；
+--            id = {domain}_{短id}（物理主键，保证全局唯一，ON CONFLICT 幂等）
 -- =============================================
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('portal_portal',  'portal_portal',  'portal', '门户',         'Portal',                'home',                          '门户平台应用。',           1, 0, 0);
+VALUES ('portal_portal',  'portal',  'portal', '门户',         'Portal',                'home',                          '门户平台应用。',           1, 0, 0);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('fi_cmxfico',     'fi_cmxfico',     'fi',     '会计核算',     'CMX FICO',              'expense-report',                '自研会计核算应用。',       1, 0, 1);
+VALUES ('fi_cmxfico',     'cmxfico', 'fi',     '会计核算',     'CMX FICO',              'expense-report',                '自研会计核算应用。',       1, 0, 1);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('fi_sap',         'fi_sap',         'fi',     'SAP',          'SAP FI',                'business-objects-experience',   'SAP 总账样例资源。',       1, 0, 2);
+VALUES ('fi_sap',         'sap',     'fi',     'SAP',          'SAP FI',                'business-objects-experience',   'SAP 总账样例资源。',       1, 0, 2);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('fi_ebs',         'fi_ebs',         'fi',     'Oracle EBS',   'Oracle EBS',            'decrease-line-height',          'Oracle EBS 总账样例资源。', 1, 0, 3);
+VALUES ('fi_ebs',         'ebs',     'fi',     'Oracle EBS',   'Oracle EBS',            'decrease-line-height',          'Oracle EBS 总账样例资源。', 1, 0, 3);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('fi_yonyou',      'fi_yonyou',      'fi',     '用友',         'Yonyou',                'developer-settings',            '用友总账样例资源。',       1, 0, 4);
+VALUES ('fi_yonyou',      'yonyou',  'fi',     '用友',         'Yonyou',                'developer-settings',            '用友总账样例资源。',       1, 0, 4);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('fi_kingdee',     'fi_kingdee',     'fi',     '金蝶',         'Kingdee',               'electronic-medical-record',     '金蝶总账样例资源。',       1, 0, 5);
+VALUES ('fi_kingdee',     'kingdee', 'fi',     '金蝶',         'Kingdee',               'electronic-medical-record',     '金蝶总账样例资源。',       1, 0, 5);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('hr_recruit',     'hr_recruit',     'hr',     '招聘',         'Recruitment',           'add-employee',                  '招聘服务目录。',           1, 0, 6);
+VALUES ('hr_recruit',     'recruit', 'hr',     '招聘',         'Recruitment',           'add-employee',                  '招聘服务目录。',           1, 0, 6);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('cr_explorer',    'cr_explorer',    'cr',     '资源浏览',     'Explorer',              'documents',                     '资源浏览与菜单页面示例。', 1, 0, 7);
+VALUES ('cr_explorer',    'explorer','cr',     '资源浏览',     'Explorer',              'documents',                     '资源浏览与菜单页面示例。', 1, 0, 7);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('dr_zhili',       'dr_zhili',       'dr',     '数据中台',     '',                      'display-more',                  '',                        1, 0, 8);
+VALUES ('dr_zhili',       'zhili',   'dr',     '数据中台',     '',                      'display-more',                  '',                        1, 0, 8);
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
-VALUES ('sc_datalake',    'sc_datalake',    'sc',     '数据湖',       '',                      'background',                    '',                        1, 0, 9);
+VALUES ('sc_datalake',    'datalake','sc',     '数据湖',       '',                      'background',                    '',                        1, 0, 9);
 
 -- =============================================
 -- 3. 模块数据
 -- 来源：data/dam-registry/registry.json
--- code 规则：module = {domain}_{app}_{id}；id = code
+-- code 规则：code = 原始短 id（纯净短码，如 gl）；
+--            id = {domain}_{app}_{短id}（物理主键，保证全局唯一，ON CONFLICT 幂等）
+-- application_code 存纯净短码（与 cmx_application.code 对齐）
 -- aliases → tags（JSON 数组字符串）
 -- =============================================
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('portal_portal_overview', 'portal_portal_overview', 'portal', 'portal_portal', '平台总览', '门户平台总览', 'home', '门户平台使用入门与总览帮助。', '[]', 'portal/portal/overview', 'modules/portal/portal/overview/module.json', 1, 0, 0);
+VALUES ('portal_portal_overview', 'overview', 'portal', 'portal', '平台总览', '门户平台总览', 'home', '门户平台使用入门与总览帮助。', '[]', 'portal/portal/overview', 'modules/portal/portal/overview/module.json', 1, 0, 0);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('fi_cmxfico_gl', 'fi_cmxfico_gl', 'fi', 'fi_cmxfico', '总账', '会计核算管理 / 总账', 'activity-items', '会计核算管理、ERP 凭证、总账科目、辅助核算等资源。', '["fi.cmxfico.gl","cmxfico.gl"]', 'fi/cmxfico/gl', 'modules/fi/cmxfico/gl/module.json', 1, 0, 1);
+VALUES ('fi_cmxfico_gl', 'gl', 'fi', 'cmxfico', '总账', '会计核算管理 / 总账', 'activity-items', '会计核算管理、ERP 凭证、总账科目、辅助核算等资源。', '["fi.cmxfico.gl","cmxfico.gl"]', 'fi/cmxfico/gl', 'modules/fi/cmxfico/gl/module.json', 1, 0, 1);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('fi_sap_gl', 'fi_sap_gl', 'fi', 'fi_sap', 'SAP 总账', 'SAP 总账样例', 'business-objects-experience', 'SAP FI 总账样例。', '[]', 'fi/sap/gl', 'modules/fi/sap/gl/module.json', 1, 0, 2);
+VALUES ('fi_sap_gl', 'sap_gl', 'fi', 'sap', 'SAP 总账', 'SAP 总账样例', 'business-objects-experience', 'SAP FI 总账样例。', '[]', 'fi/sap/gl', 'modules/fi/sap/gl/module.json', 1, 0, 2);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('fi_ebs_gl', 'fi_ebs_gl', 'fi', 'fi_ebs', 'Oracle EBS 总账', 'Oracle EBS 总账样例', 'database', 'Oracle EBS 总账样例。', '[]', 'fi/ebs/gl', 'modules/fi/ebs/gl/module.json', 1, 0, 3);
+VALUES ('fi_ebs_gl', 'ebs_gl', 'fi', 'ebs', 'Oracle EBS 总账', 'Oracle EBS 总账样例', 'database', 'Oracle EBS 总账样例。', '[]', 'fi/ebs/gl', 'modules/fi/ebs/gl/module.json', 1, 0, 3);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('fi_yonyou_gl', 'fi_yonyou_gl', 'fi', 'fi_yonyou', '用友总账', '用友总账样例', 'database', '用友总账样例。', '[]', 'fi/yonyou/gl', 'modules/fi/yonyou/gl/module.json', 1, 0, 4);
+VALUES ('fi_yonyou_gl', 'yonyou_gl', 'fi', 'yonyou', '用友总账', '用友总账样例', 'database', '用友总账样例。', '[]', 'fi/yonyou/gl', 'modules/fi/yonyou/gl/module.json', 1, 0, 4);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('fi_kingdee_gl', 'fi_kingdee_gl', 'fi', 'fi_kingdee', '金蝶总账', '金蝶总账样例', 'database', '金蝶总账样例。', '[]', 'fi/kingdee/gl', 'modules/fi/kingdee/gl/module.json', 1, 0, 5);
+VALUES ('fi_kingdee_gl', 'kingdee_gl', 'fi', 'kingdee', '金蝶总账', '金蝶总账样例', 'database', '金蝶总账样例。', '[]', 'fi/kingdee/gl', 'modules/fi/kingdee/gl/module.json', 1, 0, 5);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('hr_recruit_candidate', 'hr_recruit_candidate', 'hr', 'hr_recruit', '候选人', '招聘候选人服务目录', 'employee', '候选人服务目录。', '[]', 'hr/recruit/candidate', 'modules/hr/recruit/candidate/module.json', 1, 0, 6);
+VALUES ('hr_recruit_candidate', 'candidate', 'hr', 'recruit', '候选人', '招聘候选人服务目录', 'employee', '候选人服务目录。', '[]', 'hr/recruit/candidate', 'modules/hr/recruit/candidate/module.json', 1, 0, 6);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('cr_explorer_explorer-menu', 'cr_explorer_explorer-menu', 'cr', 'cr_explorer', 'Explorer 菜单', 'CR Explorer 菜单页面示例', 'documents', 'CR Explorer 菜单页面示例。', '[]', 'cr/explorer/explorer-menu', 'modules/cr/explorer/explorer-menu/module.json', 1, 0, 7);
+VALUES ('cr_explorer_explorer-menu', 'explorer-menu', 'cr', 'explorer', 'Explorer 菜单', 'CR Explorer 菜单页面示例', 'documents', 'CR Explorer 菜单页面示例。', '[]', 'cr/explorer/explorer-menu', 'modules/cr/explorer/explorer-menu/module.json', 1, 0, 7);
 INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
-VALUES ('fi_cmxfico_report', 'fi_cmxfico_report', 'fi', 'fi_cmxfico', '报表', '报表', 'excel-attachment', '', '[]', 'fi/cmxfico/report', 'modules/fi/cmxfico/report/module.json', 1, 0, 8);
+VALUES ('fi_cmxfico_report', 'report', 'fi', 'cmxfico', '报表', '报表', 'excel-attachment', '', '[]', 'fi/cmxfico/report', 'modules/fi/cmxfico/report/module.json', 1, 0, 8);
 
 -- =============================================
 -- 4. 内置角色数据 (cmx_role)

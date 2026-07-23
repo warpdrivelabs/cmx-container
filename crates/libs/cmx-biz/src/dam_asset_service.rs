@@ -151,6 +151,7 @@ impl DamAssetService {
 
     /// 应用改名：搬二级目录 + 重写 module 的 resource_root/manifest_path/application_code 列。
     ///
+    /// `domain` / `old_app` / `new_app` 均为短码（与 cmx_application.code 一致）。
     /// 在 ApplicationService::update 检测到 code 变更时调用。
     pub async fn on_application_renamed(
         mm: &DatabaseManager,
@@ -172,12 +173,13 @@ impl DamAssetService {
         Self::rename_tree_dirs(&[d.clone(), old.clone()], &[d.clone(), new.clone()]).await?;
 
         // 2) 重写 DB 列：该应用下所有 module
+        // application_code 现存应用短码（cmx_application.code），直接用 new 值。
         let sql = format!(
             "UPDATE cmx_module SET \
              resource_root = REPLACE(resource_root, '{d}/{old}/', '{d}/{new}/'), \
              manifest_path = REPLACE(manifest_path, 'modules/{d}/{old}/', 'modules/{d}/{new}/'), \
-             application_code = '{d}_{new}' \
-             WHERE domain_code = '{d}' AND application_code = '{d}_{old}'",
+             application_code = '{new}' \
+             WHERE domain_code = '{d}' AND application_code = '{old}'",
             d = d,
             old = old,
             new = new
@@ -261,16 +263,14 @@ impl DamAssetService {
 
     /// 删应用前校验：拒绝应用下仍有 module。
     ///
+    /// `application_code` 为应用短码（即 cmx_application.code）。
     /// 在 ApplicationService::delete 时调用。
     pub async fn check_application_deletable(
         mm: &DatabaseManager,
         db_id: &str,
-        domain: &str,
-        app: &str,
+        application_code: &str,
     ) -> Result<()> {
-        let d = assert_id("domain", domain)?;
-        let a = assert_id("app", app)?;
-        let app_code = format!("{d}_{a}");
+        let app_code = assert_id("application_code", application_code)?;
 
         let sql =
             format!("SELECT COUNT(*) AS cnt FROM cmx_module WHERE application_code = '{app_code}'");

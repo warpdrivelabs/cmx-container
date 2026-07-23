@@ -52,11 +52,8 @@ impl ApplicationService {
         .await?;
 
         // 文件副作用：确保应用级目录存在
-        // application code = {domain}_{app_id}，拆出 domain 和 app_id
-        let parts: Vec<&str> = data.code.splitn(2, '_').collect();
-        if parts.len() == 2
-            && let Err(e) = DamAssetService::ensure_app_dirs(parts[0], parts[1]).await
-        {
+        // data.code 是纯净短码，data.domain_code 是域短码，直接作为目录段。
+        if let Err(e) = DamAssetService::ensure_app_dirs(&data.domain_code, &data.code).await {
             tx.rollback()
                 .await
                 .map_err(|e| BizError::internal(format!("回滚事务失败: {}", e)))?;
@@ -95,11 +92,12 @@ impl ApplicationService {
             .await
             .map_err(|e| BizError::internal(format!("开启事务失败: {}", e)))?;
 
-        // 读取旧 code
+        // 读取旧记录，提取 code 与 domain_code（均为短码）
         let old_ds =
             GenericCrudService::<ApplicationBmc>::get(mm, db_id, Some(tx.txn_id()), id.clone())
                 .await?;
         let old_code = Self::get_field(&old_ds, "code").unwrap_or_default();
+        let old_domain = Self::get_field(&old_ds, "domain_code").unwrap_or_default();
 
         let result = GenericCrudService::<ApplicationBmc>::update(
             mm,
@@ -111,21 +109,19 @@ impl ApplicationService {
         .await?;
 
         let new_code = Self::get_field(&result, "code").unwrap_or_else(|| old_code.clone());
+        let new_domain = Self::get_field(&result, "domain_code").unwrap_or_else(|| old_domain.clone());
 
         // 若 code 变更 → 搬目录 + 重写 module 列
         if old_code != new_code && !old_code.is_empty() && !new_code.is_empty() {
-            // code = {domain}_{app_id}，拆出 domain 和 app_id
-            let old_parts: Vec<&str> = old_code.splitn(2, '_').collect();
-            let new_parts: Vec<&str> = new_code.splitn(2, '_').collect();
-            if old_parts.len() == 2 && new_parts.len() == 2 && old_parts[0] == new_parts[0] {
-                // 同域内改名
+            // 同域内改名（code/domain_code 都是短码，直接传入）
+            if old_domain == new_domain && !old_domain.is_empty() {
                 if let Err(e) = DamAssetService::on_application_renamed(
                     mm,
                     db_id,
                     Some(tx.txn_id()),
-                    old_parts[0],
-                    old_parts[1],
-                    new_parts[1],
+                    &old_domain,
+                    &old_code,
+                    &new_code,
                 )
                 .await
                 {
@@ -158,10 +154,9 @@ impl ApplicationService {
             let ds = GenericCrudService::<ApplicationBmc>::get(mm, db_id, None, id.clone()).await?;
             let code = Self::get_field(&ds, "code")
                 .unwrap_or_else(|| id.as_str().unwrap_or("").to_string());
-            // code = {domain}_{app_id}
-            let parts: Vec<&str> = code.splitn(2, '_').collect();
-            if parts.len() == 2 {
-                DamAssetService::check_application_deletable(mm, db_id, parts[0], parts[1]).await?;
+            // code 为应用短码（即 cmx_application.code）
+            if !code.is_empty() {
+                DamAssetService::check_application_deletable(mm, db_id, &code).await?;
             }
         }
 
