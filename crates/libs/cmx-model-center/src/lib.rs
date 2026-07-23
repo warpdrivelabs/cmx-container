@@ -1440,7 +1440,63 @@ async fn read_modules(db_id: &str) -> Result<std::collections::HashMap<String, V
     Ok(map)
 }
 
-/// 由 applied/latest/status 推导 scenario（镜像前端 mcScenario）。
+/// 从主库（defaultdb）的 `cmx_module` 表批量加载模块显示名。
+///
+/// module_name 的权威来源是主库 `cmx_module.name`，
+/// **不能**取定义文件里的 `moduleName` / `title`（那是元数据标题，非模块名）。
+///
+/// 索引键用 `(domain_code, application_code, code)` 三段短 id 复合键，而**非** `resource_root`：
+/// 实测主库 `resource_root`（如 SAP 为 `fi/sap/gl`）与定义文件目录（`fi/sap/sap_gl`）不一致，
+/// 但 `code` 列与 db_state 的 module 段、定义文件 moduleCode 三者一致（均为 `sap_gl`）。
+///
+/// 返回 `"{domain}\x1f{app}\x1f{module}" → name` 的映射；主库无此表或查询失败时返回空 map。
+async fn read_main_module_names() -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    let mm = get_default_db_manager();
+    let main_db = mm.get_default_db_id().await;
+    // 主库未初始化时 cmx_module 可能不存在，table_exists 返回 false 即跳过
+    if !table_exists(&main_db, "cmx_module").await.unwrap_or(false) {
+        return map;
+    }
+    let sql = "SELECT domain_code, application_code, code, name FROM cmx_module WHERE archived = 0";
+    let ds = match mm.query_sql(&main_db, None, sql, "mc_main_modules").await {
+        Ok(ds) => ds,
+        Err(e) => {
+            tracing::warn!(error = %e, "主库 cmx_module 读取失败，module_name 将使用兜底值");
+            return map;
+        }
+    };
+    let schema = ds.schema.clone();
+    for row in ds.iter() {
+        let d = row
+            .get_by_name(schema.as_ref(), "domain_code")
+            .and_then(data_value_string)
+            .unwrap_or_default();
+        let a = row
+            .get_by_name(schema.as_ref(), "application_code")
+            .and_then(data_value_string)
+            .unwrap_or_default();
+        let c = row
+            .get_by_name(schema.as_ref(), "code")
+            .and_then(data_value_string)
+            .unwrap_or_default();
+        let name = row
+            .get_by_name(schema.as_ref(), "name")
+            .and_then(data_value_string);
+        if let Some(n) = name {
+            map.insert(format!("{d}\x1f{a}\x1f{c}"), n);
+        }
+    }
+    map
+}
+
+/// 由 (domain, app, module) 三段短 id 拼复合查询键。
+/// 与 `read_main_module_names` 的 map key 格式一致（`\x1f` 分隔，防歧义）。
+fn main_module_key(domain: &str, app: &str, module: &str) -> String {
+    format!("{domain}\x1f{app}\x1f{module}")
+}
+
+
 fn scenario_of(applied: Option<&str>, latest: Option<&str>, status: &str) -> &'static str {
     if status == "failed" {
         return "retry";
@@ -1553,6 +1609,78 @@ fn compute_seed_menu_cell(
 }
 
 /// 组合 db-state：库门闸 + 每模块每 kind scenario（真实读台账 + 定义列表）。
+///
+/// # 返回结构（顶层字段）
+///
+/// | 字段 | 类型 | 说明 |
+/// |------|------|------|
+/// | `db_id` | string | 数据库标识 |
+/// | `initialized` | bool | 模型中心台账是否已初始化（`cmx_model_meta` 有记录） |
+/// | `meta_version` | i32 | 当前台账版本号 |
+/// | `expected_meta_version` | i32 | 代码期望版本号（`META_VERSION`），低于则需升级 |
+/// | `db_status` | string | `"CURRENT"` / `"UNINITIALIZED"` / `"META_UPGRADE_REQUIRED"` |
+/// | `page_mode` | string | 前端视图模式：`"normal"` / `"init"`（未初始化）/ `"meta_upgrade"`（需升级） |
+/// | `scenario_counts` | object | 全模块 kind 格的场景统计：`{create, upgrade, current, retry, drift}` |
+/// | `installed_modules` | array | **已安装模块**（在 `cmx_model_module` 有记录，至少装过一个 kind） |
+/// | `modules` | array | **全部已定义模块**（磁盘上有定义文件的，含已装和未装） |
+///
+/// # `installed_modules` vs `modules`
+///
+/// - `installed_modules`：遍历 `cmx_model_module`（台账），每条代表"装过 ≥1 个 kind 的模块"。
+///   - 注意：一个模块进此列表后，它**所有** kind（DCT/DOC/RPT/SEED/MENU）的 cell 都会带出，
+///     未装的 kind cell `status="none"` / `applied=null` / `scenario="create"`。
+///   - 前端"已创建模块"面板据此显示，并按 cell.scenario 过滤出真正装过的 kind。
+/// - `modules`：遍历磁盘定义目录（`data/meta/definitions/<domain>/<app>/<module>/`），
+///   每条带 `installed: bool`（是否在 `cmx_model_module` 有记录）。
+///   - 前端"可创建 / 安装 / 升级模块"面板据此展示，列出所有待装（scenario=create）或可升级的格。
+///
+/// # 模块级字段（两个数组共有）
+///
+/// | 字段 | 说明 |
+/// |------|------|
+/// | `key` / `domain` / `application` / `module` | 模块四段式标识（`modules` 无 `key`） |
+/// | `module_name` | 模块显示名（权威来源：主库 `cmx_module.name`，按 `code={domain}_{app}_{module}` 匹配；缺失回退 `module` 短 id） |
+/// | `installed` | （仅 `modules`）是否已安装 |
+/// | `table_count` | 物理表数（DCT+DOC 表数之和，SEED/MENU 不计） |
+/// | `created_at` / `updated_at` | 首次部署 / 最近部署时间 |
+/// | `deployed_by` / `deployed_name` | 部署人 id / 名 |
+/// | `dct` / `doc` / `rpt` / `seed` / `menu` | 各 kind 的 cell（见下） |
+///
+/// # kind cell 字段（DCT/DOC/RPT）
+///
+/// | 字段 | 说明 |
+/// |------|------|
+/// | `applied` | 库中已应用版本（`cmx_model_module_kind.version`）；未装为 `null` |
+/// | `latest` | 磁盘最新定义版本；无定义为 `null` |
+/// | `status` | 部署状态：`current` / `none` / `failed` / `drift` |
+/// | `scenario` | **场景**（前端决定动作）：`current`(无需动) / `create`(待装) / `upgrade`(可升级) / `retry`(失败重试) / `drift`(漂移重应用) / `downgrade` / `none` |
+/// | `file` / `title` / `summary` | 最新定义的文件名 / 标题 / 摘要 |
+/// | `table_count` | 该 kind 定义的表数 |
+/// | `is_default` | 该版本是否默认版本 |
+/// | `versions` | 历史版本数组（`{version,file,title,summary,table_count,is_default}`，降序） |
+///
+/// # kind cell 字段（SEED/MENU，无版本概念）
+///
+/// SEED/MENU 用文件 SHA256 + mtime 日期，不语义化为 v1/v2：
+///
+/// | 字段 | 说明 |
+/// |------|------|
+/// | `version` / `latest` | 磁盘最新文件的日期（`YYYY-MM-DD`，取所有文件 mtime 最大者） |
+/// | `applied` | 库中已应用版本（部署时写入的当时日期）；未装为 `""` |
+/// | `status` | 同上 |
+/// | `scenario` | 同上；但 drift 判断改用 `applied_checksum != latest_checksum` |
+/// | `row_count` | 种子总行数 / 菜单总节点数 |
+/// | `table_count` | 种子文件数 / 菜单文件数 |
+/// | `file` | 固定 `"seed/"` 或 `"menu-pages/"` |
+/// | `applied_checksum` / `latest_checksum` | 内部 drift 判断依据（前端不展示） |
+///
+/// # scenario 判定规则
+///
+/// DCT/DOC/RPT（`scenario_of`）：失败→`retry`；未装+有定义→`create`；已装+无定义→`current`；
+/// applied<latest→`upgrade`；applied>latest→`downgrade`；status=drift→`drift`；否则→`current`。
+///
+/// SEED/MENU（`compute_seed_menu_cell`）：失败→`retry`；否则按 checksum：无部署+有文件→`create`；
+/// checksum 一致→`current`；不一致→`drift`。
 pub async fn db_state(db_id: &str) -> Result<Value> {
     let meta = read_meta(db_id).await?;
     let initialized = meta.is_some();
@@ -1594,6 +1722,8 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
         }));
     }
     let applied_modules = read_modules(db_id).await?;
+    // module_name 权威来源：主库 cmx_module.name（按 code 匹配），失败/缺失时调用方兜底
+    let main_names = read_main_module_names().await;
 
     // 定义列表：每模块每 kind 的默认版本 = latest。
     let dct_list = cmx_model::definitions::store::list_definitions(Some("DCT"), None, None, None)
@@ -1723,7 +1853,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
         }
     };
 
-    for (key, (domain, app, module, title, kinds)) in &mods {
+    for (key, (domain, app, module, _title, kinds)) in &mods {
         let applied = applied_modules.get(key);
         let mut cell = |kind: &str| -> Value {
             let def = kinds.get(kind);
@@ -1796,7 +1926,8 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
         bump(&mut counts, menu_sc);
         modules.push(json!({
             "domain": domain, "application": app, "module": module,
-            "module_name": applied.and_then(|a| a.get("module_name")).and_then(|v| v.as_str()).unwrap_or(if title.is_empty() { module.as_str() } else { title.as_str() }),
+            "module_name": main_names.get(&main_module_key(domain, app, module)).cloned()
+                .unwrap_or_else(|| module.as_str().to_string()),
             "installed": applied.is_some(),
             "created_at": applied.and_then(|a| a.get("first_deployed_at")).and_then(|v| v.as_str()),
             "updated_at": applied.and_then(|a| a.get("current_deployed_at")).and_then(|v| v.as_str()).or_else(|| applied.and_then(|a| a.get("update_time")).and_then(|v| v.as_str())),
@@ -1837,14 +1968,21 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
                 .get(kind.to_lowercase())
                 .cloned()
                 .unwrap_or_else(|| json!({}));
+            let applied_ver = k.get("version").and_then(|v| v.as_str());
+            let status = k.get("status").and_then(|v| v.as_str()).unwrap_or("none");
+            let latest_ver = def.map(|d| d.ver.to_string());
+            // 与 modules 面板一致：实时算 scenario，供前端直接取用
+            let scenario = scenario_of(applied_ver, latest_ver.as_deref(), status);
             json!({
-                "applied": k.get("version").and_then(|v| v.as_str()),
-                "status": k.get("status").and_then(|v| v.as_str()).unwrap_or("none"),
-                "latest": def.map(|d| d.ver.to_string()),
+                "applied": applied_ver,
+                "status": status,
+                "scenario": scenario,
+                "latest": latest_ver,
                 "file": def.map(|d| d.file.clone()).unwrap_or_default(),
                 "title": def.map(|d| d.title.clone()).unwrap_or_default(),
                 "summary": def.map(|d| d.summary.clone()).unwrap_or_default(),
                 "table_count": def.map(|d| d.tables).unwrap_or(0),
+                "is_default": def.map(|d| d.is_default).unwrap_or(false),
                 "versions": vers.iter().map(|v| json!({
                     "version": v.ver.to_string(),
                     "file": v.file,
@@ -1860,7 +1998,8 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             "domain": domain,
             "application": app,
             "module": module,
-            "module_name": applied.get("module_name").and_then(|v| v.as_str()).unwrap_or(module),
+            "module_name": main_names.get(&main_module_key(domain, app, module)).cloned()
+                .unwrap_or_else(|| module.to_string()),
             "table_count": applied.get("table_count").and_then(|v| v.as_i64()).unwrap_or(0),
             "created_at": applied.get("first_deployed_at").and_then(|v| v.as_str()).or_else(|| applied.get("create_time").and_then(|v| v.as_str())),
             "updated_at": applied.get("current_deployed_at").and_then(|v| v.as_str()).or_else(|| applied.get("update_time").and_then(|v| v.as_str())),
@@ -2661,6 +2800,10 @@ async fn deploy_with_events(
         (kind_order(kind), *orig_idx)
     });
 
+    // 预加载主库 cmx_module.name（按 code 匹配）；部署写台账时 module_name 用此权威值，
+    // 不再取定义文件 moduleMeta.metaName（那是元数据标题，非模块名）
+    let main_names = read_main_module_names().await;
+
     for (seq, (_orig_idx, it)) in sorted_items.iter().enumerate() {
         let it = *it;
         let idx = seq;
@@ -2763,12 +2906,12 @@ async fn deploy_with_events(
             .and_then(|m| m.get("version"))
             .and_then(|v| v.as_i64())
             .unwrap_or(1);
-        let module_name = src
-            .get("moduleMeta")
-            .and_then(|m| m.get("metaName"))
-            .and_then(|v| v.as_str())
-            .unwrap_or(module)
-            .to_string();
+        // module_name 权威来源：主库 cmx_module.name；缺失时回退到 module 短 id。
+        // 不取定义文件 moduleMeta.metaName（那是元数据标题，非模块名，会污染台账）。
+        let module_name = main_names
+            .get(&main_module_key(domain, app, module))
+            .cloned()
+            .unwrap_or_else(|| module.to_string());
         send(
             "progress",
             json!({ "message": format!("编译完成：{} 张表，定义版本 v{}", defs.len(), version), "module": module, "kind": kind, "tables": defs.len(), "version": version }),

@@ -182,44 +182,44 @@
     {
       "domain": "fi",
       "application": "ebs",
-      "module": "gl",
+      "module": "ebs_gl",
       "title": "Oracle EBS 总账样例",
-      "manifestPath": "modules/fi/ebs/gl/module.json",
+      "manifestPath": "modules/fi/ebs/ebs_gl/module.json",
       "aliases": [],
       "resources": {
         "metaDefinitions": {
           "roots": [
-            "meta/definitions/fi/ebs/gl"
+            "meta/definitions/fi/ebs_gl"
           ],
           "fileCount": 4,
           "sampleFiles": [
-            "meta/definitions/fi/ebs/gl/ebs_gl_dct_meta_v1.json",
-            "meta/definitions/fi/ebs/gl/ebs_gl_doc_meta_v1.json",
-            "meta/definitions/fi/ebs/gl/samples/cnpc/ebs_dict_data.json",
-            "meta/definitions/fi/ebs/gl/samples/cnpc/ebs_voucher_sample.json"
+            "meta/definitions/fi/ebs_gl/ebs_gl_dct_meta_v1.json",
+            "meta/definitions/fi/ebs_gl/ebs_gl_doc_meta_v1.json",
+            "meta/definitions/fi/ebs_gl/samples/cnpc/ebs_dict_data.json",
+            "meta/definitions/fi/ebs_gl/samples/cnpc/ebs_voucher_sample.json"
           ]
         },
         "dictEntries": {
           "roots": [
-            "dict/entries/fi/ebs/gl"
+            "dict/entries/fi/ebs/ebs_gl"
           ],
           "fileCount": 24,
           "sampleFiles": [
-            "dict/entries/fi/ebs/gl/ebs_accounting_calendar.json",
-            "dict/entries/fi/ebs/gl/ebs_balance_type.json",
-            "dict/entries/fi/ebs/gl/ebs_coa_structure.json",
-            "dict/entries/fi/ebs/gl/ebs_code_combination.json",
-            "dict/entries/fi/ebs/gl/ebs_conversion_rate_type.json"
+            "dict/entries/fi/ebs/ebs_gl/ebs_accounting_calendar.json",
+            "dict/entries/fi/ebs/ebs_gl/ebs_balance_type.json",
+            "dict/entries/fi/ebs/ebs_gl/ebs_coa_structure.json",
+            "dict/entries/fi/ebs/ebs_gl/ebs_code_combination.json",
+            "dict/entries/fi/ebs/ebs_gl/ebs_conversion_rate_type.json"
           ]
         },
         "facts": {
           "roots": [
-            "fact/fi/ebs/gl"
+            "fact/fi/ebs/ebs_gl"
           ],
           "fileCount": 2,
           "sampleFiles": [
-            "fact/fi/ebs/gl/ebs_voucher_jssale_sales.json",
-            "fact/fi/ebs/gl/ebs_vouchers.json"
+            "fact/fi/ebs/ebs_gl/ebs_voucher_jssale_sales.json",
+            "fact/fi/ebs/ebs_gl/ebs_vouchers.json"
           ]
         }
       },
@@ -228,44 +228,44 @@
     {
       "domain": "fi",
       "application": "kingdee",
-      "module": "gl",
+      "module": "kingdee_gl",
       "title": "金蝶总账样例",
-      "manifestPath": "modules/fi/kingdee/gl/module.json",
+      "manifestPath": "modules/fi/kingdee/kingdee_gl/module.json",
       "aliases": [],
       "resources": {
         "metaDefinitions": {
           "roots": [
-            "meta/definitions/fi/kingdee/gl"
+            "meta/definitions/fi/kingdee/kingdee_gl"
           ],
           "fileCount": 4,
           "sampleFiles": [
-            "meta/definitions/fi/kingdee/gl/kingdee_gl_dct_meta_v1.json",
-            "meta/definitions/fi/kingdee/gl/kingdee_gl_doc_meta_v1.json",
-            "meta/definitions/fi/kingdee/gl/samples/cnpc/kingdee_dict_data.json",
-            "meta/definitions/fi/kingdee/gl/samples/cnpc/kingdee_voucher_sample.json"
+            "meta/definitions/fi/kingdee/kingdee_gl/kingdee_gl_dct_meta_v1.json",
+            "meta/definitions/fi/kingdee/kingdee_gl/kingdee_gl_doc_meta_v1.json",
+            "meta/definitions/fi/kingdee/kingdee_gl/samples/cnpc/kingdee_dict_data.json",
+            "meta/definitions/fi/kingdee/kingdee_gl/samples/cnpc/kingdee_voucher_sample.json"
           ]
         },
         "dictEntries": {
           "roots": [
-            "dict/entries/fi/kingdee/gl"
+            "dict/entries/fi/kingdee/kingdee_gl"
           ],
           "fileCount": 27,
           "sampleFiles": [
-            "dict/entries/fi/kingdee/gl/kd_acc_dimension.json",
-            "dict/entries/fi/kingdee/gl/kd_account.json",
-            "dict/entries/fi/kingdee/gl/kd_account_book.json",
-            "dict/entries/fi/kingdee/gl/kd_account_type.json",
-            "dict/entries/fi/kingdee/gl/kd_accounting_org.json"
+            "dict/entries/fi/kingdee/kingdee_gl/kd_acc_dimension.json",
+            "dict/entries/fi/kingdee/kingdee_gl/kd_account.json",
+            "dict/entries/fi/kingdee/kingdee_gl/kd_account_book.json",
+            "dict/entries/fi/kingdee/kingdee_gl/kd_account_type.json",
+            "dict/entries/fi/kingdee/kingdee_gl/kd_accounting_org.json"
           ]
         },
         "facts": {
           "roots": [
-            "fact/fi/kingdee/gl"
+            "fact/fi/kingdee/kingdee_gl"
           ],
           "fileCount": 2,
           "sampleFiles": [
-            "fact/fi/kingdee/gl/kingdee_voucher_jssale_sales.json",
-            "fact/fi/kingdee/gl/kingdee_vouchers.json"
+            "fact/fi/kingdee/kingdee_gl/kingdee_voucher_jssale_sales.json",
+            "fact/fi/kingdee/kingdee_gl/kingdee_vouchers.json"
           ]
         }
       },
@@ -274,44 +274,44 @@
     {
       "domain": "fi",
       "application": "sap",
-      "module": "gl",
+      "module": "sap_gl",
       "title": "SAP 总账样例",
-      "manifestPath": "modules/fi/sap/gl/module.json",
+      "manifestPath": "modules/fi/sap/sap_gl/module.json",
       "aliases": [],
       "resources": {
         "metaDefinitions": {
           "roots": [
-            "meta/definitions/fi/sap/gl"
+            "meta/definitions/fi/sap/sap_gl"
           ],
           "fileCount": 4,
           "sampleFiles": [
-            "meta/definitions/fi/sap/gl/samples/cnpc/fico_dict_data.json",
-            "meta/definitions/fi/sap/gl/samples/cnpc/fico_voucher_sample.json",
-            "meta/definitions/fi/sap/gl/sap_fi_dct_meta_v1.json",
-            "meta/definitions/fi/sap/gl/sap_fi_doc_meta_v1.json"
+            "meta/definitions/fi/sap/sap_gl/samples/cnpc/fico_dict_data.json",
+            "meta/definitions/fi/sap/sap_gl/samples/cnpc/fico_voucher_sample.json",
+            "meta/definitions/fi/sap/sap_gl/sap_fi_dct_meta_v1.json",
+            "meta/definitions/fi/sap/sap_gl/sap_fi_doc_meta_v1.json"
           ]
         },
         "dictEntries": {
           "roots": [
-            "dict/entries/fi/sap/gl"
+            "dict/entries/fi/sap/sap_gl"
           ],
           "fileCount": 31,
           "sampleFiles": [
-            "dict/entries/fi/sap/gl/sap_account_group.json",
-            "dict/entries/fi/sap/gl/sap_account_type.json",
-            "dict/entries/fi/sap/gl/sap_business_area.json",
-            "dict/entries/fi/sap/gl/sap_business_partner.json",
-            "dict/entries/fi/sap/gl/sap_chart_of_accounts.json"
+            "dict/entries/fi/sap/sap_gl/sap_account_group.json",
+            "dict/entries/fi/sap/sap_gl/sap_account_type.json",
+            "dict/entries/fi/sap/sap_gl/sap_business_area.json",
+            "dict/entries/fi/sap/sap_gl/sap_business_partner.json",
+            "dict/entries/fi/sap/sap_gl/sap_chart_of_accounts.json"
           ]
         },
         "facts": {
           "roots": [
-            "fact/fi/sap/gl"
+            "fact/fi/sap/sap_gl"
           ],
           "fileCount": 2,
           "sampleFiles": [
-            "fact/fi/sap/gl/sap_voucher_jssale_sales.json",
-            "fact/fi/sap/gl/sap_vouchers.json"
+            "fact/fi/sap/sap_gl/sap_voucher_jssale_sales.json",
+            "fact/fi/sap/sap_gl/sap_vouchers.json"
           ]
         }
       },
@@ -320,44 +320,44 @@
     {
       "domain": "fi",
       "application": "yonyou",
-      "module": "gl",
+      "module": "yonyou_gl",
       "title": "用友总账样例",
-      "manifestPath": "modules/fi/yonyou/gl/module.json",
+      "manifestPath": "modules/fi/yonyou/yonyou_gl/module.json",
       "aliases": [],
       "resources": {
         "metaDefinitions": {
           "roots": [
-            "meta/definitions/fi/yonyou/gl"
+            "meta/definitions/fi/yonyou/yonyou_gl"
           ],
           "fileCount": 4,
           "sampleFiles": [
-            "meta/definitions/fi/yonyou/gl/samples/cnpc/yonyou_dict_data.json",
-            "meta/definitions/fi/yonyou/gl/samples/cnpc/yonyou_voucher_sample.json",
-            "meta/definitions/fi/yonyou/gl/yonyou_gl_dct_meta_v1.json",
-            "meta/definitions/fi/yonyou/gl/yonyou_gl_doc_meta_v1.json"
+            "meta/definitions/fi/yonyou/yonyou_gl/samples/cnpc/yonyou_dict_data.json",
+            "meta/definitions/fi/yonyou/yonyou_gl/samples/cnpc/yonyou_voucher_sample.json",
+            "meta/definitions/fi/yonyou/yonyou_gl/yonyou_gl_dct_meta_v1.json",
+            "meta/definitions/fi/yonyou/yonyou_gl/yonyou_gl_doc_meta_v1.json"
           ]
         },
         "dictEntries": {
           "roots": [
-            "dict/entries/fi/yonyou/gl"
+            "dict/entries/fi/yonyou/yonyou_gl"
           ],
           "fileCount": 27,
           "sampleFiles": [
-            "dict/entries/fi/yonyou/gl/yy_account_book.json",
-            "dict/entries/fi/yonyou/gl/yy_account_category.json",
-            "dict/entries/fi/yonyou/gl/yy_account_subject.json",
-            "dict/entries/fi/yonyou/gl/yy_accounting_org.json",
-            "dict/entries/fi/yonyou/gl/yy_accounting_period.json"
+            "dict/entries/fi/yonyou/yonyou_gl/yy_account_book.json",
+            "dict/entries/fi/yonyou/yonyou_gl/yy_account_category.json",
+            "dict/entries/fi/yonyou/yonyou_gl/yy_account_subject.json",
+            "dict/entries/fi/yonyou/yonyou_gl/yy_accounting_org.json",
+            "dict/entries/fi/yonyou/yonyou_gl/yy_accounting_period.json"
           ]
         },
         "facts": {
           "roots": [
-            "fact/fi/yonyou/gl"
+            "fact/fi/yonyou/yonyou_gl"
           ],
           "fileCount": 2,
           "sampleFiles": [
-            "fact/fi/yonyou/gl/yonyou_voucher_jssale_sales.json",
-            "fact/fi/yonyou/gl/yonyou_vouchers.json"
+            "fact/fi/yonyou/yonyou_gl/yonyou_voucher_jssale_sales.json",
+            "fact/fi/yonyou/yonyou_gl/yonyou_vouchers.json"
           ]
         }
       },

@@ -892,9 +892,23 @@ function buildPanelHtml (ds) {
           const cellTables = (kind) => Number(m.cells?.[kind]?.table_count) || 0
           const totalTables = cellTables('DCT') + cellTables('DOC')
           const tblText = totalTables || m.table_count || '-'
+          // 已安装面板只展示"真正装过"的 kind：status 非 none 且 applied 有值（含版本号/日期）。
+          // 未装的 kind 不在此面板出现——它们会以下方「可创建 / 安装 / 升级」面板按 scenario=create 列出。
+          const installedKinds = MC_KINDS.filter((k) => {
+            const c = m.cells?.[k.id]
+            if (!c) return false
+            const applied = c.applied ?? c.version
+            return c.status && c.status !== 'none' && applied != null && applied !== ''
+          })
+          const kindsHtml = installedKinds.length
+            ? installedKinds.map((k) => mcKindDetailHtml(m.cells?.[k.id], k.id, m.key)).join('')
+            : `<div class="mc-kind-detail mc-kind-empty">该模块无已安装的资源</div>`
+          const kindsCls = installedKinds.length && installedKinds.length < 4
+            ? `mc-installed-kinds mc-installed-kinds-${installedKinds.length}`
+            : 'mc-installed-kinds'
           return `<div class="mc-installed-row">
           <div class="mc-installed-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div><div class="mc-mmod-s">${esc(m.deployed_name || m.deployed_by || '')}</div></div>
-          <div class="mc-installed-kinds">${MC_KINDS.map((k) => mcKindDetailHtml(m.cells?.[k.id], k.id, m.key)).join('')}</div>
+          <div class="${kindsCls}">${kindsHtml}</div>
           <div class="mc-installed-time"><span>${mcShortDate(m.created_at || m.first_deployed_at || m.create_time)}</span><span>${mcShortDate(m.updated_at || m.current_deployed_at || m.update_time)}</span></div>
           <div class="mc-mtbl">${tblText}</div>
         </div>`
@@ -2256,7 +2270,11 @@ function styleHtml () {
     .mc-installed-row:hover{background:#fafcff}
     .mc-installed-mod{min-width:0}
     .mc-installed-kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+    .mc-installed-kinds-1{grid-template-columns:minmax(0,1fr);max-width:260px}
+    .mc-installed-kinds-2{grid-template-columns:repeat(2,minmax(0,1fr));max-width:520px}
+    .mc-installed-kinds-3{grid-template-columns:repeat(3,minmax(0,1fr));max-width:780px}
     .mc-kind-detail{min-width:0;border:1px solid var(--sapGroup_TitleBorderColor,#edf0f4);border-radius:8px;padding:7px;background:var(--sapList_HeaderBackground,#fafbfc)}
+    .mc-kind-empty{display:flex;align-items:center;justify-content:center;color:var(--sapContent_LabelColor,#8993a3);font-size:11px;font-style:italic;background:transparent;border-style:dashed}
     .mc-kd-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:5px}
     .mc-kind-detail .cds-bd-kbadge{margin-bottom:0}
     .mc-kd-actions{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto}

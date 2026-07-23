@@ -1,24 +1,24 @@
 {
   "schemaVersion": 1,
   "domain": "fi",
-  "application": "kingdee",
-  "module": "gl",
-  "title": "金蝶总账样例",
+  "application": "ebs",
+  "module": "ebs_gl",
+  "title": "Oracle EBS 总账样例",
   "status": "active",
   "resources": {
     "metaDefinitions": [
       {
-        "path": "meta/definitions/fi/kingdee/gl"
+        "path": "meta/definitions/fi/ebs/ebs_gl"
       }
     ],
     "dictEntries": [
       {
-        "path": "dict/entries/fi/kingdee/gl"
+        "path": "dict/entries/fi/ebs/ebs_gl"
       }
     ],
     "facts": [
       {
-        "path": "fact/fi/kingdee/gl"
+        "path": "fact/fi/ebs/ebs_gl"
       }
     ]
   }

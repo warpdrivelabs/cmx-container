@@ -16,6 +16,7 @@ use std::sync::OnceLock;
 
 use serde_json::Value;
 use tokio::sync::RwLock;
+use tracing::warn;
 
 use cmx_api_types::{Error, Result};
 
@@ -55,6 +56,72 @@ pub fn doc_matches(doc: &Value, target: &str) -> bool {
         .and_then(|m| m.get("moduleCode"))
         .and_then(|v| v.as_str())
         == Some(target)
+}
+
+// ============================================================================
+// 候选文件排序与脏状态检测（确定性选版本 + 跨副本一致）
+// ============================================================================
+//
+// 背景：原实现从 `groups: HashMap` 直接 collect 候选，HashMap 迭代顺序不定导致：
+// 1. **多副本部署**下不同节点可能选到不同文件（违反 AGENTS §五集群一致性）。
+// 2. **进程重启**后可能选到不同文件（运行时缓存又掩盖了这一问题）。
+// 这里统一改为 (isDefault 降序 → version 降序 → file 升序) 排序，让任意副本 / 任意
+// 重启都能稳定收敛到同一份。
+
+/// 按 (isDefault 降序, version 降序, file 升序) 排序候选文件名。
+///
+/// # Arguments
+///
+/// * `candidates` - 待排序的文件名列表（原地排序）。
+/// * `entries` - `(stem, file, is_default, version)` 摘要列表，提供排序所需的元信息。
+pub fn sort_candidates_by_default(
+    candidates: &mut [String],
+    entries: &[(String, String, bool, u64)],
+) {
+    candidates.sort_by(|a, b| {
+        let meta = |f: &str| entries.iter().find(|(_, ef, _, _)| ef == f);
+        let ad = meta(a).map(|(_, _, d, _)| *d).unwrap_or(false);
+        let bd = meta(b).map(|(_, _, d, _)| *d).unwrap_or(false);
+        bd.cmp(&ad) // isDefault=true 优先
+            .then_with(|| {
+                let av = meta(a).map(|(_, _, _, v)| *v).unwrap_or(0);
+                let bv = meta(b).map(|(_, _, _, v)| *v).unwrap_or(0);
+                bv.cmp(&av) // 同 isDefault 时 version 降序
+            })
+            .then_with(|| a.cmp(b)) // 仍相等时 file 名升序稳定
+    });
+}
+
+/// 检测并 warn「同 stem 多 isDefault=true」脏状态。
+///
+/// 设计契约：同 stem 组内至多一个 `isDefault=true`（由 `set_default_version` 强制）。
+/// 该状态多见于手工编辑 JSON / 跨环境 git pull / 绕过 set_default_version 直写。
+/// 不阻断流程——`pick` 仍按 (isDefault 优先, version 最大) 收敛——但提醒运维清理。
+pub fn warn_stem_multi_default(
+    kind: &str,
+    domain: &str,
+    app: &str,
+    module: &str,
+    entries: &[(String, String, bool, u64)],
+) {
+    let mut by_stem: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (stem, file, is_default, _) in entries {
+        if *is_default {
+            by_stem
+                .entry(stem.as_str())
+                .or_default()
+                .push(file.as_str());
+        }
+    }
+    for (stem, files) in by_stem {
+        if files.len() > 1 {
+            warn!(
+                "[{kind}] 同 stem 多 isDefault=true 脏状态: domain={domain}, app={app}, module={module}, \
+                 stem={stem}, files={files:?} —— pick 将收敛到 isDefault 且 version 最大的那份，\
+                 建议清理多余 isDefault=true 的文件"
+            );
+        }
+    }
 }
 
 /// 解析 DOC 定义文件：`doc` 有值（URL query 中传入的 moduleCode）时按 `moduleMeta.moduleCode` 精确定位；缺失时盲选默认/最高版本。
@@ -101,6 +168,8 @@ pub async fn resolve_doc_file(
             .or_default()
             .push((file.clone(), *is_default, *version));
     }
+    // C1：脏状态检测——同 stem 多 isDefault=true。
+    warn_stem_multi_default("DOC", domain, app, module, &entries);
     let pick = |arr: &[(String, bool, u64)]| -> Option<String> {
         // 优先 isDefault=true 的；无则全员；组内取 version 最大者的 file。
         let any_default = arr.iter().any(|(_, d, _)| *d);
@@ -111,15 +180,18 @@ pub async fn resolve_doc_file(
     };
     // doc 有值：仿 DCT resolve_dict_file，逐候选文件读 moduleMeta.moduleCode 验证匹配（精确定位）。
     if let Some(module_code) = doc.filter(|d| !d.is_empty()) {
-        // 收集候选文件（每组代表优先）。
-        let candidates: Vec<String> = groups.values().filter_map(|arr| pick(arr)).collect();
+        // 收集候选文件（每组代表优先），按 (isDefault, version, file) 确定性排序。
+        let mut candidates: Vec<String> = groups.values().filter_map(|arr| pick(arr)).collect();
+        sort_candidates_by_default(&mut candidates, &entries);
         // 代表都没命中时，回退扫描该 stem 组其余版本（防 isDefault 版本恰好 moduleCode 不符）。
+        // 同样按确定性顺序排序，跨副本一致。
         let mut fallback: Vec<String> = Vec::new();
         for (_, file, _, _) in &entries {
             if !candidates.contains(file) {
                 fallback.push(file.clone());
             }
         }
+        sort_candidates_by_default(&mut fallback, &entries);
         // 逐候选验证 moduleCode，收集所有命中的（同 moduleCode 多文件时按 isDefault/version 选最优）。
         let mut hits: Vec<(String, bool, u64)> = Vec::new();
         let entry_meta = |file: &str| -> (bool, u64) {
@@ -148,6 +220,14 @@ pub async fn resolve_doc_file(
                 hits.push((f.clone(), is_default, version));
             }
         }
+        // C2：跨 stem 同 moduleCode 重复定义——按确定性顺序选第一份（pick 内已收敛 isDefault/version），其余 warn。
+        if hits.len() > 1 {
+            let files: Vec<&str> = hits.iter().map(|(f, _, _)| f.as_str()).collect();
+            warn!(
+                "[DOC] 跨 stem 同 moduleCode 重复定义: domain={domain}, app={app}, module={module}, \
+                 moduleCode={module_code}, files={files:?} —— 选用 pick 收敛结果，建议清理重复定义"
+            );
+        }
         if let Some(resolved) = pick(&hits) {
             doc_file_cache()
                 .write()
@@ -161,7 +241,7 @@ pub async fn resolve_doc_file(
     }
     // doc 缺失：盲选默认（向后兼容）。收集各组代表，再做一次全局选代表（跨 stem 取 isDefault 优先 / version 最大）。
     // DOC 一个 module 通常单 stem 单默认版本；多 stem 时按同一规则收敛到唯一结果。
-    let candidates: Vec<(String, bool, u64)> = groups
+    let mut candidates: Vec<(String, bool, u64)> = groups
         .values()
         .filter_map(|arr| {
             let f = pick(arr)?;
@@ -175,16 +255,19 @@ pub async fn resolve_doc_file(
             Some((f, any_default, top_version))
         })
         .collect();
+    // 跨 stem 候选按 (isDefault, version, file) 确定性排序，让多副本/重启都收敛到同一份。
+    candidates.sort_by(|a, b| {
+        b.1.cmp(&a.1) // isDefault 降序
+            .then_with(|| b.2.cmp(&a.2)) // version 降序
+            .then_with(|| a.0.cmp(&b.0)) // file 升序
+    });
     if candidates.is_empty() {
         return Err(not_found(format!(
             "未在 {domain}/{app}/{module} 下解析出可用的 DOC 默认定义"
         )));
     }
-    let any_default = candidates.iter().any(|(_, d, _)| *d);
     let resolved = candidates
-        .iter()
-        .filter(|(_, d, _)| if any_default { *d } else { true })
-        .max_by_key(|(_, _, v)| *v)
+        .first()
         .map(|(f, _, _)| f.clone())
         .ok_or_else(|| {
             not_found(format!(
@@ -233,6 +316,8 @@ pub async fn resolve_dict_file(
             .or_default()
             .push((file.clone(), *is_default, *version));
     }
+    // C1：脏状态检测——同 stem 多 isDefault=true。
+    warn_stem_multi_default("DCT", domain, app, module, &entries);
     let pick = |arr: &[(String, bool, u64)]| -> Option<String> {
         // 优先 isDefault=true 的；无则全员；组内取 version 最大者的 file。
         let any_default = arr.iter().any(|(_, d, _)| *d);
@@ -241,20 +326,26 @@ pub async fn resolve_dict_file(
             .max_by_key(|(_, _, v)| *v)
             .map(|(f, _, _)| f.clone())
     };
-    // 收集候选文件（每组代表优先），逐文件读 dictionaryTables 找 dictCode。
+    // 收集候选文件（每组代表优先），按 (isDefault, version, file) 确定性排序，
+    // 让多副本/进程重启都收敛到同一份。
     let mut candidates: Vec<String> = Vec::new();
     for arr in groups.values() {
         if let Some(f) = pick(arr) {
             candidates.push(f);
         }
     }
+    sort_candidates_by_default(&mut candidates, &entries);
     // 代表都没命中时，回退扫描该 stem 组其余版本（防 isDefault 版本恰好不含该 dict）。
+    // 同样按确定性顺序排序，跨副本一致。
     let mut fallback: Vec<String> = Vec::new();
     for (_, file, _, _) in &entries {
         if !candidates.contains(file) {
             fallback.push(file.clone());
         }
     }
+    sort_candidates_by_default(&mut fallback, &entries);
+    // 收集所有命中文件：第一个（按确定性顺序）作为返回，>1 个时 warn 提醒脏数据。
+    let mut hits: Vec<String> = Vec::new();
     for f in candidates.iter().chain(fallback.iter()) {
         let doc_ref = DefRef {
             domain: Some(domain.to_string()),
@@ -275,11 +366,134 @@ pub async fn resolve_dict_file(
             .map(|arr| arr.iter().any(|t| dict_matches(t, dict)))
             .unwrap_or(false);
         if hit {
-            dict_file_cache().write().await.insert(cache_key, f.clone());
-            return Ok(f.clone());
+            hits.push(f.clone());
         }
     }
-    Err(not_found(format!(
-        "未在 {domain}/{app}/{module} 下找到含字典 {dict} 的 DCT 定义文件"
-    )))
+    match hits.first() {
+        Some(first) => {
+            // C2：跨 stem 同 dictCode 重复定义——挑第一份（确定性收敛），其余 warn。
+            if hits.len() > 1 {
+                warn!(
+                    "[DCT] 跨 stem 同 dictCode 重复定义: domain={domain}, app={app}, module={module}, \
+                     dict={dict}, files={hits:?} —— 选用 {first}，建议清理重复定义"
+                );
+            }
+            dict_file_cache().write().await.insert(cache_key, first.clone());
+            Ok(first.clone())
+        }
+        None => Err(not_found(format!(
+            "未在 {domain}/{app}/{module} 下找到含字典 {dict} 的 DCT 定义文件"
+        ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 造一个 entries 摘要，模拟 resolve 时的 (stem, file, is_default, version)。
+    fn entries(items: &[(&str, &str, bool, u64)]) -> Vec<(String, String, bool, u64)> {
+        items
+            .iter()
+            .map(|(s, f, d, v)| (s.to_string(), f.to_string(), *d, *v))
+            .collect()
+    }
+
+    #[test]
+    fn sort_candidates_prefer_default() {
+        // a/b 无 default；c 是 default；期望 c 排最前
+        let ents = entries(&[
+            ("a", "a_v1.json", false, 1),
+            ("b", "b_v3.json", false, 3),
+            ("c", "c_v1.json", true, 1),
+        ]);
+        let mut candidates = vec![
+            "a_v1.json".to_string(),
+            "b_v3.json".to_string(),
+            "c_v1.json".to_string(),
+        ];
+        sort_candidates_by_default(&mut candidates, &ents);
+        assert_eq!(
+            candidates,
+            vec![
+                "c_v1.json".to_string(), // isDefault=true 优先
+                "b_v3.json".to_string(), // version desc
+                "a_v1.json".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sort_candidates_version_desc_within_same_default() {
+        // 同 isDefault=false 时按 version 降序
+        let ents = entries(&[
+            ("a", "a_v1.json", false, 1),
+            ("b", "b_v2.json", false, 2),
+            ("c", "c_v3.json", false, 3),
+        ]);
+        let mut candidates = vec![
+            "a_v1.json".to_string(),
+            "b_v2.json".to_string(),
+            "c_v3.json".to_string(),
+        ];
+        sort_candidates_by_default(&mut candidates, &ents);
+        assert_eq!(
+            candidates,
+            vec![
+                "c_v3.json".to_string(),
+                "b_v2.json".to_string(),
+                "a_v1.json".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sort_candidates_file_lex_as_final_tiebreaker() {
+        // 同 isDefault + 同 version 时按 file 名升序稳定
+        let ents = entries(&[
+            ("a", "z_v1.json", false, 1),
+            ("b", "a_v1.json", false, 1),
+            ("c", "m_v1.json", false, 1),
+        ]);
+        let mut candidates = vec![
+            "z_v1.json".to_string(),
+            "a_v1.json".to_string(),
+            "m_v1.json".to_string(),
+        ];
+        sort_candidates_by_default(&mut candidates, &ents);
+        assert_eq!(
+            candidates,
+            vec![
+                "a_v1.json".to_string(),
+                "m_v1.json".to_string(),
+                "z_v1.json".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sort_candidates_default_beats_higher_version() {
+        // isDefault=true 即使 version 更低也排前面
+        let ents = entries(&[
+            ("a", "a_v10.json", false, 10),
+            ("b", "b_v1.json", true, 1),
+        ]);
+        let mut candidates = vec![
+            "a_v10.json".to_string(),
+            "b_v1.json".to_string(),
+        ];
+        sort_candidates_by_default(&mut candidates, &ents);
+        assert_eq!(
+            candidates,
+            vec!["b_v1.json".to_string(), "a_v10.json".to_string()]
+        );
+    }
+
+    #[test]
+    fn sort_candidates_empty_is_noop() {
+        let ents = entries(&[]);
+        let mut candidates: Vec<String> = vec![];
+        sort_candidates_by_default(&mut candidates, &ents);
+        assert!(candidates.is_empty());
+    }
 }

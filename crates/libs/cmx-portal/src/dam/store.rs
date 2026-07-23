@@ -44,7 +44,7 @@ pub struct DamApplication {
     pub db_id: String,
     /// 所属域 id。
     pub domain: String,
-    /// 应用唯一标识（业务键，即反拆后的 app_id，显示用）。
+    /// 应用唯一标识（业务键，即 cmx_application.code 纯净短码，显示用）。
     pub id: String,
     /// 应用名称。
     pub name: String,
@@ -227,9 +227,9 @@ pub async fn list_domains(active_only: bool) -> crate::error::PortalResult<Vec<D
     Ok(out)
 }
 
-/// 应用列表（按 domain 过滤，查 cmx_application，反向映射回 DamApplication shape）。
+/// 应用列表（按 domain 过滤，查 cmx_application，映射回 DamApplication shape）。
 ///
-/// DB 的 application_code 是 `{domain}_{app_id}` 拼接，反向拆出原始 app_id 作为 id。
+/// DB 的 `code` 即纯净短码（如 `cmxfico`），直接作为 id 返回，无需反拆。
 /// `active_only` 为 true 时只返回 status=1（启用）的记录。
 #[tracing::instrument]
 pub async fn list_applications(
@@ -266,12 +266,10 @@ pub async fn list_applications(
     for row in ds.iter() {
         let code = row_str(row, schema, "code");
         let domain_code = row_str(row, schema, "domain_code");
-        // 反向拆解：code = {domain}_{app_id}，去掉 domain_ 前缀得 app_id
-        let app_id = strip_prefix(&code, &format!("{domain_code}_"));
         out.push(DamApplication {
             db_id: row_str(row, schema, "id"),
             domain: domain_code,
-            id: app_id,
+            id: code,
             name: row_str(row, schema, "name"),
             title: row_str(row, schema, "title"),
             icon: row_str(row, schema, "icon"),
@@ -283,10 +281,10 @@ pub async fn list_applications(
     Ok(out)
 }
 
-/// 模块列表（按 domain/application 过滤，查 cmx_module，反向映射回 DamModule shape）。
+/// 模块列表（按 domain/application 过滤，查 cmx_module，映射回 DamModule shape）。
 ///
-/// DB 的 module_code 是 `{domain}_{app}_{module_id}` 拼接，反向拆出原始三段。
-/// application_code 是 `{domain}_{app}`，反向拆出 app_id。
+/// DB 的 `code` 即纯净短码（如 `gl`），`application_code` 即应用短码（如 `cmxfico`），
+/// 直接作为 id / application 返回，无需反拆。
 /// `active_only` 为 true 时只返回 status=1（启用）的记录。
 #[tracing::instrument]
 pub async fn list_modules(
@@ -305,15 +303,9 @@ pub async fn list_modules(
         conditions.push(format!("domain_code = ${}", params.len()));
     }
     if !a.is_empty() {
-        // a 是原始 app_id，DB 里 application_code = {domain}_{app_id}
-        if d.is_empty() {
-            // 不确定 domain：用 LIKE 匹配 `*_<app_id>` 后缀（真正用 LIKE 运算符）。
-            params.push(format!("%_{}", a).into());
-            conditions.push(format!("application_code LIKE ${}", params.len()));
-        } else {
-            params.push(format!("{}_{}", d, a).into());
-            conditions.push(format!("application_code = ${}", params.len()));
-        }
+        // a 是应用短码，DB 的 application_code 也是短码，直接精确匹配。
+        params.push(a.to_string().into());
+        conditions.push(format!("application_code = ${}", params.len()));
     }
     if active_only {
         conditions.push("status = 1".to_string());
@@ -337,9 +329,6 @@ pub async fn list_modules(
         let code = row_str(row, schema, "code");
         let domain_code = row_str(row, schema, "domain_code");
         let app_code = row_str(row, schema, "application_code");
-        // 反向拆解：app_code = {domain}_{app_id} → app_id；code = {domain}_{app}_{module_id} → module_id
-        let app_id = strip_prefix(&app_code, &format!("{domain_code}_"));
-        let module_id = strip_prefix(&code, &format!("{app_code}_"));
         let tags_str = row_str(row, schema, "tags");
         let aliases: Vec<String> = if tags_str.is_empty() {
             Vec::new()
@@ -357,10 +346,10 @@ pub async fn list_modules(
         out.push(DamModule {
             db_id: row_str(row, schema, "id"),
             domain: domain_code,
-            application: app_id.clone(),
-            app: app_id.clone(),
-            id: module_id.clone(),
-            module: module_id,
+            application: app_code.clone(),
+            app: app_code,
+            id: code.clone(),
+            module: code,
             name: row_str(row, schema, "name"),
             title: row_str(row, schema, "title"),
             icon: row_str(row, schema, "icon"),
@@ -377,13 +366,4 @@ pub async fn list_modules(
         });
     }
     Ok(out)
-}
-
-/// 去掉字符串前缀（若无前缀则返回原值）。
-fn strip_prefix(s: &str, prefix: &str) -> String {
-    if let Some(rest) = s.strip_prefix(prefix) {
-        rest.to_string()
-    } else {
-        s.to_string()
-    }
 }

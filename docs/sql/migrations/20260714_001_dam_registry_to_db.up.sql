@@ -10,8 +10,10 @@
 --     编码 (fi/hr/cr/cmxfico...) 无交集，本迁移以 registry 数据替换旧种子。
 --   - module 的 resource_root/manifest_path/icon/title/theme/theme_color 为
 --     新增列（DAM 资产定位用），aliases 复用既有 tags 列。
---   - code 生成规则：domain 原样；app = {domain}_{id}；module = {domain}_{app}_{id}。
---     id = code（主键与业务键同值）。
+--   - code 生成规则：domain 原样；app/module 用纯净短码。
+--     id = {domain}_{短码} / {domain}_{app}_{短码}（物理主键，与 code 解耦，保证全局唯一）。
+--     ⚠️ 若库曾执行过旧版（code = 拼接码）的 20260714，需补跑
+--     20260722_001_dam_code_to_short 把 code 改为短码。
 --
 -- 注意：此迁移为幂等设计，可重复执行。
 -- ============================================================
@@ -81,8 +83,10 @@ DELETE FROM cmx_domain WHERE code IN ('FIN','LOG','SAL','MFG','HCM','XAP');
 --
 -- 数据来源：data/dam-registry/registry.json（5 域 / 10 应用 / 9 模块）
 -- 数据修正：补录 portal 域（applications/modules 中引用但 domains 缺失）
--- code 规则：domain=原 id；app={domain}_{id}；module={domain}_{app}_{id}
--- id = code；status: active→1, disabled→0
+-- code 规则：domain=原 id；app/module 用纯净短码
+--            id = {domain}_{短码} / {domain}_{app}_{短码}（物理主键，与 code 解耦，保证全局唯一）
+--            application_code 存应用短码（与 cmx_application.code 对齐）
+-- status: active→1, disabled→0
 -- ============================================================
 
 -- 3.1 域数据（6 条，含补录的 portal）
@@ -94,69 +98,69 @@ VALUES
     ('dr',     'dr',     '数据资源管理',   'data Resources',          'database',       '',                                       1, 0, 4),
     ('sc',     'sc',     '生产资源管理',   '生产资源管理',             'machine',        '',                                       1, 0, 5),
     -- 补录：applications/modules 引用 domain=portal 但 registry domains 缺失
-    ('portal', 'portal', '门户',           'Portal',                  'home',           '门户平台域。',                            0, 0, 0)
+    ('portal', 'portal', '门户',           'Portal',                  'home',           '门户平台域。',                            0, 0, 8)
 ON CONFLICT (id) DO UPDATE SET
     code = EXCLUDED.code, name = EXCLUDED.name, title = EXCLUDED.title,
     icon = EXCLUDED.icon, description = EXCLUDED.description,
     status = EXCLUDED.status, archived = EXCLUDED.archived, sort_order = EXCLUDED.sort_order;
 
--- 3.2 应用数据（10 条，code = {domain}_{id}）
+-- 3.2 应用数据（10 条，code = 纯净短码，id = {domain}_{短码}）
 INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
 VALUES
-    ('portal_portal',  'portal_portal',  'portal', '门户',         'Portal',                'home',                          '门户平台应用。',           1, 0, 0),
-    ('fi_cmxfico',     'fi_cmxfico',     'fi',     '会计核算',     'CMX FICO',              'expense-report',                '自研会计核算应用。',       1, 0, 1),
-    ('fi_sap',         'fi_sap',         'fi',     'SAP',          'SAP FI',                'business-objects-experience',   'SAP 总账样例资源。',       1, 0, 2),
-    ('fi_ebs',         'fi_ebs',         'fi',     'Oracle EBS',   'Oracle EBS',            'decrease-line-height',          'Oracle EBS 总账样例资源。', 1, 0, 3),
-    ('fi_yonyou',      'fi_yonyou',      'fi',     '用友',         'Yonyou',                'developer-settings',            '用友总账样例资源。',       1, 0, 4),
-    ('fi_kingdee',     'fi_kingdee',     'fi',     '金蝶',         'Kingdee',               'electronic-medical-record',     '金蝶总账样例资源。',       1, 0, 5),
-    ('hr_recruit',     'hr_recruit',     'hr',     '招聘',         'Recruitment',           'add-employee',                  '招聘服务目录。',           1, 0, 6),
-    ('cr_explorer',    'cr_explorer',    'cr',     '资源浏览',     'Explorer',              'documents',                     '资源浏览与菜单页面示例。', 1, 0, 7),
-    ('dr_zhili',       'dr_zhili',       'dr',     '数据中台',     '',                      'display-more',                  '',                        1, 0, 8),
-    ('sc_datalake',    'sc_datalake',    'sc',     '数据湖',       '',                      'background',                    '',                        1, 0, 9)
+    ('portal_portal',  'portal',  'portal', '门户',         'Portal',                'home',                          '门户平台应用。',           0, 0, 8),
+    ('fi_cmxfico',     'cmxfico', 'fi',     '会计核算',     'CMX FICO',              'expense-report',                '自研会计核算应用。',       1, 0, 1),
+    ('fi_sap',         'sap',     'fi',     'SAP',          'SAP FI',                'business-objects-experience',   'SAP 总账样例资源。',       1, 0, 2),
+    ('fi_ebs',         'ebs',     'fi',     'Oracle EBS',   'Oracle EBS',            'decrease-line-height',          'Oracle EBS 总账样例资源。', 1, 0, 3),
+    ('fi_yonyou',      'yonyou',  'fi',     '用友',         'Yonyou',                'developer-settings',            '用友总账样例资源。',       1, 0, 4),
+    ('fi_kingdee',     'kingdee', 'fi',     '金蝶',         'Kingdee',               'electronic-medical-record',     '金蝶总账样例资源。',       1, 0, 5),
+    ('hr_recruit',     'recruit', 'hr',     '招聘',         'Recruitment',           'add-employee',                  '招聘服务目录。',           1, 0, 6),
+    ('cr_explorer',    'explorer','cr',     '资源浏览',     'Explorer',              'documents',                     '资源浏览与菜单页面示例。', 1, 0, 7),
+    ('dr_zhili',       'zhili',   'dr',     '数据中台',     '',                      'display-more',                  '',                        1, 0, 8),
+    ('sc_datalake',    'datalake','sc',     '数据湖',       '',                      'background',                    '',                        1, 0, 9)
 ON CONFLICT (id) DO UPDATE SET
     code = EXCLUDED.code, domain_code = EXCLUDED.domain_code, name = EXCLUDED.name,
     title = EXCLUDED.title, icon = EXCLUDED.icon, description = EXCLUDED.description,
     status = EXCLUDED.status, archived = EXCLUDED.archived, sort_order = EXCLUDED.sort_order;
 
--- 3.3 模块数据（9 条，code = {domain}_{app}_{id}）
+-- 3.3 模块数据（9 条，code = 纯净短码，application_code = 应用短码，id = {domain}_{app}_{短码}）
 -- aliases → tags（JSON 数组字符串）；resource_root/manifest_path 原样；title/icon 原样
 INSERT INTO cmx_module
     (id, code, domain_code, application_code, name, title, icon, description,
      tags, resource_root, manifest_path, status, archived, sort_order)
 VALUES
-    ('portal_portal_overview', 'portal_portal_overview', 'portal', 'portal_portal',
+    ('portal_portal_overview', 'overview', 'portal', 'portal',
      '平台总览', '门户平台总览', 'home', '门户平台使用入门与总览帮助。',
-     '[]', 'portal/portal/overview', 'modules/portal/portal/overview/module.json', 1, 0, 0),
+     '[]', 'portal/portal/overview', 'modules/portal/portal/overview/module.json', 0, 0, 8),
 
-    ('fi_cmxfico_gl', 'fi_cmxfico_gl', 'fi', 'fi_cmxfico',
+    ('fi_cmxfico_gl', 'gl', 'fi', 'cmxfico',
      '总账', '会计核算管理 / 总账', 'activity-items', '会计核算管理、ERP 凭证、总账科目、辅助核算等资源。',
      '["fi.cmxfico.gl","cmxfico.gl"]', 'fi/cmxfico/gl', 'modules/fi/cmxfico/gl/module.json', 1, 0, 1),
 
-    ('fi_sap_gl', 'fi_sap_gl', 'fi', 'fi_sap',
+    ('fi_sap_gl', 'sap_gl', 'fi', 'sap',
      'SAP 总账', 'SAP 总账样例', 'business-objects-experience', 'SAP FI 总账样例。',
-     '[]', 'fi/sap/gl', 'modules/fi/sap/gl/module.json', 1, 0, 2),
+     '[]', 'fi/sap/sap_gl', 'modules/fi/sap/sap_gl/module.json', 1, 0, 2),
 
-    ('fi_ebs_gl', 'fi_ebs_gl', 'fi', 'fi_ebs',
+    ('fi_ebs_gl', 'ebs_gl', 'fi', 'ebs',
      'Oracle EBS 总账', 'Oracle EBS 总账样例', 'database', 'Oracle EBS 总账样例。',
-     '[]', 'fi/ebs/gl', 'modules/fi/ebs/gl/module.json', 1, 0, 3),
+     '[]', 'fi/ebs/ebs_gl', 'modules/fi/ebs/ebs_gl/module.json', 1, 0, 3),
 
-    ('fi_yonyou_gl', 'fi_yonyou_gl', 'fi', 'fi_yonyou',
+    ('fi_yonyou_gl', 'yonyou_gl', 'fi', 'yonyou',
      '用友总账', '用友总账样例', 'database', '用友总账样例。',
-     '[]', 'fi/yonyou/gl', 'modules/fi/yonyou/gl/module.json', 1, 0, 4),
+     '[]', 'fi/yonyou/yonyou_gl', 'modules/fi/yonyou/yonyou_gl/module.json', 1, 0, 4),
 
-    ('fi_kingdee_gl', 'fi_kingdee_gl', 'fi', 'fi_kingdee',
+    ('fi_kingdee_gl', 'kingdee_gl', 'fi', 'kingdee',
      '金蝶总账', '金蝶总账样例', 'database', '金蝶总账样例。',
-     '[]', 'fi/kingdee/gl', 'modules/fi/kingdee/gl/module.json', 1, 0, 5),
+     '[]', 'fi/kingdee/kingdee_gl', 'modules/fi/kingdee/kingdee_gl/module.json', 1, 0, 5),
 
-    ('hr_recruit_candidate', 'hr_recruit_candidate', 'hr', 'hr_recruit',
+    ('hr_recruit_candidate', 'candidate', 'hr', 'recruit',
      '候选人', '招聘候选人服务目录', 'employee', '候选人服务目录。',
      '[]', 'hr/recruit/candidate', 'modules/hr/recruit/candidate/module.json', 1, 0, 6),
 
-    ('cr_explorer_explorer-menu', 'cr_explorer_explorer-menu', 'cr', 'cr_explorer',
+    ('cr_explorer_explorer-menu', 'explorer-menu', 'cr', 'explorer',
      'Explorer 菜单', 'CR Explorer 菜单页面示例', 'documents', 'CR Explorer 菜单页面示例。',
      '[]', 'cr/explorer/explorer-menu', 'modules/cr/explorer/explorer-menu/module.json', 1, 0, 7),
 
-    ('fi_cmxfico_report', 'fi_cmxfico_report', 'fi', 'fi_cmxfico',
+    ('fi_cmxfico_report', 'report', 'fi', 'cmxfico',
      '报表', '报表', 'excel-attachment', '',
      '[]', 'fi/cmxfico/report', 'modules/fi/cmxfico/report/module.json', 1, 0, 8)
 ON CONFLICT (id) DO UPDATE SET
@@ -167,17 +171,20 @@ ON CONFLICT (id) DO UPDATE SET
 
 
 -- ============================================================
--- 第 4 部分：cmx_permission 24 条 GL 权限 code 改写
+-- 第 4 部分：cmx_permission GL 权限对齐说明
 --
--- 原 domain_code='FIN', app_code='FI', module_code='GL'
--- 改为小写：domain_code='fi', app_code='fi_cmxfico', module_code='fi_cmxfico_gl'
--- （旧 module GL 对应新 module fi_cmxfico_gl，即会计核算总账）
+-- cmx_permission 表用纯净短码（app_code/module_code），与本次改码后的
+-- cmx_application.code / cmx_module.code 自然对齐：
+--   domain_code='fi', app_code='cmxfico', module_code='gl'
+-- （对应会计核算总账模块，即 id='fi_cmxfico_gl' 的记录）
+--
+-- 旧库若残留大写编码（FIN/FI/GL）的权限记录，需手动改写为小写短码：
 -- ============================================================
 
 -- UPDATE cmx_permission
 -- SET domain_code = 'fi',
---     app_code    = 'fi_cmxfico',
---     module_code = 'fi_cmxfico_gl'
+--     app_code    = 'cmxfico',
+--     module_code = 'gl'
 -- WHERE domain_code = 'FIN'
 --   AND app_code    = 'FI'
 --   AND module_code = 'GL';
