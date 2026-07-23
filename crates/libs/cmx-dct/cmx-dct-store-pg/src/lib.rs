@@ -179,23 +179,97 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
             });
         }
     };
-    if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
-        push(own, &mut columns, &mut raw_fields, &mut seen);
-    }
-    if let Some(obj) = t.as_object() {
-        // 固定顺序 + 兜底（与 compile_dct 一致）。
-        for key in [
-            "baseFieldSet",
-            "hierarchyFieldSet",
-            "scopeFieldSet",
-            "effectiveFieldSet",
-            "disableFieldSet",
-            "auditFieldSet",
-            "systemFieldSet",
-        ] {
-            if let Some(set_name) = obj.get(key).and_then(|v| v.as_str())
-                && let Some(fields) = base_fieldset(&base, set_name)
-            {
+    // 分组（段）合并顺序：若本表声明了 fieldSetOrder（设计期「分组排序」产出），按它决定
+    // 各组先后——'own' = 本表 fields，其余 = 引用字段集名（按名从 base 取字段）。
+    // 无 fieldSetOrder 时默认「本表 fields 在前 → 各 *FieldSet 引用按固定键序」，向后兼容。
+    // push 闭包内置 seen 去重，故段顺序变化不会导致同名字段重复。
+    let own_fields: Option<&Vec<Value>> = t.get("fields").and_then(|v| v.as_array());
+    // 收集本表声明的引用字段集名（按固定键序，去重），供默认顺序与兜底补尾使用。
+    let declared_sets: Vec<String> = {
+        let mut out = Vec::new();
+        if let Some(obj) = t.as_object() {
+            for key in [
+                "baseFieldSet",
+                "hierarchyFieldSet",
+                "scopeFieldSet",
+                "effectiveFieldSet",
+                "disableFieldSet",
+                "auditFieldSet",
+                "systemFieldSet",
+            ] {
+                if let Some(set_name) = obj.get(key).and_then(|v| v.as_str()) {
+                    let s = set_name.to_string();
+                    if !out.contains(&s) {
+                        out.push(s);
+                    }
+                }
+            }
+        }
+        out
+    };
+
+    let have_own = own_fields.is_some();
+    let ordered_segs: Vec<String> = if let Some(order) = t.get("fieldSetOrder").and_then(|v| v.as_array()) {
+        // 仅保留实际存在的段：'own'（本表有 fields 时）或已声明的引用字段集名。悬空项忽略。
+        let have_sets: std::collections::HashSet<&String> = declared_sets.iter().collect();
+        let mut segs: Vec<String> = order
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .filter(|s| s == "own" && have_own || have_sets.contains(s))
+            .collect();
+        // 去重（保首个位置）。
+        let mut seen_seg = std::collections::HashSet::new();
+        segs.retain(|s| seen_seg.insert(s.clone()));
+        if segs.is_empty() {
+            // fieldSetOrder 全悬空 → 回退默认。
+            let mut def: Vec<String> = declared_sets.clone();
+            if have_own {
+                def.push("own".to_string());
+            }
+            def
+        } else {
+            // 清单外漏掉的段按默认相对序补尾（不丢分组）。
+            let used: std::collections::HashSet<String> = segs.iter().cloned().collect();
+            for s in &declared_sets {
+                if !used.contains(s) {
+                    segs.push(s.clone());
+                }
+            }
+            if have_own && !used.contains("own") {
+                segs.push("own".to_string());
+            }
+            segs
+        }
+    } else {
+        // 无 fieldSetOrder：默认「引用组在前（固定键序）→ 本表组在后」。
+        // 注：历史上此处是「本表 fields 先 push、再引用」，与下方 reorder_columns 配合产出
+        // Common 头/Audit 尾的显示序。为保持向后兼容，默认段序仍按 [引用..., own]，
+        // 但实际 push 顺序见下方——以 fieldSetOrder 是否存在分两路，确保旧表行为不变。
+        let mut def = declared_sets.clone();
+        if have_own {
+            def.push("own".to_string());
+        }
+        def
+    };
+
+    if t.get("fieldSetOrder").and_then(|v| v.as_array()).is_some() {
+        // 自定义段序：严格按 ordered_segs push（own → 本表 fields；其余 → base 字段集）。
+        for seg in &ordered_segs {
+            if seg == "own" {
+                if let Some(own) = own_fields {
+                    push(own, &mut columns, &mut raw_fields, &mut seen);
+                }
+            } else if let Some(fields) = base_fieldset(&base, seg) {
+                push(fields, &mut columns, &mut raw_fields, &mut seen);
+            }
+        }
+    } else {
+        // 默认（向后兼容）：本表 fields 在前 → 各引用按固定键序。
+        if let Some(own) = own_fields {
+            push(own, &mut columns, &mut raw_fields, &mut seen);
+        }
+        for set_name in &declared_sets {
+            if let Some(fields) = base_fieldset(&base, set_name) {
                 push(fields, &mut columns, &mut raw_fields, &mut seen);
             }
         }
@@ -299,6 +373,11 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
 /// 置尾，其余列居中保持合并相对顺序。仅影响 `/dct/meta` 投影的显示列序，不影响物理表 DDL
 /// 与校验规范（后者按字段名查，与顺序无关）。
 fn reorder_columns(columns: &mut Vec<DictColumn>, base: &Value, table_def: &Value) {
+    // 已声明 fieldSetOrder 时，合并阶段已按用户自定义段序 push，此处不再做 Common/Audit
+    // 三分组重排（否则会打散用户排好的分组顺序）。无 fieldSetOrder 时走原默认逻辑。
+    if table_def.get("fieldSetOrder").and_then(|v| v.as_array()).is_some() {
+        return;
+    }
     /// 取 table_def 上某 `*FieldSet` 引用（值=base 字段集名）的字段名集合。
     fn names_of(base: &Value, table_def: &Value, key: &str) -> std::collections::HashSet<String> {
         table_def
@@ -884,5 +963,25 @@ mod tests {
         let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
         // Common[id,code,name] -> mid[custom,create_time] -> audit[]（无 audit 引用）
         assert_eq!(names, vec!["id", "code", "name", "custom", "create_time"]);
+    }
+
+    #[test]
+    fn reorder_columns_skipped_when_field_set_order_present() {
+        // 声明了 fieldSetOrder 时，reorder_columns 不再做 Common/Audit 三分组重排——
+        // 合并阶段已按用户自定义段序 push，此处保持原样（含系统列交叉排）。
+        let base = base_meta();
+        let table_def = json!({
+            "baseFieldSet": "dictionaryCommonNoIDFields",
+            "auditFieldSet": "dictionaryAuditFields",
+            "fieldSetOrder": ["dictionaryCommonNoIDFields", "own", "dictionaryAuditFields"]
+        });
+        // 模拟按 fieldSetOrder 合并后的顺序（custom 本表字段穿插在 Common/Audit 之间）。
+        let mut columns = vec![
+            col("code"), col("custom1"), col("name"), col("create_time"), col("status"),
+        ];
+        reorder_columns(&mut columns, &base, &table_def);
+        let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+        // 未被重排，保持传入顺序。
+        assert_eq!(names, vec!["code", "custom1", "name", "create_time", "status"]);
     }
 }
