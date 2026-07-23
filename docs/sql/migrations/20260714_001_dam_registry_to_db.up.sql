@@ -138,19 +138,19 @@ VALUES
 
     ('fi_sap_gl', 'sap_gl', 'fi', 'sap',
      'SAP 总账', 'SAP 总账样例', 'business-objects-experience', 'SAP FI 总账样例。',
-     '[]', 'fi/sap/gl', 'modules/fi/sap/gl/module.json', 1, 0, 2),
+     '[]', 'fi/sap/sap_gl', 'modules/fi/sap/sap_gl/module.json', 1, 0, 2),
 
     ('fi_ebs_gl', 'ebs_gl', 'fi', 'ebs',
      'Oracle EBS 总账', 'Oracle EBS 总账样例', 'database', 'Oracle EBS 总账样例。',
-     '[]', 'fi/ebs/gl', 'modules/fi/ebs/gl/module.json', 1, 0, 3),
+     '[]', 'fi/ebs/ebs_gl', 'modules/fi/ebs/ebs_gl/module.json', 1, 0, 3),
 
     ('fi_yonyou_gl', 'yonyou_gl', 'fi', 'yonyou',
      '用友总账', '用友总账样例', 'database', '用友总账样例。',
-     '[]', 'fi/yonyou/gl', 'modules/fi/yonyou/gl/module.json', 1, 0, 4),
+     '[]', 'fi/yonyou/yonyou_gl', 'modules/fi/yonyou/yonyou_gl/module.json', 1, 0, 4),
 
     ('fi_kingdee_gl', 'kingdee_gl', 'fi', 'kingdee',
      '金蝶总账', '金蝶总账样例', 'database', '金蝶总账样例。',
-     '[]', 'fi/kingdee/gl', 'modules/fi/kingdee/gl/module.json', 1, 0, 5),
+     '[]', 'fi/kingdee/kingdee_gl', 'modules/fi/kingdee/kingdee_gl/module.json', 1, 0, 5),
 
     ('hr_recruit_candidate', 'candidate', 'hr', 'recruit',
      '候选人', '招聘候选人服务目录', 'employee', '候选人服务目录。',

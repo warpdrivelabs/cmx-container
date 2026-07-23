@@ -1445,11 +1445,11 @@ async fn read_modules(db_id: &str) -> Result<std::collections::HashMap<String, V
 /// module_name 的权威来源是主库 `cmx_module.name`，
 /// **不能**取定义文件里的 `moduleName` / `title`（那是元数据标题，非模块名）。
 ///
-/// 索引键选 `resource_root`（如 `fi/cmxfico/gl`）而非 `code`：改用短码后多个应用可能
-/// 都有 `gl` 模块，`code` 会撞键；`resource_root` 是 `{domain}/{app}/{module}` 三段路径，
-/// 天然唯一，与定义文件侧 (domain, app, module) 三段短码拼接对齐。
+/// 索引键用 `(domain_code, application_code, code)` 三段短 id 复合键，而**非** `resource_root`：
+/// 实测主库 `resource_root`（如 SAP 为 `fi/sap/gl`）与定义文件目录（`fi/sap/sap_gl`）不一致，
+/// 但 `code` 列与 db_state 的 module 段、定义文件 moduleCode 三者一致（均为 `sap_gl`）。
 ///
-/// 返回 `resource_root → name` 的映射；主库无此表或查询失败时返回空 map（调用方兜底）。
+/// 返回 `"{domain}\x1f{app}\x1f{module}" → name` 的映射；主库无此表或查询失败时返回空 map。
 async fn read_main_module_names() -> std::collections::HashMap<String, String> {
     let mut map = std::collections::HashMap::new();
     let mm = get_default_db_manager();
@@ -1458,7 +1458,7 @@ async fn read_main_module_names() -> std::collections::HashMap<String, String> {
     if !table_exists(&main_db, "cmx_module").await.unwrap_or(false) {
         return map;
     }
-    let sql = "SELECT resource_root, name FROM cmx_module WHERE archived = 0";
+    let sql = "SELECT domain_code, application_code, code, name FROM cmx_module WHERE archived = 0";
     let ds = match mm.query_sql(&main_db, None, sql, "mc_main_modules").await {
         Ok(ds) => ds,
         Err(e) => {
@@ -1468,25 +1468,32 @@ async fn read_main_module_names() -> std::collections::HashMap<String, String> {
     };
     let schema = ds.schema.clone();
     for row in ds.iter() {
-        let resource_root = row
-            .get_by_name(schema.as_ref(), "resource_root")
-            .and_then(data_value_string);
+        let d = row
+            .get_by_name(schema.as_ref(), "domain_code")
+            .and_then(data_value_string)
+            .unwrap_or_default();
+        let a = row
+            .get_by_name(schema.as_ref(), "application_code")
+            .and_then(data_value_string)
+            .unwrap_or_default();
+        let c = row
+            .get_by_name(schema.as_ref(), "code")
+            .and_then(data_value_string)
+            .unwrap_or_default();
         let name = row
             .get_by_name(schema.as_ref(), "name")
             .and_then(data_value_string);
-        if let (Some(r), Some(n)) = (resource_root, name) {
-            if !r.is_empty() {
-                map.insert(r, n);
-            }
+        if let Some(n) = name {
+            map.insert(format!("{d}\x1f{a}\x1f{c}"), n);
         }
     }
     map
 }
 
-/// 由 (domain, app, module) 三段短 id 拼 `resource_root` 查询键（`{domain}/{app}/{module}`）。
-/// 与 `cmx_module.resource_root` 列格式一致，用于查 `read_main_module_names` 返回的 map。
+/// 由 (domain, app, module) 三段短 id 拼复合查询键。
+/// 与 `read_main_module_names` 的 map key 格式一致（`\x1f` 分隔，防歧义）。
 fn main_module_key(domain: &str, app: &str, module: &str) -> String {
-    format!("{domain}/{app}/{module}")
+    format!("{domain}\x1f{app}\x1f{module}")
 }
 
 

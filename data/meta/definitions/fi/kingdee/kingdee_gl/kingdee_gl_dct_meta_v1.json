@@ -2,7 +2,7 @@
   "moduleMeta": {
     "metaName": "金蝶 ERP GL 会计凭证数据字典元数据",
     "metaKind": "DCT",
-    "moduleCode": "GL",
+    "moduleCode": "kingdee_gl",
     "moduleName": "总账(金蝶 ERP)",
     "version": 1,
     "designStyle": "separate-dictionary-tables",

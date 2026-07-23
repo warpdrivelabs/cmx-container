@@ -179,8 +179,8 @@
       "icon": "business-objects-experience",
       "status": "active",
       "description": "SAP FI 总账样例。",
-      "resourceRoot": "fi/sap/gl",
-      "manifestPath": "modules/fi/sap/gl/module.json",
+      "resourceRoot": "fi/sap/sap_gl",
+      "manifestPath": "modules/fi/sap/sap_gl/module.json",
       "aliases": []
     },
     {
@@ -194,8 +194,8 @@
       "icon": "database",
       "status": "active",
       "description": "Oracle EBS 总账样例。",
-      "resourceRoot": "fi/ebs/gl",
-      "manifestPath": "modules/fi/ebs/gl/module.json",
+      "resourceRoot": "fi/ebs/ebs_gl",
+      "manifestPath": "modules/fi/ebs/ebs_gl/module.json",
       "aliases": []
     },
     {
@@ -209,8 +209,8 @@
       "icon": "database",
       "status": "active",
       "description": "用友总账样例。",
-      "resourceRoot": "fi/yonyou/gl",
-      "manifestPath": "modules/fi/yonyou/gl/module.json",
+      "resourceRoot": "fi/yonyou/yonyou_gl",
+      "manifestPath": "modules/fi/yonyou/yonyou_gl/module.json",
       "aliases": []
     },
     {
@@ -224,8 +224,8 @@
       "icon": "database",
       "status": "active",
       "description": "金蝶总账样例。",
-      "resourceRoot": "fi/kingdee/gl",
-      "manifestPath": "modules/fi/kingdee/gl/module.json",
+      "resourceRoot": "fi/kingdee/kingdee_gl",
+      "manifestPath": "modules/fi/kingdee/kingdee_gl/module.json",
       "aliases": []
     },
     {

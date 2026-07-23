@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "domain": "fi",
+  "application": "ebs",
+  "module": "ebs_gl",
+  "title": "Oracle EBS 总账样例",
+  "status": "active",
+  "resources": {
+    "metaDefinitions": [
+      {
+        "path": "meta/definitions/fi/ebs/kingdee_gl"
+      }
+    ],
+    "dictEntries": [
+      {
+        "path": "dict/entries/fi/ebs/kingdee_gl"
+      }
+    ],
+    "facts": [
+      {
+        "path": "fact/fi/ebs/kingdee_gl"
+      }
+    ]
+  }
+}

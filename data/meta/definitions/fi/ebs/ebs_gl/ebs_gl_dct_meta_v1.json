@@ -2,7 +2,7 @@
   "moduleMeta": {
     "metaName": "Oracle EBS GL 会计凭证数据字典元数据",
     "metaKind": "DCT",
-    "moduleCode": "GL",
+    "moduleCode": "ebs_gl",
     "moduleName": "总账(Oracle EBS)",
     "version": 1,
     "designStyle": "separate-dictionary-tables",

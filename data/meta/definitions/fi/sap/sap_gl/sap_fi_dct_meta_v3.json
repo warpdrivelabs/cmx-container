@@ -2,7 +2,7 @@
   "moduleMeta": {
     "metaName": "SAP FI 会计凭证数据字典元数据",
     "metaKind": "DCT",
-    "moduleCode": "FI",
+    "moduleCode": "sap_gl",
     "moduleName": "财务会计(SAP)",
     "version": 3,
     "versionName": "",
