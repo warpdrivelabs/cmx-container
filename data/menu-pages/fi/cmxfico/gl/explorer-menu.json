@@ -2269,6 +2269,35 @@
           }
         },
         {
+          "id": "gl-dict-data-editor-html",
+          "name": "gl-dict-data-editor-html",
+          "caption": "字典数据维护（HTML）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/database",
+          "workspace": {
+            "content": {
+              "caption": "字典数据维护（HTML）",
+              "icon": "database",
+              "views": [
+                {
+                  "tabLabel": "字典数据",
+                  "icon": "database",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dct-data-editor-html",
+                  "view": "content",
+                  "props": {
+                    "domain": "fi",
+                    "application": "cmxfico",
+                    "module": "gl",
+                    "dbId": "fico-db"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
           "id": "doc-def-manager",
           "name": "doc-def-manager",
           "caption": "业务单据定义",

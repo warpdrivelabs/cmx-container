@@ -884,6 +884,16 @@
       "page": "voucher-flex",
       "relPath": "fi/cmxfico/gl/voucher-flex.html",
       "latestHtmlFile": "voucher-flex.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.dct-data-editor-html",
+      "name": "字典数据维护(HTML)",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "dct-data-editor-html",
+      "relPath": "fi/cmxfico/gl/dct-data-editor-html.html",
+      "latestHtmlFile": "dct-data-editor-html.html"
     }
   ]
 }
