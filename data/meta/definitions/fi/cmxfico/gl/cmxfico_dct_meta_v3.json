@@ -34,7 +34,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_client",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "SAP Client/MANDT,跨组织数据隔离维度",
@@ -161,7 +161,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择国家",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -189,7 +190,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择公司货币",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -218,7 +220,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择贸易伙伴",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -305,7 +308,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择所属公司",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -333,7 +337,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择国家",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -361,7 +366,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择本位币",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -468,7 +474,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择会计年度变式",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -720,7 +727,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择控制范围货币",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -778,7 +786,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择会计年度变式",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         }
       ],
@@ -1294,7 +1303,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择科目组",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -1322,7 +1332,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择账户类型",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -1393,7 +1404,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择科目货币",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -1451,7 +1463,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择字段状态组",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -1480,7 +1493,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择统驭科目类型",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -1620,7 +1634,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_acct_group",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "科目编号区间",
@@ -1690,7 +1704,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_account_type",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "S/D/K/A/M",
@@ -1773,7 +1787,7 @@
         "dictKind": "BUSINESS",
         "selfHierarchy": false,
         "tableName": "cf_doc_type",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "SA/KR/DR/AB",
@@ -1806,7 +1820,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择编号范围",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -1835,7 +1850,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择冲销凭证类型",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -1931,7 +1947,7 @@
         "dictKind": "BUSINESS",
         "selfHierarchy": false,
         "tableName": "cf_posting_key",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "40/50/01/31",
@@ -1964,7 +1980,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择借贷标志",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -1993,7 +2010,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择账户类型",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -2022,7 +2040,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择字段状态组",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -2073,7 +2092,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_dc_indicator",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "S借/H贷",
@@ -2102,7 +2121,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_spl_gl_ind",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "A预付/F预收/W票据",
@@ -2155,7 +2174,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择账户类型",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -2239,7 +2259,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_fld_stat_grp",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "字段必填控制",
@@ -2349,7 +2369,7 @@
         "dictKind": "BUSINESS",
         "selfHierarchy": false,
         "tableName": "cf_currency",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "ISO 币种",
@@ -2423,7 +2443,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_fx_rate_type",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "M/B/G",
@@ -2452,7 +2472,7 @@
         "dictKind": "BUSINESS",
         "selfHierarchy": false,
         "tableName": "cf_fy_variant",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "K4 等",
@@ -2529,7 +2549,7 @@
         "dictKind": "BUSINESS",
         "selfHierarchy": false,
         "tableName": "cf_fisc_period",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "年→期",
@@ -2673,7 +2693,7 @@
         "dictKind": "BUSINESS",
         "selfHierarchy": false,
         "tableName": "cf_ledger",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "并行会计 0L/CN",
@@ -2729,7 +2749,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择会计准则",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -2779,7 +2800,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择扩展分类账",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -2808,7 +2830,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择分类账货币",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -2864,7 +2887,7 @@
         "dictKind": "BUSINESS",
         "selfHierarchy": false,
         "tableName": "cf_tax_code",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "进/销项税",
@@ -2993,7 +3016,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择国家",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         }
       ],
@@ -3020,7 +3044,7 @@
         "dictKind": "BUSINESS",
         "selfHierarchy": false,
         "tableName": "cf_pay_terms",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "账期折扣",
@@ -3190,7 +3214,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_pay_method",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "转账/支票/汇票",
@@ -3243,7 +3267,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择国家",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -3399,7 +3424,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择国家",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -3428,7 +3454,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择默认付款条件",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -3528,7 +3555,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择付款方式",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -3617,7 +3645,8 @@
           "editSettings": {
             "helpLayout": "classify",
             "dictTitle": "选择银行国家",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -3666,7 +3695,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择账户币种",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -4122,7 +4152,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_country",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "ISO 国家",
@@ -4155,7 +4185,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择本国货币",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         },
         {
@@ -4223,7 +4254,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_number_range",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "SAP FI 凭证类型对应的号码范围(T003-NUMKR/NRIV)。",
@@ -4314,7 +4345,7 @@
         "dictKind": "CLASSIFY",
         "selfHierarchy": false,
         "tableName": "cf_acct_princ",
-        "idField": "id",
+        "idField": "code",
         "codeField": "code",
         "labelField": "name",
         "remark": "SAP 新总账/分类账会计原则。",
@@ -4367,7 +4398,8 @@
           "editSettings": {
             "helpLayout": "grid",
             "dictTitle": "选择国家",
-            "showClear": true
+            "showClear": true,
+            "idCol": "code"
           }
         }
       ],
@@ -4520,5 +4552,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-07-23T07:45:58.483Z"
+  "updatedAt": "2026-07-24T03:17:38.397Z"
 }
