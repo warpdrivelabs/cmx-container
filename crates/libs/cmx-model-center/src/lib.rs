@@ -1732,9 +1732,11 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
     let doc_list = cmx_model::definitions::store::list_definitions(Some("DOC"), None, None, None)
         .await
         .map_err(db_err("列出 DOC 失败"))?;
-    let rpt_list = cmx_model::definitions::store::list_definitions(Some("RPT"), None, None, None)
-        .await
-        .map_err(db_err("列出 RPT 失败"))?;
+    // RPT 报表模板暂不返回：模板型 RPT 元数据当前只有建表链路，无运行期消费，
+    // 在 db_state 矩阵里展示会造成"可部署但无业务价值"的误导。待运行期打通后恢复。
+    // let rpt_list = cmx_model::definitions::store::list_definitions(Some("RPT"), None, None, None)
+    //     .await
+    //     .map_err(db_err("列出 RPT 失败"))?;
 
     // 归并成 module -> { DCT: {ver,file,title}, DOC: {...} }（取默认/最大版本）
     #[derive(Default, Clone)]
@@ -1843,7 +1845,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
     };
     ingest(&dct_list, "DCT");
     ingest(&doc_list, "DOC");
-    ingest(&rpt_list, "RPT");
+    // ingest(&rpt_list, "RPT"); // RPT 暂停返回，见上方 rpt_list 注释
 
     let mut modules = Vec::new();
     let mut counts = json!({ "create": 0, "upgrade": 0, "current": 0, "retry": 0, "drift": 0 });
@@ -1905,7 +1907,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
         // 再算 SEED/MENU（避免对 counts 的两次可变借用冲突）。
         let dct_cell = cell("DCT");
         let doc_cell = cell("DOC");
-        let rpt_cell = cell("RPT");
+        // let rpt_cell = cell("RPT"); // RPT 暂停返回
         drop(cell);
         // SEED / MENU cell：实时扫描文件 + 对比 cmx_model_module_kind.def_checksum。
         let (seed_sc, seed_cell) = compute_seed_menu_cell(
@@ -1934,7 +1936,8 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             "deployed_by": applied.and_then(|a| a.get("deployed_by")).and_then(|v| v.as_str()),
             "deployed_name": applied.and_then(|a| a.get("deployed_name")).and_then(|v| v.as_str()),
             "table_count": tblc,
-            "dct": dct_cell, "doc": doc_cell, "rpt": rpt_cell,
+            "dct": dct_cell, "doc": doc_cell,
+            // "rpt": rpt_cell, // RPT 暂停返回
             "seed": seed_cell,
             "menu": menu_cell,
         }));
@@ -2007,7 +2010,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             "deployed_name": applied.get("deployed_name").and_then(|v| v.as_str()),
             "dct": def_cell("DCT"),
             "doc": def_cell("DOC"),
-            "rpt": def_cell("RPT"),
+            // "rpt": def_cell("RPT"), // RPT 暂停返回
             "seed": compute_seed_menu_cell("SEED", domain, app, module, applied.get("seed")).1,
             "menu": compute_seed_menu_cell("MENU", domain, app, module, applied.get("menu")).1,
         }));

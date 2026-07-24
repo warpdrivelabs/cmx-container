@@ -39,7 +39,10 @@ pub async fn dct_meta(
     _headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     debug!("{:<12} - dct_meta {}/{}", "HANDLER", q.module, q.dict);
-    let view = store::resolve_dict(&q).await?;
+    // dct_meta 是唯一需要字段完整属性（width/visible/pattern/enumValues 等）的场景：
+    // 供前端字典维护页构建列模型（编辑/校验/布局）。按 ?with_props=true 按需下发扁平键，
+    // 避免基本场景 payload 膨胀。
+    let view = store::resolve_dict(&q, q.with_props).await?;
     let cols: Vec<Value> = view
         .columns
         .iter()
@@ -77,6 +80,17 @@ pub async fn dct_meta(
             if let Some(d) = &c.display {
                 obj["display"] = d.clone();
             }
+            // 扁平属性（width/visible/pattern/enumValues/required/intDigits/decimalDigits 等）：
+            // with_props=true 时由 store 收集到 extra，此处铺到列对象顶层——与字段定义 JSON
+            // 存储形态一致，前端 buildColumnModel 可直接展开挂到 CmxColumn（构造器的"完整继承"
+            // 机制会自动收纳未建模键，toDescriptor 会输出 width/visible/frozen）。
+            if let Some(extra) = &c.extra
+                && let Some(m) = extra.as_object()
+            {
+                for (k, v) in m {
+                    obj[k] = v.clone();
+                }
+            }
             obj
         })
         .collect();
@@ -106,7 +120,7 @@ pub async fn dct_search(
     body: Option<Json<Value>>,
 ) -> Result<Json<ApiResp<Value>>> {
     let db_id = db_id_from(&headers).await;
-    let view = store::resolve_dict(&q).await?;
+    let view = store::resolve_dict(&q, false).await?;
     let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
     debug!(
         "{:<12} - dct_search {} table={}",
@@ -130,7 +144,7 @@ pub async fn dct_search_zmc_msgpack(
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
     let db_id = db_id_from(&headers).await;
-    let view = store::resolve_dict(&q).await?;
+    let view = store::resolve_dict(&q, false).await?;
     let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
     debug!(
         "{:<12} - dct zmc-msgpack {} table={}",
@@ -172,7 +186,7 @@ pub async fn dct_upsert(
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
     let db_id = db_id_from(&headers).await;
-    let view = store::resolve_dict(&q).await?;
+    let view = store::resolve_dict(&q, false).await?;
     debug!(
         "{:<12} - dct_upsert {} table={}",
         "HANDLER", q.dict, view.table_name
@@ -207,7 +221,7 @@ pub async fn dct_delete(
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     let db_id = db_id_from(&headers).await;
-    let view = store::resolve_dict(&q).await?;
+    let view = store::resolve_dict(&q, false).await?;
     debug!("{:<12} - dct_delete {} id={}", "HANDLER", q.dict, id);
     let data = store::delete(&view, &id, &db_id).await?;
     Ok(Json(ApiResp::ok(data)))
@@ -230,7 +244,7 @@ pub async fn dct_save(
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
     let db_id = db_id_from(&headers).await;
-    let view = store::resolve_dict(&q).await?;
+    let view = store::resolve_dict(&q, false).await?;
     let save_mode = body
         .get("saveMode")
         .and_then(|v| v.as_str())

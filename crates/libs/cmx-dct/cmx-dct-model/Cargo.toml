@@ -21,3 +21,5 @@ cmx-biz = { workspace = true }
 serde = { workspace = true }
 # JSON（弱类型定义 Value → 强类型 view + 行改写）
 serde_json = { workspace = true }
+# 时间解析（to_dv_by_col 对 TIMESTAMP/DATETIME/DATE 列支持 ISO8601/RFC3339 字符串 coerce）
+chrono = { workspace = true }

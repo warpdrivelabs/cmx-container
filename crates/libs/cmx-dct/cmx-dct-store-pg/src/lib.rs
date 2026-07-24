@@ -17,7 +17,7 @@ use cmx_database_pg::{DatabaseManager, get_default_pg_db_manager};
 
 use cmx_dct_model::{
     DctQuery, DictColumn, DictView, SERVER_FILLED_COLS, SERVER_REPLACED_COLS, base_fieldset,
-    build_search_sql, build_upsert_sql_dv, is_server_managed_col, json_to_datavalue,
+    build_search_sql, build_upsert_sql_dv, is_server_managed_col,
     mint_ids_for_inserts, pk_is_generated, row_fields, to_dv_by_col, valid_col,
 };
 
@@ -58,7 +58,11 @@ pub async fn resolve_db_id(db_id_header: Option<&str>) -> String {
 // ============================================================================
 
 /// 解析 `DctQuery` → 强类型 `DictView`（合并列 + base 字段集 + 校验规范缓存）。
-pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
+///
+/// `with_props`：是否把字段定义里的扁平属性（width/visible/pattern/enumValues/required/
+/// intDigits/decimalDigits 等）收集到 `DictColumn.extra`。仅 `/dct/meta` 在 `with_props=true`
+/// 时需要（供前端字典维护页构建完整列模型）；数据装载/回存场景传 false，保持 payload 精简。
+pub async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
     // file 缺失时自动解析：在该 domain/app/module 下扫描含 dictCode 的 DCT 文件。
     // 前端运行时只持有 dictCode + domain/app/module（host 无 file 坐标），故 file 由后端兜底。
     let file = match &q.file {
@@ -110,7 +114,8 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
     let push = |fields: &Vec<Value>,
                 columns: &mut Vec<DictColumn>,
                 raw_fields: &mut Vec<Value>,
-                seen: &mut std::collections::HashSet<String>| {
+                seen: &mut std::collections::HashSet<String>,
+                with_props: bool| {
         for f in fields {
             let name = match f.get("name").and_then(|v| v.as_str()) {
                 Some(n) if !n.is_empty() => n.to_string(),
@@ -134,6 +139,28 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
             let edit = f.get("edit").filter(|v| v.is_object()).cloned();
             let edit_settings = f.get("editSettings").filter(|v| v.is_object()).cloned();
             let display = f.get("display").filter(|v| v.is_object()).cloned();
+            // 扁平属性（字段定义顶层键）：仅在 with_props=true 时收集，按白名单取规范键
+            // （field-edit-display-modes.md §四 所列：列布局/基本/约束/治理的扁平键）。
+            // handler 投影时铺到列对象顶层，与字段定义 JSON 存储形态一致，前端可直接展开。
+            let extra = if with_props {
+                let mut x = serde_json::Map::new();
+                for k in [
+                    "width", "frozen", "visible", "required", "align", "intDigits", "decimalDigits",
+                    "pattern", "enumValues", "defaultValue", "agg", "unique", "maxlength", "min",
+                    "max", "placeholder", "label", "i18n", "searchable", "filterable", "sensitive",
+                ] {
+                    if let Some(v) = f.get(k) {
+                        x.insert(k.to_string(), v.clone());
+                    }
+                }
+                if x.is_empty() {
+                    None
+                } else {
+                    Some(Value::Object(x))
+                }
+            } else {
+                None
+            };
             columns.push(DictColumn {
                 caption,
                 data_type: f
@@ -175,28 +202,103 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
                 edit,
                 edit_settings,
                 display,
+                extra,
                 name,
             });
         }
     };
-    if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
-        push(own, &mut columns, &mut raw_fields, &mut seen);
-    }
-    if let Some(obj) = t.as_object() {
-        // 固定顺序 + 兜底（与 compile_dct 一致）。
-        for key in [
-            "baseFieldSet",
-            "hierarchyFieldSet",
-            "scopeFieldSet",
-            "effectiveFieldSet",
-            "disableFieldSet",
-            "auditFieldSet",
-            "systemFieldSet",
-        ] {
-            if let Some(set_name) = obj.get(key).and_then(|v| v.as_str())
-                && let Some(fields) = base_fieldset(&base, set_name)
-            {
-                push(fields, &mut columns, &mut raw_fields, &mut seen);
+    // 分组（段）合并顺序：若本表声明了 fieldSetOrder（设计期「分组排序」产出），按它决定
+    // 各组先后——'own' = 本表 fields，其余 = 引用字段集名（按名从 base 取字段）。
+    // 无 fieldSetOrder 时默认「本表 fields 在前 → 各 *FieldSet 引用按固定键序」，向后兼容。
+    // push 闭包内置 seen 去重，故段顺序变化不会导致同名字段重复。
+    let own_fields: Option<&Vec<Value>> = t.get("fields").and_then(|v| v.as_array());
+    // 收集本表声明的引用字段集名（按固定键序，去重），供默认顺序与兜底补尾使用。
+    let declared_sets: Vec<String> = {
+        let mut out = Vec::new();
+        if let Some(obj) = t.as_object() {
+            for key in [
+                "baseFieldSet",
+                "hierarchyFieldSet",
+                "scopeFieldSet",
+                "effectiveFieldSet",
+                "disableFieldSet",
+                "auditFieldSet",
+                "systemFieldSet",
+            ] {
+                if let Some(set_name) = obj.get(key).and_then(|v| v.as_str()) {
+                    let s = set_name.to_string();
+                    if !out.contains(&s) {
+                        out.push(s);
+                    }
+                }
+            }
+        }
+        out
+    };
+
+    let have_own = own_fields.is_some();
+    let ordered_segs: Vec<String> = if let Some(order) = t.get("fieldSetOrder").and_then(|v| v.as_array()) {
+        // 仅保留实际存在的段：'own'（本表有 fields 时）或已声明的引用字段集名。悬空项忽略。
+        let have_sets: std::collections::HashSet<&String> = declared_sets.iter().collect();
+        let mut segs: Vec<String> = order
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .filter(|s| s == "own" && have_own || have_sets.contains(s))
+            .collect();
+        // 去重（保首个位置）。
+        let mut seen_seg = std::collections::HashSet::new();
+        segs.retain(|s| seen_seg.insert(s.clone()));
+        if segs.is_empty() {
+            // fieldSetOrder 全悬空 → 回退默认。
+            let mut def: Vec<String> = declared_sets.clone();
+            if have_own {
+                def.push("own".to_string());
+            }
+            def
+        } else {
+            // 清单外漏掉的段按默认相对序补尾（不丢分组）。
+            let used: std::collections::HashSet<String> = segs.iter().cloned().collect();
+            for s in &declared_sets {
+                if !used.contains(s) {
+                    segs.push(s.clone());
+                }
+            }
+            if have_own && !used.contains("own") {
+                segs.push("own".to_string());
+            }
+            segs
+        }
+    } else {
+        // 无 fieldSetOrder：默认「引用组在前（固定键序）→ 本表组在后」。
+        // 注：历史上此处是「本表 fields 先 push、再引用」，与下方 reorder_columns 配合产出
+        // Common 头/Audit 尾的显示序。为保持向后兼容，默认段序仍按 [引用..., own]，
+        // 但实际 push 顺序见下方——以 fieldSetOrder 是否存在分两路，确保旧表行为不变。
+        let mut def = declared_sets.clone();
+        if have_own {
+            def.push("own".to_string());
+        }
+        def
+    };
+
+    if t.get("fieldSetOrder").and_then(|v| v.as_array()).is_some() {
+        // 自定义段序：严格按 ordered_segs push（own → 本表 fields；其余 → base 字段集）。
+        for seg in &ordered_segs {
+            if seg == "own" {
+                if let Some(own) = own_fields {
+                    push(own, &mut columns, &mut raw_fields, &mut seen, with_props);
+                }
+            } else if let Some(fields) = base_fieldset(&base, seg) {
+                push(fields, &mut columns, &mut raw_fields, &mut seen, with_props);
+            }
+        }
+    } else {
+        // 默认（向后兼容）：本表 fields 在前 → 各引用按固定键序。
+        if let Some(own) = own_fields {
+            push(own, &mut columns, &mut raw_fields, &mut seen, with_props);
+        }
+        for set_name in &declared_sets {
+            if let Some(fields) = base_fieldset(&base, set_name) {
+                push(fields, &mut columns, &mut raw_fields, &mut seen, with_props);
             }
         }
     }
@@ -299,6 +401,11 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
 /// 置尾，其余列居中保持合并相对顺序。仅影响 `/dct/meta` 投影的显示列序，不影响物理表 DDL
 /// 与校验规范（后者按字段名查，与顺序无关）。
 fn reorder_columns(columns: &mut Vec<DictColumn>, base: &Value, table_def: &Value) {
+    // 已声明 fieldSetOrder 时，合并阶段已按用户自定义段序 push，此处不再做 Common/Audit
+    // 三分组重排（否则会打散用户排好的分组顺序）。无 fieldSetOrder 时走原默认逻辑。
+    if table_def.get("fieldSetOrder").and_then(|v| v.as_array()).is_some() {
+        return;
+    }
     /// 取 table_def 上某 `*FieldSet` 引用（值=base 字段集名）的字段名集合。
     fn names_of(base: &Value, table_def: &Value, key: &str) -> std::collections::HashSet<String> {
         table_def
@@ -369,8 +476,6 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
         view.dict_code, view.dict_name, view.table_name, view.id_field, view.code_field, view.label_field, view.parent_field, view.pk, view.columns.len(), raw, db_id
     );
     let (sql, count_sql, params) = build_search_sql(view, raw);
-    // JSON params -> DataValue（走 datavalues 绑定，与 cmx-sql-execution 规范一致）。
-    let dv_params: Vec<DataValue> = params.iter().map(json_to_datavalue).collect();
     tracing::info!("[DCT-DEBUG] search sql={}, db_id={}, table={}", sql, db_id, view.table_name);
 
     let mm = get_default_pg_db_manager();
@@ -379,13 +484,13 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
             db_id,
             None,
             &sql,
-            dv_params.clone(),
+            params.clone(),
             &view.dict_code,
         )
         .await
         .map_err(|e| { tracing::error!("[DCT-DEBUG] search failed: sql={}, err={:?}", sql, e); api_err(&format!("字典查询失败: {e}")) })?;
     let total_ds = mm
-        .query_sql_with_datavalues(db_id, None, &count_sql, dv_params, "cnt")
+        .query_sql_with_datavalues(db_id, None, &count_sql, params, "cnt")
         .await
         .map_err(|e| api_err(&format!("字典计数失败: {e}")))?;
 
@@ -424,13 +529,11 @@ pub async fn search_zmc(view: &DictView, raw: &Value, db_id: &str) -> Result<Vec
         view.dict_code, view.dict_name, view.table_name, view.id_field, view.code_field, view.label_field, view.parent_field, view.pk, view.columns.len(), raw, db_id
     );
     let (sql, _count_sql, params) = build_search_sql(view, raw);
-    let dv_params: Vec<cmx_core::model::cell::DataValue> =
-        params.iter().map(json_to_datavalue).collect();
 
     let mm = get_default_pg_db_manager();
     // 零拷贝：ZmcDataSet 持有原始 tokio-postgres Row，惰性列式二进制编码。
     let zmc = mm
-        .query_sql_zmc_with_datavalues(db_id, &sql, dv_params, &view.dict_code)
+        .query_sql_zmc_with_datavalues(db_id, &sql, params, &view.dict_code)
         .await
         .map_err(|e| {
             tracing::error!(
@@ -502,12 +605,18 @@ pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertO
 
     let mm = get_default_pg_db_manager();
     let mut affected = 0u64;
-    for obj in &rows {
+    for (i, obj) in rows.iter().enumerate() {
         if let Some((sql, params)) = build_upsert_sql_dv(view, obj) {
             let n = mm
                 .execute_sql_with_datavalues(db_id, None, &sql, params)
                 .await
-                .map_err(|e| api_err_db(&e.to_string()))?;
+                .map_err(|e| {
+                    tracing::error!(
+                        "[DCT-UPSERT] sql_failed dict_code={} table={} row_index={} sql={} err={}",
+                        view.dict_code, view.table_name, i, sql, e
+                    );
+                    api_err_db(&e.to_string())
+                })?;
             affected += n;
         }
     }
@@ -532,7 +641,13 @@ pub async fn delete(view: &DictView, id: &str, db_id: &str) -> Result<Value> {
     let n = mm
         .execute_sql_with_datavalues(db_id, None, &sql, params)
         .await
-        .map_err(|e| api_err_db(&e.to_string()))?;
+        .map_err(|e| {
+            tracing::error!(
+                "[DCT-DELETE] sql_failed dict_code={} table={} pk={} id={} sql={} err={}",
+                view.dict_code, view.table_name, view.pk, id, sql, e
+            );
+            api_err_db(&e.to_string())
+        })?;
 
     Ok(json!({ "ok": n > 0, "deleted": n }))
 }
@@ -571,6 +686,10 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
     let bucket = match bucket {
         Some(b) => b,
         None => {
+            tracing::info!(
+                "[DCT-SAVE] empty_changeset dict_code={} table={} db_id={}",
+                view.dict_code, view.table_name, db_id
+            );
             return Ok(SaveOutcome::Ok {
                 affected: 0,
                 updated_at: Vec::new(),
@@ -578,32 +697,79 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
             });
         }
     };
+    // 预统计各分支行数，便于日志中区分事务内失败阶段（不打印全字段，避免日志爆炸）。
+    let ins_n = bucket
+        .get("inserted")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let upd_n = bucket
+        .get("updated")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let del_n = bucket
+        .get("deleted")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    tracing::info!(
+        "[DCT-SAVE] enter dict_code={} table={} pk={} db_id={} inserted={} updated={} deleted={}",
+        view.dict_code, view.table_name, view.pk, db_id, ins_n, upd_n, del_n
+    );
 
     // 落库前列级校验（开事务前，一次回报全部）。inserted 走整行校验（含 NOT NULL，跳过
     // 服务端 backfill 列）；updated 只校验其 fields（不做整表 NOT NULL）。
     let violations = validate_bucket(view, bucket);
     if !violations.is_empty() {
+        // 校验未通过：聚合首条违规定位到表+列+行号，便于日志侧反查前端表单字段。
+        let first = violations.first();
+        tracing::warn!(
+            "[DCT-SAVE] validation_failed dict_code={} table={} count={} first_row={:?} first_column={:?} first_code={} first_message={}",
+            view.dict_code,
+            view.table_name,
+            violations.len(),
+            first.and_then(|v| v.row),
+            first.and_then(|v| v.column.clone()),
+            first.map(|v| v.code).unwrap_or(""),
+            first.map(|v| v.message.as_str()).unwrap_or("")
+        );
         return Ok(SaveOutcome::Invalid(violations));
     }
 
     let mm = get_default_pg_db_manager();
     let tx = mm.get_transaction_context();
-    let txn_id = tx
-        .begin(db_id)
-        .await
-        .map_err(|e| api_err(&format!("开启事务失败: {e}")))?;
+    let txn_id = tx.begin(db_id).await.map_err(|e| {
+        tracing::error!(
+            "[DCT-SAVE] tx_begin_failed dict_code={} table={} db_id={} err={}",
+            view.dict_code, view.table_name, db_id, e
+        );
+        api_err(&format!("开启事务失败: {e}"))
+    })?;
 
     let result = save_apply(mm, db_id, &txn_id, view, bucket).await;
 
     match result {
         Ok((affected, updated_at, conflict, id_map)) => {
             if conflict {
+                tracing::warn!(
+                    "[DCT-SAVE] optimistic_lock_conflict dict_code={} table={} db_id={} rolling_back=true",
+                    view.dict_code, view.table_name, db_id
+                );
                 let _ = tx.rollback(&txn_id).await;
                 return Ok(SaveOutcome::Conflict);
             }
-            tx.commit(&txn_id)
-                .await
-                .map_err(|e| api_err(&format!("提交事务失败: {e}")))?;
+            tx.commit(&txn_id).await.map_err(|e| {
+                tracing::error!(
+                    "[DCT-SAVE] tx_commit_failed dict_code={} table={} db_id={} affected={} err={}",
+                    view.dict_code, view.table_name, db_id, affected, e
+                );
+                api_err(&format!("提交事务失败: {e}"))
+            })?;
+            tracing::info!(
+                "[DCT-SAVE] success dict_code={} table={} db_id={} affected={} updated_rows={} idmap_size={}",
+                view.dict_code, view.table_name, db_id, affected, updated_at.len(), id_map.len()
+            );
             Ok(SaveOutcome::Ok {
                 affected,
                 updated_at,
@@ -612,6 +778,11 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
         }
         Err(e) => {
             let _ = tx.rollback(&txn_id).await;
+            // 已被各分支的 error! 日志记录过 SQL/原始错误，此处只补充阶段 + 表级上下文。
+            tracing::error!(
+                "[DCT-SAVE] save_apply_failed dict_code={} table={} db_id={} err={}",
+                view.dict_code, view.table_name, db_id, e
+            );
             Err(e)
         }
     }
@@ -675,7 +846,7 @@ async fn save_apply(
 
     // deleted：按 pk 删。
     if let Some(dels) = bucket.get("deleted").and_then(|v| v.as_array()) {
-        for id in dels {
+        for (i, id) in dels.iter().enumerate() {
             let sql = format!(
                 "DELETE FROM \"{}\" WHERE \"{}\" = $1",
                 view.table_name, view.pk
@@ -684,7 +855,13 @@ async fn save_apply(
             let n = mm
                 .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                 .await
-                .map_err(|e| api_err_db(&e.to_string()))?;
+                .map_err(|e| {
+                    tracing::error!(
+                        "[DCT-SAVE-APPLY] sql_failed phase=deleted dict_code={} table={} pk={} row_index={} id={:?} sql={} err={}",
+                        view.dict_code, view.table_name, view.pk, i, id, sql, e
+                    );
+                    api_err_db(&e.to_string())
+                })?;
             affected += n;
         }
     }
@@ -696,12 +873,18 @@ async fn save_apply(
         if pk_is_generated(view) {
             id_map = mint_ids_for_inserts(view, &mut rows);
         }
-        for o in &rows {
+        for (i, o) in rows.iter().enumerate() {
             if let Some((sql, params)) = build_upsert_sql_dv(view, o) {
                 let n = mm
                     .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                     .await
-                    .map_err(|e| api_err_db(&e.to_string()))?;
+                    .map_err(|e| {
+                        tracing::error!(
+                            "[DCT-SAVE-APPLY] sql_failed phase=inserted dict_code={} table={} row_index={} sql={} err={}",
+                            view.dict_code, view.table_name, i, sql, e
+                        );
+                        api_err_db(&e.to_string())
+                    })?;
                 affected += n;
             }
         }
@@ -710,7 +893,7 @@ async fn save_apply(
     // updated：带乐观锁基线（baseline=装载时 update_time）。有 baseline 且表有 update_time 列时，
     // UPDATE ... WHERE pk=$ AND update_time=baseline；影响 0 行 = 冲突。
     if let Some(ups) = bucket.get("updated").and_then(|v| v.as_array()) {
-        for row in ups {
+        for (row_index, row) in ups.iter().enumerate() {
             let id = match row.get("id") {
                 Some(v) if !v.is_null() => v.clone(),
                 _ => continue,
@@ -745,7 +928,9 @@ async fn save_apply(
             let pk_ph = i;
             params.push(to_dv_by_col(view, &view.pk, &id));
             // 乐观锁：baseline 存在 + 有 update_time 列 → 加 AND update_time = baseline。
+            // baseline 在下面 if let 中会被 move，先借出 JSON 字符串副本给后续日志使用。
             let baseline = row.get("baseline").filter(|b| !b.is_null()).cloned();
+            let baseline_repr = serde_json::to_string(&baseline).unwrap_or_default();
             let lock_clause = if let Some(b) = baseline.filter(|_| valid_col(view, "update_time")) {
                 i += 1;
                 params.push(to_dv_by_col(view, "update_time", &b));
@@ -764,9 +949,19 @@ async fn save_apply(
             let n = mm
                 .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                 .await
-                .map_err(|e| api_err_db(&e.to_string()))?;
+                .map_err(|e| {
+                    tracing::error!(
+                        "[DCT-SAVE-APPLY] sql_failed phase=updated dict_code={} table={} row_index={} id={} baseline={} sql={} err={}",
+                        view.dict_code, view.table_name, row_index, id, baseline_repr, sql, e
+                    );
+                    api_err_db(&e.to_string())
+                })?;
             if n == 0 && !lock_clause.is_empty() {
                 // 乐观锁冲突（baseline 不匹配）。
+                tracing::warn!(
+                    "[DCT-SAVE-APPLY] optimistic_lock_conflict dict_code={} table={} row_index={} id={} baseline={} sql={}",
+                    view.dict_code, view.table_name, row_index, id, baseline_repr, sql
+                );
                 return Ok((affected, updated_at, true, id_map));
             }
             affected += n;
@@ -777,17 +972,34 @@ async fn save_apply(
                     view.table_name, view.pk
                 );
                 let q_params = vec![to_dv_by_col(view, &view.pk, &id)];
-                if let Ok(ds) = mm
+                match mm
                     .query_sql_with_datavalues(db_id, Some(txn_id), &q, q_params, "ut")
                     .await
-                    && let Ok(v) = serde_json::to_value(&ds)
-                    && let Some(ut) = v
-                        .get("rows")
-                        .and_then(|r| r.get(0))
-                        .and_then(|r0| r0.get("ut"))
-                        .cloned()
                 {
-                    updated_at.push(json!({ "id": id, "updateTime": ut }));
+                    Ok(ds) => {
+                        if let Ok(v) = serde_json::to_value(&ds)
+                            && let Some(ut) = v
+                                .get("rows")
+                                .and_then(|r| r.get(0))
+                                .and_then(|r0| r0.get("ut"))
+                                .cloned()
+                        {
+                            updated_at.push(json!({ "id": id, "updateTime": ut }));
+                        } else {
+                            // 序列化/取值失败：仅日志告警，不影响主流程。
+                            tracing::warn!(
+                                "[DCT-SAVE-APPLY] update_time_extract_failed dict_code={} table={} row_index={} id={}",
+                                view.dict_code, view.table_name, row_index, id
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        // 辅助查询失败：仅日志告警，不影响主流程（主 UPDATE 已成功）。
+                        tracing::warn!(
+                            "[DCT-SAVE-APPLY] update_time_query_failed dict_code={} table={} row_index={} id={} sql={} err={}",
+                            view.dict_code, view.table_name, row_index, id, q, e
+                        );
+                    }
                 }
             }
         }
@@ -817,6 +1029,7 @@ mod tests {
             edit: None,
             edit_settings: None,
             display: None,
+            extra: None,
         }
     }
 
@@ -884,5 +1097,25 @@ mod tests {
         let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
         // Common[id,code,name] -> mid[custom,create_time] -> audit[]（无 audit 引用）
         assert_eq!(names, vec!["id", "code", "name", "custom", "create_time"]);
+    }
+
+    #[test]
+    fn reorder_columns_skipped_when_field_set_order_present() {
+        // 声明了 fieldSetOrder 时，reorder_columns 不再做 Common/Audit 三分组重排——
+        // 合并阶段已按用户自定义段序 push，此处保持原样（含系统列交叉排）。
+        let base = base_meta();
+        let table_def = json!({
+            "baseFieldSet": "dictionaryCommonNoIDFields",
+            "auditFieldSet": "dictionaryAuditFields",
+            "fieldSetOrder": ["dictionaryCommonNoIDFields", "own", "dictionaryAuditFields"]
+        });
+        // 模拟按 fieldSetOrder 合并后的顺序（custom 本表字段穿插在 Common/Audit 之间）。
+        let mut columns = vec![
+            col("code"), col("custom1"), col("name"), col("create_time"), col("status"),
+        ];
+        reorder_columns(&mut columns, &base, &table_def);
+        let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+        // 未被重排，保持传入顺序。
+        assert_eq!(names, vec!["code", "custom1", "name", "create_time", "status"]);
     }
 }

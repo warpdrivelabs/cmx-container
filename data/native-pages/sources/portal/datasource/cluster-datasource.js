@@ -432,16 +432,21 @@ function dbSummaryHtml (ds) {
 const MC_KINDS = [
   { id: 'DCT',  label: '数据字典',   icon: 'dimension' },
   { id: 'DOC',  label: '业务单据',   icon: 'document-text' },
+  // RPT 报表列暂隐藏：后端 db_state 已停止返回 rpt 字段（模板型 RPT 仅建表链路、无运行期消费，
+  // 展示会造成"可部署但无业务价值"的误导）。待运行期打通后，取消下行注释即可恢复。
+  // { id: 'RPT',  label: '报表',       icon: 'excel-attachment' },
   { id: 'SEED', label: '初始化数据', icon: 'course-book' },
   { id: 'MENU', label: '菜单同步',   icon: 'list' },
 ]
+// 矩阵中默认展示的 kind（可勾选执行的主 kind）；RPT 等扩展 kind 仍参与 scenario 统计，
+// 但矩阵只渲染 MC_KINDS 中 pick=true 的场景格。布局改为块状自适应（flex wrap），不再固定列数。
 // 场景元数据：文案 / 图标 / 色调 / 是否可勾选执行
 const MC_SCENARIO = {
   create:    { label: '创建',  short: '创建',  icon: 'add',             tone: 'blue',  pick: true  },
   upgrade:   { label: '升级',  short: '升级',  icon: 'trend-up',        tone: 'amber', pick: true  },
   current:   { label: '已就绪', short: '已就绪', icon: 'status-positive', tone: 'green', pick: false },
   retry:     { label: '重试',  short: '失败',  icon: 'restart',         tone: 'red',   pick: true  },
-  drift:     { label: '重应用', short: '漂移',  icon: 'alert',           tone: 'amber', pick: true  },
+  drift:     { label: '漂移',  short: '漂移',  icon: 'alert',           tone: 'amber', pick: true  },
   downgrade: { label: '降级',  short: '较新',  icon: 'down',            tone: 'gray',  pick: false },
   none:      { label: '无定义', short: '无定义', icon: 'less',            tone: 'gray',  pick: false },
 }
@@ -571,7 +576,7 @@ function mcCellHtml (m, k, opts = {}) {
   const on = !!b.picked[mcCellKey(m.key, k.id)]
   const selectedVersion = opts.withVersionSelector ? mcCellSelectedVersion(m, k.id) : null
   let verText = ''
-  const hasVersion = k.id === 'DCT' || k.id === 'DOC' || k.id === 'RPT'
+  const hasVersion = k.id === 'DCT' || k.id === 'DOC' /* || k.id === 'RPT' */ // RPT 暂隐藏
   if (!hasVersion) {
     const unit = k.id === 'MENU' ? '节点' : '行'
     if (sc === 'create' || sc === 'current' || sc === 'drift') {
@@ -587,10 +592,10 @@ function mcCellHtml (m, k, opts = {}) {
     else verText = `v${c.applied || selectedVersion?.version || c.latest}`
   }
   const selector = opts.withVersionSelector ? mcVersionOptionsHtml(m, k.id) : ''
+  const kindBadgeCls = k.id === 'DOC' ? 'doc' : (k.id === 'RPT' ? 'rpt' : (k.id === 'SEED' ? 'seed' : (k.id === 'MENU' ? 'menu' : 'dct')))
   return `<div class="mc-cell t-${sm.tone} ${pickable ? 'pickable' : ''} ${on ? 'on' : ''}" ${pickable ? `data-mc-cell="${esc(mcCellKey(m.key, k.id))}"` : ''}>
-    ${pickable ? `<span class="mc-cell-ck"><ui5-icon name="accept"></ui5-icon></span>` : ''}
-    <ui5-icon name="${sm.icon}" class="mc-cell-ic"></ui5-icon>
-    <span class="mc-cell-body"><span class="mc-cell-sc">${sm.short}</span>${verText ? `<span class="mc-cell-ver">${esc(verText)}</span>` : ''}${selector}</span>
+    <div class="mc-cell-head"><span class="cds-bd-kbadge ${kindBadgeCls}">${esc(k.label)}</span><span class="mc-cell-sc"><ui5-icon name="${sm.icon}"></ui5-icon>${sm.short}</span>${pickable ? `<span class="mc-cell-ck"><ui5-icon name="accept"></ui5-icon></span>` : ''}</div>
+    <div class="mc-cell-body">${verText ? `<span class="mc-cell-ver">${esc(verText)}</span>` : ''}${selector}</div>
   </div>`
 }
 
@@ -637,10 +642,14 @@ function mcNormalizeDbState (raw, dbId) {
     const cells = {
       DCT:  mcNormalizeCell(m.cells?.DCT  || m.cells?.dct  || m.DCT  || m.dct),
       DOC:  mcNormalizeCell(m.cells?.DOC  || m.cells?.doc  || m.DOC  || m.doc),
+      RPT:  mcNormalizeCell(m.cells?.RPT  || m.cells?.rpt  || m.RPT  || m.rpt || mcEmptyCell()),
       SEED: mcNormalizeCell(m.cells?.SEED || m.cells?.seed || m.SEED || m.seed || mcEmptyCell()),
       MENU: mcNormalizeCell(m.cells?.MENU || m.cells?.menu || m.MENU || m.menu || mcEmptyCell()),
     }
-    for (const k of MC_KINDS) counts[cells[k.id].scenario] = (counts[cells[k.id].scenario] || 0) + 1
+    for (const k of MC_KINDS) {
+      const sc = cells[k.id]?.scenario
+      if (sc) counts[sc] = (counts[sc] || 0) + 1
+    }
     return {
       ...m,
       key: m.key || `${domain}/${app}/${module}`,
@@ -669,6 +678,7 @@ function mcNormalizeDbState (raw, dbId) {
       cells: {
         DCT:  mcNormalizeCell(m.dct  || m.cells?.DCT  || m.cells?.dct),
         DOC:  mcNormalizeCell(m.doc  || m.cells?.DOC  || m.cells?.doc),
+        RPT:  mcNormalizeCell(m.rpt  || m.cells?.RPT  || m.cells?.rpt || mcEmptyCell()),
         SEED: mcNormalizeCell(m.seed || m.cells?.SEED || m.cells?.seed),
         MENU: mcNormalizeCell(m.menu || m.cells?.MENU || m.cells?.menu || mcEmptyCell()),
       },
@@ -718,7 +728,7 @@ function mcKindDetailHtml (cell, kind, moduleKey = '') {
   const upgradeSelect = canUpgrade ? mcInstalledUpgradeSelectHtml(moduleKey, kind, c) : ''
   return `<div class="mc-kind-detail">
     <div class="mc-kd-head">
-      <span class="cds-bd-kbadge ${kind === 'DOC' ? 'doc' : (kind === 'SEED' ? 'seed' : (kind === 'MENU' ? 'menu' : 'dct'))}">${esc(MC_KINDS.find((k) => k.id === kind)?.label || kind)}</span>
+      <span class="cds-bd-kbadge ${kind === 'DOC' ? 'doc' : (kind === 'RPT' ? 'rpt' : (kind === 'SEED' ? 'seed' : (kind === 'MENU' ? 'menu' : 'dct')))}">${esc(MC_KINDS.find((k) => k.id === kind)?.label || kind)}</span>
       <span class="mc-kd-actions">
         ${upgradeSelect}
         ${actionLabel ? `<button class="mc-action-btn t-${esc(sm.tone)}" data-mc-upgrade="${esc(moduleKey)}:${esc(kind)}" title="${esc(actionLabel)}到所选定义版本"><ui5-icon name="${actionIcon}"></ui5-icon>${esc(actionLabel)}</button>` : ''}
@@ -878,7 +888,6 @@ function buildPanelHtml (ds) {
     ${badge('create')}${badge('upgrade')}${badge('current')}${badge('retry')}${badge('drift')}
   </div>`
 
-  const cellHtml = (m, k) => mcCellHtml(m, k, { withVersionSelector: true })
   const installed = (b.dbState?.installed_modules || []).filter(mcModuleMatchesFilter)
   const installedCollapsed = mcCollapsed('installed')
   const availableCollapsed = mcCollapsed('available')
@@ -903,12 +912,9 @@ function buildPanelHtml (ds) {
           const kindsHtml = installedKinds.length
             ? installedKinds.map((k) => mcKindDetailHtml(m.cells?.[k.id], k.id, m.key)).join('')
             : `<div class="mc-kind-detail mc-kind-empty">该模块无已安装的资源</div>`
-          const kindsCls = installedKinds.length && installedKinds.length < 4
-            ? `mc-installed-kinds mc-installed-kinds-${installedKinds.length}`
-            : 'mc-installed-kinds'
           return `<div class="mc-installed-row">
           <div class="mc-installed-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div><div class="mc-mmod-s">${esc(m.deployed_name || m.deployed_by || '')}</div></div>
-          <div class="${kindsCls}">${kindsHtml}</div>
+          <div class="mc-installed-kinds">${kindsHtml}</div>
           <div class="mc-installed-time"><span>${mcShortDate(m.created_at || m.first_deployed_at || m.create_time)}</span><span>${mcShortDate(m.updated_at || m.current_deployed_at || m.update_time)}</span></div>
           <div class="mc-mtbl">${tblText}</div>
         </div>`
@@ -924,13 +930,21 @@ function buildPanelHtml (ds) {
   const availablePanel = `
     <div class="mc-panel">
       <div class="mc-panel-h"><span><ui5-icon name="add-activity"></ui5-icon>当前选择下可创建 / 安装 / 升级模块</span><span class="mc-panel-actions"><b>${actionable.length}</b>${mcCollapseButton('available', '当前选择下可创建 / 安装 / 升级模块')}</span></div>
-      ${availableCollapsed ? '' : (actionable.length ? `<div class="mc-matrix">
-        <div class="mc-matrix-head"><span class="mc-mh-mod">模块</span>${MC_KINDS.map((k) => `<span class="mc-mh-k"><ui5-icon name="${k.icon}"></ui5-icon>${k.label}</span>`).join('')}<span class="mc-mh-t">表数</span></div>
-        ${actionable.map((m) => `<div class="mc-mrow">
-          <div class="mc-mmod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div></div>
-          ${MC_KINDS.map((k) => cellHtml(m, k)).join('')}
+      ${availableCollapsed ? '' : (actionable.length ? `<div class="mc-available">
+        <div class="mc-available-head"><span>模块</span><span>可创建 / 安装 / 升级的资源（点击勾选）</span><span></span><span>表数</span></div>
+        ${actionable.map((m) => {
+          // 只渲染有动作的 kind 格（create/upgrade/retry/drift），none/current 不显示
+          const activeKinds = MC_KINDS.filter((k) => {
+            const sc = m.cells[k.id]?.scenario
+            return sc === 'create' || sc === 'upgrade' || sc === 'retry' || sc === 'drift'
+          })
+          return `<div class="mc-available-row">
+          <div class="mc-available-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div></div>
+          <div class="mc-available-kinds">${activeKinds.map((k) => mcCellHtml(m, k, { withVersionSelector: true })).join('')}</div>
+          <div class="mc-available-spacer"></div>
           <div class="mc-mtbl">${m.table_count}</div>
-        </div>`).join('')}
+        </div>`
+        }).join('')}
       </div>` : `<div class="cds-bd-empty"><ui5-icon name="status-positive"></ui5-icon>当前筛选下没有待创建、安装或升级的模块</div>`)}
     </div>`
 
@@ -1119,7 +1133,7 @@ function mcReviewPlanDetailHtml (rv) {
       return `<div class="cds-bd-plan-grp">
         <div class="cds-bd-plan-grp-h">
           <span class="mc-badge t-${stTone(r.status)} sm"><ui5-icon name="${stIcon(r.status)}"></ui5-icon>${r.status === 'failed' ? '失败' : (r.status === 'skipped' ? '跳过' : '计划')}</span>
-          <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'SEED' ? 'seed' : (r.kind === 'MENU' ? 'menu' : (r.kind === 'SYS' ? 'seed' : 'dct')))}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
+          <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'RPT' ? 'rpt' : (r.kind === 'SEED' ? 'seed' : (r.kind === 'MENU' ? 'menu' : (r.kind === 'SYS' ? 'seed' : 'dct'))))}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
           <span class="cds-bd-plan-grp-t">${esc(r.module)}${r.version != null ? ' · v' + esc(r.version) : ''}</span>
           <span class="cds-bd-plan-grp-n">${r.tables != null ? r.tables + ' 张表' : (r.note ? esc(r.note) : '')}</span>
         </div>
@@ -1212,7 +1226,11 @@ function updateReviewPanel () {
     if (viewOf(host) !== 'content-overview') continue
     const root = host.renderRoot || host.shadowRoot?.querySelector('.native-page-root')
     const wrap = root && root.querySelector('.mc-review')
-    if (!wrap) { renderInto(host); continue }
+    // .mc-review 尚未渲染时跳过本次局部更新，不调 renderInto：
+    // SSE 流处理期间（progress/done 事件）中间态调 renderInto 会触发 bindOverview，
+    // 若此时 b.loaded/b.dsKey 处于过渡态可能与 finally 的 refreshOverviewHosts 叠加引发重复加载。
+    // 完整重渲由调用方 finally 块的 refreshOverviewHosts 统一负责。
+    if (!wrap) continue
     const tmp = document.createElement('template')
     tmp.innerHTML = mcReviewHtml(key)
     const fresh = tmp.content.firstElementChild
@@ -1231,7 +1249,8 @@ function updateInitLog () {
     if (viewOf(host) !== 'content-overview') continue
     const root = host.renderRoot || host.shadowRoot?.querySelector('.native-page-root')
     const wrap = root && root.querySelector('.mc-initlog')
-    if (!wrap) { renderInto(host); continue }
+    // 同 updateReviewPanel：找不到时跳过，不调 renderInto，避免流处理期间中间态重渲
+    if (!wrap) continue
     const tmp = document.createElement('template')
     tmp.innerHTML = mcInitLogHtml()
     const fresh = tmp.content.firstElementChild
@@ -1354,7 +1373,7 @@ function mcPlanHtml () {
         return `<div class="cds-bd-plan-grp">
           <div class="cds-bd-plan-grp-h">
             <span class="mc-badge t-${stTone(r.status)} sm"><ui5-icon name="${stIcon(r.status)}"></ui5-icon>${r.status === 'success' ? '成功' : (r.status === 'failed' ? '失败' : '跳过')}</span>
-            <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'SEED' ? 'seed' : (r.kind === 'MENU' ? 'menu' : 'dct'))}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
+            <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'RPT' ? 'rpt' : (r.kind === 'SEED' ? 'seed' : (r.kind === 'MENU' ? 'menu' : 'dct')))}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
             <span class="cds-bd-plan-grp-t">${esc(r.module)}${r.version != null ? ' · v' + esc(r.version) : ''}</span>
             <span class="cds-bd-plan-grp-n">${r.tables != null ? r.tables + ' 张表' : (r.note ? esc(r.note) : '')}</span>
           </div>
@@ -1551,6 +1570,11 @@ async function runMcPlan () {
   const b = state.build
   const ds = state.datasources.find((d) => d.id === state.selectedDsId)
   const picked = mcPickedCells()
+  // review 处于终态（executed/error）时自动清理，允许立即发起新一轮计划；
+  // 否则上一次部署完成后未点「返回/清空」就会卡住按钮（b.review 非空导致守卫 return）。
+  if (b.review && (b.review.status === 'executed' || b.review.status === 'error')) {
+    b.review = null
+  }
   if (!ds || !picked.length || b.running || b.review) return
   const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null
   b.initAbort = ac
@@ -1648,6 +1672,10 @@ async function executeMcPlanAfterReview () {
           b.review.status = 'executed'
           b.review.log.done = true
         }
+        // 立即解除运行态（与 handleReviewExecuteEvent 一致），不等 finally：
+        // 否则 readSseStream 等待流关闭期间 b.running 仍为 true，阻碍后续操作。
+        b.running = false
+        b.initAbort = null
         b.plan = { results: Array.isArray(data.results) ? data.results : [], errors: [] }
         b.picked = {}
         b.forceRecreate = {}
@@ -1798,21 +1826,31 @@ function bindOverview (root) {
   })
 }
 
-/** 只重画模块矩阵区（搜索时保输入焦点）。 */
+/** 只重画可创建/安装/升级模块区（搜索时保输入焦点）。 */
 function rerenderMatrix (root) {
-  const host = root.querySelector('.mc-matrix, .cds-bd-empty')
+  const host = root.querySelector('.mc-available, .cds-bd-empty')
   if (!host || !host.closest('.cds-bd')) return
   const modules = mcFilteredModules()
-  const cellHtml = (m, k) => mcCellHtml(m, k)
+  const actionable = modules.filter((m) => MC_KINDS.some((k) => {
+    const sc = m.cells[k.id].scenario
+    return sc === 'create' || sc === 'upgrade' || sc === 'retry' || sc === 'drift'
+  }))
   const fresh = document.createElement('template')
-  fresh.innerHTML = modules.length ? `
-    <div class="mc-matrix">
-      <div class="mc-matrix-head"><span class="mc-mh-mod">模块</span>${MC_KINDS.map((k) => `<span class="mc-mh-k"><ui5-icon name="${k.icon}"></ui5-icon>${k.label}</span>`).join('')}<span class="mc-mh-t">表数</span></div>
-      ${modules.map((m) => `<div class="mc-mrow">
-        <div class="mc-mmod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div></div>
-        ${MC_KINDS.map((k) => cellHtml(m, k)).join('')}
+  fresh.innerHTML = actionable.length ? `
+    <div class="mc-available">
+      <div class="mc-available-head"><span>模块</span><span>可创建 / 安装 / 升级的资源（点击勾选）</span><span></span><span>表数</span></div>
+      ${actionable.map((m) => {
+        const activeKinds = MC_KINDS.filter((k) => {
+          const sc = m.cells[k.id]?.scenario
+          return sc === 'create' || sc === 'upgrade' || sc === 'retry' || sc === 'drift'
+        })
+        return `<div class="mc-available-row">
+        <div class="mc-available-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div></div>
+        <div class="mc-available-kinds">${activeKinds.map((k) => mcCellHtml(m, k, { withVersionSelector: true })).join('')}</div>
+        <div class="mc-available-spacer"></div>
         <div class="mc-mtbl">${m.table_count}</div>
-      </div>`).join('')}
+      </div>`
+      }).join('')}
     </div>` : `<div class="cds-bd-empty"><ui5-icon name="course-book"></ui5-icon>当前筛选下无模块</div>`
   const el = fresh.content.firstElementChild
   if (el) host.replaceWith(el)
@@ -2168,6 +2206,7 @@ function styleHtml () {
     /* ── 场景工作台（模型中心）── */
     .cds-bd-kbadge.seed{background:#fff2df;color:#c77700}
     .cds-bd-kbadge.menu{background:#efe9fb;color:#6a4cd9}
+    .cds-bd-kbadge.rpt{background:#fde8f3;color:#c0356a}
     /* 运维 tab 切换 */
     .mc-tabs{display:flex;align-items:center;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#e5e5e5)}
     .mc-tab{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:8px 14px;font:inherit;font-size:13px;font-weight:600;color:var(--sapContent_LabelColor,#6a6d70);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -2269,10 +2308,8 @@ function styleHtml () {
     .mc-installed-row:last-child{border-bottom:0}
     .mc-installed-row:hover{background:#fafcff}
     .mc-installed-mod{min-width:0}
-    .mc-installed-kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
-    .mc-installed-kinds-1{grid-template-columns:minmax(0,1fr);max-width:260px}
-    .mc-installed-kinds-2{grid-template-columns:repeat(2,minmax(0,1fr));max-width:520px}
-    .mc-installed-kinds-3{grid-template-columns:repeat(3,minmax(0,1fr));max-width:780px}
+    .mc-installed-kinds{display:flex;flex-wrap:wrap;gap:7px}
+    .mc-installed-kinds>.mc-kind-detail{flex:1 1 150px;max-width:260px;min-width:150px}
     .mc-kind-detail{min-width:0;border:1px solid var(--sapGroup_TitleBorderColor,#edf0f4);border-radius:8px;padding:7px;background:var(--sapList_HeaderBackground,#fafbfc)}
     .mc-kind-empty{display:flex;align-items:center;justify-content:center;color:var(--sapContent_LabelColor,#8993a3);font-size:11px;font-style:italic;background:transparent;border-style:dashed}
     .mc-kd-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:5px}
@@ -2302,41 +2339,57 @@ function styleHtml () {
     @media (max-width:980px){
       .mc-installed-head{display:none}
       .mc-installed-row{grid-template-columns:1fr}
-      .mc-installed-kinds{grid-template-columns:1fr}
+      .mc-installed-kinds>.mc-kind-detail{flex:1 1 100%;max-width:none}
       .mc-installed-time{flex-direction:row;flex-wrap:wrap}
+      .mc-available-head{display:none}
+      .mc-available-row{grid-template-columns:1fr}
+      .mc-available-spacer{display:none}
+      .mc-available-kinds>.mc-cell{flex:1 1 100%;max-width:none}
     }
-    /* 模块矩阵 */
-    .mc-matrix{overflow:hidden}
-    .mc-matrix-head,.mc-mrow{display:grid;grid-template-columns:minmax(120px,1fr) repeat(4, minmax(84px,1fr)) 50px;gap:8px;align-items:center}
-    .mc-matrix-head{padding:8px 12px;background:var(--sapList_HeaderBackground,#f6f8fb);border-bottom:1px solid var(--sapGroup_TitleBorderColor,#eee);font-size:11px;font-weight:700;color:var(--sapContent_LabelColor,#6a6d70)}
-    .mc-mh-k{display:inline-flex;align-items:center;gap:4px}
-    .mc-mh-k ui5-icon{width:.8rem;height:.8rem;opacity:.7}
-    .mc-mh-t{text-align:right}
-    .mc-mrow{padding:8px 12px;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#f2f2f2)}
-    .mc-mrow:last-child{border-bottom:0}
-    .mc-mrow:hover{background:#fafcff}
-    .mc-mmod{min-width:0}
+    /* 可创建/安装/升级模块面板（块状自适应，与已安装面板列宽对齐） */
+    .mc-available{overflow:visible}
+    .mc-available-head,.mc-available-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(280px,3.5fr) minmax(80px,.5fr) 50px;gap:10px;align-items:center}
+    .mc-available-head{padding:8px 12px;font-size:11px;font-weight:700;color:var(--sapContent_LabelColor,#6a6d70);background:#fbfcfe;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#f0f0f0)}
+    .mc-available-row{padding:10px 12px;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#f2f2f2)}
+    .mc-available-row:last-child{border-bottom:0}
+    .mc-available-row:hover{background:#fafcff}
+    .mc-available-mod{min-width:0}
+    .mc-available-spacer{}
     .mc-mmod-t{font-size:13px;font-weight:600;color:var(--sapTextColor,#1d2d3e);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .mc-mmod-s{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+    .mc-available-kinds{display:flex;flex-wrap:wrap;gap:7px;min-width:0}
+    .mc-available-kinds .mc-cell{flex:1 1 150px;max-width:260px;min-width:150px}
     .mc-mtbl{text-align:right;font-size:13px;font-weight:700;color:var(--sapContent_LabelColor,#5a6570)}
-    /* 场景格 */
-    .mc-cell{position:relative;display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid transparent;border-radius:8px;min-width:0;user-select:none}
-    .mc-cell-ic{width:.95rem;height:.95rem;flex:0 0 auto}
-    .mc-cell-body{min-width:0;display:flex;flex-direction:column;line-height:1.2}
-    .mc-cell-sc{font-size:12px;font-weight:600}
-    .mc-cell-ver{font-size:10px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .mc-ver-select{margin-top:4px;width:100%;height:22px;border:1px solid currentColor;border-radius:6px;background:rgba(255,255,255,.72);color:inherit;font:inherit;font-size:10px;box-sizing:border-box}
-    .mc-cell-ck{position:absolute;top:4px;right:4px;width:15px;height:15px;border:1.5px solid currentColor;border-radius:5px;display:flex;align-items:center;justify-content:center;opacity:.45}
-    .mc-cell-ck ui5-icon{width:.6rem;height:.6rem;opacity:0}
-    .mc-cell.t-blue{background:#eef6ff;color:#0a6ed1}
-    .mc-cell.t-amber{background:#fdf3e2;color:#b9720d}
-    .mc-cell.t-green{background:#eaf7ef;color:#107e3e}
-    .mc-cell.t-red{background:#fdecec;color:#bb0000}
-    .mc-cell.t-gray{background:#f2f4f7;color:#8a9099}
+    /* 资源格（白底卡片：左边框色条 + 标题行 + 内容行） */
+    .mc-cell{position:relative;display:flex;flex-direction:column;gap:5px;padding:8px 10px 8px 11px;border:1px solid var(--sapGroup_TitleBorderColor,#e4e7ea);border-left:3px solid transparent;border-radius:8px;min-width:0;background:var(--sapList_Background,#fff);user-select:none;transition:border-color .12s,box-shadow .12s}
+    .mc-cell-head{display:flex;align-items:center;gap:5px}
+    .mc-cell-head .cds-bd-kbadge{margin-bottom:0;font-size:10px;padding:2px 6px;border-radius:5px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+    .mc-cell-head .cds-bd-kbadge ui5-icon{width:.7rem;height:.7rem}
+    .mc-cell-sc{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;white-space:nowrap;flex:0 0 auto;margin-left:auto}
+    .mc-cell-sc ui5-icon{width:.7rem;height:.7rem}
+    .mc-cell-body{min-width:0;display:flex;flex-direction:column;gap:3px;line-height:1.3}
+    .mc-cell-ver{font-size:11px;font-weight:600;color:var(--sapTextColor,#32363a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mc-ver-select{margin-top:2px;width:100%;height:24px;border:1px solid var(--sapField_BorderColor,#8993a3);border-radius:6px;background:#fff;color:var(--sapTextColor,#32363a);font:inherit;font-size:11px;box-sizing:border-box}
+    /* 勾选圆点：放在标题行末尾（场景标签右侧），不再绝对定位 */
+    .mc-cell-ck{flex:0 0 auto;width:16px;height:16px;border:1.5px solid var(--sapContent_LabelColor,#8993a3);border-radius:5px;display:flex;align-items:center;justify-content:center;opacity:.4;transition:opacity .1s}
+    .mc-cell-ck ui5-icon{width:.65rem;height:.65rem;opacity:0}
+    /* 场景色：左边框色条 + 场景标签底色，不再填充整个 cell */
+    .mc-cell.t-blue{border-left-color:#0a6ed1}
+    .mc-cell.t-blue .mc-cell-sc{background:#eef6ff;color:#0a6ed1}
+    .mc-cell.t-amber{border-left-color:#b9720d}
+    .mc-cell.t-amber .mc-cell-sc{background:#fdf3e2;color:#b9720d}
+    .mc-cell.t-green{border-left-color:#107e3e}
+    .mc-cell.t-green .mc-cell-sc{background:#eaf7ef;color:#107e3e}
+    .mc-cell.t-red{border-left-color:#bb0000}
+    .mc-cell.t-red .mc-cell-sc{background:#fdecec;color:#bb0000}
+    .mc-cell.t-gray{border-left-color:#8a9099}
+    .mc-cell.t-gray .mc-cell-sc{background:#f2f4f7;color:#8a9099}
     .mc-cell.pickable{cursor:pointer}
-    .mc-cell.pickable:hover{filter:brightness(.97);box-shadow:inset 0 0 0 1px currentColor}
-    .mc-cell.on{box-shadow:inset 0 0 0 2px currentColor}
-    .mc-cell.on .mc-cell-ck{opacity:1;background:currentColor}
+    .mc-cell.pickable:hover{border-color:#9dc3ec;box-shadow:0 2px 8px rgba(10,110,209,.12)}
+    .mc-cell.pickable:hover .mc-cell-ck{opacity:.7}
+    /* 选中态：整体边框变蓝 + 左色条加粗 + 勾选圆点实心 */
+    .mc-cell.on{border-color:#0a6ed1;border-width:1px 1px 1px 3px;box-shadow:0 2px 10px rgba(10,110,209,.18)}
+    .mc-cell.on .mc-cell-ck{opacity:1;background:#0a6ed1;border-color:#0a6ed1}
     .mc-cell.on .mc-cell-ck ui5-icon{opacity:1;color:#fff}
     /* 执行抽屉 */
     .mc-drawer{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;padding:11px 14px;border-radius:10px;background:linear-gradient(120deg,#0a6ed1,#3b8ae6);color:#fff;box-shadow:0 4px 14px rgba(10,110,209,.3)}
@@ -2407,7 +2460,7 @@ function styleHtml () {
     .cds-neo .mc-review-actions,
     .cds-neo .mc-review-detail-h,
     .cds-neo .cds-bd-plan-foot,
-    .cds-neo .mc-matrix-head,
+    .cds-neo .mc-available-head,
     .cds-neo .mc-installed-head{
       background:var(--cds-mc-surface-soft);
       border-color:var(--cds-mc-border);
@@ -2422,18 +2475,25 @@ function styleHtml () {
     .cds-neo .cds-bd-plan-err,
     .cds-neo .mc-il-foot.err{background:var(--cds-mc-red-bg);color:var(--cds-mc-red)}
     .cds-neo .cds-bd-kbadge.dct,
-    .cds-neo .mc-badge.t-blue.active,
-    .cds-neo .mc-cell.t-blue{background:var(--cds-mc-blue-bg);color:var(--cds-mc-blue)}
+    .cds-neo .mc-badge.t-blue.active{background:var(--cds-mc-blue-bg);color:var(--cds-mc-blue)}
+    .cds-neo .mc-cell.t-blue{border-left-color:var(--cds-mc-blue)}
+    .cds-neo .mc-cell.t-blue .mc-cell-sc{background:var(--cds-mc-blue-bg);color:var(--cds-mc-blue)}
     .cds-neo .cds-bd-kbadge.doc,
-    .cds-neo .mc-badge.t-green.active,
-    .cds-neo .mc-cell.t-green{background:var(--cds-mc-green-bg);color:var(--cds-mc-green)}
+    .cds-neo .mc-badge.t-green.active{background:var(--cds-mc-green-bg);color:var(--cds-mc-green)}
+    .cds-neo .mc-cell.t-green{border-left-color:var(--cds-mc-green)}
+    .cds-neo .mc-cell.t-green .mc-cell-sc{background:var(--cds-mc-green-bg);color:var(--cds-mc-green)}
     .cds-neo .cds-bd-kbadge.seed,
-    .cds-neo .mc-badge.t-amber.active,
-    .cds-neo .mc-cell.t-amber{background:var(--cds-mc-amber-bg);color:var(--cds-mc-amber)}
+    .cds-neo .mc-badge.t-amber.active{background:var(--cds-mc-amber-bg);color:var(--cds-mc-amber)}
+    .cds-neo .mc-cell.t-amber{border-left-color:var(--cds-mc-amber)}
+    .cds-neo .mc-cell.t-amber .mc-cell-sc{background:var(--cds-mc-amber-bg);color:var(--cds-mc-amber)}
     .cds-neo .cds-bd-kbadge.menu{background:var(--cds-mc-purple-bg);color:var(--cds-mc-purple)}
-    .cds-neo .mc-badge.t-red.active,
-    .cds-neo .mc-cell.t-red{background:var(--cds-mc-red-bg);color:var(--cds-mc-red)}
-    .cds-neo .mc-cell.t-gray{background:var(--cds-mc-gray-bg);color:var(--sapContent_LabelColor,#7a828c)}
+    .cds-neo .cds-bd-kbadge.rpt{background:var(--cds-mc-red-bg);color:var(--cds-mc-red)}
+    .cds-neo .mc-badge.t-red.active{background:var(--cds-mc-red-bg);color:var(--cds-mc-red)}
+    .cds-neo .mc-cell.t-red{border-left-color:var(--cds-mc-red)}
+    .cds-neo .mc-cell.t-red .mc-cell-sc{background:var(--cds-mc-red-bg);color:var(--cds-mc-red)}
+    .cds-neo .mc-cell{background:var(--cds-mc-surface);border-color:var(--cds-mc-border)}
+    .cds-neo .mc-cell.t-gray{border-left-color:var(--sapContent_LabelColor,#7a828c)}
+    .cds-neo .mc-cell.t-gray .mc-cell-sc{background:var(--cds-mc-gray-bg);color:var(--sapContent_LabelColor,#7a828c)}
     .cds-neo .mc-badge{
       background:var(--sapButton_Background,var(--cds-mc-surface));
       color:var(--sapTextColor,#32363a);
@@ -2452,7 +2512,7 @@ function styleHtml () {
     .cds-neo .mc-st-ok ui5-icon{color:var(--cds-mc-green)}
     .cds-neo .mc-st-warn ui5-icon{color:var(--cds-mc-amber)}
     .cds-neo .mc-installed-row,
-    .cds-neo .mc-mrow,
+    .cds-neo .mc-available-row,
     .cds-neo .cds-bd-plan-grp,
     .cds-neo .mc-review-detail,
     .cds-neo .mc-result-detail,
@@ -2466,7 +2526,7 @@ function styleHtml () {
     .cds-neo .mc-change-empty{background:var(--cds-mc-surface-soft)}
     .cds-neo .mc-change-error{background:var(--cds-mc-red-bg);color:var(--cds-mc-red)}
     .cds-neo .mc-installed-row:hover,
-    .cds-neo .mc-mrow:hover{background:var(--cds-mc-hover)}
+    .cds-neo .mc-available-row:hover{background:var(--cds-mc-hover)}
     .cds-neo .mc-kind-detail{
       background:var(--cds-mc-surface-soft);
       border-color:var(--cds-mc-border);
