@@ -11,6 +11,8 @@ use serde_json::{Value, json};
 
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+
 // ============================================================================
 // 请求参数
 // ============================================================================
@@ -139,6 +141,10 @@ pub fn valid_col(view: &DictView, name: &str) -> bool {
 ///   让绑定层用正确类型的 `None::<T>`。
 /// - **整型列字符串数字 coerce**：前端 grid 编辑器回传的值可能是字符串形态数字（如 `"1"`），
 ///   整型列（INT/BIGINT/TINYINT）下转 `DataValue::Int`，避开 WrongType。
+/// - **TIMESTAMP/DATETIME/DATE 列字符串 coerce**：前端回传的乐观锁 baseline（`update_time`）
+///   通常是 ISO8601/RFC3339 字符串（如 `"2026-07-24T03:17:42.078808+00:00"`），`json_to_datavalue`
+///   只会包成 `DataValue::String`，直接绑到 TIMESTAMP 列会 WrongType。这里按列类型尝试解析
+///   为 `DataValue::DateTime` / `DataValue::Date`，对齐 PG 协议层 `PgDateTime`/`NaiveDate`。
 pub fn to_dv_by_col(view: &DictView, col_name: &str, v: &Value) -> DataValue {
     let dt = view
         .columns
@@ -162,8 +168,51 @@ pub fn to_dv_by_col(view: &DictView, col_name: &str, v: &Value) -> DataValue {
             return DataValue::Int(n);
         }
     }
+    // 时间/日期列的字符串 coerce：前端 update_time baseline / 日期字段常以字符串回传
+    // （如 "2026-07-24T03:17:42.078808+00:00"、"2026-07-24"）。解析失败仍回退到
+    // json_to_datavalue（由绑定层报 WrongType，避免静默错误）。
+    if dt.contains("DATETIME") || dt.contains("TIMESTAMP") {
+        if let Some(s) = v.as_str()
+            && let Some(dv) = parse_datetime_str(s)
+        {
+            return dv;
+        }
+    }
+    if dt == "DATE" {
+        if let Some(s) = v.as_str()
+            && let Some(dv) = parse_date_str(s)
+        {
+            return dv;
+        }
+    }
     // 其余按 JSON 值类型自然映射（Number→Int/Float、String→String、Bool→Bool）
     json_to_datavalue(v)
+}
+
+/// 解析时间字符串为 DataValue::DateTime。
+///
+/// 兼容：
+/// - RFC3339（含时区）：`2026-07-24T03:17:42.078808+00:00` / `...Z`（前端 baseline 形态）
+/// - Naive datetime（无时区）：`2026-07-24 03:17:42[.fff]`（按 UTC 墙钟解释）
+fn parse_datetime_str(s: &str) -> Option<DataValue> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Some(DataValue::DateTime(dt.with_timezone(&Utc)));
+    }
+    if let Ok(ndt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f")
+        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S"))
+    {
+        return Some(DataValue::DateTime(
+            DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc),
+        ));
+    }
+    None
+}
+
+/// 解析日期字符串为 DataValue::Date。
+fn parse_date_str(s: &str) -> Option<DataValue> {
+    NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        .ok()
+        .map(DataValue::Date)
 }
 
 /// 取列的 SqlTypeMarker（从物理 dataType 字符串派发）。
@@ -280,7 +329,11 @@ pub fn id_to_key(v: Option<&Value>) -> Option<String> {
 // ============================================================================
 
 /// 由 view + 请求 body 构造 (data_sql, count_sql, params)。data/search 与 zmc-msgpack 端点共用。
-pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Value>) {
+///
+/// params 直接产出 `Vec<DataValue>`（按列名走 [`to_dv_by_col`] 派发），与 save 路径统一：
+/// 整型列字符串数字 coerce、TIMESTAMP/DATETIME/DATE 列字符串 coerce、NULL 带类型。
+/// 调用方无需再做 `json_to_datavalue` 转换。
+pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<DataValue>) {
     let col_list = view
         .columns
         .iter()
@@ -289,7 +342,7 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Va
         .join(", ");
 
     let mut wheres: Vec<String> = Vec::new();
-    let mut params: Vec<Value> = Vec::new();
+    let mut params: Vec<DataValue> = Vec::new();
     let mut n = 0usize;
 
     // parentId 过滤（自分级 children）：仅当定义有 parentField 且请求带 parentId 键。
@@ -301,7 +354,7 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Va
         } else {
             n += 1;
             wheres.push(format!("\"{}\" = ${}", pf, n));
-            params.push(pv.clone());
+            params.push(to_dv_by_col(view, pf, pv));
         }
     }
 
@@ -316,7 +369,7 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Va
             } else {
                 n += 1;
                 wheres.push(format!("\"{}\" = ${}", k, n));
-                params.push(v.clone());
+                params.push(to_dv_by_col(view, k, v));
             }
         }
     }
@@ -334,7 +387,8 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Va
                     "(\"{}\" ILIKE ${} OR \"{}\" ILIKE ${})",
                     c, p, l, p
                 ));
-                params.push(Value::String(format!("%{}%", kw)));
+                // code/label 恒为 VARCHAR，ILIKE 模糊串直接用 String。
+                params.push(DataValue::String(format!("%{}%", kw)));
             }
         }
     }

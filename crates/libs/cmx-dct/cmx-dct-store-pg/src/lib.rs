@@ -17,7 +17,7 @@ use cmx_database_pg::{DatabaseManager, get_default_pg_db_manager};
 
 use cmx_dct_model::{
     DctQuery, DictColumn, DictView, SERVER_FILLED_COLS, SERVER_REPLACED_COLS, base_fieldset,
-    build_search_sql, build_upsert_sql_dv, is_server_managed_col, json_to_datavalue,
+    build_search_sql, build_upsert_sql_dv, is_server_managed_col,
     mint_ids_for_inserts, pk_is_generated, row_fields, to_dv_by_col, valid_col,
 };
 
@@ -476,8 +476,6 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
         view.dict_code, view.dict_name, view.table_name, view.id_field, view.code_field, view.label_field, view.parent_field, view.pk, view.columns.len(), raw, db_id
     );
     let (sql, count_sql, params) = build_search_sql(view, raw);
-    // JSON params -> DataValue（走 datavalues 绑定，与 cmx-sql-execution 规范一致）。
-    let dv_params: Vec<DataValue> = params.iter().map(json_to_datavalue).collect();
     tracing::info!("[DCT-DEBUG] search sql={}, db_id={}, table={}", sql, db_id, view.table_name);
 
     let mm = get_default_pg_db_manager();
@@ -486,13 +484,13 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
             db_id,
             None,
             &sql,
-            dv_params.clone(),
+            params.clone(),
             &view.dict_code,
         )
         .await
         .map_err(|e| { tracing::error!("[DCT-DEBUG] search failed: sql={}, err={:?}", sql, e); api_err(&format!("字典查询失败: {e}")) })?;
     let total_ds = mm
-        .query_sql_with_datavalues(db_id, None, &count_sql, dv_params, "cnt")
+        .query_sql_with_datavalues(db_id, None, &count_sql, params, "cnt")
         .await
         .map_err(|e| api_err(&format!("字典计数失败: {e}")))?;
 
@@ -531,13 +529,11 @@ pub async fn search_zmc(view: &DictView, raw: &Value, db_id: &str) -> Result<Vec
         view.dict_code, view.dict_name, view.table_name, view.id_field, view.code_field, view.label_field, view.parent_field, view.pk, view.columns.len(), raw, db_id
     );
     let (sql, _count_sql, params) = build_search_sql(view, raw);
-    let dv_params: Vec<cmx_core::model::cell::DataValue> =
-        params.iter().map(json_to_datavalue).collect();
 
     let mm = get_default_pg_db_manager();
     // 零拷贝：ZmcDataSet 持有原始 tokio-postgres Row，惰性列式二进制编码。
     let zmc = mm
-        .query_sql_zmc_with_datavalues(db_id, &sql, dv_params, &view.dict_code)
+        .query_sql_zmc_with_datavalues(db_id, &sql, params, &view.dict_code)
         .await
         .map_err(|e| {
             tracing::error!(
@@ -609,12 +605,18 @@ pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertO
 
     let mm = get_default_pg_db_manager();
     let mut affected = 0u64;
-    for obj in &rows {
+    for (i, obj) in rows.iter().enumerate() {
         if let Some((sql, params)) = build_upsert_sql_dv(view, obj) {
             let n = mm
                 .execute_sql_with_datavalues(db_id, None, &sql, params)
                 .await
-                .map_err(|e| api_err_db(&e.to_string()))?;
+                .map_err(|e| {
+                    tracing::error!(
+                        "[DCT-UPSERT] sql_failed dict_code={} table={} row_index={} sql={} err={}",
+                        view.dict_code, view.table_name, i, sql, e
+                    );
+                    api_err_db(&e.to_string())
+                })?;
             affected += n;
         }
     }
@@ -639,7 +641,13 @@ pub async fn delete(view: &DictView, id: &str, db_id: &str) -> Result<Value> {
     let n = mm
         .execute_sql_with_datavalues(db_id, None, &sql, params)
         .await
-        .map_err(|e| api_err_db(&e.to_string()))?;
+        .map_err(|e| {
+            tracing::error!(
+                "[DCT-DELETE] sql_failed dict_code={} table={} pk={} id={} sql={} err={}",
+                view.dict_code, view.table_name, view.pk, id, sql, e
+            );
+            api_err_db(&e.to_string())
+        })?;
 
     Ok(json!({ "ok": n > 0, "deleted": n }))
 }
@@ -678,6 +686,10 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
     let bucket = match bucket {
         Some(b) => b,
         None => {
+            tracing::info!(
+                "[DCT-SAVE] empty_changeset dict_code={} table={} db_id={}",
+                view.dict_code, view.table_name, db_id
+            );
             return Ok(SaveOutcome::Ok {
                 affected: 0,
                 updated_at: Vec::new(),
@@ -685,32 +697,79 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
             });
         }
     };
+    // 预统计各分支行数，便于日志中区分事务内失败阶段（不打印全字段，避免日志爆炸）。
+    let ins_n = bucket
+        .get("inserted")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let upd_n = bucket
+        .get("updated")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let del_n = bucket
+        .get("deleted")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    tracing::info!(
+        "[DCT-SAVE] enter dict_code={} table={} pk={} db_id={} inserted={} updated={} deleted={}",
+        view.dict_code, view.table_name, view.pk, db_id, ins_n, upd_n, del_n
+    );
 
     // 落库前列级校验（开事务前，一次回报全部）。inserted 走整行校验（含 NOT NULL，跳过
     // 服务端 backfill 列）；updated 只校验其 fields（不做整表 NOT NULL）。
     let violations = validate_bucket(view, bucket);
     if !violations.is_empty() {
+        // 校验未通过：聚合首条违规定位到表+列+行号，便于日志侧反查前端表单字段。
+        let first = violations.first();
+        tracing::warn!(
+            "[DCT-SAVE] validation_failed dict_code={} table={} count={} first_row={:?} first_column={:?} first_code={} first_message={}",
+            view.dict_code,
+            view.table_name,
+            violations.len(),
+            first.and_then(|v| v.row),
+            first.and_then(|v| v.column.clone()),
+            first.map(|v| v.code).unwrap_or(""),
+            first.map(|v| v.message.as_str()).unwrap_or("")
+        );
         return Ok(SaveOutcome::Invalid(violations));
     }
 
     let mm = get_default_pg_db_manager();
     let tx = mm.get_transaction_context();
-    let txn_id = tx
-        .begin(db_id)
-        .await
-        .map_err(|e| api_err(&format!("开启事务失败: {e}")))?;
+    let txn_id = tx.begin(db_id).await.map_err(|e| {
+        tracing::error!(
+            "[DCT-SAVE] tx_begin_failed dict_code={} table={} db_id={} err={}",
+            view.dict_code, view.table_name, db_id, e
+        );
+        api_err(&format!("开启事务失败: {e}"))
+    })?;
 
     let result = save_apply(mm, db_id, &txn_id, view, bucket).await;
 
     match result {
         Ok((affected, updated_at, conflict, id_map)) => {
             if conflict {
+                tracing::warn!(
+                    "[DCT-SAVE] optimistic_lock_conflict dict_code={} table={} db_id={} rolling_back=true",
+                    view.dict_code, view.table_name, db_id
+                );
                 let _ = tx.rollback(&txn_id).await;
                 return Ok(SaveOutcome::Conflict);
             }
-            tx.commit(&txn_id)
-                .await
-                .map_err(|e| api_err(&format!("提交事务失败: {e}")))?;
+            tx.commit(&txn_id).await.map_err(|e| {
+                tracing::error!(
+                    "[DCT-SAVE] tx_commit_failed dict_code={} table={} db_id={} affected={} err={}",
+                    view.dict_code, view.table_name, db_id, affected, e
+                );
+                api_err(&format!("提交事务失败: {e}"))
+            })?;
+            tracing::info!(
+                "[DCT-SAVE] success dict_code={} table={} db_id={} affected={} updated_rows={} idmap_size={}",
+                view.dict_code, view.table_name, db_id, affected, updated_at.len(), id_map.len()
+            );
             Ok(SaveOutcome::Ok {
                 affected,
                 updated_at,
@@ -719,6 +778,11 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
         }
         Err(e) => {
             let _ = tx.rollback(&txn_id).await;
+            // 已被各分支的 error! 日志记录过 SQL/原始错误，此处只补充阶段 + 表级上下文。
+            tracing::error!(
+                "[DCT-SAVE] save_apply_failed dict_code={} table={} db_id={} err={}",
+                view.dict_code, view.table_name, db_id, e
+            );
             Err(e)
         }
     }
@@ -782,7 +846,7 @@ async fn save_apply(
 
     // deleted：按 pk 删。
     if let Some(dels) = bucket.get("deleted").and_then(|v| v.as_array()) {
-        for id in dels {
+        for (i, id) in dels.iter().enumerate() {
             let sql = format!(
                 "DELETE FROM \"{}\" WHERE \"{}\" = $1",
                 view.table_name, view.pk
@@ -791,7 +855,13 @@ async fn save_apply(
             let n = mm
                 .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                 .await
-                .map_err(|e| api_err_db(&e.to_string()))?;
+                .map_err(|e| {
+                    tracing::error!(
+                        "[DCT-SAVE-APPLY] sql_failed phase=deleted dict_code={} table={} pk={} row_index={} id={:?} sql={} err={}",
+                        view.dict_code, view.table_name, view.pk, i, id, sql, e
+                    );
+                    api_err_db(&e.to_string())
+                })?;
             affected += n;
         }
     }
@@ -803,12 +873,18 @@ async fn save_apply(
         if pk_is_generated(view) {
             id_map = mint_ids_for_inserts(view, &mut rows);
         }
-        for o in &rows {
+        for (i, o) in rows.iter().enumerate() {
             if let Some((sql, params)) = build_upsert_sql_dv(view, o) {
                 let n = mm
                     .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                     .await
-                    .map_err(|e| api_err_db(&e.to_string()))?;
+                    .map_err(|e| {
+                        tracing::error!(
+                            "[DCT-SAVE-APPLY] sql_failed phase=inserted dict_code={} table={} row_index={} sql={} err={}",
+                            view.dict_code, view.table_name, i, sql, e
+                        );
+                        api_err_db(&e.to_string())
+                    })?;
                 affected += n;
             }
         }
@@ -817,7 +893,7 @@ async fn save_apply(
     // updated：带乐观锁基线（baseline=装载时 update_time）。有 baseline 且表有 update_time 列时，
     // UPDATE ... WHERE pk=$ AND update_time=baseline；影响 0 行 = 冲突。
     if let Some(ups) = bucket.get("updated").and_then(|v| v.as_array()) {
-        for row in ups {
+        for (row_index, row) in ups.iter().enumerate() {
             let id = match row.get("id") {
                 Some(v) if !v.is_null() => v.clone(),
                 _ => continue,
@@ -852,7 +928,9 @@ async fn save_apply(
             let pk_ph = i;
             params.push(to_dv_by_col(view, &view.pk, &id));
             // 乐观锁：baseline 存在 + 有 update_time 列 → 加 AND update_time = baseline。
+            // baseline 在下面 if let 中会被 move，先借出 JSON 字符串副本给后续日志使用。
             let baseline = row.get("baseline").filter(|b| !b.is_null()).cloned();
+            let baseline_repr = serde_json::to_string(&baseline).unwrap_or_default();
             let lock_clause = if let Some(b) = baseline.filter(|_| valid_col(view, "update_time")) {
                 i += 1;
                 params.push(to_dv_by_col(view, "update_time", &b));
@@ -871,9 +949,19 @@ async fn save_apply(
             let n = mm
                 .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                 .await
-                .map_err(|e| api_err_db(&e.to_string()))?;
+                .map_err(|e| {
+                    tracing::error!(
+                        "[DCT-SAVE-APPLY] sql_failed phase=updated dict_code={} table={} row_index={} id={} baseline={} sql={} err={}",
+                        view.dict_code, view.table_name, row_index, id, baseline_repr, sql, e
+                    );
+                    api_err_db(&e.to_string())
+                })?;
             if n == 0 && !lock_clause.is_empty() {
                 // 乐观锁冲突（baseline 不匹配）。
+                tracing::warn!(
+                    "[DCT-SAVE-APPLY] optimistic_lock_conflict dict_code={} table={} row_index={} id={} baseline={} sql={}",
+                    view.dict_code, view.table_name, row_index, id, baseline_repr, sql
+                );
                 return Ok((affected, updated_at, true, id_map));
             }
             affected += n;
@@ -884,17 +972,34 @@ async fn save_apply(
                     view.table_name, view.pk
                 );
                 let q_params = vec![to_dv_by_col(view, &view.pk, &id)];
-                if let Ok(ds) = mm
+                match mm
                     .query_sql_with_datavalues(db_id, Some(txn_id), &q, q_params, "ut")
                     .await
-                    && let Ok(v) = serde_json::to_value(&ds)
-                    && let Some(ut) = v
-                        .get("rows")
-                        .and_then(|r| r.get(0))
-                        .and_then(|r0| r0.get("ut"))
-                        .cloned()
                 {
-                    updated_at.push(json!({ "id": id, "updateTime": ut }));
+                    Ok(ds) => {
+                        if let Ok(v) = serde_json::to_value(&ds)
+                            && let Some(ut) = v
+                                .get("rows")
+                                .and_then(|r| r.get(0))
+                                .and_then(|r0| r0.get("ut"))
+                                .cloned()
+                        {
+                            updated_at.push(json!({ "id": id, "updateTime": ut }));
+                        } else {
+                            // 序列化/取值失败：仅日志告警，不影响主流程。
+                            tracing::warn!(
+                                "[DCT-SAVE-APPLY] update_time_extract_failed dict_code={} table={} row_index={} id={}",
+                                view.dict_code, view.table_name, row_index, id
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        // 辅助查询失败：仅日志告警，不影响主流程（主 UPDATE 已成功）。
+                        tracing::warn!(
+                            "[DCT-SAVE-APPLY] update_time_query_failed dict_code={} table={} row_index={} id={} sql={} err={}",
+                            view.dict_code, view.table_name, row_index, id, q, e
+                        );
+                    }
                 }
             }
         }
