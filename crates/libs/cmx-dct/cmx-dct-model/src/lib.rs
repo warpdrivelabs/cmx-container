@@ -29,6 +29,12 @@ pub struct DctQuery {
     pub file: Option<String>,
     /// 字典表 dictCode（如 currency / gl_account / bus_partner）
     pub dict: String,
+    /// 是否返回字段的扁平属性（width/visible/pattern/enumValues/required/intDigits/decimalDigits
+    /// 等）到 columns[].extra。默认 false（仅基本列信息，向后兼容）；字典数据维护页等需要
+    /// 完整字段属性做编辑/校验/布局的场景传 true。
+    /// query key 即 `with_props`（serde 无 rename）。
+    #[serde(default)]
+    pub with_props: bool,
 }
 
 /// search 请求体。
@@ -97,6 +103,11 @@ pub struct DictColumn {
     pub edit_settings: Option<Value>,
     /// 显示属性（原样透传 display{}，如下沉后的 decimalDigits/format）。
     pub display: Option<Value>,
+    /// 字段定义里的扁平属性（width/frozen/visible/required/align/intDigits/decimalDigits/
+    /// pattern/enumValues/defaultValue/agg/unique/maxlength/min/max 等），原样收集。
+    /// 仅在 `DctQuery.with_props=true` 时填充，避免基本场景的 meta payload 膨胀。
+    /// handler 投影时把键铺到列对象顶层（与字段定义 JSON 存储形态一致，前端可直接展开）。
+    pub extra: Option<Value>,
 }
 
 // ============================================================================

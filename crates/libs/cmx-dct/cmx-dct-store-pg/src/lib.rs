@@ -58,7 +58,11 @@ pub async fn resolve_db_id(db_id_header: Option<&str>) -> String {
 // ============================================================================
 
 /// 解析 `DctQuery` → 强类型 `DictView`（合并列 + base 字段集 + 校验规范缓存）。
-pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
+///
+/// `with_props`：是否把字段定义里的扁平属性（width/visible/pattern/enumValues/required/
+/// intDigits/decimalDigits 等）收集到 `DictColumn.extra`。仅 `/dct/meta` 在 `with_props=true`
+/// 时需要（供前端字典维护页构建完整列模型）；数据装载/回存场景传 false，保持 payload 精简。
+pub async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
     // file 缺失时自动解析：在该 domain/app/module 下扫描含 dictCode 的 DCT 文件。
     // 前端运行时只持有 dictCode + domain/app/module（host 无 file 坐标），故 file 由后端兜底。
     let file = match &q.file {
@@ -110,7 +114,8 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
     let push = |fields: &Vec<Value>,
                 columns: &mut Vec<DictColumn>,
                 raw_fields: &mut Vec<Value>,
-                seen: &mut std::collections::HashSet<String>| {
+                seen: &mut std::collections::HashSet<String>,
+                with_props: bool| {
         for f in fields {
             let name = match f.get("name").and_then(|v| v.as_str()) {
                 Some(n) if !n.is_empty() => n.to_string(),
@@ -134,6 +139,28 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
             let edit = f.get("edit").filter(|v| v.is_object()).cloned();
             let edit_settings = f.get("editSettings").filter(|v| v.is_object()).cloned();
             let display = f.get("display").filter(|v| v.is_object()).cloned();
+            // 扁平属性（字段定义顶层键）：仅在 with_props=true 时收集，按白名单取规范键
+            // （field-edit-display-modes.md §四 所列：列布局/基本/约束/治理的扁平键）。
+            // handler 投影时铺到列对象顶层，与字段定义 JSON 存储形态一致，前端可直接展开。
+            let extra = if with_props {
+                let mut x = serde_json::Map::new();
+                for k in [
+                    "width", "frozen", "visible", "required", "align", "intDigits", "decimalDigits",
+                    "pattern", "enumValues", "defaultValue", "agg", "unique", "maxlength", "min",
+                    "max", "placeholder", "label", "i18n", "searchable", "filterable", "sensitive",
+                ] {
+                    if let Some(v) = f.get(k) {
+                        x.insert(k.to_string(), v.clone());
+                    }
+                }
+                if x.is_empty() {
+                    None
+                } else {
+                    Some(Value::Object(x))
+                }
+            } else {
+                None
+            };
             columns.push(DictColumn {
                 caption,
                 data_type: f
@@ -175,6 +202,7 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
                 edit,
                 edit_settings,
                 display,
+                extra,
                 name,
             });
         }
@@ -257,20 +285,20 @@ pub async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
         for seg in &ordered_segs {
             if seg == "own" {
                 if let Some(own) = own_fields {
-                    push(own, &mut columns, &mut raw_fields, &mut seen);
+                    push(own, &mut columns, &mut raw_fields, &mut seen, with_props);
                 }
             } else if let Some(fields) = base_fieldset(&base, seg) {
-                push(fields, &mut columns, &mut raw_fields, &mut seen);
+                push(fields, &mut columns, &mut raw_fields, &mut seen, with_props);
             }
         }
     } else {
         // 默认（向后兼容）：本表 fields 在前 → 各引用按固定键序。
         if let Some(own) = own_fields {
-            push(own, &mut columns, &mut raw_fields, &mut seen);
+            push(own, &mut columns, &mut raw_fields, &mut seen, with_props);
         }
         for set_name in &declared_sets {
             if let Some(fields) = base_fieldset(&base, set_name) {
-                push(fields, &mut columns, &mut raw_fields, &mut seen);
+                push(fields, &mut columns, &mut raw_fields, &mut seen, with_props);
             }
         }
     }
@@ -896,6 +924,7 @@ mod tests {
             edit: None,
             edit_settings: None,
             display: None,
+            extra: None,
         }
     }
 

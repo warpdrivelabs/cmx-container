@@ -42,6 +42,9 @@ function isPkGenerated (meta) {
 
 function showInTable (col, meta) {
   if (DERIVED_HIERARCHY.has(col.name)) return false
+  // 元数据声明 visible:false → 列表隐藏（如 base 定义 id 列 visible:false）。
+  // 规范（field-edit-display-modes §四 flcLayout）：visible 是字段固有属性，应被尊重。
+  if (col.visible === false) return false
   return true
 }
 
@@ -149,6 +152,42 @@ function editModeFor (col, meta) {
   if (t === 'TINYINT') return { mode: 'checkbox' }
   if (t === 'INT' || t === 'BIGINT' || t === 'DECIMAL') return { mode: 'cmx-number-input' }
   return { mode: 'cmx-text-input' }
+}
+
+/** 把字段的 enumValues（数组或逗号串）映射成 select 的 options。
+ *  规范（field-edit-display-modes §四 constraint）：enumValues 映射成 edit.options + 强制 select。
+ *  该映射在 FLC 引擎（flexible-combination-engine.js）内自动做；data-editor 直接构造 CmxColumn，
+ *  故在此复刻同样逻辑。支持两种形态：
+ *    - 数组：['open','closed'] 或 [{value,label}]
+ *    - 逗号串：'open,closed'
+ *  返回 null 表示无可用枚举（调用方据此决定是否强制 select）。 */
+function enumOptionsFromField (col) {
+  const ev = col.enumValues
+  if (ev == null) return null
+  let arr = null
+  if (Array.isArray(ev)) arr = ev
+  else if (typeof ev === 'string' && ev.trim()) arr = ev.split(',').map((s) => s.trim()).filter(Boolean)
+  if (!arr || !arr.length) return null
+  return arr.map((v) => {
+    if (v && typeof v === 'object') return { value: v.value, label: v.label != null ? v.label : v.value }
+    return { value: v, label: String(v) }
+  })
+}
+
+/** 后端 with_props=true 下发的扁平字段属性白名单（field-edit-display-modes §四 所列规范键）。
+ *  这些键直接挂 CmxColumn 顶层：构造器的"完整继承"机制（cmx-column.js:118-122）会自动收纳，
+ *  toDescriptor 会输出 width/visible/frozen；其余键供编辑器/适配层按需读取。 */
+const FLAT_PROP_KEYS = [
+  'width', 'frozen', 'visible', 'align', 'intDigits', 'decimalDigits',
+  'maxlength', 'min', 'max', 'placeholder', 'defaultValue', 'agg',
+  'label', 'i18n', 'searchable', 'filterable', 'sensitive',
+]
+function flatPropsFor (col) {
+  const out = {}
+  for (const k of FLAT_PROP_KEYS) {
+    if (col[k] != null) out[k] = col[k]
+  }
+  return out
 }
 
 /** 把 DCT 元数据的 display 配置映射到 cmx-revo-grid 列的 display 对象。
@@ -451,7 +490,10 @@ async function loadDictList (def) {
 }
 
 async function loadMeta (def, dictCode) {
-  return apiGet(`/api/dct/meta?${qs(def, { dict: dictCode })}`, def.dbId)
+  // with_props=true：让后端把字段扁平属性（width/visible/pattern/enumValues/required/
+  // intDigits/decimalDigits 等）一并下发，供 buildColumnModel 严格按 field-edit-display-modes
+  // 规范构建列模型（列宽/隐藏/校验正则/枚举下拉/必填）。
+  return apiGet(`/api/dct/meta?${qs(def, { dict: dictCode, with_props: 'true' })}`, def.dbId)
 }
 
 /* ─────────────── 列模型（含 edit.mode 行内编辑配置） ─────────────── */
@@ -464,13 +506,24 @@ function buildColumnModel (meta) {
     .filter((c) => showInTable(c, meta))
     .map((c) => {
       const editable = isEditable(c, meta)
+      // 元数据 edit 基底：原样保留全部子属性（intDigits/decimalDigits/min/max/maxlength/
+      // pattern/placeholder/readonly/requiredWhen/editableWhen/visibleWhen/formatPattern/minDate/
+      // maxDate/inputType 等，见 EDITOR_PROPERTY_SCHEMA）。editModeFor 推断的 mode/options 仅覆盖
+      // 对应键，不破坏其余录入控件专属属性。
+      const metaEdit = (c.edit && typeof c.edit === 'object') ? { ...c.edit } : {}
+      // 扁平属性（后端 with_props=true 下发）：width/frozen/visible/align/intDigits/decimalDigits/
+      // maxlength/min/max/placeholder/defaultValue/agg/label/i18n/... 直接挂顶层。
+      const flat = flatPropsFor(c)
       const colOpts = {
         id: c.name,
         caption: colCaption(c),
         dataType: c.dataType,
-        width: defaultWidthFor(c),
+        ...flat,
       }
-      // 应用元数据的 display 配置（align/decimalDigits/format）
+      // 列宽：元数据优先（规范 width），缺失才回退按类型推断的默认值
+      colOpts.width = flat.width || defaultWidthFor(c)
+      // 应用元数据的 display 配置（align/decimalDigits/format/thousandSeparator/zeroAsBlank/
+      // negativeColor/badgeMap/link/icon 等）。displayFor 只透传规范值。
       const disp = displayFor(c)
       if (disp) colOpts.display = disp
       // 引用字典列：挂 refDict/displayField/refField 供 grid 回显（code → name）
@@ -482,11 +535,28 @@ function buildColumnModel (meta) {
 
       if (editable) {
         const em = editModeFor(c, meta)
-        colOpts.edit = { mode: em.mode, trigger: 'click' }
+        // edit 以元数据为基底，叠加推断的 mode/trigger/options；pattern 从扁平键补入 edit
+        // （cmx-text-input 编辑器从 field.pattern ?? edit.pattern 读正则做即时校验，
+        //  cmx-builtin-field-types.js 的 _fieldFromColData 透传）。
+        colOpts.edit = { ...metaEdit, mode: em.mode, trigger: 'click' }
         if (em.options) colOpts.edit.options = em.options
-        // 字典选择列（cmx-dict-selct）需要 editSettings 传字典坐标（cmx-dict-select 弹窗用）
+        if (!colOpts.edit.pattern && c.pattern) colOpts.edit.pattern = c.pattern
+        // enumValues → select：无 refDict 且元数据未显式指定 edit.mode 时，强制 select + options
+        // （复刻 FLC 引擎 flexible-combination-engine.js:467-473 的映射）。
+        if (!c.refDict && !metaEdit.mode) {
+          const opts = enumOptionsFromField(c)
+          if (opts) {
+            colOpts.edit.mode = 'select'
+            colOpts.edit.options = opts
+          }
+        }
+        // 字典选择列（cmx-dict-selct）需要 editSettings 传字典坐标（cmx-dict-select 弹窗用）。
+        // 以元数据 editSettings（设计器配的 helpLayout/displayMode/dictTitle/showClear/mruMax 等）
+        // 为基底，再覆盖运行时必需的 dictCode/idCol/labelCol/hierarchical/coord/parentCol。
         if (em.mode === 'cmx-dict-selct') {
+          const metaEs = (c.editSettings && typeof c.editSettings === 'object') ? { ...c.editSettings } : {}
           colOpts.editSettings = {
+            ...metaEs,
             dictCode: em.dictCode,
             idCol: em.idField,
             labelCol: em.labelField,
@@ -502,8 +572,10 @@ function buildColumnModel (meta) {
           }
           if (em.parentField) colOpts.editSettings.parentCol = em.parentField
         }
-        // 必填校验（元数据 nullable=false）
-        if (c.nullable === false) colOpts.edit.required = true
+        // 必填：元数据 edit.required / 顶层 required 优先；其次 nullable=false 推断（向后兼容）
+        if (colOpts.edit.required === true || c.required === true || c.nullable === false) {
+          colOpts.edit.required = true
+        }
         // code 主键（业务键）：新增行可填，保存后只读
         // 用 grid 内部 id 字段的 't' 前缀判断新增态；readonlyWhen 是 formula-eval 表达式
         if (!pkGenerated && c.name === pk) {
@@ -511,9 +583,10 @@ function buildColumnModel (meta) {
           colOpts.edit.required = true
         }
       } else {
-        // 不可编辑列：保留元数据的 edit.mode（如 checkbox 显示复选框样式），否则 readonly
-        const metaMode = c.edit && c.edit.mode ? String(c.edit.mode).toLowerCase() : ''
-        colOpts.edit = (metaMode === 'checkbox') ? { mode: 'checkbox' } : { mode: 'readonly' }
+        // 不可编辑列：保留元数据的 edit.mode（如 checkbox 显示复选框样式），否则 readonly。
+        // 仍透传元数据 edit 的其余子属性（如 pattern 供展示态校验信息）。
+        const metaMode = metaEdit.mode ? String(metaEdit.mode).toLowerCase() : ''
+        colOpts.edit = (metaMode === 'checkbox') ? { ...metaEdit, mode: 'checkbox' } : { ...metaEdit, mode: 'readonly' }
       }
       // checkbox 列内容居中（✓ / 空心框），呼应 cmx-checkbox-field-type 的 cellTemplate
       if (colOpts.edit && colOpts.edit.mode === 'checkbox') {
