@@ -159,7 +159,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择国家",
             "showClear": true
           }
@@ -187,7 +187,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择公司货币",
             "showClear": true
           }
@@ -303,7 +303,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择所属公司",
             "showClear": true
           }
@@ -331,7 +331,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择国家",
             "showClear": true
           }
@@ -359,7 +359,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择本位币",
             "showClear": true
           }
@@ -2991,7 +2991,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择国家",
             "showClear": true
           }
@@ -3241,7 +3241,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择国家",
             "showClear": true
           }
@@ -3664,7 +3664,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择账户币种",
             "showClear": true
           }
@@ -4153,7 +4153,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择本国货币",
             "showClear": true
           }
@@ -4365,7 +4365,7 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
+            "helpLayout": "grid",
             "dictTitle": "选择国家",
             "showClear": true
           }

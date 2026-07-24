@@ -31,13 +31,21 @@ const AUDIT_FIELDS = new Set(['create_by', 'create_time', 'update_by', 'update_t
 const SYSTEM_FLAG_FIELDS = new Set(['is_system'])
 const DERIVED_HIERARCHY = new Set(['full_path', 'level_no', 'is_leaf'])
 
-/** 主键是否由后端自动生成（整数主键铸号）。
- *  判据与后端 pk_is_generated 一致：主键列 dataType 含 "INT" → 服务端生成，前端不填。
- *  反之（如 code 作 PK 的字符串业务键）→ 用户新增时必填，保存后不可改。 */
-function isPkGenerated (meta) {
-  const pkCol = (meta.columns || []).find((c) => c.name === meta.pk)
-  if (!pkCol) return false
-  return String(pkCol.dataType || '').toUpperCase().includes('INT')
+/** 判断字段是否为主键（兼容 isPrimaryKey:1/true 与 meta.pk 两种标记）。
+ *  元数据字段可能用 isPrimaryKey（0/1 或 boolean）显式标记，也可能仅由 meta.pk 声明。 */
+function isPrimaryKeyField (col, meta) {
+  if (Number(col.isPrimaryKey) === 1 || col.isPrimaryKey === true) return true
+  return !!meta.pk && col.name === meta.pk
+}
+
+/** 字符串主键（业务键，如 code）：主键 + dataType 为 VARCHAR/CHAR/TEXT。
+ *  这类字段新增时由用户填写，保存后只读（由 readonlyWhen 行级条件控制）。
+ *  与之相对：整数主键（INT/BIGINT）由后端铸号，前端不填。 */
+function isStringPk (col, meta) {
+  if (!isPrimaryKeyField(col, meta)) return false
+  const t = String(col.dataType || '').toUpperCase()
+  // VARCHAR/CHAR/TEXT/STRING 视为字符串业务键；INT/BIGINT 为后端铸号
+  return t.includes('CHAR') || t.includes('TEXT') || t === 'STRING'
 }
 
 function showInTable (col, meta) {
@@ -49,11 +57,11 @@ function showInTable (col, meta) {
 }
 
 /** 行内是否可编辑：
- *  - id 主键（整数，后端铸号）→ 不可编辑
- *  - code 主键（字符串业务键）→ 可编辑（用 readonlyWhen 限定：仅新增行可填，已存在行只读）
+ *  - 字符串主键（业务键，如 code）→ 可编辑（用 readonlyWhen 限定：仅新增行可填，已存在行只读）
+ *  - 整数主键（id，后端铸号）→ 不可编辑
  *  - 审计/系统标识/派生层级 → 不可编辑 */
 function isEditable (col, meta) {
-  if (col.name === meta.pk) return !isPkGenerated(meta)
+  if (isPrimaryKeyField(col, meta)) return isStringPk(col, meta)
   if (AUDIT_FIELDS.has(col.name)) return false
   if (SYSTEM_FLAG_FIELDS.has(col.name)) return false
   if (DERIVED_HIERARCHY.has(col.name)) return false
@@ -500,8 +508,6 @@ async function loadMeta (def, dictCode) {
 function buildColumnModel (meta) {
   const C = cmx()
   if (!C.CmxColumnModel || !C.CmxColumn) return null
-  const pk = meta.pk
-  const pkGenerated = isPkGenerated(meta)
   const members = (meta.columns || [])
     .filter((c) => showInTable(c, meta))
     .map((c) => {
@@ -576,9 +582,13 @@ function buildColumnModel (meta) {
         if (colOpts.edit.required === true || c.required === true || c.nullable === false) {
           colOpts.edit.required = true
         }
-        // code 主键（业务键）：新增行可填，保存后只读
-        // 用 grid 内部 id 字段的 't' 前缀判断新增态；readonlyWhen 是 formula-eval 表达式
-        if (!pkGenerated && c.name === pk) {
+        // 字符串主键（业务键，如 code）：新增时可填，保存后只读。
+        // 关键：必须用可编辑的 mode（cmx-text-input）+ readonlyWhen 行级条件来达成"新增可填/存量只读"。
+        // 若沿用元数据的 edit.mode='readonly'，整列会被 cmx-column-adapter 标成 col.readonly=true，
+        // revo-grid 在 focus 阶段直接跳过编辑，beforeedit 不派发，readonlyWhen 无从求值 → 新增也填不了。
+        // readonlyWhen 用 grid 内部 id 字段的 't' 前缀判断新增态（addRow 生成 tempId='t...'）。
+        if (isStringPk(c, meta)) {
+          colOpts.edit.mode = 'cmx-text-input'
           colOpts.edit.readonlyWhen = `NOT(STARTSWITH(id, 't'))`
           colOpts.edit.required = true
         }
@@ -746,24 +756,20 @@ function addRow (root) {
   const meta = state.meta
   const grid = state.grid
   if (!meta || !grid || !grid.addRow) return
-  const pk = meta.pk
-  const pkGenerated = isPkGenerated(meta)
   // 临时行标识（grid 内部用 id 字段做行标识，cmx-revo-grid 要求每行有 id）
   const tempId = `t${Date.now()}${Math.floor(Math.random() * 1000)}`
   const newRow = { id: tempId }
-  if (pkGenerated) {
-    // id 主键（整数，后端铸号）：pk 字段填临时值，保存时后端替换
-    newRow[pk] = tempId
-  } else {
-    // code 主键（字符串业务键）：pk 字段（code）留空让用户填，readonlyWhen 用 id 的 't' 前缀判断新增态
-    newRow[pk] = ''
+  // 主键字段：整数主键（后端铸号）填临时 id（保存时后端替换）；
+  // 字符串主键（业务键）留空让用户填，readonlyWhen 用 id 的 't' 前缀判断新增态
+  for (const c of (meta.columns || [])) {
+    if (!isPrimaryKeyField(c, meta)) continue
+    newRow[c.name] = isStringPk(c, meta) ? '' : tempId
   }
-  // 可编辑列给默认值：未填字段用 null（后端 build_upsert_sql 对 null 用 SQL NULL 字面量，
+  // 可编辑非主键列给默认值：未填字段用 null（后端 build_upsert_sql 对 null 用 SQL NULL 字面量，
   // 正确处理；空字符串 "" 会被当真实值插入，对 INT/DATE 等类型报错）。
   // 仅 status=1（启用）、sort_no=0 给业务默认值。
-  const editableCols = (meta.columns || []).filter((c) => isEditable(c, meta))
+  const editableCols = (meta.columns || []).filter((c) => isEditable(c, meta) && !isPrimaryKeyField(c, meta))
   for (const c of editableCols) {
-    if (c.name === pk) continue  // pk 已处理
     if (c.name === 'status') newRow.status = 1
     else if (c.name === 'sort_no') newRow.sort_no = 0
     else newRow[c.name] = null
