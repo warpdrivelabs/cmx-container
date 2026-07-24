@@ -65,6 +65,11 @@ impl ModuleRoutes for ReportModule {
                 "/report-design/reports/{code}/data/query",
                 post(handlers::report_design_query_data),
             )
+            // 打开报表：一次调用取全集（版式+cellMap+元素+函数[+数据]），替代前端顺序多调。
+            .route(
+                "/report-design/reports/{code}/open",
+                post(handlers::report_design_open_report),
+            )
             .route(
                 "/report-design/reports/{code}/data",
                 post(handlers::report_design_save_data),
@@ -82,6 +87,21 @@ impl ModuleRoutes for ReportModule {
             .route(
                 "/report-design/reports/{code}/ops",
                 get(handlers::report_design_list_ops).post(handlers::report_design_apply_ops),
+            )
+            // 计算路由设置：报表取数路由绑定（cr_report_source_binding）注册 CRUD。
+            //   单据类型 + 组织 → 物理目标(db_id|service)。list 用 {key}，delete 用独立
+            //   /id/{id} 子路径避免与 {key} 路由歧义（照 cmx-flow 子流程绑定端点）。
+            .route(
+                "/report-source-bindings",
+                post(handlers::upsert_report_source_binding),
+            )
+            .route(
+                "/report-source-bindings/{key}",
+                get(handlers::list_report_source_bindings),
+            )
+            .route(
+                "/report-source-bindings/id/{id}",
+                axum::routing::delete(handlers::delete_report_source_binding),
             )
             // 旧 html 报表设计器预览兼容接口；新工作台不使用。
             .route("/rpt/compute", post(handlers::rpt_compute))

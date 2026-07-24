@@ -185,6 +185,15 @@ impl JobManager {
         self.inner.summary_hub.broadcast(SUMMARY_CHANNEL, ev);
     }
 
+    /// 汇总流广播「作业已移除」（归档/删除）：前端据此从活跃列表删除该行。
+    fn emit_summary_removed(&self, id: JobId) {
+        let ev = JobEvent::new(
+            "job",
+            serde_json::json!({ "id": id.to_string(), "removed": true }),
+        );
+        self.inner.summary_hub.broadcast(SUMMARY_CHANNEL, ev);
+    }
+
     /// 下一条日志 seq（预留：M2 日志走 SSE，DB 日志表留待 M3 消费）。
     #[allow(dead_code)]
     fn next_log_seq(&self, id: JobId) -> i64 {
@@ -765,6 +774,8 @@ impl JobManager {
                 self.inner.table.remove(&id);
                 self.inner.controls.remove(&id);
                 self.inner.hub.clear(id);
+                // 汇总流推「移除」事件：前端据此从活跃列表删除该行（推送替代轮询，无需前端轮询发现归档）。
+                self.emit_summary_removed(id);
                 ControlOutcome::Accepted
             }
             Some(s) => ControlOutcome::Rejected(format!("{} 未终结，不可归档", s.as_str())),

@@ -44,8 +44,9 @@ const state = {
   hosts: new Set(),     // 挂载的 host 集合（多区/多标签页刷新）
   es: null,             // 当前单作业 EventSource
   esJobId: '',          // es 订阅的作业 id（避免重复订阅）
-  summaryEs: null,      // 汇总 SSE（列表页实时刷新，M2）
-  pollTimer: null,      // 列表轮询定时器（汇总流之外的兜底追平）
+  summaryEs: null,      // 汇总 SSE（服务端推送：后端有变化即推，取代轮询）
+  summaryReady: false,  // 汇总流是否已首次连上（用于区分首连 vs 断线重连补拉）
+  liveTimer: null,      // 存活看门狗（仅剔除已关闭 host + 停摆，不拉数据）
   // 新建作业表单模型
   form: {
     kind: 'job.demo',
@@ -96,6 +97,16 @@ const KIND_LABEL = {
   'rpt.verify': '报表校验',
 }
 const kindLabel = (k) => KIND_LABEL[k] ? `${KIND_LABEL[k]} (${k})` : k
+
+// 作业种类 → 标题着色 class（对应 CSS 里各 .kc-* 用主题变量着色，适配 light/dark）。
+// 未知种类回落 kc-default（主文本色）。同前缀（rpt.*）也可归一，但这里按具体 kind 区分更清晰。
+const KIND_COLOR = {
+  'job.demo': 'kc-demo',
+  'job.consumer': 'kc-consumer',
+  'rpt.compute': 'kc-compute',
+  'rpt.verify': 'kc-verify',
+}
+const kindColorClass = (k) => KIND_COLOR[k] || 'kc-default'
 
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -351,15 +362,31 @@ function closeEs () {
   state.esJobId = ''
 }
 
-// 汇总 SSE（M2）：订阅 /api/jobs/events，收 job 摘要事件 → upsert 列表行，实时刷新。
+// 汇总 SSE：订阅 /api/jobs/events，后端有任何作业变化即主动推 job 摘要事件 → 实时更新列表。
+// 这是「服务端推送」的核心——取代定时轮询：提交/状态跃迁/进度/终态/归档 后端都会推。
 function subscribeSummary () {
   if (state.summaryEs) return
   const es = new EventSource('/api/jobs/events')
   state.summaryEs = es
+  // 断线重连（EventSource 原生自动重连）后，全量拉一次对齐，补回断连期间漏推的变化。
+  es.addEventListener('open', () => {
+    if (state.summaryReady) loadJobs()  // 首次 open 不重复拉（mount 已 loadJobs）；重连才补拉
+    state.summaryReady = true
+  })
   es.addEventListener('job', (e) => {
     const j = safeParse(e.data)
     if (!j || !j.id) return
-    const idx = state.jobs.findIndex((x) => String(x.id) === String(j.id))
+    const id = String(j.id)
+    // 移除事件（归档/删除）：从活跃列表删行，若正选中则清详情。
+    if (j.removed) {
+      const i = state.jobs.findIndex((x) => String(x.id) === id)
+      if (i >= 0) state.jobs.splice(i, 1)
+      state.throughput.delete(id)
+      if (state.selectedId === id) { closeEs(); state.selectedId = ''; state.detail = null; state.items = new Map(); state.logs = [] }
+      refreshMonitor('active')
+      return
+    }
+    const idx = state.jobs.findIndex((x) => String(x.id) === id)
     const merged = idx >= 0
       ? { ...state.jobs[idx], ...j, progress: { ...(state.jobs[idx].progress || {}), ...summaryProgress(j) } }
       : { ...j, progress: summaryProgress(j) }
@@ -384,7 +411,12 @@ function openMonitor (id) {
   state.items = new Map()
   state.logs = []
   refreshDetail(id)
-  subscribe(id)
+  // 只对活跃（非终态）作业订阅实时 SSE。终态作业无实时流——一连上就 done 关流，
+  // 若还订阅会触发「连上→done→重渲→再订」的死循环。终态作业详情靠 refreshDetail 一次拉取即可。
+  const j = state.jobs.find((x) => String(x.id) === String(id))
+  const terminal = j && ['completed', 'failed', 'cancelled'].includes(j.status)
+  if (terminal) closeEs()
+  else subscribe(id)
   refreshMonitor('active')
 }
 
@@ -409,7 +441,8 @@ function subscribe (id) {
     const d = safeParse(e.data)
     if (d && state.detail) { state.detail.status = d.status }
     refreshMonitor('active')
-    if (d && ['completed', 'failed', 'cancelled'].includes(d.status)) { loadJobs() }
+    // 终态：关闭本作业流（无更多实时事件）。列表变化由汇总流推送，无需在此 loadJobs（否则触发循环）。
+    if (d && ['completed', 'failed', 'cancelled'].includes(d.status)) { closeEs() }
   })
   es.addEventListener('progress', (e) => {
     const d = safeParse(e.data)
@@ -445,7 +478,7 @@ function subscribe (id) {
     if (d && state.detail) state.detail.error = d
     refreshMonitor('active')
   })
-  es.addEventListener('done', () => { closeEs(); loadJobs() })
+  es.addEventListener('done', () => { closeEs() }) // 流终结：仅关流。列表更新靠汇总流推送。
 }
 
 function applyProgress (p) {
@@ -607,7 +640,16 @@ function styleCss () {
   .jc .jobrow.sel{border-color:var(--jc-accent);box-shadow:0 0 0 1px var(--jc-accent) inset,0 2px 14px color-mix(in srgb,var(--jc-accent) 30%,transparent)}
   .jc .jobrow.sel::before{background:var(--jc-accent)}
   .jc .jobrow .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:2px}
-  .jc .jobrow .title{font-weight:600;font-size:13px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;flex:1;min-width:0}
+  .jc .jobrow .title{font-weight:600;font-size:13px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;flex:1;min-width:0;
+    padding:3px 9px;border-radius:6px;border:1px solid transparent}
+  /* 按作业种类给整个标题区上色：淡色底(accent 混入透明,light/dark 皆自适配) + accent 文字 + 同色描边。
+     色板用 UI5 Fiori 分类色 --sapAccentColor*（主题自动调对比度），深色 hex 作 fallback。混色比例
+     参照本页状态徽标(.st-*)——15% 底在浅底/深底都读得清，文字用满色保证对比。 */
+  .jc .jobrow .title.kc-default{color:var(--jc-txt);background:color-mix(in srgb,var(--jc-dim) 12%,transparent);border-color:color-mix(in srgb,var(--jc-dim) 22%,transparent)}
+  .jc .jobrow .title.kc-demo{color:var(--sapAccentColor5,#b072d0);background:color-mix(in srgb,var(--sapAccentColor5,#b072d0) 15%,transparent);border-color:color-mix(in srgb,var(--sapAccentColor5,#b072d0) 30%,transparent)}
+  .jc .jobrow .title.kc-consumer{color:var(--sapAccentColor8,#4a90d9);background:color-mix(in srgb,var(--sapAccentColor8,#4a90d9) 15%,transparent);border-color:color-mix(in srgb,var(--sapAccentColor8,#4a90d9) 30%,transparent)}
+  .jc .jobrow .title.kc-compute{color:var(--sapAccentColor6,#2f9e8f);background:color-mix(in srgb,var(--sapAccentColor6,#2f9e8f) 15%,transparent);border-color:color-mix(in srgb,var(--sapAccentColor6,#2f9e8f) 30%,transparent)}
+  .jc .jobrow .title.kc-verify{color:var(--sapAccentColor3,#c77e23);background:color-mix(in srgb,var(--sapAccentColor3,#c77e23) 15%,transparent);border-color:color-mix(in srgb,var(--sapAccentColor3,#c77e23) 30%,transparent)}
   .jc .kind{font-family:"SF Mono",Menlo,monospace;font-size:11px;color:var(--jc-link);opacity:.85;margin-top:3px}
   .jc .bar{height:7px;background:var(--jc-sunken);border-radius:20px;overflow:hidden;margin:10px 0 3px;box-shadow:inset 0 1px 2px rgba(0,0,0,.2)}
   .jc .bar>i{display:block;height:100%;border-radius:20px;background:var(--jc-info);transition:width .35s cubic-bezier(.4,0,.2,1)}
@@ -768,7 +810,7 @@ function jobRowHtml (j) {
   }
   return `<div class="jobrow${sel}${svc ? ' svc' : ''}" data-job="${esc(j.id)}">
     <div class="top">
-      <span class="title">${esc(j.title)}</span>
+      <span class="title ${kindColorClass(j.kind)}">${esc(j.title)}</span>
       ${statusBadge(j.status)}
     </div>
     <div class="kind">${svc ? '◆ ' : ''}${esc(j.kind)} · #${esc(j.id)}</div>
@@ -936,7 +978,7 @@ function historyRowHtml (j) {
   const sel = String(j.id) === state.histSel.selectedId ? ' sel' : ''
   return `<div class="jobrow${sel}" data-hist="${esc(j.id)}">
     <div class="top">
-      <span class="title">${esc(j.title)}</span>
+      <span class="title ${kindColorClass(j.kind)}">${esc(j.title)}</span>
       ${statusBadge(j.status)}
     </div>
     <div class="kind">${esc(j.kind)} · #${esc(j.id)}</div>
@@ -1163,6 +1205,8 @@ function refreshAll () {
     if (!host || !host.isConnected) { state.hosts.delete(host); continue }
     renderInto(host, host.__jcView || 'content')
   }
+  // 页面已全部关闭：借任意刷新时机彻底停摆（比 30s 轮询看门狗更快释放 SSE/定时器）。
+  if (state.hosts.size === 0 && (state.liveTimer || state.summaryEs || state.es)) teardown()
 }
 
 function refreshView (which) {
@@ -1176,6 +1220,7 @@ function refreshView (which) {
 // 不传则刷全部内容/属性区。永不刷 explorer（保表单焦点）。
 function refreshMonitor (onlyMode) {
   for (const host of Array.from(state.hosts)) {
+    if (!host || !host.isConnected) { state.hosts.delete(host); continue }
     const v = host.__jcView || 'active'
     if (v === 'property') { renderInto(host, v); continue }
     const isContent = v === 'active' || v === 'history' || v === 'content'
@@ -1186,6 +1231,8 @@ function refreshMonitor (onlyMode) {
     }
     renderInto(host, v)
   }
+  // 页面已全部关闭：借 SSE 事件驱动的刷新时机尽快停摆（关页后下一个事件即释放）。
+  if (state.hosts.size === 0 && (state.liveTimer || state.summaryEs || state.es)) teardown()
 }
 
 function mount (ctx, view) {
@@ -1193,14 +1240,38 @@ function mount (ctx, view) {
   state.hosts.add(host)
   if (host) host.__jcView = view
   requestAnimationFrame(() => renderInto(host, view))
-  if (!state.pollTimer) {
-    loadJobs()
-    subscribeSummary()
-    state.pollTimer = setInterval(() => { if (state.hosts.size) loadJobs() }, 30000)
+  if (!state.liveTimer) {
+    loadJobs()          // 首帧全量快照（一次性，非轮询）
+    subscribeSummary()  // 之后全靠汇总 SSE 推送更新，不再定时拉取
+    // 存活看门狗：只剔除已关闭 host + 停摆，绝不拉数据（数据靠推送）。空闲时 SSE 不发事件，
+    // 故仍需一个低频 tick 兜底检测「页面已关」以释放 SSE/定时器；60s 足够，且不打后端。
+    state.liveTimer = setInterval(() => {
+      pruneHosts()
+      if (state.hosts.size === 0) teardown()
+    }, 60000)
   }
   // 历史视图挂载时拉取历史数据（首次进入即有内容 + 默认选中第一个）。
   if (view === 'history') loadHistory()
   return `<style>${styleCss()}</style>${viewHtml(view)}`
+}
+
+// 剔除已从 DOM 卸载的 host（切走/关闭工作台后其 shadow root isConnected=false）。
+function pruneHosts () {
+  for (const h of Array.from(state.hosts)) {
+    if (!h || !h.isConnected) state.hosts.delete(h)
+  }
+}
+
+// 页面全部关闭时的彻底停摆：停看门狗定时器 + 关闭汇总流与单作业流，清空运行态。
+function teardown () {
+  if (state.liveTimer) { clearInterval(state.liveTimer); state.liveTimer = null }
+  state.summaryReady = false
+  if (state.summaryEs) { try { state.summaryEs.close() } catch (_) {} state.summaryEs = null }
+  closeEs()
+  state.selectedId = ''
+  state.detail = null
+  state.items = new Map()
+  state.logs = []
 }
 
 export default {

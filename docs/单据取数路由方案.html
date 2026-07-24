@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>单据取数路由方案 · 多端点多组织</title>
+<style>
+  :root{
+    --design:#4a90d9; --calc:#42a86b; --apply:#f0b429; --warn:#e0857a;
+    --bg:#0f1419; --card:#1a2028; --card2:#232b35; --txt:#e6edf3; --dim:#8b98a5;
+    --line:#2d3742; --accent:#f0b429; --code:#a9c7e8;
+    --doc:#c98fe0; --rpt:#4a90d9; --net:#5bb8c4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 90px}
+  h1{font-size:28px;font-weight:700;margin:0 0 6px;letter-spacing:.3px}
+  h2{font-size:20px;font-weight:600;margin:52px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;font-weight:600;margin:30px 0 10px;color:var(--accent)}
+  h4{font-size:14px;font-weight:600;margin:20px 0 8px;color:var(--txt)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:4px}
+  p{margin:10px 0}
+  .meta{background:var(--card);border-radius:10px;padding:16px 20px;margin:20px 0;font-size:13px;color:var(--dim)}
+  .meta b{color:var(--txt)}
+  .meta div{margin:3px 0}
+  code{background:#0d1117;padding:1.5px 6px;border-radius:4px;font-size:12.5px;color:var(--code);
+    font-family:"SF Mono",Menlo,Consolas,monospace}
+  pre{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;margin:14px 0;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6}
+  pre code{background:none;padding:0;color:#c9d6e3}
+  .k{color:#f0b429}.s{color:#7fd4a3}.c{color:#8b98a5;font-style:italic}.n{color:#8fc0ef}.f{color:#e6a2d8}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;background:var(--card);border-radius:10px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--card2);font-weight:600;color:var(--dim);font-size:12px}
+  tbody tr:hover{background:#20272f}
+  .mono{font-family:"SF Mono",Menlo,monospace;font-size:12px;color:var(--code)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600;margin-right:6px}
+  .b-reuse{background:rgba(120,120,180,.2);color:#b0b0e0}
+  .b-new{background:rgba(224,133,122,.18);color:#eaa79d}
+  .b-doc{background:rgba(201,143,224,.18);color:#d9b0ea}
+  .b-rpt{background:rgba(74,144,217,.18);color:#8fc0ef}
+  .b-flow{background:rgba(66,168,107,.18);color:#7fd4a3}
+  .callout{border-left:3px solid var(--accent);background:var(--card);border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;font-size:13px}
+  .callout.good{border-left-color:var(--calc)}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout.pick{border-left-color:var(--rpt)}
+  .callout b{color:var(--txt)}
+  .toc{background:var(--card);border-radius:10px;padding:18px 22px;margin:24px 0}
+  .toc h4{margin:0 0 10px;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .toc ol{margin:0;padding-left:20px;columns:2;column-gap:36px}
+  .toc li{margin:4px 0;break-inside:avoid}
+  .toc a{color:var(--code);text-decoration:none}
+  .toc a:hover{color:var(--accent);text-decoration:underline}
+  .flow{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:18px;margin:16px 0;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12px;line-height:1.55;color:#c9d6e3;white-space:pre;overflow-x:auto}
+  .pill{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11px;font-family:"SF Mono",Menlo,monospace;
+    background:#0d1117;border:1px solid var(--line);color:var(--code);margin:0 2px}
+  .foot{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+  .cols2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+  .yes{color:#7fd4a3;font-weight:600}.no{color:#eaa79d;font-weight:600}.mid{color:#f0cd76;font-weight:600}
+  .opt{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0}
+  .opt h3{margin-top:4px}
+  .opt.rec{border-color:var(--calc);box-shadow:inset 0 0 0 1px rgba(66,168,107,.25)}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;background:var(--card2);color:var(--dim);margin:0 4px 4px 0}
+  .num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;
+    background:var(--rpt);color:#08121e;font-weight:700;font-size:12px;margin-right:8px}
+  .step{display:flex;gap:10px;margin:8px 0;align-items:flex-start}
+  .step .n2{flex:0 0 24px;height:24px;border-radius:50%;background:var(--card2);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+  hr{border:none;border-top:1px dashed var(--line);margin:26px 0}
+  @media(max-width:820px){.toc ol{columns:1}.cols2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>单据取数路由方案 · 多端点 / 多组织</h1>
+<div class="sub">Doc-Source Routing · 逻辑单据类型 → 物理端点 · 组织继承解析 · Scatter-Gather 合批 · 照搬已验证范式</div>
+
+<div class="meta">
+  <div><b>本篇定位</b>：<a style="color:#8fc0ef">《业务单据 ↔ 报表取数打通方案》</a>的<b>路由专题扩展（§17）</b>。上一篇解决"报表怎么取单据数据"，本篇解决"当每种单据、甚至同种单据的不同部署，分散在不同服务器/库上时，取数请求<b>该发往哪里</b>"。</div>
+  <div><b>要解决的问题</b>：① 不同类型单据在不同服务器（数据+应用），连接路径各异；② <b>同一类单据也可能部署在不同的应用/数据服务上</b>（按组织、按租户、按历史分片）。取数路由必须<b>运行时可解析</b>，不能编译期写死。</div>
+  <div><b>核心结论</b>：<b>需要配置，但不是扁平的"类型→服务器"表</b>——那会被"同类不同部署"击穿成条目爆炸。正解是<b>多维路由键 <code>(单据类型, 组织, 期间…)</code> + 两级解耦</b>（治理面：慢变、按组织继承；地址面：快变、服务发现动态解析）。</div>
+  <div><b>最大利好</b>：这套"逻辑名 + 组织 → 物理目标"的三层解析，代码库里<b>已有 1:1 可照搬的成品</b>——cmx-flow 的 <span class="pill">SubflowRouter</span> + <span class="pill">cmx_flow_subflow_binding</span> 绑定表 + CRUD 管理面。外加 cmx-plugin 的 <span class="pill">remote_importers</span>"类别→服务名/URL"双模式解析可作跨服务落点蓝本。<b>不是新造，是改字段平移。</b></div>
+  <div><b>状态</b>：<b>架构方案，不动代码</b>。</div>
+</div>
+
+<div class="toc">
+  <h4>目录</h4>
+  <ol>
+    <li><a href="#s1">1 · 直答：需要配置，但形态是关键</a></li>
+    <li><a href="#s2">2 · 为什么扁平表会崩</a></li>
+    <li><a href="#s3">3 · 路由键是多维的</a></li>
+    <li><a href="#s4">4 · 两级解耦：治理面 + 地址面</a></li>
+    <li><a href="#s5">5 · 现成范式盘点（可照搬）</a></li>
+    <li><a href="#s6">6 · 四种路由方案对比择优</a></li>
+    <li><a href="#s7">7 · 推荐架构：ReportSourceRouter</a></li>
+    <li><a href="#s8">8 · 绑定表 DDL + 三层继承算法</a></li>
+    <li><a href="#s9">9 · 组织上下文透传（关键缺口）</a></li>
+    <li><a href="#s10">10 · Scatter-Gather：跨端点合批</a></li>
+    <li><a href="#s11">11 · 地址面：db_id / 服务发现落点</a></li>
+    <li><a href="#s12">12 · 治理面：绑定矩阵管理 UI</a></li>
+    <li><a href="#s13">13 · 缓存 · 一致性 · 失败降级</a></li>
+    <li><a href="#s14">14 · 分期实施</a></li>
+    <li><a href="#s15">15 · 接缝清单 + 待拍板</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s1">1 · 直答：需要配置，但形态是关键</h2>
+<p>你的直觉是对的——<b>必须有配置来指定路由</b>，取数侧不能靠猜哪台服务器有数据。但真正的问题不是"要不要配置"，而是<b>配置长什么样</b>。一张朴素的"单据类型 → 服务器"映射表能应付第一个诉求（不同类型在不同服务器），却会被你提的第二个诉求击穿：</p>
+<div class="callout warn">
+<b>"同一类单据也可能部署在不同的应用/数据服务上"——这一句就决定了路由键不能只有"单据类型"一个维度。</b> 一旦同类分散，扁平表就退化为"每个(类型 × 组织 × 实例)一条记录"，条目爆炸、且单据每迁移一次就要手工改配置、必然漂移。
+</div>
+<p>本方案给出的形态是：<b>多维路由键 + 组织继承 + 两级解耦 + 照搬现成范式</b>。下面逐层展开为什么。</p>
+
+<!-- ============================================================ -->
+<h2 id="s2">2 · 为什么扁平表会崩</h2>
+<p>设想最直白的配置——一张 <code>doc_type → server</code> 表。看它在四种现实压力下如何变形：</p>
+<table>
+  <thead><tr><th>现实压力</th><th>扁平表的下场</th></tr></thead>
+  <tbody>
+    <tr><td>不同类型不同服务器</td><td class="yes">✓ 能应付（这是它唯一能处理的情形）</td></tr>
+    <tr><td>同类型按组织分库（北京凭证在A、上海在B）</td><td class="no">✗ 退化为 <code>(类型,组织)→server</code>，每个组织一行；1000 个组织 = 1000 行</td></tr>
+    <tr><td>大部分组织走默认、少数例外</td><td class="no">✗ 无"默认+例外"表达力，要么全列举，要么写不下例外</td></tr>
+    <tr><td>单据服务扩容/迁移/换机房</td><td class="no">✗ 物理地址写死在表里，一迁就要改所有相关行，漂移</td></tr>
+  </tbody>
+</table>
+<p>崩溃的根因有两个，分别对应第 3、4 节的两个设计决定：<b>①路由键维度不足</b>（只有类型，没有组织）；<b>②把"归属治理"和"物理地址"焊死在一张表</b>（治理慢变、地址快变，混在一起互相拖累）。</p>
+
+<!-- ============================================================ -->
+<h2 id="s3">3 · 路由键是多维的</h2>
+<p>"同一类单据分散在不同服务器"这件事，<b>几乎从不是随机分散的</b>，而是<b>沿某个业务维度分片</b>的。把分片维度显式建进路由键，分散就被自然表达，而不是靠堆记录去枚举。</p>
+<table>
+  <thead><tr><th>分片维度</th><th>典型场景</th><th>是否已有现成载体</th></tr></thead>
+  <tbody>
+    <tr><td><b>组织</b>（主）</td><td>北京公司凭证在总部库、子公司凭证在各自库；集团多法人分库</td><td class="yes">✓ <code>cmx_org.path</code> 物化路径 + flow 已用它做继承路由</td></tr>
+    <tr><td>期间</td><td>当年数据在生产库、历史归档在冷库</td><td class="mid">△ 单据有 period_code 列，路由需扩展</td></tr>
+    <tr><td>租户</td><td>SaaS 多租户，每租户独立库/服务</td><td class="mid">△ 需租户上下文</td></tr>
+    <tr><td>单据类型</td><td>凭证在总账服务、费用单在费控服务</td><td class="yes">✓ moduleMeta 有 doc_type / moduleCode</td></tr>
+  </tbody>
+</table>
+<div class="callout pick">
+<b>设计决定 ①：路由键 = <code>(单据类型, 组织)</code> 为主，<code>期间/租户</code> 为可选扩展维。</b> 其中<b>组织是一等维度</b>——因为最常见的"同类分散"就是按法人/组织分库，而且组织带<b>层级</b>（可继承），一条默认规则能覆盖整棵子树。期间/租户按需追加，解析算法同构。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s4">4 · 两级解耦：治理面 + 地址面</h2>
+<p>扁平表的第二个死因是把两件<b>变化速率截然不同</b>的事焊在一起。拆开它们：</p>
+<div class="cols2">
+  <div class="opt">
+    <h3><span class="b-doc badge">治理面</span> 归属决策（慢变）</h3>
+    <p>"<b>gl凭证 + 北京组织</b> 归<b>哪个逻辑服务/数据源</b>管？"</p>
+    <p class="sub">这是<b>业务/组织决策</b>，随机构调整变化——月/季度级。用<b>数据库绑定表</b>存，<b>支持组织继承</b>，可运营（管理界面增删改）。产出的是<b>逻辑句柄</b>（如 <code>db_id=fico-bj</code> 或 <code>service=doc-gl-bj</code>），<b>不是 IP</b>。</p>
+  </div>
+  <div class="opt">
+    <h3><span class="b-rpt badge">地址面</span> 物理定位（快变）</h3>
+    <p>"逻辑服务 <code>doc-gl-bj</code> <b>此刻在哪个地址/连接串</b>？"</p>
+    <p class="sub">这是<b>运维/运行时</b>关注，随扩容、迁移、故障转移变化——分钟级甚至秒级。用<b>服务发现（Nacos）动态解析</b> + <b>配置静态兜底</b>。治理面完全不感知地址变化。</p>
+  </div>
+</div>
+<div class="callout good">
+<b>设计决定 ②：治理面产逻辑句柄，地址面解析物理地址，两者用 <code>db_id</code>/<code>service_name</code> 作契约边界。</b> 好处：单据服务扩容/迁移时，<b>只有地址面变，治理绑定表一行不动</b>；业务把某组织的凭证换个库管时，<b>只改治理绑定，地址面无感</b>。两个团队（业务管理员、运维）各改各的，互不踩踏。
+</div>
+
+<div class="flow">                    两级解耦 · 一次取数的路由解析
+
+  FetchSpec { docType:"gl_voucher", org:"BJ-SUB-01", period:"2026-05" }
+      │
+      │  ①治理面：ReportSourceRouter.resolve(docType, org)     ← 慢变·可运营·组织继承
+      │     精确(gl,BJ-SUB-01)? → 无 → 沿 org.path 向上找最近祖先(gl,BJ)? → 命中
+      ▼
+  逻辑句柄  { targetKind: DbId("fico-bj") }  或  { targetKind: Service("doc-gl-bj") }
+      │
+      │  ②地址面：resolve_endpoint(句柄)                        ← 快变·服务发现·静态兜底
+      │     DbId  → DatabaseManager.get_db("fico-bj") → 连接池(可指向远程PG)
+      │     Service→ Nacos discover("doc-gl-bj") → healthy实例 → http/grpc URL
+      ▼
+  物理端点  postgres://10.1.2.3:5432/fico_bj  或  http://10.1.2.7:8080
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s5">5 · 现成范式盘点（可照搬）</h2>
+<p>好消息压轴：上面推导出的每一块，代码库里<b>都已有落地实现可照搬</b>。这把方案从"设计"降级为"平移"。</p>
+<table>
+  <thead><tr><th>方案所需</th><th>现成实现</th><th>位置</th><th>可用度</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>治理面：逻辑名+组织→目标 的三层继承解析</b></td>
+      <td><span class="b-flow badge">FLOW</span> <code>SubflowRouter</code>：精确匹配 → 沿 <code>cmx_org.path</code> 最长前缀继承 → NULL 兜底</td>
+      <td class="mono">cmx-flow-store-pg/src/subflow_router.rs:58-104</td>
+      <td class="yes">1:1 照搬</td>
+    </tr>
+    <tr>
+      <td><b>治理面：绑定表 + CRUD 管理面</b></td>
+      <td><code>cmx_flow_subflow_binding</code>(called_key, org_id, target, enabled) + upsert/list/delete + REST</td>
+      <td class="mono">…/ddl.rs:171-183 · handlers.rs:701-771</td>
+      <td class="yes">改字段即用</td>
+    </tr>
+    <tr>
+      <td><b>治理面：引擎中立可注入</b></td>
+      <td>trait <code>resolve(key, org)</code> 作引擎"第四扩展点"，返回 <code>RouteError::NoBinding</code></td>
+      <td class="mono">cmx-flow-model/src/subflow.rs:16-47</td>
+      <td class="yes">同款 trait</td>
+    </tr>
+    <tr>
+      <td><b>地址面：逻辑句柄=db_id → 物理连接池</b></td>
+      <td><code>DatabaseManager.get_db(db_id)</code>；<code>new_db_pool</code> 支持任意连接串（含远程 PG）；多源按 db_id 隔离</td>
+      <td class="mono">cmx-database-pg/connection/mod.rs:482</td>
+      <td class="yes">直接复用</td>
+    </tr>
+    <tr>
+      <td><b>地址面：类别→服务名/URL 双模式解析</b></td>
+      <td><span class="b-doc badge">PLUGIN</span> <code>remote_importers</code>：直连URL 或 Nacos discovery，按类别取 service_name → healthy 实例 → 拼 URL</td>
+      <td class="mono">remote_importers/mod.rs:395-443 · center_client/config.rs</td>
+      <td class="yes">跨服务落点蓝本</td>
+    </tr>
+    <tr>
+      <td><b>数据源已带坐标维度</b></td>
+      <td><code>DbConfig</code> / <code>cmx_sys_datasource</code> 已含 <code>domain_code/application_code/module_code/source_type</code></td>
+      <td class="mono">cmx-database/src/config/mod.rs:89-127</td>
+      <td class="mid">现成过滤维</td>
+    </tr>
+    <tr>
+      <td><b>单据逻辑坐标</b></td>
+      <td>定义路径 <code>&lt;domain&gt;/&lt;app&gt;/&lt;module&gt;</code> + <code>moduleMeta.moduleCode</code> + <code>documentTypeDict</code></td>
+      <td class="mono">cmx-model/definitions/store.rs:61-117</td>
+      <td class="mid">坐标来源</td>
+    </tr>
+  </tbody>
+</table>
+<div class="callout warn">
+<b>两个必须新建/补齐的缺口（探查确认）：</b>
+<div style="margin-top:6px">
+<b>缺口 A — 绑定链路不存在</b>：当前单据落库只有三种决定方式——请求头 <code>db_id</code> / 全局第一个 <code>source_type=biz</code> 库 / 默认库，<b>全都与单据类型、组织无关</b>；定义文件里也没有任何 <code>dbId/targetDb</code> 字段。→ 照抄 SubflowRouter 新建 <code>report_source_binding</code> 表 + 解析器。
+</div>
+<div style="margin-top:6px">
+<b>缺口 B — 组织未透传到取数链路</b>：flow 靠 <code>start_process_org(org_id)</code> 把组织一路贯穿到路由；而 DOC/RPT 的取数链路当前<b>只透传 <code>db_id</code> header，没有 org 贯穿</b>。→ 比照 flow，在 compute 请求里带 org 并贯穿到 <code>ReportSourceRouter</code>（§9）。
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s6">6 · 四种路由方案对比择优</h2>
+<p>把"路由配置放在哪、怎么解析"这个决定，列出四种可能，逐一权衡：</p>
+
+<div class="opt">
+<h3><span class="num">1</span>定义文件内联（单据定义 JSON 里写 <code>dbId</code>）</h3>
+<p>在每个单据定义的 <code>moduleMeta</code> 里加 <code>"dataSource": "fico-bj"</code>。报表取数时读定义拿到库。</p>
+<p><span class="tag">配置量 小</span><span class="tag">组织维度 ✗</span><span class="tag">同类不同部署 ✗</span><span class="tag">可运营 ✗ 改定义要重部署</span></p>
+<p class="sub"><b>劣</b>：定义是"逻辑设计"，物理位置写进去就把设计和部署焊死；<b>无法表达"同一定义按组织落不同库"</b>（一个定义只能写一个 dbId）；改路由要改定义文件+重新部署。<b>只适合"一类单据永远在同一个库"的简单情形。</b></p>
+</div>
+
+<div class="opt">
+<h3><span class="num">2</span>静态配置文件映射（<code>dev-local.toml</code> 里 <code>[report_source]</code> 段）</h3>
+<p>仿 <code>[center_client]</code>，在配置文件里写 <code>doc_type → service_name/db_id</code> 映射。</p>
+<p><span class="tag">配置量 中</span><span class="tag">组织维度 ✗</span><span class="tag">同类不同部署 ✗</span><span class="tag">可运营 △ 改配置要重启</span></p>
+<p class="sub"><b>优</b>：有现成蓝本（remote_importers 就是这么做的），实现快。<b>劣</b>：仍是<b>扁平映射无组织维度</b>；改路由要改配置文件并重启进程；不能按组织给例外。<b>适合类型少、部署稳定、无按组织分片的场景。</b></p>
+</div>
+
+<div class="opt rec">
+<h3><span class="num">3</span>数据库绑定表 + 组织继承解析 ⭐（照搬 SubflowRouter）</h3>
+<p>治理面用一张可运营的 <code>report_source_binding(doc_type, org_id, target, enabled)</code> 表，三层解析（精确→沿 org 继承→兜底）；地址面 db_id/服务发现动态解析。</p>
+<p><span class="tag">配置量 小（默认+例外）</span><span class="tag">组织维度 ✓✓</span><span class="tag">同类不同部署 ✓✓</span><span class="tag">可运营 ✓✓ 热更新</span><span class="tag">有现成蓝本 ✓✓</span></p>
+<p class="sub"><b>优</b>：① <b>组织继承</b>——配一条"gl默认走总账库"+ 少数例外，覆盖整棵组织树，配置量最小；② <b>可运营</b>——管理界面增删改、即时生效、无需重启/重部署；③ <b>同类不同部署天然支持</b>（同 doc_type 多行不同 org→不同 target）；④ <b>代码库已有 1:1 落地</b>（flow 的 M5.2），连绑定表、CRUD、REST、继承 SQL 都是现成的。<b>劣</b>：比方案 2 多一张表 + 一个解析器（但都是照抄）。</p>
+</div>
+
+<div class="opt">
+<h3><span class="num">4</span>服务注册元数据路由（Nacos metadata 打业务标签）</h3>
+<p>单据服务注册时在 <code>ServiceInstance.metadata</code> 里打 <code>doc_type/org</code> 标签，报表侧发现时按标签过滤实例。</p>
+<p><span class="tag">配置量 中</span><span class="tag">组织维度 △</span><span class="tag">可运营 △</span><span class="tag">改造 大</span></p>
+<p class="sub"><b>劣</b>：<code>RegistryAwareDiscover</code> 当前<b>只按 service_name 发现、不按 metadata 过滤</b>（探查确认），要改发现层；治理规则散落在各服务的自注册代码里，<b>不可集中运营</b>；组织×类型的绑定矩阵无法在一处审视。<b>发现层改造收益不抵成本。</b>但它的 metadata 可作地址面的补充标签。</p>
+</div>
+
+<div class="callout pick">
+<b>择优：方案 3（数据库绑定表 + 组织继承）为主干，方案 2（静态配置）作地址面兜底，方案 4 的 metadata 作服务发现补充。</b>
+<div style="margin-top:6px">
+理由一句话：<b>唯有方案 3 同时解决"同类不同部署 + 按组织分片 + 可运营 + 有现成蓝本"四件事</b>。方案 1/2 的扁平映射在"同类分散"面前失效；方案 4 要改发现层且不可集中治理。而方案 3 几乎是把 cmx-flow 已经跑通的 M5.2 换几个字段——<b>风险最低、契合最高</b>。
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s7">7 · 推荐架构：ReportSourceRouter</h2>
+<p>在上一篇的 <code>DocFetchProvider</code> 之前，插入一个 <code>ReportSourceRouter</code>（照搬 <code>SubflowRouter</code>）。整条取数链路变成"先路由、再分桶、各端点取数、汇合"。</p>
+
+<div class="flow">┌──────────────────────── 报表服务 (report-service) ────────────────────────┐
+│  cmx-rpt-formula 引擎（零改）                                                 │
+│     compute_report 两遍法 ── 收集全部取数键 ─▶ FetchSpec[]                     │  <span class="b-rpt badge">RPT</span>
+│                                    │  含 docType + org + period               │
+│                                    ▼                                          │
+│  DocFetchProvider.batch_balance(&[FetchSpec])                                 │
+│     │                                                                         │
+│     ├─① ReportSourceRouter.resolve(docType, org)  ← 照搬 SubflowRouter        │  <span class="b-new badge">NEW</span>
+│     │     每个 spec 解析出逻辑句柄 { DbId | Service }                          │
+│     │                                                                         │
+│     ├─② 按句柄分桶（scatter）  bucket[endpoint] = [specs…]                     │  <span class="b-new badge">NEW</span>
+│     │                                                                         │
+│     ├─③ 每桶并行取数（各选 transport：A同库 / C HTTP / D gRPC / B远程PG）      │
+│     │     endpoint#1 ─┐                                                       │
+│     │     endpoint#2 ─┼─▶ 并行 fetch，各自 ZmcDataSet msgpack 回传             │
+│     │     endpoint#3 ─┘                                                       │
+│     │                                                                         │
+│     └─④ 汇合（gather）：按 specHash 合并所有桶结果 → 填求值缓存                 │  <span class="b-new badge">NEW</span>
+│                                    │                                          │
+│                                    ▼ pass2 同步 eval（SUM/IF/REF 本地）        │
+└───────────────────────────────────────────────────────────────────────────┘
+        ①治理面（绑定表·组织继承）      ②③④地址面 + scatter-gather</div>
+
+<p>相比上一篇，这里有<b>两处关键修正</b>：</p>
+<div class="step"><div class="n2">1</div><div><b>provider 前置路由</b>：不再假设"所有取数都发同一个单据服务"。每个 <code>FetchSpec</code> 先经 <code>ReportSourceRouter</code> 解析目标。</div></div>
+<div class="step"><div class="n2">2</div><div><b>"一次往返"修正为"每端点一次往返"</b>：一张报表的取数键现在可能横跨多个端点，合批粒度从"整张报表"降为"每个目标端点"（§10 scatter-gather）。</div></div>
+
+<!-- ============================================================ -->
+<h2 id="s8">8 · 绑定表 DDL + 三层继承算法</h2>
+
+<h3>8.1 绑定表（照搬 <code>cmx_flow_subflow_binding</code>）</h3>
+<pre><code><span class="c">-- 治理面：单据类型(+组织) → 逻辑句柄。照搬 flow 绑定表，改字段。</span>
+<span class="k">CREATE TABLE</span> <span class="n">cr_report_source_binding</span> (
+    id            <span class="k">VARCHAR</span>(64)  <span class="k">PRIMARY KEY</span>,       <span class="c">-- binding_id(doc_type,org) 派生稳定 id</span>
+    doc_type      <span class="k">VARCHAR</span>(128) <span class="k">NOT NULL</span>,          <span class="c">-- 单据类型逻辑名 ← 对应 called_key</span>
+    org_id        <span class="k">VARCHAR</span>(64),                     <span class="c">-- NULL = 该类型的默认兜底 ← 对应 org_id</span>
+    target_kind   <span class="k">VARCHAR</span>(16)  <span class="k">NOT NULL</span>,          <span class="c">-- 'db_id' | 'service'  （地址面解析方式）</span>
+    target_ref    <span class="k">VARCHAR</span>(128) <span class="k">NOT NULL</span>,          <span class="c">-- 'fico-bj' 或 'doc-gl-bj' ← 对应 target_definition_key</span>
+    transport     <span class="k">VARCHAR</span>(16),                     <span class="c">-- 'local'|'http'|'grpc'|'remote_pg'（可空,由地址面推断）</span>
+    period_scope  <span class="k">VARCHAR</span>(64),                     <span class="c">-- 可选:期间维度('2025..'归档),NULL=不限</span>
+    enabled       <span class="k">BOOLEAN</span>      <span class="k">NOT NULL DEFAULT</span> <span class="n">TRUE</span>,
+    priority      <span class="k">INT</span>          <span class="k">NOT NULL DEFAULT</span> <span class="n">0</span>,   <span class="c">-- 同级多命中时的裁决</span>
+    remark        <span class="k">VARCHAR</span>(500),
+    created_at    <span class="k">TIMESTAMPTZ</span>, updated_at <span class="k">TIMESTAMPTZ</span>
+);
+<span class="k">CREATE INDEX</span> <span class="k">ON</span> <span class="n">cr_report_source_binding</span>(doc_type);
+<span class="k">CREATE INDEX</span> <span class="k">ON</span> <span class="n">cr_report_source_binding</span>(org_id);</code></pre>
+
+<h3>8.2 三层解析（照搬 <code>subflow_router.rs:58-104</code> 的解析顺序）</h3>
+<pre><code><span class="k">async fn</span> <span class="f">resolve</span>(&amp;<span class="k">self</span>, doc_type: &amp;<span class="k">str</span>, org: <span class="n">Option</span>&lt;&amp;<span class="k">str</span>&gt;) -&gt; <span class="n">RouteResult</span>&lt;<span class="n">SourceHandle</span>&gt; {
+  <span class="c">// ① 精确匹配：这个组织有专属绑定？</span>
+  <span class="k">if let</span> <span class="n">Some</span>(org) = org {
+    <span class="c">// WHERE doc_type=$1 AND org_id=$2 AND enabled  ORDER BY priority DESC LIMIT 1</span>
+    <span class="k">if let</span> <span class="n">Some</span>(hit) = exact(doc_type, org).<span class="k">await</span>? { <span class="k">return</span> <span class="n">Ok</span>(hit); }
+
+    <span class="c">// ② 沿组织路径继承：找最近的有绑定的祖先组织（照搬 flow 的物化路径 LIKE）</span>
+    <span class="c">// JOIN cmx_org self ON self.id=$2</span>
+    <span class="c">// JOIN cmx_org anc  ON self.path LIKE anc.path || '%'   -- anc 是 self 的祖先</span>
+    <span class="c">// WHERE b.doc_type=$1 AND b.org_id=anc.id AND b.enabled</span>
+    <span class="c">// ORDER BY length(anc.path) DESC LIMIT 1   -- 最长前缀=最近祖先优先</span>
+    <span class="k">if let</span> <span class="n">Some</span>(hit) = inherit_along_org_path(doc_type, org).<span class="k">await</span>? { <span class="k">return</span> <span class="n">Ok</span>(hit); }
+  }
+  <span class="c">// ③ 类型默认兜底：org_id IS NULL 的那条</span>
+  <span class="k">if let</span> <span class="n">Some</span>(hit) = fallback(doc_type).<span class="k">await</span>? { <span class="k">return</span> <span class="n">Ok</span>(hit); }
+
+  <span class="c">// 全无 → 明确报错，设计态即可校验（不留到运行时）</span>
+  <span class="n">Err</span>(<span class="n">RouteError</span>::<span class="n">NoBinding</span>{ doc_type, org })
+}</code></pre>
+<div class="callout good">
+<b>组织继承是配置量的胜负手。</b> 一条 <code>(gl_voucher, org=NULL, fico-main)</code> 兜底 + 一条 <code>(gl_voucher, org=BJ, fico-bj)</code> 例外，就让北京整棵子树走 fico-bj、其余全走 fico-main——<b>两行覆盖上千组织</b>。这正是 flow M5.2 已验证的"总部hq/北京继承/上海branch 三结果"同款语义。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s9">9 · 组织上下文透传（关键缺口 B）</h2>
+<p>路由要按组织解析，前提是<b>取数链路里拿得到"当前是哪个组织"</b>。探查确认这是个真实缺口：flow 有 <code>start_process_org(org_id)</code> 一路贯穿，DOC/RPT 取数链路当前只传 <code>db_id</code> header。补齐路径：</p>
+<div class="flow">compute 请求已带 orgCode（现有！compute.rs 已收 orgCode/periodCode）
+   │  POST /report-design/reports/{code}/compute { orgCode:"BJ-SUB-01", periodCode:"2026-05" }
+   ▼
+compute_report_service 解析 orgCode ──┐
+   │                                   │ 贯穿进 FetchSpec.org（新增字段）
+   ▼                                   ▼
+DocFetchProvider ── 每个 FetchSpec 带 org ──▶ ReportSourceRouter.resolve(docType, org)
+   │
+   │  跨服务取数时，org 随请求下传（可选：单据端二次校验组织权限）
+   ▼
+X-Delegated-User-Token（用户身份）+ orgCode（取数组织）一并进单据取数端点</div>
+<div class="callout good">
+<b>利好：compute 端点<b>本来就收 <code>orgCode</code></b>（上一篇探查确认，<span class="mono">compute.rs:246</span> orgCode/periodCode 必填）。</b> 组织上下文在<b>入口已存在</b>，缺的只是"把它从 compute 一路带到 router"——是<b>贯穿</b>而非<b>新增来源</b>，改动小。REF 跨报表取数时，org 可能切换（合并报表看子公司），按被引用报表的 org 重新路由即可。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s10">10 · Scatter-Gather：跨端点合批</h2>
+<p>上一篇"一张报表一次网络往返"的前提是"所有取数发同一个单据服务"。多端点路由打破了这个前提——必须<b>按端点分桶</b>再各自合批。但合批的收益依然保留：</p>
+<div class="step"><div class="n2">Scatter</div><div>路由后按逻辑句柄分桶：<code>bucket["fico-bj"]=[spec1,spec3…]</code>、<code>bucket["doc-fee-svc"]=[spec2…]</code>。<b>N 个取数键 → K 个桶（K = 涉及的端点数，通常 1~3）</b>。</div></div>
+<div class="step"><div class="n2">并行</div><div>K 个桶<b>并发</b>发出（<code>tokio::join</code> / <code>futures::join_all</code>），墙钟 = 最慢的那个端点，不是 K 个串行相加。</div></div>
+<div class="step"><div class="n2">Gather</div><div>各桶回传的 <code>ZmcDataSet</code> 按 <code>specHash</code> 合并进统一缓存 → pass2 同步求值。<b>一个 spec 属于哪个桶对引擎透明</b>。</div></div>
+<div class="callout">
+<b>合批粒度的精确表述：从"整张报表一次"改为"每个目标端点一次、K 个端点并行"。</b> 常态下一张报表的取数集中在 1~2 个端点（同一套账在同一库），K 很小，与上一篇几乎无差；只有跨多法人合并报表才会 K 变大，而那时并行发出仍只付"最慢端点"一次延迟。<b>N+1 依然被消灭</b>——被消灭的是"每个取数键一次"，不是"每个端点一次"。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s11">11 · 地址面：db_id / 服务发现落点</h2>
+<p>治理面产出逻辑句柄后，地址面负责变成可连接的物理端点。两种句柄、两条解析路径（照搬 remote_importers 双模式）：</p>
+<table>
+  <thead><tr><th>句柄 <code>target_kind</code></th><th>解析路径</th><th>复用</th><th>适用</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>db_id</code>（数据源句柄）</td>
+      <td><code>DatabaseManager.get_db("fico-bj")</code> → 连接池。db_id 的 <code>db_url</code> 可指向<b>任意远程 PG</b>（改 toml 即可）。</td>
+      <td class="mono">connection/mod.rs:482</td>
+      <td>方案 A 同库 / B 跨库直连</td>
+    </tr>
+    <tr>
+      <td><code>service</code>（服务句柄）</td>
+      <td>直连模式：查 <code>[report_source].urls</code> 静态 URL；发现模式：Nacos <code>discover("doc-gl-bj")</code> → healthy 实例 → <code>metadata["http_port"/"grpc_port"]</code> 拼 URL。</td>
+      <td class="mono">remote_importers/mod.rs:395-443</td>
+      <td>方案 C HTTP / D gRPC</td>
+    </tr>
+  </tbody>
+</table>
+<div class="callout">
+<b>句柄类型决定 transport，transport 决定物理形态——层层解析、各司其职。</b> 治理绑定表只需写"逻辑上归 fico-bj 管"；至于 fico-bj 是本机库、远程库、还是一个独立单据微服务，全由地址面按 <code>target_kind</code> + 配置/发现决定。<b>单据从"共库"演进到"独立微服务"，改的是绑定表里 target_kind 从 db_id 换成 service，引擎与语义层不动。</b>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s12">12 · 治理面：绑定矩阵管理 UI</h2>
+<p>照搬 flow 的绑定 CRUD（<span class="mono">handlers.rs:701-771</span> + 设计态矩阵），给报表管理员一个<b>可运营</b>的界面：</p>
+<div class="step"><div class="n2">1</div><div><b>矩阵视图</b>：行=单据类型，列=组织（树形），格=目标句柄。空格=继承自父组织/默认（灰显解析结果，可视化"继承"）。</div></div>
+<div class="step"><div class="n2">2</div><div><b>REST</b>：<code>GET /report-design/source-bindings?docType=</code>（列某类型全部绑定）、<code>POST</code>（upsert，<code>binding_id(doc_type,org)</code> 派生稳定 id）、<code>DELETE</code>。照搬 flow 的 <code>PgSubflowBindingStore</code>（<span class="mono">subflow_router.rs:142-301</span>）。</div></div>
+<div class="step"><div class="n2">3</div><div><b>解析预览</b>：管理员输 <code>(docType, org)</code>，界面实时显示三层解析命中哪条（精确/继承/兜底），便于验证配置。</div></div>
+<div class="step"><div class="n2">4</div><div><b>热更新</b>：绑定改动即时生效（路由器每次 resolve 查库，或短 TTL 缓存 + 失效通知），无需重启/重部署——对比方案 1/2 的核心优势。</div></div>
+
+<!-- ============================================================ -->
+<h2 id="s13">13 · 缓存 · 一致性 · 失败降级</h2>
+<table>
+  <thead><tr><th>议题</th><th>处理</th></tr></thead>
+  <tbody>
+    <tr><td>路由结果缓存</td><td>路由解析结果 <code>(docType,org)→handle</code> 可缓存（治理慢变），短 TTL + 绑定变更事件失效。取数<b>值</b>缓存见上一篇 §11（关账长缓存）。</td></tr>
+    <tr><td>无绑定</td><td><code>RouteError::NoBinding</code> → 该取数格标 <code>#REF!</code>，其余照算；<b>设计态 check_formula 时即预解析路由</b>，无绑定当场报错，不留运行时。</td></tr>
+    <tr><td>某端点不可达</td><td>scatter-gather 中<b>单桶失败不拖累其他桶</b>：该桶的取数格标 <code>#N/A</code>，其他端点的数据正常。降级沿用上一篇 §13。</td></tr>
+    <tr><td>跨端点一致性</td><td>不同端点无法共享一个 DB 事务快照。策略：历史期间（已关账）天然一致；开放期跨多法人合并报表标注"取数时点"，或统一取"日终快照"。</td></tr>
+    <tr><td>绑定与单据实际部署漂移</td><td>治理绑定表是<b>唯一事实源</b>；单据服务上线/迁移时同步更新绑定（或由单据服务部署钩子回写建议绑定）。定期对账：绑定指向的 db_id/service 是否仍存活。</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="s14">14 · 分期实施</h2>
+<table>
+  <thead><tr><th>阶段</th><th>目标</th><th>交付</th></tr></thead>
+  <tbody>
+    <tr><td><b>R1 单端点先行</b></td><td>不做路由，全走默认库</td><td>上一篇 P1–P3：报表取到单据真数（单库单端点）。<b>路由留空=全走默认</b>，先兑现取数价值。</td></tr>
+    <tr><td><b>R2 绑定表 + 路由器</b></td><td>治理面落地</td><td>照搬 SubflowRouter：<code>cr_report_source_binding</code> 表 + <code>ReportSourceRouter</code> 三层解析 + CRUD/REST。db_id 句柄先行（跨库场景）。</td></tr>
+    <tr><td><b>R3 组织透传</b></td><td>补缺口 B</td><td>compute 的 orgCode 贯穿到 FetchSpec.org → router；REF 跨报表 org 切换。</td></tr>
+    <tr><td><b>R4 Scatter-Gather</b></td><td>多端点并行</td><td>provider 按句柄分桶 + 并行取数 + 汇合。真正支持"同类不同部署/多法人合并报表"。</td></tr>
+    <tr><td><b>R5 服务句柄</b></td><td>跨服务落点</td><td><code>target_kind=service</code> + 地址面双模式解析（直连URL/Nacos）。单据独立微服务化。</td></tr>
+    <tr><td><b>R6 管理矩阵 UI</b></td><td>可运营</td><td>绑定矩阵界面 + 解析预览 + 热更新。</td></tr>
+  </tbody>
+</table>
+<p class="sub"><b>R1 时路由是"零配置=全默认"</b>，完全兼容上一篇的单端点方案；路由能力按需逐层叠加，每阶段独立可验证、可回退。</p>
+
+<!-- ============================================================ -->
+<h2 id="s15">15 · 接缝清单 + 待拍板</h2>
+<h3>15.1 接缝清单</h3>
+<table>
+  <thead><tr><th>文件 / 位置</th><th>改动</th><th>类型</th></tr></thead>
+  <tbody>
+    <tr><td><span class="mono">cr_report_source_binding (报表库)</span></td><td>绑定表 DDL（照搬 cmx_flow_subflow_binding）</td><td><span class="b-new badge">DDL</span></td></tr>
+    <tr><td><span class="mono">cmx-rpt-model/src/source_route.rs</span></td><td>trait <code>ReportSourceRouter</code> + <code>SourceHandle</code>/<code>RouteError</code>（照搬 subflow.rs）</td><td><span class="b-new badge">NEW</span></td></tr>
+    <tr><td><span class="mono">cmx-rpt-store-pg/src/source_router.rs</span></td><td><code>PgReportSourceRouter</code> 三层解析 + <code>PgSourceBindingStore</code> CRUD（照搬 subflow_router.rs）</td><td><span class="b-new badge">NEW</span></td></tr>
+    <tr><td><span class="mono">cmx-rpt-store-pg/src/compute.rs</span></td><td><code>DocFetchProvider</code> 前置 router + scatter-gather 分桶</td><td><span class="b-reuse badge">EXT</span></td></tr>
+    <tr><td><span class="mono">cmx-rpt-formula .../FetchSpec</span></td><td>新增 <code>org</code> 字段</td><td><span class="b-reuse badge">EXT</span></td></tr>
+    <tr><td><span class="mono">compute_report_service</span></td><td>orgCode 贯穿进 FetchSpec（缺口 B）</td><td><span class="b-reuse badge">EDIT</span></td></tr>
+    <tr><td><span class="mono">cmx-rpt-api/src/handlers.rs</span></td><td>source-bindings CRUD 端点（照搬 flow handlers:701-771）</td><td><span class="b-new badge">NEW</span></td></tr>
+    <tr><td><span class="mono">dev-local.toml</span></td><td><code>[report_source]</code> 地址面：service→url/discovery（照搬 [center_client]）</td><td><span class="b-new badge">CFG</span></td></tr>
+    <tr><td><span class="mono">报表管理前端</span></td><td>绑定矩阵 UI + 解析预览</td><td><span class="b-new badge">UI</span></td></tr>
+  </tbody>
+</table>
+<p class="sub"><b>引擎本体零改；路由器、绑定表、CRUD、继承 SQL 全部照搬 cmx-flow M5.2 已验证实现。</b></p>
+
+<h3>15.2 待拍板</h3>
+<table>
+  <thead><tr><th>#</th><th>议题</th><th>建议</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>路由配置形态：定义内联 / 静态配置 / <b>数据库绑定表</b>？</td><td><b>数据库绑定表（方案3）</b>——唯一同时解决"同类不同部署+组织分片+可运营+有现成蓝本"。</td></tr>
+    <tr><td>2</td><td>路由键除组织外，是否纳入期间/租户？</td><td>先只做 <code>(doc_type, org)</code>；<code>period_scope</code> 列预留，历史归档分库时再启用；租户按需。</td></tr>
+    <tr><td>3</td><td>逻辑句柄用 db_id 还是 service？</td><td><b>两者都支持</b>（<code>target_kind</code> 区分）：共库/跨库用 db_id，独立微服务用 service。按部署演进平滑切换。</td></tr>
+    <tr><td>4</td><td>组织透传是否需要改 compute 契约？</td><td>不需要——compute <b>已收 orgCode</b>，只是贯穿到 router，属内部改动。</td></tr>
+    <tr><td>5</td><td>无绑定时报错还是回落默认库？</td><td>建议<b>回落默认库 + 告警</b>（兼容 R1 零配置），严格模式可切"报错"。设计态预解析暴露缺失绑定。</td></tr>
+    <tr><td>6</td><td>绑定表放报表库还是主控库(primary)？</td><td><b>主控库 primary</b>——它是跨库治理的元数据，不该绑定在某个业务库里；与 flow 绑定表同置。</td></tr>
+  </tbody>
+</table>
+
+<div class="foot">
+  单据取数路由方案 · 多端点 / 多组织 · 架构设计稿 · 不动代码<br>
+  核心主张：路由键多维（单据类型+组织）、两级解耦（治理面组织继承 + 地址面动态解析）、照搬 cmx-flow SubflowRouter 已验证范式（三层解析+绑定表+CRUD）+ cmx-plugin remote_importers 双模式落点；Scatter-Gather 跨端点合批，引擎零改。<br>
+  Generated with dmxapi
+</div>
+
+</div>
+</body>
+</html>

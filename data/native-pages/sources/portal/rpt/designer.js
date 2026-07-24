@@ -257,6 +257,10 @@ function getState (ctx) {
         gridlines: true,
         headers: true,
         editable: true,
+        showCalc: false, // 标题栏「计算」开关：有取数/计算公式的格盖显 <计算>
+        showCheck: false, // 标题栏「校验」开关：有校验公式的格盖显 <校验>；两者都开且都有→<算-校>
+        showElement: false, // 标题栏「元素」开关：有元素绑定的格盖显 <元素>；计算公式优先级高于元素（有计算则显计算）
+        zoom: 1, // 顶栏缩放（会话级视图偏好，不随报表保存；1=100%，范围 0.5~2）
       },
     })
   }
@@ -459,6 +463,38 @@ function styleCss () {
     .rd-toolbar{margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0}
     .rd-selection{height:26px;min-width:52px;max-width:150px;border-radius:6px;padding:0 10px;display:inline-flex;align-items:center;gap:5px;background:var(--sapField_Background,#fff);border:1px solid color-mix(in srgb,var(--rd-blue) 26%,var(--rd-border));color:var(--rd-blue);font:800 12px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:inset 0 1px 2px rgba(10,31,68,.04)}.rd-selection::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--rd-blue);flex:0 0 auto;box-shadow:0 0 0 3px color-mix(in srgb,var(--rd-blue) 16%,transparent)}
     .rd-hgroup{display:inline-flex;align-items:center;gap:2px;height:32px;padding:2px;border-radius:8px;background:color-mix(in srgb,var(--rd-border) 26%,transparent)}
+    .rd-hgroup-badge{gap:4px;padding:2px 6px;background:color-mix(in srgb,var(--rd-border) 20%,transparent)}
+    /* 计算/校验滑动开关（Toggle）：现代/科技、dark 自适应。calc=蓝青 check=紫；开=轨填主题色+柔光、滑块靠右。 */
+    .rd-btoggle{--tg:var(--rd-blue);display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px 0 5px;border:1px solid transparent;border-radius:999px;background:transparent;font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s,border-color .15s}
+    .rd-btoggle-calc{--tg:var(--rd-cyan)}.rd-btoggle-check{--tg:var(--rd-purple)}.rd-btoggle-element{--tg:var(--rd-green)}
+    .rd-btoggle-track{position:relative;flex:0 0 auto;width:32px;height:18px;border-radius:999px;background:color-mix(in srgb,var(--rd-border) 62%,var(--sapField_Background,#fff));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rd-border) 70%,transparent);transition:background .18s,box-shadow .18s}
+    .rd-btoggle-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(10,31,68,.34),0 0 0 .5px rgba(10,31,68,.06);transition:transform .18s cubic-bezier(.4,0,.2,1)}
+    .rd-btoggle-label{color:var(--sapContent_LabelColor,#6a6d70);letter-spacing:.02em;transition:color .15s}
+    .rd-btoggle:hover .rd-btoggle-track{background:color-mix(in srgb,var(--rd-border) 74%,var(--sapField_Background,#fff))}
+    .rd-btoggle:hover .rd-btoggle-label{color:var(--sapContent_IconColor,#475059)}
+    .rd-btoggle.on{background:color-mix(in srgb,var(--tg) 12%,transparent);border-color:color-mix(in srgb,var(--tg) 30%,transparent)}
+    .rd-btoggle.on .rd-btoggle-track{background:var(--tg);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tg) 60%,transparent),0 0 0 3px color-mix(in srgb,var(--tg) 22%,transparent)}
+    .rd-btoggle.on .rd-btoggle-thumb{transform:translateX(14px)}
+    .rd-btoggle.on .rd-btoggle-label{color:var(--tg);font-weight:800}
+    .rd-btoggle:focus-visible{outline:2px solid color-mix(in srgb,var(--tg) 55%,transparent);outline-offset:1px}
+    /* 表格缩放滑杆：−/+ 微调 + 发光已选段 range + 百分数胶囊。科技/精致、dark 自适应。 */
+    .rd-zoom{display:inline-flex;align-items:center;gap:5px;height:32px;padding:2px 6px;border-radius:8px;background:color-mix(in srgb,var(--rd-border) 20%,transparent)}
+    .rd-zoom-step{flex:0 0 auto;width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--sapContent_IconColor,#475059);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s,color .12s}
+    .rd-zoom-step svg{width:.95rem;height:.95rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .rd-zoom-step:hover{background:var(--sapTile_Background,#fff);color:var(--rd-blue);box-shadow:0 1px 4px rgba(10,31,68,.12)}
+    .rd-zoom-range{-webkit-appearance:none;appearance:none;width:104px;height:20px;background:transparent;cursor:pointer;margin:0}
+    .rd-zoom-range:focus{outline:none}
+    /* 轨道：未选段 = 细灰圆条；已选段 = 主题蓝渐变（用 --rd-zoom-fill 百分比填充） */
+    .rd-zoom-range::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:linear-gradient(90deg,var(--rd-blue) 0,#2ea8c8 var(--rd-zoom-fill,50%),color-mix(in srgb,var(--rd-border) 70%,transparent) var(--rd-zoom-fill,50%))}
+    .rd-zoom-range::-moz-range-track{height:4px;border-radius:999px;background:color-mix(in srgb,var(--rd-border) 70%,transparent)}
+    .rd-zoom-range::-moz-range-progress{height:4px;border-radius:999px;background:linear-gradient(90deg,var(--rd-blue),#2ea8c8)}
+    .rd-zoom-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:#fff;border:1px solid color-mix(in srgb,var(--rd-blue) 40%,var(--rd-border));box-shadow:0 1px 3px rgba(10,31,68,.32),0 0 0 .5px rgba(10,31,68,.05);transition:transform .12s,box-shadow .12s}
+    .rd-zoom-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:1px solid color-mix(in srgb,var(--rd-blue) 40%,var(--rd-border));box-shadow:0 1px 3px rgba(10,31,68,.32);transition:transform .12s,box-shadow .12s}
+    .rd-zoom-range:hover::-webkit-slider-thumb,.rd-zoom-range:active::-webkit-slider-thumb{transform:scale(1.18);box-shadow:0 2px 8px rgba(10,110,209,.4),0 0 0 4px color-mix(in srgb,var(--rd-blue) 20%,transparent)}
+    .rd-zoom-range:hover::-moz-range-thumb,.rd-zoom-range:active::-moz-range-thumb{transform:scale(1.18);box-shadow:0 2px 8px rgba(10,110,209,.4),0 0 0 4px color-mix(in srgb,var(--rd-blue) 20%,transparent)}
+    .rd-zoom-pct{flex:0 0 auto;min-width:46px;height:22px;padding:0 8px;border:1px solid color-mix(in srgb,var(--rd-blue) 24%,var(--rd-border));border-radius:999px;background:color-mix(in srgb,var(--rd-blue) 8%,var(--sapField_Background,#fff));color:var(--rd-blue);font:800 11.5px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em;cursor:pointer;transition:background .12s,border-color .12s}
+    .rd-zoom-pct:hover{background:color-mix(in srgb,var(--rd-blue) 16%,var(--sapField_Background,#fff));border-color:color-mix(in srgb,var(--rd-blue) 46%,var(--rd-border))}
+    .rd-zoom-pct:focus-visible{outline:2px solid color-mix(in srgb,var(--rd-blue) 55%,transparent);outline-offset:1px}
     .rd-hbtn{position:relative;height:28px;min-width:28px;border:0;border-radius:6px;background:transparent;color:var(--sapContent_IconColor,#475059);display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 8px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .12s,color .12s,box-shadow .12s;white-space:nowrap}
     .rd-hbtn svg{width:1.02rem;height:1.02rem;fill:none;stroke:currentColor;stroke-width:1.85;stroke-linecap:round;stroke-linejoin:round}
     .rd-hbtn:hover{background:var(--sapTile_Background,#fff);color:var(--rd-blue);box-shadow:0 1px 4px rgba(10,31,68,.12)}
@@ -555,7 +591,7 @@ function styleCss () {
     .rd-cm-more label{display:inline-flex;align-items:center;gap:6px;cursor:pointer}.rd-cm-more input[type=color]{width:26px;height:22px;border:1px solid var(--rd-border);border-radius:4px;background:#fff;cursor:pointer;padding:0}
     .rd-more{flex:0 0 auto;position:relative}.rd-more[hidden]{display:none}.rd-more>.rd-tool.active,.rd-more>.rd-tool[aria-expanded="true"]{background:var(--rd-blue);color:#fff}
     .rd-more-menu{position:absolute;right:0;top:36px;z-index:20;min-width:64px;display:none;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--rd-border);border-radius:9px;background:var(--sapPopover_Background,#fff);box-shadow:0 14px 36px rgba(10,31,68,.2)}.rd-more.open .rd-more-menu{display:flex}.rd-more-menu .rd-ribbon-item,.rd-more-menu .rd-group{display:inline-flex}.rd-more-menu .rd-group{background:color-mix(in srgb,var(--rd-border) 22%,transparent);flex-wrap:wrap}.rd-more-menu .rd-ribbon-sep{display:none}
-    .rd-sheet-stage{flex:1;min-height:0;overflow:hidden;padding:12px;background:linear-gradient(180deg,color-mix(in srgb,var(--rd-blue) 4%,var(--sapBackgroundColor,#f5f6f7)),var(--sapBackgroundColor,#f5f6f7))}.rd-spread-host{height:100%;min-height:480px;border:1px solid var(--rd-border);border-radius:8px;background:var(--sapTile_Background,#fff);box-shadow:0 4px 18px rgba(10,31,68,.08);overflow:hidden}.rd-spread{display:block;width:100%;height:100%;min-height:480px}
+    .rd-sheet-stage{flex:1;min-height:0;overflow:hidden;padding:0;background:linear-gradient(180deg,color-mix(in srgb,var(--rd-blue) 4%,var(--sapBackgroundColor,#f5f6f7)),var(--sapBackgroundColor,#f5f6f7))}.rd-spread-host{height:100%;min-height:480px;border:0;border-radius:0;background:var(--sapTile_Background,#fff);box-shadow:none;overflow:hidden}.rd-spread{display:block;width:100%;height:100%;min-height:480px}
     /* Excel 样式公式栏：名称框 | fx | 公式输入框，一行贴在工具栏与网格之间 */
     .rd-fxbar{flex:0 0 auto;display:flex;align-items:center;height:32px;padding:0 10px;border-bottom:1px solid var(--rd-border);background:var(--sapTile_Background,#fff);box-shadow:inset 0 -1px 0 color-mix(in srgb,var(--rd-border) 60%,transparent)}
     .rd-namebox{position:relative;flex:0 0 auto;width:124px;height:24px;display:flex;align-items:center;border:1px solid color-mix(in srgb,var(--rd-blue) 24%,var(--rd-border));border-radius:5px;background:var(--sapField_Background,#fff);box-shadow:inset 0 1px 2px rgba(10,31,68,.04)}
@@ -570,8 +606,22 @@ function styleCss () {
     .rd-fxbar-input{flex:1;min-width:0;height:24px;border:0;outline:0;background:transparent;padding:0 6px;font:13px/1 var(--sapFontFamily,Arial,sans-serif);color:var(--sapTextColor,#1d2d3e)}
     .rd-fxbar-input::placeholder{color:var(--sapContent_LabelColor,#9aa4b0);font-style:italic}
     .rd-fxbar-input:focus{background:color-mix(in srgb,var(--rd-blue) 5%,transparent);border-radius:5px}
+    /* 内容框左侧数据元素只读胶囊（绿，有绑定才显）——公式在右可编辑，元素在左只读。 */
+    .rd-fxbar-elem{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;max-width:230px;height:22px;margin-right:8px;padding:0 9px;border:1px solid color-mix(in srgb,var(--rd-green) 40%,var(--rd-border));border-radius:999px;background:color-mix(in srgb,var(--rd-green) 12%,var(--sapTile_Background,#fff));color:var(--rd-green);font:700 12px/1 var(--sapFontFamily,Arial,sans-serif);white-space:nowrap;cursor:default}
+    .rd-fxbar-elem[hidden]{display:none}
+    .rd-fxbar-elem ui5-icon{flex:0 0 auto;width:.82rem;height:.82rem;color:var(--rd-green)}
+    .rd-fxbar-elem [data-rd-fxelem-text]{min-width:0;overflow:hidden;text-overflow:ellipsis}
     .rd-sheet-stage.rd-drop-hot .rd-spread-host{border-color:var(--rd-blue);box-shadow:0 0 0 2px color-mix(in srgb,var(--rd-blue) 30%,transparent),0 4px 18px color-mix(in srgb,var(--rd-blue) 22%,transparent)}
     .rd-sheet-stage{position:relative}.rd-drop-hint{position:absolute;z-index:40;display:none;pointer-events:none;padding:3px 8px;border-radius:6px;background:var(--rd-blue);color:#fff;font:700 11px/1.4 var(--sapFontFamily,Arial,sans-serif);box-shadow:0 4px 12px rgba(10,110,209,.35);white-space:nowrap}
+    /* 公式徽标覆盖层：绝对定位盖住有公式的格，纯展示（不进 SpreadJS/toJSON）。calc=蓝青 check=紫 both=双色。 */
+    .rd-badge-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:30}
+    .rd-cell-badge{--bg:var(--rd-cyan);position:absolute;display:flex;align-items:center;justify-content:center;box-sizing:border-box;overflow:hidden;background:var(--sapTile_Background,#fff);border:1.5px solid color-mix(in srgb,var(--bg) 55%,transparent);border-radius:4px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bg) 16%,transparent),0 1px 4px rgba(10,31,68,.14)}
+    .rd-cell-badge .rd-badge-pill{max-width:100%;padding:0 6px;border-radius:999px;font:800 10.5px/1.6 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--bg);background:color-mix(in srgb,var(--bg) 14%,var(--sapTile_Background,#fff))}
+    .rd-cell-badge.calc{--bg:var(--rd-cyan)}
+    .rd-cell-badge.check{--bg:var(--rd-purple)}
+    .rd-cell-badge.element{--bg:var(--rd-green)}
+    .rd-cell-badge.both{border-color:transparent;background:linear-gradient(var(--sapTile_Background,#fff),var(--sapTile_Background,#fff)) padding-box,linear-gradient(120deg,var(--rd-cyan),var(--rd-purple)) border-box}
+    .rd-cell-badge.both .rd-badge-pill{color:var(--rd-purple);background:linear-gradient(120deg,color-mix(in srgb,var(--rd-cyan) 16%,var(--sapTile_Background,#fff)),color-mix(in srgb,var(--rd-purple) 16%,var(--sapTile_Background,#fff)))}
     .rd-prop-grid{display:grid;grid-template-columns:1fr;gap:8px}.rd-sec{border:1px solid var(--rd-border);border-radius:8px;background:var(--sapTile_Background,#fff);padding:10px}.rd-sec>b{display:block;margin-bottom:7px;color:var(--rd-blue)}.rd-row{display:grid;grid-template-columns:86px minmax(0,1fr);gap:8px;align-items:center;margin:6px 0}.rd-row span{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70)}.rd-row b,.rd-row input{min-width:0}.rd-row input{height:28px;border:1px solid var(--rd-border);border-radius:6px;background:var(--sapField_Background,#fff);color:inherit;padding:0 8px}.rd-note{border:1px dashed var(--rd-border);border-radius:8px;padding:12px;background:var(--sapList_HeaderBackground,#f7f9fc);color:var(--sapContent_LabelColor,#6a6d70)}.rd-empty{padding:18px;border:1px dashed var(--rd-border);border-radius:8px;background:var(--sapTile_Background,#fff);color:var(--sapContent_LabelColor,#6a6d70)}.rd-loading{display:flex;align-items:center;gap:8px;padding:14px;color:var(--sapContent_LabelColor,#6a6d70)}
     .rd-toast{position:absolute;left:50%;bottom:22px;transform:translate(-50%,14px);z-index:60;max-width:min(560px,88%);padding:10px 16px;border-radius:9px;background:#1d2d3e;color:#fff;font-size:12.5px;font-weight:600;box-shadow:0 12px 32px rgba(10,31,68,.34);opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;display:flex;align-items:center;gap:8px}.rd-toast.show{opacity:1;transform:translate(-50%,0)}.rd-toast[data-kind="success"]{background:linear-gradient(180deg,#12b56b,#0f9d5c)}.rd-toast[data-kind="error"]{background:linear-gradient(180deg,#e5544b,#c0392b)}.rd-toast::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.8;flex:0 0 auto}
     .rd-head-actions{margin-left:auto;display:flex;align-items:center;gap:6px}
@@ -615,43 +665,36 @@ function styleCss () {
        --sapTile_Background（非 #fff，否则 dark 下发白刺眼）。浮层在 .rd 外，故自带 --rd-* 变量。 */
     .rd-fxp-mask{position:static;--rd-blue:#0a6ed1;--rd-cyan:#00a6c8;--rd-green:#10a760;--rd-purple:#7c3aed;--rd-amber:#d98200;--rd-red:#c9372c;--rd-border:var(--sapGroup_TitleBorderColor,#d9e2ec)}
     /* 黄金分割：宽 720 ≈ 高 445 × 1.618，宽 > 高的横版 */
-    .rd-fxp-panel{position:fixed;z-index:1000;width:min(720px,94vw);height:446px;max-height:86vh;display:flex;flex-direction:column;background:var(--sapTile_Background,#fff);color:var(--sapTextColor,#1d2d3e);border:1px solid color-mix(in srgb,var(--rd-blue) 30%,var(--rd-border));border-radius:14px;box-shadow:0 26px 70px rgba(0,0,0,.5),0 3px 12px rgba(0,0,0,.34);overflow:hidden}
-    .rd-fxp-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:move;background:linear-gradient(135deg,var(--rd-blue),#0a4f9c);color:#fff;user-select:none;flex:0 0 auto}
-    .rd-fxp-head b{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:700;color:#fff}
-    .rd-fxp-badge{display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;border-radius:6px;background:rgba(255,255,255,.22);font:italic 800 14px/1 "Times New Roman",Georgia,serif}
-    .rd-fxp-x{width:26px;height:26px;border:0;border-radius:7px;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.rd-fxp-x:hover{background:rgba(255,255,255,.32)}
+    .rd-fxp-panel{position:fixed;z-index:1000;width:min(720px,94vw);height:min(446px,86vh);display:flex;flex-direction:column;background:var(--sapTile_Background,#fff);color:var(--sapTextColor,#1d2d3e);border:1px solid color-mix(in srgb,var(--rd-blue) 30%,var(--rd-border));border-radius:12px;box-shadow:0 26px 70px rgba(0,0,0,.5),0 3px 12px rgba(0,0,0,.34);overflow:hidden}
+    .rd-fxp-head{display:flex;align-items:center;justify-content:space-between;padding:5px 10px;cursor:move;background:linear-gradient(135deg,var(--rd-blue),#0a4f9c);color:#fff;user-select:none;flex:0 0 auto}
+    .rd-fxp-head b{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#fff}
+    .rd-fxp-badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:18px;border-radius:5px;background:rgba(255,255,255,.22);font:italic 800 12px/1 "Times New Roman",Georgia,serif}
+    .rd-fxp-x{width:22px;height:22px;border:0;border-radius:6px;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.rd-fxp-x:hover{background:rgba(255,255,255,.32)}
     /* 公式编辑区（顶部整宽横条，绿色系强调） */
     .rd-fxp-editrow{flex:0 0 auto;display:flex;align-items:stretch;margin:11px 14px 8px;border:1.5px solid color-mix(in srgb,var(--rd-green) 45%,var(--rd-border));border-radius:9px;overflow:hidden}
     .rd-fxp-eq{display:flex;align-items:center;justify-content:center;width:30px;flex:0 0 auto;background:color-mix(in srgb,var(--rd-green) 22%,var(--sapField_Background,#fff));color:var(--rd-green);font:800 16px/1 ui-monospace,Menlo,Consolas,monospace;border-right:1px solid color-mix(in srgb,var(--rd-green) 34%,var(--rd-border))}
     .rd-fxp-expr{flex:1;min-height:44px;max-height:96px;resize:vertical;border:0;outline:0;padding:8px 11px;font:600 13.5px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--sapTextColor,#1d2d3e);background:color-mix(in srgb,var(--rd-green) 10%,var(--sapField_Background,#fff))}
     .rd-fxp-expr::placeholder{color:var(--sapContent_LabelColor,#9aa4b0);font-weight:400;font-style:italic}
     /* 调色板：横版三区并排（运算符窄列 + 内置 + 取数），搜索跨整行 */
-    .rd-fxp-pal{flex:1;min-height:0;overflow:auto;padding:2px 14px 12px;display:grid;grid-template-columns:150px 1fr 1fr;grid-auto-rows:min-content;gap:9px}
-    .rd-fxp-search{grid-column:1/-1;display:flex;align-items:center;gap:7px;height:32px;padding:0 10px;border:1px solid var(--rd-border);border-radius:8px;background:var(--sapField_Background,#fff)}
+    .rd-fxp-pal{flex:1;min-height:0;overflow:hidden;padding:6px 12px 8px;display:flex;flex-direction:column;gap:6px}.rd-fxp-oprow{flex:0 0 auto;display:flex;flex-wrap:nowrap;align-items:center;gap:5px;padding:6px 8px;border:1px solid var(--rd-border);border-left:4px solid var(--rd-amber);border-radius:9px;background:color-mix(in srgb,var(--rd-amber) 12%,var(--sapTile_Background,#fff))}.rd-fxp-tabs{flex:0 0 auto;display:flex;align-items:center;gap:6px}.rd-fxp-tab{height:28px;padding:0 12px;border:1px solid var(--rd-border);border-radius:8px;background:var(--sapField_Background,#fff);color:var(--sapContent_LabelColor,#6a6d70);font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:background .1s,color .1s,border-color .1s}.rd-fxp-tab.on.rd-fxp-tab-fetch{color:#fff;background:var(--rd-purple);border-color:var(--rd-purple)}.rd-fxp-tab.on.rd-fxp-tab-builtin{color:#fff;background:var(--rd-cyan);border-color:var(--rd-cyan)}.rd-fxp-tab:not(.on):hover{color:var(--rd-blue);border-color:color-mix(in srgb,var(--rd-blue) 40%,var(--rd-border))}.rd-fxp-list{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;border:1px solid var(--rd-border);border-radius:9px;padding:5px 6px}.rd-fxp-list-fetch{border-left:4px solid var(--rd-purple);background:color-mix(in srgb,var(--rd-purple) 8%,var(--sapTile_Background,#fff))}.rd-fxp-list-builtin{border-left:4px solid var(--rd-cyan);background:color-mix(in srgb,var(--rd-cyan) 8%,var(--sapTile_Background,#fff))}
+    .rd-fxp-search{flex:0 0 auto;margin-left:auto;width:210px;display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border:1px solid var(--rd-border);border-radius:8px;background:var(--sapField_Background,#fff)}
     .rd-fxp-search ui5-icon{width:.9rem;height:.9rem;color:var(--sapContent_LabelColor,#8a8d90)}
     .rd-fxp-search input{flex:1;border:0;outline:0;background:transparent;font:13px var(--sapFontFamily,Arial);color:var(--sapTextColor,#1d2d3e)}
-    .rd-fxp-zone{border-radius:10px;padding:8px 9px 9px;border:1px solid var(--rd-border);border-left-width:4px;min-width:0}
-    .rd-fxp-zone-op{border-left-color:var(--rd-amber);background:color-mix(in srgb,var(--rd-amber) 12%,var(--sapTile_Background,#fff))}
-    .rd-fxp-zone-builtin{border-left-color:var(--rd-cyan);background:color-mix(in srgb,var(--rd-cyan) 12%,var(--sapTile_Background,#fff))}
-    .rd-fxp-zone-fetch{border-left-color:var(--rd-purple);background:color-mix(in srgb,var(--rd-purple) 12%,var(--sapTile_Background,#fff))}
-    .rd-fxp-zt{font-size:11px;font-weight:800;letter-spacing:.02em;margin-bottom:7px}
-    .rd-fxp-zone-op .rd-fxp-zt{color:var(--rd-amber)}.rd-fxp-zone-builtin .rd-fxp-zt{color:var(--rd-cyan)}.rd-fxp-zone-fetch .rd-fxp-zt{color:var(--rd-purple)}
-    .rd-fxp-ops{display:flex;flex-wrap:wrap;gap:5px}
     .rd-fx-op{min-width:32px;height:30px;padding:0 9px;border:1px solid color-mix(in srgb,var(--rd-amber) 40%,var(--rd-border));border-radius:7px;background:var(--sapField_Background,#fff);color:var(--rd-amber);font:700 14px/1 ui-monospace,Menlo,Consolas,monospace;cursor:pointer;transition:transform .1s,box-shadow .1s,background .1s}
     .rd-fx-op:hover{background:color-mix(in srgb,var(--rd-amber) 22%,var(--sapField_Background,#fff));transform:translateY(-1px);box-shadow:0 2px 7px color-mix(in srgb,var(--rd-amber) 40%,transparent)}
-    .rd-fx-op-cell{font-family:var(--sapFontFamily,Arial);font-size:11px;font-weight:600;min-width:auto;width:100%;margin-top:2px}
-    .rd-fxp-fns{display:flex;flex-direction:column;gap:6px}
-    .rd-fx-fn{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;padding:6px 9px;border:1px solid var(--rd-border);border-radius:8px;background:var(--sapField_Background,#fff);cursor:pointer;transition:transform .1s,box-shadow .1s,border-color .1s}
-    .rd-fx-fn:hover{transform:translateY(-1px)}
-    .rd-fx-fnname{font:800 13px/1.1 ui-monospace,Menlo,Consolas,monospace}
-    .rd-fx-fnhelp{font-size:10.5px;color:var(--sapContent_LabelColor,#6a6d70);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+    .rd-fx-op-cell{font-family:var(--sapFontFamily,Arial);font-size:11px;font-weight:600;min-width:auto;margin-left:auto}
+    .rd-fxp-fns{display:flex;flex-direction:column;gap:2px}.rd-fxp-fns-scroll{overflow:auto;flex:1 1 auto;min-height:0}
+    .rd-fx-fn{display:flex;flex-direction:row;align-items:baseline;gap:8px;text-align:left;padding:3px 8px;min-height:24px;border:1px solid transparent;border-radius:6px;background:transparent;cursor:pointer;transition:background .1s,border-color .1s}
+    .rd-fx-fn:hover{background:color-mix(in srgb,var(--rd-blue) 8%,var(--sapField_Background,#fff))}
+    .rd-fx-fnname{flex:0 0 auto;min-width:74px;font:800 12px/1.4 ui-monospace,Menlo,Consolas,monospace}
+    .rd-fx-fnhelp{flex:1 1 auto;min-width:40px;font-size:11px;color:var(--sapContent_LabelColor,#6a6d70);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rd-fx-fneg{flex:0 1 auto;margin-left:auto;font:10px/1.4 ui-monospace,Menlo,Consolas,monospace;color:color-mix(in srgb,var(--sapContent_LabelColor,#6a6d70) 70%,transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40%;min-width:0}
     .rd-fx-fn-builtin .rd-fx-fnname{color:var(--rd-cyan)}.rd-fx-fn-builtin:hover{border-color:var(--rd-cyan);box-shadow:0 2px 8px color-mix(in srgb,var(--rd-cyan) 30%,transparent)}
     .rd-fx-fn-fetch .rd-fx-fnname{color:var(--rd-purple)}.rd-fx-fn-fetch:hover{border-color:var(--rd-purple);box-shadow:0 2px 8px color-mix(in srgb,var(--rd-purple) 30%,transparent)}
     /* 取数参数子面板（横版：逐参两列摊开） */
     .rd-fxp-sub{flex:1;min-height:0;overflow:auto;padding:4px 14px 12px;display:flex;flex-direction:column;gap:9px}
     .rd-fxp-subhead{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;background:color-mix(in srgb,var(--rd-purple) 16%,var(--sapTile_Background,#fff));border:1px solid color-mix(in srgb,var(--rd-purple) 32%,var(--rd-border))}
     .rd-fxp-subback{width:26px;height:26px;border:0;border-radius:6px;background:color-mix(in srgb,var(--rd-purple) 22%,transparent);color:var(--rd-purple);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.rd-fxp-subback:hover{background:color-mix(in srgb,var(--rd-purple) 38%,transparent)}
-    .rd-fxp-subttl{font-size:12.5px;color:var(--sapTextColor,#1d2d3e)}.rd-fxp-subttl b{color:var(--rd-purple);font-family:ui-monospace,Menlo,Consolas,monospace}
+    .rd-fxp-subttl{font-size:12.5px;color:var(--sapTextColor,#1d2d3e)}.rd-fxp-subttl b{color:var(--rd-purple);font-family:ui-monospace,Menlo,Consolas,monospace}.rd-fxp-subeg{margin-left:6px;font:11px/1.4 ui-monospace,Menlo,Consolas,monospace;color:color-mix(in srgb,var(--sapContent_LabelColor,#6a6d70) 80%,transparent);font-style:normal}
     .rd-fxp-subgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px}
     .rd-fxp-prow{display:grid;grid-template-columns:92px minmax(0,1fr);gap:9px;align-items:start;padding:6px 0;border-bottom:1px dashed color-mix(in srgb,var(--rd-border) 70%,transparent)}
     .rd-fxp-plabel{font-size:12px;color:var(--sapTextColor,#1d2d3e);padding-top:7px;font-weight:600}.rd-fxp-plabel .req{color:var(--rd-red,#c9372c);margin-left:2px}
@@ -663,9 +706,9 @@ function styleCss () {
     .rd-fxp-subout label{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70);flex:0 0 auto}
     .rd-fxp-subout code{flex:1;font:700 12.5px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--rd-purple);background:color-mix(in srgb,var(--rd-purple) 14%,var(--sapTile_Background,#fff));border:1px solid color-mix(in srgb,var(--rd-purple) 30%,var(--rd-border));border-radius:7px;padding:6px 9px;word-break:break-all}
     /* 底部动作 */
-    .rd-fxp-foot{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--rd-border);background:var(--sapList_HeaderBackground,#f7f9fc)}
+    .rd-fxp-foot{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 10px;border-top:1px solid var(--rd-border);background:var(--sapList_HeaderBackground,#f7f9fc)}
     .rd-fxp-tgt{font-size:11.5px;color:var(--sapContent_LabelColor,#6a6d70)}.rd-fxp-tgt b{color:var(--rd-blue);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
-    .rd-fxp-btns{display:flex;gap:8px}
+    .rd-fxp-btns{display:flex;gap:8px}.rd-fxp-foot .rd-sbtn{height:24px;font-size:11.5px;padding:0 9px}
     .rd-fxp-empty,.rd-fxp-loading{padding:14px;text-align:center;color:var(--sapContent_LabelColor,#8a8d90);font-size:12px;grid-column:1/-1}
   `
 }
@@ -827,6 +870,8 @@ function toolIcon (name) {
     'chevron-down': '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>',
     'rotate-ccw': '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v6h6"/><path d="M3.5 11a9 9 0 1 1 .5 6"/></svg>',
     'rotate-cw': '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 5v6h-6"/><path d="M20.5 11a9 9 0 1 0-.5 6"/></svg>',
+    minus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
   }
   return icons[name] || `<ui5-icon name="${esc(name)}"></ui5-icon>`
 }
@@ -1020,6 +1065,10 @@ function toolbarHtml (st) {
         ribbonButton('fmt-dec-inc', 'decimal-increase', '增加小数位'),
         ribbonButton('fmt-dec-dec', 'decimal-decrease', '减少小数位'),
       )}
+      ${ribbonGroup(
+        ribbonButton('clear-value', 'eraser', '清除内容'),
+        ribbonButton('clear-format', 'clear-formatting', '清除格式'),
+      )}
     </span>
     <span class="rd-more" data-rd-more hidden>
       <button class="rd-tool" type="button" data-rd-more-toggle title="更多工具" aria-label="更多工具" aria-expanded="false">${toolIcon('overflow')}</button>
@@ -1028,15 +1077,38 @@ function toolbarHtml (st) {
   </div>`
 }
 
+/** 顶栏「表格视图缩放」滑杆控件：−/+ 微调 + range 拖动 + 百分数胶囊（点击回 100%）。范围 50~200%。 */
+function zoomSlider (st) {
+  const pct = Math.round((st.sheetUi.zoom || 1) * 100)
+  const fill = ((pct - 50) / 150) * 100 // 已选段渐变百分比（50→0%, 200→100%）
+  return `<span class="rd-zoom" data-rd-zoom style="--rd-zoom-fill:${fill}%">
+    <button class="rd-zoom-step" type="button" data-zoom-step="-1" title="缩小" aria-label="缩小">${toolIcon('minus')}</button>
+    <input class="rd-zoom-range" type="range" min="50" max="200" step="10" value="${pct}" data-zoom-range aria-label="表格缩放百分比" title="拖动调整表格缩放">
+    <button class="rd-zoom-step" type="button" data-zoom-step="1" title="放大" aria-label="放大">${toolIcon('plus')}</button>
+    <button class="rd-zoom-pct" type="button" data-zoom-reset title="点击重置为 100%" aria-label="缩放百分比，点击重置"><span data-zoom-pct-text>${pct}%</span></button>
+  </span>`
+}
+
+/** 标题栏「计算 / 校验」滑动开关（Toggle）：开→有对应公式的格盖显徽标。kind=calc|check。 */
+function badgeToggle (kind, label, on) {
+  return `<button class="rd-btoggle rd-btoggle-${kind} ${on ? 'on' : ''}" type="button" data-badge-toggle="${kind}" role="switch" aria-checked="${on ? 'true' : 'false'}" title="${esc(label)}：在有${kind === 'calc' ? '取数/计算' : '校验'}公式的单元格上显示标记">
+      <span class="rd-btoggle-track"><span class="rd-btoggle-thumb"></span></span>
+      <span class="rd-btoggle-label">${esc(label)}</span>
+    </button>`
+}
+
 function headerToolsHtml (st) {
+  const ui = st.sheetUi
   return `<span class="rd-toolbar">
+    <span class="rd-hgroup rd-hgroup-badge">
+      ${badgeToggle('calc', '计算', !!ui.showCalc)}
+      ${badgeToggle('check', '校验', !!ui.showCheck)}
+      ${badgeToggle('element', '元素', !!ui.showElement)}
+    </span>
+    ${zoomSlider(st)}
     <span class="rd-hgroup">
       ${historyButton('undo', 'undo', '撤销')}
       ${historyButton('redo', 'redo', '重做')}
-    </span>
-    <span class="rd-hgroup">
-      <button class="rd-hbtn" type="button" data-sheet-cmd="clear-value" title="清除内容" aria-label="清除内容">${toolIcon('eraser')}</button>
-      <button class="rd-hbtn" type="button" data-sheet-cmd="clear-format" title="清除格式" aria-label="清除格式">${toolIcon('clear-formatting')}</button>
     </span>
     ${reportSplitButton()}
     <input data-rd-import-file type="file" accept=".xlsx,.xls" hidden>
@@ -1058,6 +1130,8 @@ function reportSplitButton () {
       <span class="rd-rpt-sep"></span>
       ${item('import-xlsx', 'upload', '导入 Excel')}
       ${item('export-xlsx', 'download', '导出 Excel')}
+      <span class="rd-rpt-sep"></span>
+      ${item('route-config', 'settings', '计算路由设置')}
     </span>
   </span>`
 }
@@ -1079,10 +1153,11 @@ function contentHtml (st) {
       <span class="rd-fxbar-sep"></span>
       <button class="rd-fx-btn" type="button" data-rd-fxbtn title="插入函数（fx）：进入公式编辑" aria-label="插入函数"><i>fx</i></button>
       <span class="rd-fxbar-sep"></span>
+      <span class="rd-fxbar-elem" data-rd-fxelem hidden title="当前单元格绑定的数据元素"><ui5-icon name="database"></ui5-icon><span data-rd-fxelem-text></span></span>
       <input class="rd-fxbar-input" data-rd-fxinput spellcheck="false" autocomplete="off"
              placeholder="输入内容，或以 = 开头输入公式" aria-label="公式输入框" value="">
     </div>
-    <div class="rd-sheet-stage"><div class="rd-spread-host"><cmx-spreadjs-sheet class="rd-spread" data-rd-spread data-cmx-formula-bar="false" data-cmx-report="${esc(JSON.stringify(reportModel(st)))}"></cmx-spreadjs-sheet></div></div>
+    <div class="rd-sheet-stage"><div class="rd-spread-host"><cmx-spreadjs-sheet class="rd-spread" data-rd-spread data-cmx-formula-bar="false" data-cmx-report="${esc(JSON.stringify(reportModel(st)))}"></cmx-spreadjs-sheet></div><div class="rd-badge-layer" data-rd-badge-layer aria-hidden="true"></div></div>
   </section>`
 }
 
@@ -1607,6 +1682,7 @@ function bindPropertyPage (root, st, host, view) {
     const cm = st.cellMap[key] = st.cellMap[key] || {}
     cm[el.getAttribute('data-cellmap-field')] = el.value
     markDirty(st, true)
+    renderBadges(st) // 计算/校验开关开着时，新挂/清除公式即时反映到 content 徽标（跨宿主）
   }))
   root.querySelector('[data-cellmap-save]')?.addEventListener('click', () => {
     markDirty(st, true)
@@ -1663,6 +1739,7 @@ function bindPropertyPage (root, st, host, view) {
     enqueueOp(st, field === 'checkFormula' ? 'setCheckFormula' : 'setCellFormula',
       { sheet: sheetName, cell: addr }, { formula })
     rerender()
+    renderBadges(st) // 计算/校验开关开着时，向导插入的公式即时反映到 content 徽标
     toast(root, `已插入公式到 ${addr}：${formula}`, 'success')
   })
 
@@ -1680,6 +1757,7 @@ function bindPropertyPage (root, st, host, view) {
     enqueueOp(st, 'unbindElement', { sheet: sheetName, cell: addr }, {})
     toast(root, `已解除 ${addr} 的元素绑定`, 'success')
     rerender()
+    renderBadges(st) // 元素开关开着时，解绑即时反映到 content 徽标
   })
   root.querySelectorAll('[data-el-insert]').forEach((b) => b.addEventListener('click', () => {
     insertElementValue(st, root, b.getAttribute('data-el-insert'))
@@ -1749,6 +1827,7 @@ function bindElementToCell (st, root, code) {
   enqueueOp(st, 'bindElement', { sheet: sheetName, cell: addr }, { elementCode: el.code })
   toast(root, `已绑定 ${el.code} → ${addr}`, 'success')
   refreshInstance(st, (v) => v === 'propertyCell' || v === 'propertyElement')
+  renderBadges(st) // 元素开关开着时，绑定元素即时反映到 content 徽标
 }
 
 /** 把元素名称填入当前单元格（作为文本标签），并顺带绑定。 */
@@ -1791,6 +1870,7 @@ function bindElementToCellAddr (st, root, payload, addr) {
   enqueueOp(st, 'bindElement', { sheet: sheetName, cell: addr }, { elementCode: code })
   toast(root, `${existed ? '已覆盖绑定' : '已绑定'} ${code} → ${addr}`, 'success')
   refreshInstance(st, (v) => v === 'propertyCell' || v === 'propertyElement')
+  renderBadges(st) // 拖拽绑定可能带入 calc/checkFormula → 徽标即时反映
   return true
 }
 
@@ -1828,6 +1908,151 @@ function parseDragElement (dt) {
 function sheetElOf (root) {
   return root.querySelector('[data-rd-spread]')
 }
+
+// ============================================================================
+// 公式徽标覆盖层（计算/校验）：有 calcFormula/checkFormula 的格盖显 <计算>/<校验>/<算-校>。
+// 纯 light DOM 覆盖（不进 SpreadJS/toJSON→不污染保存 BLOB/不触发 dirty），随滚动/改列宽/切 sheet 实时跟随。
+// ============================================================================
+
+/** 取在屏 content 宿主的 root（徽标层/stage 所在）；多 content 宿主时优先可见那个，都不可见兜底首个。 */
+function contentRootOf (st) {
+  let fallback = null
+  for (const host of Array.from(st.hosts)) {
+    if (!host || !host.isConnected) continue
+    if (host.__rptDesignerNativeView !== 'content') continue
+    const root = host.renderRoot || host.shadowRoot?.querySelector('.native-page-root')
+    if (!root) continue
+    const el = root.querySelector?.('[data-rd-spread]')
+    const visible = el && ((el.offsetParent !== null) || (el.getClientRects && el.getClientRects().length > 0))
+    if (visible) return root
+    fallback = fallback || root
+  }
+  return fallback
+}
+
+/** SpreadJS 画布宿主元素（组件 shadow 内 .sheet / canvas 容器）——坐标基准，同 cellAddrFromDrop 取法。 */
+function spreadHostEl (sheet) {
+  const shadow = sheet?.shadowRoot
+  return shadow?.querySelector('.sheet') || shadow?.querySelector('canvas')?.parentElement || shadow?.querySelector('canvas') || sheet
+}
+
+/** 视口签名（表名|首行|首列|宿主宽高位置）——poller 据此判断滚动/尺寸变化是否需重绘。 */
+function badgeViewportSig (st) {
+  const sheet = liveSheetOf(st)
+  const ws = sheet?.getWorkbook?.()?.getActiveSheet?.()
+  if (!ws) return ''
+  const hr = spreadHostEl(sheet)?.getBoundingClientRect?.() || {}
+  let top = 0; let left = 0
+  try { top = ws.getViewportTopRow ? ws.getViewportTopRow(1) : 0 } catch (_) {}
+  try { left = ws.getViewportLeftColumn ? ws.getViewportLeftColumn(1) : 0 } catch (_) {}
+  return `${(typeof ws.name === 'function' ? ws.name() : '')}|${top}|${left}|${Math.round(hr.width || 0)}|${Math.round(hr.height || 0)}|${Math.round(hr.left || 0)}|${Math.round(hr.top || 0)}`
+}
+
+/** 重绘公式徽标：扫 st.cellMap，把当前 sheet 可视范围内有对应公式的格盖上徽标（节点按 addr 复用）。 */
+function renderBadges (st) {
+  const ui = st.sheetUi || {}
+  const root = contentRootOf(st)
+  const layer = root?.querySelector?.('[data-rd-badge-layer]')
+  if (!layer) return
+  const cache = layer.__rdBadges || (layer.__rdBadges = new Map())
+  const clearAll = () => { for (const node of cache.values()) node.remove(); cache.clear() }
+  if (!ui.showCalc && !ui.showCheck && !ui.showElement) { clearAll(); return }
+  const sheet = liveSheetOf(st)
+  const ws = sheet?.getWorkbook?.()?.getActiveSheet?.()
+  const stage = root.querySelector('.rd-sheet-stage')
+  if (!ws || !stage) { clearAll(); return }
+  const sheetName = (typeof ws.name === 'function') ? ws.name() : ''
+  const hostRect = spreadHostEl(sheet).getBoundingClientRect()
+  const stageRect = stage.getBoundingClientRect()
+  // 可视行列范围（默认主视口 index=1）——超范围不画（overflow 也裁，双保险省节点）。取不到则不设限。
+  let r0 = -Infinity; let r1 = Infinity; let c0 = -Infinity; let c1 = Infinity
+  try {
+    if (ws.getViewportTopRow) { r0 = ws.getViewportTopRow(1); r1 = ws.getViewportBottomRow(1); c0 = ws.getViewportLeftColumn(1); c1 = ws.getViewportRightColumn(1) }
+  } catch (_) { r0 = -Infinity; r1 = Infinity; c0 = -Infinity; c1 = Infinity }
+  const seen = new Set()
+  for (const key of Object.keys(st.cellMap || {})) {
+    const cm = st.cellMap[key]
+    if (!cm) continue
+    // key = `sheet名!地址`（新）或裸地址（旧）；只画当前 sheet。
+    const bang = key.indexOf('!')
+    const kSheet = bang >= 0 ? key.slice(0, bang) : ''
+    const addr = bang >= 0 ? key.slice(bang + 1) : key
+    if (kSheet && kSheet !== sheetName) continue
+    const hasCalc = !!(ui.showCalc && cm.calcFormula && String(cm.calcFormula).trim())
+    const hasCheck = !!(ui.showCheck && cm.checkFormula && String(cm.checkFormula).trim())
+    const hasElement = !!(ui.showElement && cm.elementCode && String(cm.elementCode).trim())
+    if (!hasCalc && !hasCheck && !hasElement) continue
+    const p = parseA1(addr)
+    if (!p) continue
+    // 合并单元格：非锚点子格跳过（锚点整块盖）。
+    let span = null
+    try { span = ws.getSpan ? ws.getSpan(p.row, p.col) : null } catch (_) {}
+    if (span && (span.row !== p.row || span.col !== p.col)) continue
+    if (!span && (p.row < r0 || p.row > r1 || p.col < c0 || p.col > c1)) continue
+    let rect = null
+    // 合并块用 4 参重载取整块矩形；普通格取单格。
+    try { rect = span ? ws.getCellRect(p.row, p.col, span.rowCount || 1, span.colCount || 1) : ws.getCellRect(p.row, p.col) } catch (_) {}
+    if (!rect || !(rect.width > 0) || !(rect.height > 0)) continue
+    // 徽标物理盖住整格，只能显一个 → 优先级：计算>校验>元素（计算公式优先级高于元素，都有则显计算）。
+    // calc+check 都有且都开 → 合并态 <算-校>。
+    const both = hasCalc && hasCheck
+    let variant; let text
+    if (both) { variant = 'both'; text = '<算-校>' }
+    else if (hasCalc) { variant = 'calc'; text = '<计算>' }
+    else if (hasCheck) { variant = 'check'; text = '<校验>' }
+    else { variant = 'element'; text = '<元素>' }
+    let node = cache.get(addr)
+    if (!node) {
+      node = document.createElement('div')
+      node.innerHTML = '<span class="rd-badge-pill"></span>'
+      layer.appendChild(node)
+      cache.set(addr, node)
+    }
+    node.className = `rd-cell-badge ${variant}`
+    const pill = node.firstChild
+    if (pill.textContent !== text) pill.textContent = text
+    const left = hostRect.left - stageRect.left + rect.x
+    const top = hostRect.top - stageRect.top + rect.y
+    node.style.cssText = `left:${left}px;top:${top}px;width:${rect.width}px;height:${rect.height}px`
+    seen.add(addr)
+  }
+  for (const [addr, node] of cache) { if (!seen.has(addr)) { node.remove(); cache.delete(addr) } }
+}
+
+/** rAF 去抖触发一次重绘（多事件合并成一帧）。 */
+function scheduleBadges (st) {
+  if (st.__badgeRaf) return
+  st.__badgeRaf = requestAnimationFrame(() => { st.__badgeRaf = null; try { renderBadges(st) } catch (_) {} })
+}
+
+/** 自停轮询跟随滚动/尺寸（原生事件覆盖不全）：视口签名变化才重绘；两开关全关或 content 宿主死→自杀。 */
+function startBadgePoll (st) {
+  if (st.__badgePoll) return
+  st.__badgeSig = badgeViewportSig(st)
+  st.__badgePoll = setInterval(() => {
+    const ui = st.sheetUi || {}
+    const alive = Array.from(st.hosts).some((h) => h && h.isConnected && h.__rptDesignerNativeView === 'content')
+    if ((!ui.showCalc && !ui.showCheck && !ui.showElement) || !alive) { clearInterval(st.__badgePoll); st.__badgePoll = null; return }
+    const sig = badgeViewportSig(st)
+    if (sig !== st.__badgeSig) { st.__badgeSig = sig; renderBadges(st) }
+  }, 200)
+}
+
+/** 绑 SpreadJS 滚动/尺寸/编辑事件 → 去抖重绘徽标（poller 之外的即时兜底）。 */
+function bindBadgeEvents (sheet, st, tries = 0) {
+  const wb = sheet.getWorkbook?.()
+  if (!wb) { if (tries < 20) setTimeout(() => bindBadgeEvents(sheet, st, tries + 1), 300); return }
+  if (wb.__rdBadgeBound) return
+  wb.__rdBadgeBound = true
+  const on = () => scheduleBadges(st)
+  const EVENTS = ['TopRowChanged', 'LeftColumnChanged', 'ColumnWidthChanged', 'RowHeightChanged', 'ValueChanged', 'RangeChanged', 'CellChanged', 'ClipboardPasted']
+  for (const name of EVENTS) { try { wb.bind(name, on) } catch (_) {} }
+  const bindSheet = (ws) => { if (!ws || ws.__rdBadgeBound) return; ws.__rdBadgeBound = true; for (const name of EVENTS) { try { ws.bind(name, on) } catch (_) {} } }
+  try { const cnt = wb.getSheetCount?.() || 1; for (let i = 0; i < cnt; i++) bindSheet(wb.getSheet?.(i)) } catch (_) { bindSheet(wb.getActiveSheet?.()) }
+  try { wb.bind('ActiveSheetChanged', () => { bindSheet(wb.getActiveSheet?.()); on() }) } catch (_) {}
+  if (!st.__badgeResizeBound) { st.__badgeResizeBound = true; window.addEventListener('resize', () => scheduleBadges(st)) }
+}
+
 
 /** 读当前选区的 formatter 字符串（getSelectionState().format，空=常规）。 */
 function currentFormatter (sheet, st) {
@@ -1897,20 +2122,58 @@ function toggleMergeSelection (sheet, st, root) {
   updateToolbarControlsAll(st)
 }
 
+/** 应用缩放（pct 50~200）到在屏当前 sheet + 原地更新顶栏滑杆控件（不整页重渲，避免重挂 SpreadJS）。 */
+function applyZoom (st, pct) {
+  const p = Math.max(50, Math.min(200, Math.round(Number(pct) || 100)))
+  st.sheetUi.zoom = p / 100
+  const ws = liveSheetOf(st)?.getWorkbook?.()?.getActiveSheet?.()
+  try { ws?.zoom?.(p / 100) } catch (_) {}
+  updateZoomControlAll(st)
+  // 缩放改变 getCellRect → 徽标须重定位（缩放不改视口签名，poller 不会自发重绘，故显式触发）。
+  scheduleBadges(st)
+}
+
+/** 原地把顶栏缩放控件（range 值 + 已选段渐变 + 百分数胶囊）同步到 st.sheetUi.zoom。 */
+function updateZoomControl (root, st) {
+  const box = root.querySelector('[data-rd-zoom]')
+  if (!box) return
+  const pct = Math.round((st.sheetUi.zoom || 1) * 100)
+  const fill = ((pct - 50) / 150) * 100
+  box.style.setProperty('--rd-zoom-fill', `${fill}%`)
+  const range = box.querySelector('[data-zoom-range]')
+  const focused = box.getRootNode?.()?.activeElement
+  if (range && range !== focused) range.value = String(pct)
+  const txt = box.querySelector('[data-zoom-pct-text]')
+  if (txt) txt.textContent = `${pct}%`
+}
+
+/** 跨所有在屏 content 宿主同步缩放控件。 */
+function updateZoomControlAll (st) {
+  for (const host of Array.from(st.hosts)) {
+    if (!host || !host.isConnected || host.__rptDesignerNativeView !== 'content') continue
+    const root = host.renderRoot || host.shadowRoot?.querySelector('.native-page-root')
+    if (root) updateZoomControl(root, st)
+  }
+}
+
 function applySheetUiStyle (sheet, st, patch = {}) {
   Object.assign(st.sheetUi, patch)
   if (!sheet || typeof sheet.applySelectionStyle !== 'function') return
   const ui = st.sheetUi
-  sheet.applySelectionStyle({
+  // 只发本次真正改的属性——尤其 backColor/foreColor 仅当用户改「填充色/字体色」时才带上。
+  // 否则加粗/对齐/换行等任意格式修改都会把 ui.fillColor(默认#ffffff)写成单元格底色→无填充格变银白。
+  const style = {
     font: fontSpec(ui),
     hAlign: ui.align,
     vAlign: ui.valign === 'middle' ? 'center' : ui.valign,
     textDecoration: ui.underline ? 'underline' : 'none',
-    foreColor: ui.fontColor,
-    backColor: ui.fillColor,
     formatter: NUMBER_FORMATS[ui.format] || '',
     wordWrap: ui.wordWrap,
-  })
+  }
+  // 组件 applySelectionStyle 用 hasOwnProperty 判定是否写色——故仅在 patch 触及时才加键。
+  if (Object.prototype.hasOwnProperty.call(patch, 'fillColor')) style.backColor = ui.fillColor
+  if (Object.prototype.hasOwnProperty.call(patch, 'fontColor')) style.foreColor = ui.fontColor
+  sheet.applySelectionStyle(style)
 }
 
 function syncSheetUiFromSelection (sheet, st) {
@@ -2011,6 +2274,7 @@ function updateToolbarControls (root, st) {
   root.querySelectorAll('[data-history-toggle="redo"]').forEach((btn) => { btn.disabled = history.canRedo !== true })
   root.querySelectorAll('[data-history="undo"]').forEach((el) => el.classList.toggle('disabled', history.canUndo !== true))
   root.querySelectorAll('[data-history="redo"]').forEach((el) => el.classList.toggle('disabled', history.canRedo !== true))
+  updateZoomControl(root, st) // 顶栏缩放滑杆回显（切格/切 sheet/重渲后）
 }
 
 function renderHistoryMenu (root, sheet, kind) {
@@ -2269,6 +2533,8 @@ async function presentRptError (root, err, action = 'save') {
 async function saveLayout (sheet, st, root) {
   const wbJson = sheet.getWorkbookJson ? sheet.getWorkbookJson() : (sheet.getWorkbook?.()?.toJSON?.() || null)
   if (!wbJson) { toast(root, '保存失败：工作簿未就绪', 'error'); return }
+  // 缩放是会话级视图偏好，不随报表保存：剔除各 sheet 的 zoomFactor，令 BLOB 恒 100%。
+  try { const shs = wbJson.sheets || {}; for (const n of Object.keys(shs)) { if (shs[n] && 'zoomFactor' in shs[n]) delete shs[n].zoomFactor } } catch (_) {}
   const proj = deriveProjection(sheet, st)
   const payload = {
     version: st.props.version || '',
@@ -2287,6 +2553,41 @@ async function saveLayout (sheet, st, root) {
     // 对齐 DOC：专业对话框展示（唯一键冲突/校验/乐观锁），冲突确认后重载最新版。
     const r = await presentRptError(root, err, 'save')
     if (r?.kind === 'conflict') await loadLayout(sheet, st, root)
+    return false
+  }
+}
+
+/** 打开报表：一次后端调用取全集（版式+cellMap+元素+函数）。分发进各缓存 + 复原版式。
+ *  失败返回 false → 调用方回退旧多调用路径（loadLayout + 懒加载 elements/functions）。 */
+async function openReportBundle (sheet, st, root) {
+  try {
+    const data = await apiJson(`/api/report-design/reports/${enc(st.props.reportCode)}/open`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version: st.props.version || '' }),
+    })
+    if (!data) return false
+    // ① 版式（复用现有 buildReportModel/hydratePropsFromLayout，data 含 fmt/sheets/regions/rows/cols/cellMap）
+    st.__model = buildReportModel(st, data)
+    st.__contentHash = data?.fmt?.contentHash || null
+    hydratePropsFromLayout(st, data)
+    const wbJson = st.__model.workbookJson
+    if (wbJson && sheet.setWorkbookJson) await sheet.setWorkbookJson(wbJson)
+    else if (sheet.setReportModel) sheet.setReportModel(reportModel(st))
+    // ② 函数目录（预置缓存 → 后续 loadFunctions 命中不再请求）
+    st.functions = Array.isArray(data?.functions) ? data.functions : []
+    st.functionsLoaded = true
+    // ③ 元素目录（预置缓存 → 后续 loadElements 命中不再请求；normalize 补缺失分类）
+    const norm = normalizeElementsPayload({ categories: data?.categories, elements: data?.elements })
+    st.elementCategories = norm.categories
+    st.elements = norm.elements
+    st.elementsLoaded = true
+    // 收尾（同 loadLayout）
+    syncActiveSheetName(sheet, st)
+    syncSheetUiFromSelection(sheet, st)
+    updateToolbarControls(root, st)
+    refreshInstance(st, (v) => v === 'propertyMeta' || v === 'propertyCell' || v === 'explorerData' || v === 'propertyElement')
+    return true
+  } catch (_) {
     return false
   }
 }
@@ -2605,6 +2906,9 @@ function runSheetCommand (cmd, sheet, st, root) {
       ui.editable = !ui.editable
       sheet.setEditable?.(ui.editable)
       break
+    case 'route-config':
+      rcOpenDialog(st.props.reportCode, root)
+      break
   }
   // 会改动版式的命令 → 置 dirty（保存/导出/导入/撤销重做/纯显示切换不算）。
   const MUTATING = new Set([
@@ -2697,6 +3001,29 @@ function bindSheetToolbar (root, st) {
   root.querySelectorAll('[data-sheet-cmd]').forEach((btn) => {
     btn.addEventListener('click', () => runSheetCommand(btn.getAttribute('data-sheet-cmd') || '', sheet, st, root))
   })
+  // 计算/校验滑动开关：翻状态 → 原地切 .on（不整页重渲，避免重挂 SpreadJS）→ 重绘徽标 + 起自停轮询。
+  root.querySelectorAll('[data-badge-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const kind = btn.getAttribute('data-badge-toggle')
+      const flag = kind === 'check' ? 'showCheck' : (kind === 'element' ? 'showElement' : 'showCalc')
+      const on = !st.sheetUi[flag]
+      st.sheetUi[flag] = on
+      btn.classList.toggle('on', on)
+      btn.setAttribute('aria-checked', on ? 'true' : 'false')
+      renderBadges(st)
+      if (st.sheetUi.showCalc || st.sheetUi.showCheck || st.sheetUi.showElement) startBadgePoll(st)
+    })
+  })
+  // 缩放滑杆：拖动 range 实时缩放 / −+ 步进 / 点百分数胶囊回 100%。
+  const zoomRange = root.querySelector('[data-zoom-range]')
+  zoomRange?.addEventListener('input', () => applyZoom(st, zoomRange.value))
+  root.querySelectorAll('[data-zoom-step]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const dir = Number(btn.getAttribute('data-zoom-step')) || 0
+      applyZoom(st, Math.round((st.sheetUi.zoom || 1) * 100) + dir * 10)
+    })
+  })
+  root.querySelector('[data-zoom-reset]')?.addEventListener('click', () => applyZoom(st, 100))
   root.querySelectorAll('[data-sheet-field]').forEach((field) => {
     field.addEventListener('change', () => {
       const key = field.getAttribute('data-sheet-field')
@@ -2787,8 +3114,8 @@ function bindFormulaBar (root, st) {
   })
   fx?.addEventListener('change', submitFx)
 
-  // —— fx 按钮：打开 Excel 样式函数定义面板 ——
-  fxBtn?.addEventListener('click', () => openFxPanel(root, st))
+  // —— fx 按钮：打开通用 fx 函数/公式编辑器组件（cmx-fx-editor），注入取数函数/参数控件 ——
+  fxBtn?.addEventListener('click', () => openFxEditor(root, st, fxBtn))
 }
 
 /** 跳转/选中在屏 sheet 的单元格或区域（B4 / A1:C5）。成功返回 true。 */
@@ -2818,12 +3145,36 @@ function gotoCellOrRange (st, addr) {
   return true
 }
 
-/** 用当前选中格的公式/值刷新公式输入框（不动名称框）。 */
+/** 用当前选中格的公式/值刷新公式输入框（不动名称框）+ 左侧数据元素只读胶囊。
+ *  内容框优先级：取数公式 calcFormula > 校验公式 checkFormula > 画布原生公式 > 值。
+ *  元素绑定单独以左侧绿色只读胶囊显示（有才显），不挤进可编辑的公式框。 */
 function fxSyncFromSelection (root, st) {
   const fx = root.querySelector('[data-rd-fxinput]')
   if (!fx) return
+  const addr = st.selectedCell || 'A1'
+  const cm = st.cellMap[cellKey(st, addr)] || {}
+  // —— 左侧元素胶囊 ——
+  const chip = root.querySelector('[data-rd-fxelem]')
+  if (chip) {
+    const code = String(cm.elementCode || '').trim()
+    if (code) {
+      const el = (st.elements || []).find((x) => String(x.code) === code)
+      const label = el ? (el.name ? `${el.name} (${code})` : code) : code
+      const txt = chip.querySelector('[data-rd-fxelem-text]')
+      if (txt) txt.textContent = label
+      chip.title = `当前单元格绑定的数据元素：${label}`
+      chip.hidden = false
+    } else {
+      chip.hidden = true
+    }
+  }
+  // —— 公式框：设计器公式优先，回退画布原生公式/值 ——
+  const calc = String(cm.calcFormula || '').trim()
+  const check = String(cm.checkFormula || '').trim()
+  if (calc) { fx.value = /^=/.test(calc) ? calc : `=${calc}`; return }
+  if (check) { fx.value = /^=/.test(check) ? check : `=${check}`; return }
   const ws = liveSheetOf(st)?.getWorkbook?.()?.getActiveSheet?.()
-  const p = parseA1(st.selectedCell || 'A1')
+  const p = parseA1(addr)
   if (!ws || !p) { fx.value = ''; return }
   let formula = null
   try { formula = ws.getFormula ? ws.getFormula(p.row, p.col) : null } catch {}
@@ -2870,7 +3221,190 @@ function fxpControl (st, p, i, val) {
 }
 
 /** 内置(可拼)函数：SpreadJS 原生 + formula-eval 都支持，点击插入 NAME() 并把光标停括号内。 */
-const FX_BUILTIN = ['SUM', 'IF', 'ABS', 'MAX', 'MIN', 'ROUND']
+/**
+ * SpreadJS/Excel 内置函数常用全集（~150），每项 [name, category, help, example]。
+ * category: math数学 stat统计 logic逻辑 text文本 date日期 lookup查找 finance财务 info信息。
+ * 点击后经 fxCatalogFn() 归一为 {name,category,help,example,prototype:{params,variadic}} 走逐参子面板。
+ */
+const FX_BUILTIN_CATALOG = [
+  // ── 数学 math ──
+  ['SUM','math','求和（支持区间）','SUM(D3:D7)'],
+  ['SUMIF','math','按条件求和','SUMIF(A2:A9,">100",B2:B9)'],
+  ['SUMIFS','math','多条件求和','SUMIFS(C2:C9,A2:A9,"华东",B2:B9,">0")'],
+  ['SUMPRODUCT','math','乘积之和','SUMPRODUCT(A2:A9,B2:B9)'],
+  ['PRODUCT','math','连乘','PRODUCT(A2:A9)'],
+  ['ABS','math','绝对值','ABS(C5)'],
+  ['ROUND','math','四舍五入','ROUND(C5,2)'],
+  ['ROUNDUP','math','向上舍入','ROUNDUP(C5,2)'],
+  ['ROUNDDOWN','math','向下舍入','ROUNDDOWN(C5,2)'],
+  ['INT','math','取整（向下）','INT(C5)'],
+  ['TRUNC','math','截尾取整','TRUNC(C5,2)'],
+  ['MOD','math','取余','MOD(C5,3)'],
+  ['CEILING','math','按基数向上取整','CEILING(C5,10)'],
+  ['FLOOR','math','按基数向下取整','FLOOR(C5,10)'],
+  ['POWER','math','幂','POWER(C5,2)'],
+  ['SQRT','math','平方根','SQRT(C5)'],
+  ['EXP','math','e 的幂','EXP(C5)'],
+  ['LN','math','自然对数','LN(C5)'],
+  ['LOG','math','对数','LOG(C5,10)'],
+  ['LOG10','math','常用对数','LOG10(C5)'],
+  ['SIGN','math','符号(-1/0/1)','SIGN(C5)'],
+  ['GCD','math','最大公约数','GCD(A2,B2)'],
+  ['LCM','math','最小公倍数','LCM(A2,B2)'],
+  ['RAND','math','0~1 随机数','RAND()'],
+  ['RANDBETWEEN','math','区间随机整数','RANDBETWEEN(1,100)'],
+  ['SUBTOTAL','math','分类汇总(可选函数号)','SUBTOTAL(9,C2:C9)'],
+  ['ROMAN','math','罗马数字','ROMAN(2026)'],
+  ['PI','math','圆周率','PI()'],
+  ['QUOTIENT','math','商的整数部分','QUOTIENT(C5,3)'],
+  ['MROUND','math','舍入到基数倍数','MROUND(C5,5)'],
+  ['SIN','math','正弦','SIN(C5)'],
+  ['COS','math','余弦','COS(C5)'],
+  ['TAN','math','正切','TAN(C5)'],
+  // ── 统计 stat ──
+  ['AVERAGE','stat','平均值','AVERAGE(C2:C9)'],
+  ['AVERAGEIF','stat','按条件平均','AVERAGEIF(A2:A9,">0",C2:C9)'],
+  ['AVERAGEIFS','stat','多条件平均','AVERAGEIFS(C2:C9,A2:A9,"华东")'],
+  ['COUNT','stat','计数(数字)','COUNT(C2:C9)'],
+  ['COUNTA','stat','计数(非空)','COUNTA(A2:A9)'],
+  ['COUNTBLANK','stat','空单元格计数','COUNTBLANK(A2:A9)'],
+  ['COUNTIF','stat','按条件计数','COUNTIF(A2:A9,">100")'],
+  ['COUNTIFS','stat','多条件计数','COUNTIFS(A2:A9,"华东",B2:B9,">0")'],
+  ['MAX','stat','最大值','MAX(C5:C9)'],
+  ['MIN','stat','最小值','MIN(C5:C9)'],
+  ['MAXIFS','stat','按条件最大','MAXIFS(C2:C9,A2:A9,"华东")'],
+  ['MINIFS','stat','按条件最小','MINIFS(C2:C9,A2:A9,"华东")'],
+  ['MEDIAN','stat','中位数','MEDIAN(C2:C9)'],
+  ['MODE','stat','众数','MODE(C2:C9)'],
+  ['LARGE','stat','第 k 大','LARGE(C2:C9,2)'],
+  ['SMALL','stat','第 k 小','SMALL(C2:C9,2)'],
+  ['RANK','stat','排名','RANK(C5,C2:C9)'],
+  ['STDEV','stat','样本标准差','STDEV(C2:C9)'],
+  ['STDEVP','stat','总体标准差','STDEVP(C2:C9)'],
+  ['VAR','stat','样本方差','VAR(C2:C9)'],
+  ['VARP','stat','总体方差','VARP(C2:C9)'],
+  ['PERCENTILE','stat','百分位数','PERCENTILE(C2:C9,0.9)'],
+  ['QUARTILE','stat','四分位数','QUARTILE(C2:C9,1)'],
+  ['FREQUENCY','stat','频数分布','FREQUENCY(A2:A9,B2:B5)'],
+  // ── 逻辑 logic ──
+  ['IF','logic','条件取值','IF(C5>0,C5,0)'],
+  ['IFS','logic','多分支条件','IFS(C5>90,"A",C5>60,"B",TRUE,"C")'],
+  ['IFERROR','logic','出错时取备用值','IFERROR(A1/B1,0)'],
+  ['IFNA','logic','#N/A 时取备用值','IFNA(VLOOKUP(A1,D:E,2,0),"无")'],
+  ['AND','logic','逻辑与','AND(C5>0,C5<100)'],
+  ['OR','logic','逻辑或','OR(C5<0,C5>100)'],
+  ['NOT','logic','逻辑非','NOT(C5>0)'],
+  ['XOR','logic','逻辑异或','XOR(A1>0,B1>0)'],
+  ['TRUE','logic','逻辑真','TRUE()'],
+  ['FALSE','logic','逻辑假','FALSE()'],
+  ['SWITCH','logic','按值分支','SWITCH(A1,1,"一",2,"二","其它")'],
+  // ── 文本 text ──
+  ['CONCATENATE','text','连接文本','CONCATENATE(A1," ",B1)'],
+  ['CONCAT','text','连接(支持区间)','CONCAT(A1:A5)'],
+  ['TEXTJOIN','text','带分隔符连接','TEXTJOIN("-",TRUE,A1:A5)'],
+  ['LEFT','text','左取 n 字符','LEFT(A1,3)'],
+  ['RIGHT','text','右取 n 字符','RIGHT(A1,3)'],
+  ['MID','text','中间取字符','MID(A1,2,3)'],
+  ['LEN','text','文本长度','LEN(A1)'],
+  ['FIND','text','查找(区分大小写)','FIND("x",A1)'],
+  ['SEARCH','text','查找(不区分大小写)','SEARCH("x",A1)'],
+  ['REPLACE','text','按位置替换','REPLACE(A1,1,2,"XX")'],
+  ['SUBSTITUTE','text','按内容替换','SUBSTITUTE(A1,"旧","新")'],
+  ['UPPER','text','转大写','UPPER(A1)'],
+  ['LOWER','text','转小写','LOWER(A1)'],
+  ['PROPER','text','首字母大写','PROPER(A1)'],
+  ['TRIM','text','去首尾空格','TRIM(A1)'],
+  ['REPT','text','重复文本','REPT("*",5)'],
+  ['TEXT','text','按格式转文本','TEXT(C5,"#,##0.00")'],
+  ['VALUE','text','文本转数值','VALUE(A1)'],
+  ['NUMBERVALUE','text','按区域转数值','NUMBERVALUE(A1)'],
+  ['CHAR','text','数字转字符','CHAR(65)'],
+  ['CODE','text','字符转编码','CODE(A1)'],
+  ['EXACT','text','精确比较','EXACT(A1,B1)'],
+  ['CLEAN','text','删除非打印字符','CLEAN(A1)'],
+  // ── 日期 date ──
+  ['TODAY','date','今天','TODAY()'],
+  ['NOW','date','现在(日期时间)','NOW()'],
+  ['DATE','date','构造日期','DATE(2026,7,1)'],
+  ['TIME','date','构造时间','TIME(9,30,0)'],
+  ['YEAR','date','取年','YEAR(A1)'],
+  ['MONTH','date','取月','MONTH(A1)'],
+  ['DAY','date','取日','DAY(A1)'],
+  ['HOUR','date','取时','HOUR(A1)'],
+  ['MINUTE','date','取分','MINUTE(A1)'],
+  ['SECOND','date','取秒','SECOND(A1)'],
+  ['WEEKDAY','date','星期几','WEEKDAY(A1,2)'],
+  ['WEEKNUM','date','第几周','WEEKNUM(A1)'],
+  ['EOMONTH','date','月末日期','EOMONTH(A1,0)'],
+  ['EDATE','date','n 月后日期','EDATE(A1,3)'],
+  ['DATEDIF','date','日期差','DATEDIF(A1,B1,"m")'],
+  ['DAYS','date','天数差','DAYS(B1,A1)'],
+  ['NETWORKDAYS','date','工作日天数','NETWORKDAYS(A1,B1)'],
+  ['WORKDAY','date','n 工作日后','WORKDAY(A1,5)'],
+  ['DATEVALUE','date','文本转日期','DATEVALUE("2026-07-01")'],
+  // ── 查找 lookup ──
+  ['VLOOKUP','lookup','垂直查找','VLOOKUP(A2,D:F,3,0)'],
+  ['HLOOKUP','lookup','水平查找','HLOOKUP(A2,D1:J3,2,0)'],
+  ['LOOKUP','lookup','向量查找','LOOKUP(A2,D2:D9,F2:F9)'],
+  ['INDEX','lookup','按行列取值','INDEX(D2:F9,2,3)'],
+  ['MATCH','lookup','匹配位置','MATCH(A2,D2:D9,0)'],
+  ['XLOOKUP','lookup','增强查找','XLOOKUP(A2,D2:D9,F2:F9,"无")'],
+  ['CHOOSE','lookup','按序号选值','CHOOSE(2,"甲","乙","丙")'],
+  ['OFFSET','lookup','偏移引用','OFFSET(A1,2,3)'],
+  ['INDIRECT','lookup','按文本引用','INDIRECT("D"&ROW())'],
+  ['ROW','lookup','行号','ROW(A1)'],
+  ['COLUMN','lookup','列号','COLUMN(A1)'],
+  ['ROWS','lookup','区间行数','ROWS(A1:A9)'],
+  ['COLUMNS','lookup','区间列数','COLUMNS(A1:F1)'],
+  ['TRANSPOSE','lookup','转置','TRANSPOSE(A1:C3)'],
+  ['HYPERLINK','lookup','超链接','HYPERLINK("http://x","链接")'],
+  // ── 财务 finance ──
+  ['PMT','finance','等额还款额','PMT(0.05/12,60,-100000)'],
+  ['PV','finance','现值','PV(0.05/12,60,-2000)'],
+  ['FV','finance','终值','FV(0.05/12,60,-2000)'],
+  ['NPV','finance','净现值','NPV(0.1,C2:C9)'],
+  ['IRR','finance','内部收益率','IRR(C2:C9)'],
+  ['RATE','finance','利率','RATE(60,-2000,100000)'],
+  ['NPER','finance','期数','NPER(0.05/12,-2000,100000)'],
+  ['SLN','finance','直线折旧','SLN(100000,10000,5)'],
+  ['DB','finance','固定余额递减折旧','DB(100000,10000,5,1)'],
+  ['DDB','finance','双倍余额递减折旧','DDB(100000,10000,5,1)'],
+  // ── 信息 info ──
+  ['ISBLANK','info','是否为空','ISBLANK(A1)'],
+  ['ISNUMBER','info','是否数字','ISNUMBER(A1)'],
+  ['ISTEXT','info','是否文本','ISTEXT(A1)'],
+  ['ISERROR','info','是否错误值','ISERROR(A1)'],
+  ['ISNA','info','是否 #N/A','ISNA(A1)'],
+  ['ISEVEN','info','是否偶数','ISEVEN(A1)'],
+  ['ISODD','info','是否奇数','ISODD(A1)'],
+  ['NA','info','返回 #N/A','NA()'],
+  ['N','info','转数值','N(A1)'],
+  ['T','info','转文本','T(A1)'],
+]
+const FX_BUILTIN_CATS = { math: '数学', stat: '统计', logic: '逻辑', text: '文本', date: '日期', lookup: '查找', finance: '财务', info: '信息' }
+
+/**
+ * 把 catalog 条目/名称归一为可走逐参子面板的 fn 对象。
+ * 优先用后端 st.functions 的真实 prototype（若命中）；否则由 example 括号内的参数名/个数**推断**一个通用 prototype
+ * （每参 kind=expr，无引号裸写；末参若像区间则也 expr）。variadic 对 SUM/AVERAGE 等聚合类给一个可追加参。
+ */
+function fxCatalogFn (st, name) {
+  const hit = (st.functions || []).find((f) => f.name === name)
+  const row = FX_BUILTIN_CATALOG.find((r) => r[0] === name)
+  const help = (hit && hit.help) || (row && row[2]) || ''
+  const example = (hit && hit.example) || (row && row[3]) || `${name}()`
+  const category = (row && row[1]) || (hit && hit.category) || 'math'
+  if (hit && hit.prototype) return { ...hit, help, example, category }
+  // 由样例推断参数：取第一个括号内、按逗号切（忽略嵌套逗号——样例都简单，够用）
+  const m = /\(([^)]*)\)/.exec(example)
+  const argStr = m ? m[1].trim() : ''
+  const rawArgs = argStr ? argStr.split(',').map((s) => s.trim()) : []
+  const params = rawArgs.map((a, i) => ({ name: a || `参数${i + 1}`, kind: 'expr', required: i === 0, hint: '' }))
+  // 聚合/连接类给变参入口
+  const AGG = ['SUM', 'AVERAGE', 'COUNT', 'COUNTA', 'MAX', 'MIN', 'PRODUCT', 'CONCAT', 'CONCATENATE', 'AND', 'OR', 'GCD', 'LCM', 'MEDIAN', 'MODE', 'STDEV', 'STDEVP', 'VAR', 'VARP']
+  const variadic = AGG.includes(name) ? { name: '更多', kind: 'expr', required: false, hint: '可继续追加' } : null
+  return { name, category, help, example, prototype: { params, variadic } }
+}
 /** 取数函数（需参数，点击展开逐参子面板）。 */
 const FX_FETCH = ['QM', 'QC', 'JE', 'FS', 'REF']
 /** 运算符/括号快捷插入。 */
@@ -2912,24 +3446,33 @@ function fxPaletteHtml (st) {
   const fp = st.fxPanel
   const q = String(fp.search || '').trim().toLowerCase()
   const opBtns = FX_OPS.map((o) => `<button class="rd-fx-op" type="button" data-fx-op="${esc(o.ins)}" data-fx-inside="${o.inside ? '1' : ''}" title="${esc(o.t)}">${esc(o.t)}</button>`).join('')
-  const fnMeta = (name) => (st.functions || []).find((f) => f.name === name) || { name, help: '' }
-  const match = (name) => { if (!q) return true; const m = fnMeta(name); return name.toLowerCase().includes(q) || String(m.help || '').toLowerCase().includes(q) }
-  const builtinBtns = FX_BUILTIN.filter(match).map((name) => { const m = fnMeta(name); return `<button class="rd-fx-fn rd-fx-fn-builtin" type="button" data-fx-builtin="${esc(name)}" title="${esc(m.help || name)}"><span class="rd-fx-fnname">${esc(name)}</span><span class="rd-fx-fnhelp">${esc(m.help || '')}</span></button>` }).join('') || '<div class="rd-fxp-empty">无匹配</div>'
-  const fetchBtns = FX_FETCH.filter(match).map((name) => { const m = fnMeta(name); return `<button class="rd-fx-fn rd-fx-fn-fetch" type="button" data-fx-fetch="${esc(name)}" title="${esc(m.help || name)}"><span class="rd-fx-fnname">${esc(name)}</span><span class="rd-fx-fnhelp">${esc(m.help || '')}</span></button>` }).join('') || '<div class="rd-fxp-empty">无匹配</div>'
   const cellBtn = `<button class="rd-fx-op rd-fx-op-cell" type="button" data-fx-cell title="插入当前选中单元格地址">插入单元格 ${esc(st.selectedCell || 'A1')}</button>`
+  // 一行一个函数：左名(等宽) + 说明 + 右侧样例（灰）。搜索按 名称/说明/样例/分类。
+  const fnRow = (kind, name, help, example) => `<button class="rd-fx-fn rd-fx-fn-${kind}" type="button" data-fx-${kind}="${esc(name)}" title="${esc(name + (help ? ' — ' + help : '') + (example ? '　例：' + example : ''))}">
+      <span class="rd-fx-fnname">${esc(name)}</span><span class="rd-fx-fnhelp">${esc(help || '')}</span><span class="rd-fx-fneg">${esc(example || '')}</span></button>`
+  const hit = (name) => (st.functions || []).find((f) => f.name === name)
+  const tab = fp.tab === 'builtin' ? 'builtin' : 'fetch'
+  // 只渲染当前 tab 的那一组，搜索天然只作用于当前 tab。
+  let rows
+  if (tab === 'builtin') {
+    rows = FX_BUILTIN_CATALOG
+      .filter(([name, cat, help, eg]) => !q || name.toLowerCase().includes(q) || String(help).toLowerCase().includes(q) || String(eg).toLowerCase().includes(q) || String(FX_BUILTIN_CATS[cat] || '').includes(q))
+      .map(([name, cat, help, eg]) => fnRow('builtin', name, help, eg)).join('') || '<div class="rd-fxp-empty">无匹配</div>'
+  } else {
+    rows = FX_FETCH.map((name) => hit(name) || { name, help: '', example: '' })
+      .filter((m) => !q || m.name.toLowerCase().includes(q) || String(m.help || '').toLowerCase().includes(q) || String(m.example || '').toLowerCase().includes(q))
+      .map((m) => fnRow('fetch', m.name, m.help, m.example)).join('') || '<div class="rd-fxp-empty">无匹配</div>'
+  }
+  const ph = tab === 'builtin' ? '搜索内置函数…' : '搜索取数函数…'
   return `<div class="rd-fxp-pal">
-      <div class="rd-fxp-search"><ui5-icon name="search"></ui5-icon><input data-fxp-search placeholder="搜索函数…" value="${esc(fp.search || '')}"></div>
-      <div class="rd-fxp-zone rd-fxp-zone-op">
-        <div class="rd-fxp-zt">运算符 · 括号</div>
-        <div class="rd-fxp-ops">${opBtns}${cellBtn}</div>
+      <div class="rd-fxp-oprow">${opBtns}${cellBtn}</div>
+      <div class="rd-fxp-tabs">
+        <button class="rd-fxp-tab rd-fxp-tab-fetch ${tab === 'fetch' ? 'on' : ''}" type="button" data-fxp-tab="fetch">取数函数</button>
+        <button class="rd-fxp-tab rd-fxp-tab-builtin ${tab === 'builtin' ? 'on' : ''}" type="button" data-fxp-tab="builtin">内置函数</button>
+        <div class="rd-fxp-search"><ui5-icon name="search"></ui5-icon><input data-fxp-search placeholder="${ph}" value="${esc(fp.search || '')}"></div>
       </div>
-      <div class="rd-fxp-zone rd-fxp-zone-builtin">
-        <div class="rd-fxp-zt">内置函数</div>
-        <div class="rd-fxp-fns">${builtinBtns}</div>
-      </div>
-      <div class="rd-fxp-zone rd-fxp-zone-fetch">
-        <div class="rd-fxp-zt">取数函数（点开填参数）</div>
-        <div class="rd-fxp-fns">${fetchBtns}</div>
+      <div class="rd-fxp-list rd-fxp-list-${tab}">
+        <div class="rd-fxp-fns rd-fxp-fns-scroll">${rows}</div>
       </div>
     </div>`
 }
@@ -2948,17 +3491,87 @@ function fxSubPanelHtml (st, sub) {
   const built = buildFormula(fn, sub.args)
   return `<div class="rd-fxp-sub">
       <div class="rd-fxp-subhead"><button class="rd-fxp-subback" type="button" data-fxp-subback><ui5-icon name="nav-back"></ui5-icon></button>
-        <span class="rd-fxp-subttl"><b>${esc(fn.name)}</b> · ${esc(fn.help || '')}</span></div>
+        <span class="rd-fxp-subttl"><b>${esc(fn.name)}</b> · ${esc(fn.help || '')}${fn.example ? `<em class="rd-fxp-subeg">例：${esc(fn.example)}</em>` : ''}</span></div>
       <div class="rd-fxp-subgrid">${rows}</div>
       <div class="rd-fxp-subout"><label>函数</label><code data-fxp-subout>${esc(built || fn.name + '()')}</code>
         <button class="rd-sbtn primary" type="button" data-fxp-subinsert><ui5-icon name="add"></ui5-icon>插入到表达式</button></div>
     </div>`
 }
 
+/** 报表专属参数控件（注入 cmx-fx-editor）：period/org/object/direction。object 用 st.elements datalist。
+ *  组件不认这些 kind，未注入则退化文本框——故这里把设计器的域知识作为「取数函数专属」注入。 */
+function rptParamControls (st) {
+  return {
+    period: ({ value: val, attr: A, esc: e }) => {
+      const opts = [['0', '本期(0)'], ['-1', '上期(-1)'], ['-2', '上两期(-2)'], ['-12', '上年同期(-12)']]
+      const isAbs = !opts.some(([v]) => v === String(val)) && !!val
+      const list = opts.map(([v, l]) => `<option value="${v}" ${String(val) === v ? 'selected' : ''}>${l}</option>`).join('')
+      return `<select ${A}>${list}<option value="__abs" ${isAbs ? 'selected' : ''}>绝对期间…</option></select>
+        <input ${A}-abs placeholder="或输入 2026-06" value="${e(isAbs ? val : '')}" class="fxe-abs">`
+    },
+    org: ({ value: val, attr: A, esc: e }) => {
+      const isCode = val && val[0] !== '@'
+      return `<select ${A}><option value="@current" ${val === '@current' || !val ? 'selected' : ''}>@当前组织</option>
+        <option value="@parent" ${val === '@parent' ? 'selected' : ''}>@上级组织</option>
+        <option value="__code" ${isCode ? 'selected' : ''}>指定组织码…</option></select>
+        <input ${A}-code placeholder="组织码" value="${e(isCode ? val : '')}" class="fxe-abs">`
+    },
+    object: ({ index: i, value: val, attr: A, esc: e }) => {
+      const els = (st.elements || []).slice(0, 300)
+      const opts = els.map((el) => `<option value="${e(el.code)}">${e(el.code)} ${e(el.name || '')}</option>`).join('')
+      return `<input ${A} list="fxe-obj-${i}" placeholder="科目码/元素码" value="${e(val)}">
+        <datalist id="fxe-obj-${i}">${opts}</datalist>`
+    },
+    direction: ({ value: val, attr: A }) => `<select ${A}><option value="net" ${val === 'net' || !val ? 'selected' : ''}>净额</option>
+      <option value="debit" ${val === 'debit' ? 'selected' : ''}>借方</option>
+      <option value="credit" ${val === 'credit' ? 'selected' : ''}>贷方</option></select>`,
+  }
+}
+
+/** 打开通用 fx 编辑器组件：注入取数函数目录 + 参数控件 + 初值回显；监听 commit 落地。 */
+function openFxEditor (root, st, anchorEl) {
+  let el = root.querySelector('cmx-fx-editor[data-rd-fx]')
+  if (!el) {
+    el = document.createElement('cmx-fx-editor')
+    el.setAttribute('data-rd-fx', '')
+    root.appendChild(el)
+    el.addEventListener('cmx-fx-commit', (ev) => onFxCommit(root, st, ev.detail))
+  }
+  el.configure({
+    fetchFunctions: () => loadFunctions(st),
+    fetchTabLabel: '取数函数',
+    paramControls: rptParamControls(st),
+    getInitialExpr: (addr) => readCellExpr(st, addr),
+    initialTarget: st.selectedCell || 'A1',
+  })
+  el.setCurrentCell(st.selectedCell || 'A1')
+  el.open(anchorEl)
+}
+
+/** fx 组件提交：整条 DSL 表达式 → 画布公式(sanitize+撤销) + cellMap.calcFormula + 协同 Op。 */
+function onFxCommit (root, st, detail) {
+  const expr = String(detail?.expr || '').trim().replace(/^=+/, '')
+  if (!expr) { toast(root, '表达式为空', 'error'); return }
+  const addr = detail?.target || st.selectedCell || 'A1'
+  const sheetName = currentSheetCode(st)
+  if (addr !== st.selectedCell) { gotoCellOrRange(st, addr); st.selectedCell = addr }
+  const canvasExpr = sanitizeExprForSpreadjs(expr)
+  applyCellInput(st, root, 'formula', '=' + canvasExpr)
+  const key = cellKey(st, addr, sheetName)
+  const cm = st.cellMap[key] = st.cellMap[key] || {}
+  cm.calcFormula = expr
+  markDirty(st, true)
+  enqueueOp(st, 'setCellFormula', { sheet: sheetName, cell: addr }, { formula: expr })
+  updateToolbarControls(root, st)
+  toast(root, `已写入 ${addr}：=${expr}`, 'success')
+}
+
 /** 打开面板：建 overlay + 载函数目录 + 渲染（非模态浮层）。 */
-function openFxPanel (root, st) {
+function openFxPanel (root, st, anchorEl) {
   const initAddr = st.selectedCell || 'A1'
-  st.fxPanel = { open: true, expr: '', target: initAddr, search: '', sub: null, pos: null, caret: null, edited: false }
+  let anchorRect = null
+  try { if (anchorEl && anchorEl.getBoundingClientRect) { const r = anchorEl.getBoundingClientRect(); anchorRect = { left: r.left, bottom: r.bottom, top: r.top } } } catch (_) {}
+  st.fxPanel = { open: true, expr: '', target: initAddr, search: '', tab: 'fetch', sub: null, pos: null, caret: null, edited: false, anchorRect }
   st.fxPanel.expr = readCellExpr(st, initAddr) // 打开即回显当前格已有公式（双向联动）
   let host = root.querySelector('.rd-fxp-mask')
   if (!host) { host = document.createElement('div'); host.className = 'rd-fxp-mask'; root.appendChild(host) }
@@ -3007,10 +3620,21 @@ function readCellExpr (st, addr) {
  * 全程不重渲染面板（否则丢公式与焦点）。
  */
 function updateFxPanelTarget (st) {
+  // 选区变化 → 通知在屏 cmx-fx-editor 组件：目标格跟随 + 「插入单元格」地址跟随（组件内部处理双向回显）。
+  const addr = st.selectedCell || 'A1'
+  for (const host of Array.from(st.hosts)) {
+    if (!host || !host.isConnected || host.__rptDesignerNativeView !== 'content') continue
+    const root = host.renderRoot || host.shadowRoot?.querySelector('.native-page-root')
+    const el = root?.querySelector?.('cmx-fx-editor[data-rd-fx]')
+    if (el && typeof el.setTarget === 'function') { el.setCurrentCell(addr); el.setTarget(addr) }
+  }
+}
+
+/** 旧内联 fx 面板目标同步（已停用，逻辑迁至 cmx-fx-editor 组件）。 */
+function updateFxPanelTargetLegacy (st) {
   const fp = st.fxPanel
   if (!fp) return
   const addr = st.selectedCell || 'A1'
-  const sameCell = fp.target === addr
   fp.target = addr
   // 载入该格已存公式（未编辑才载、避免覆盖用户手打）
   let loadExpr = null
@@ -3038,12 +3662,22 @@ function updateFxPanelTarget (st) {
 function fxPlacePanel (st, panel) {
   const fp = st.fxPanel
   if (fp.pos) { panel.style.left = fp.pos.left + 'px'; panel.style.top = fp.pos.top + 'px'; return }
-  // 首次：量取尺寸，停在视口右上偏中
+  // 量取尺寸后定位
   panel.style.visibility = 'hidden'
   const pr = panel.getBoundingClientRect()
-  const pw = pr.width || 520
-  let left = Math.max(12, window.innerWidth - pw - 40)
-  let top = 130
+  const pw = pr.width || 460
+  const ph = pr.height || 460
+  let left, top
+  const a = fp.anchorRect
+  if (a) {
+    // fx 按钮正下方：左对齐按钮，屏内夹取；下方放不下则上翻到按钮上方
+    left = Math.min(Math.max(8, a.left), window.innerWidth - pw - 8)
+    top = a.bottom + 6
+    if (top + ph > window.innerHeight - 8) top = Math.max(8, a.top - ph - 6)
+  } else {
+    left = Math.max(12, window.innerWidth - pw - 40)
+    top = 130
+  }
   panel.style.left = left + 'px'
   panel.style.top = top + 'px'
   panel.style.visibility = ''
@@ -3140,6 +3774,12 @@ function bindFxPanel (root, st) {
     return
   }
 
+  // 调色板：tab 切换（清空搜索，因不同域搜索词无意义）
+  host.querySelectorAll('[data-fxp-tab]').forEach((b) => b.addEventListener('click', () => {
+    fp.tab = b.getAttribute('data-fxp-tab') === 'builtin' ? 'builtin' : 'fetch'
+    fp.search = ''
+    renderFxPanel(root, st)
+  }))
   // 调色板：搜索
   const search = host.querySelector('[data-fxp-search]')
   if (search) {
@@ -3155,9 +3795,11 @@ function bindFxPanel (root, st) {
   }))
   // 插入单元格地址
   host.querySelector('[data-fx-cell]')?.addEventListener('click', () => fxInsertAtCursor(root, st, st.selectedCell || 'A1'))
-  // 内置函数：插入 NAME() 光标停括号内
+  // 内置函数：展开参数子面板（catalog 归一为带 prototype 的 fn；由样例推断参数）
   host.querySelectorAll('[data-fx-builtin]').forEach((b) => b.addEventListener('click', () => {
-    fxInsertAtCursor(root, st, `${b.getAttribute('data-fx-builtin')}()`, true)
+    const fn = fxCatalogFn(st, b.getAttribute('data-fx-builtin'))
+    fp.sub = { fn, args: wizardParamList(fn).map((p) => p.default || '') }
+    renderFxPanel(root, st)
   }))
   // 取数函数：展开参数子面板
   host.querySelectorAll('[data-fx-fetch]').forEach((b) => b.addEventListener('click', () => {
@@ -3234,11 +3876,17 @@ function sanitizeExprForSpreadjs (expr) {
   let s = String(expr || '')
   // 单引号字符串字面量 '...' → 双引号 "..."（SpreadJS 公式的字符串必须双引号；单引号是 sheet 名语义）。
   s = s.replace(/'([^']*)'/g, (mm, inner) => `"${inner.replace(/"/g, '')}"`)
-  // @current / @parent / @root / @self 等 @ 记号（未被引号包裹）→ 双引号字符串
-  s = s.replace(/@[a-zA-Z]+/g, (m) => `"${m}"`)
-  // 绝对期间 YYYY-MM（未被引号包裹的）→ 双引号；简单处理：孤立的 4 位-2 位
-  s = s.replace(/(^|[(,\s])(\d{4}-\d{2})(?=[),\s]|$)/g, (mm, pre, ym) => `${pre}"${ym}"`)
-  return s
+  // ★ 幂等：只处理**双引号外**的裸 @token / YYYY-MM（已在 "..." 内的不再二次加引号，
+  //   否则 "@current" → ""@current"" 语法非法 → 单元格 #VALUE!）。按双引号切段：偶数下标=引号外。
+  const parts = s.split('"')
+  for (let i = 0; i < parts.length; i += 2) {
+    parts[i] = parts[i]
+      // @current / @parent / @root / @self 等 @ 记号（引号外）→ 双引号字符串
+      .replace(/@[a-zA-Z]+/g, (m) => `"${m}"`)
+      // 绝对期间 YYYY-MM（引号外，孤立的 4 位-2 位）→ 双引号
+      .replace(/(^|[(,\s])(\d{4}-\d{2})(?=[),\s]|$)/g, (mm, pre, ym) => `${pre}"${ym}"`)
+  }
+  return parts.join('"')
 }
 
 /** 边框下拉：点按钮开/关菜单，点菜单项应用对应线位。 */
@@ -3772,22 +4420,46 @@ function initSpreadComponent (root, st) {
   // 数据元素拖拽落到单元格 → 绑定（已绑则覆盖）。落点 hitTest 求格；含拖拽经过高亮。
   bindElementDrop(root, sheet, st)
   const model = reportModel(st)
-  const applyModel = () => {
+  // 组件的 async connectedCallback 里先 await ensureSpreadJs() 才 new Workbook()——首次进门户
+  // SpreadJS 懒加载慢，此时 getWorkbook() 仍为 null。whenDefined 只保证「类已注册」，不保证
+  // 「本实例工作簿已构建」。必须等 getWorkbook() 非空再 loadLayout，否则 setWorkbookJson/showHeaders
+  // 均命中组件内 `if(!this._spread)return` 静默丢弃已存版式 → 显示初始骨架（关闭重开才好，因组件已热）。
+  const whenWorkbookReady = () => new Promise((resolve) => {
+    const t0 = Date.now()
+    const tick = () => {
+      let wb = null
+      try { wb = sheet.getWorkbook && sheet.getWorkbook() } catch (_) {}
+      if (wb) { resolve(wb); return }
+      if (!sheet.isConnected || Date.now() - t0 > 20000) { resolve(null); return } // 宿主断开/超时兑底，不永久挂起
+      setTimeout(tick, 60)
+    }
+    tick()
+  })
+  const applyModel = async () => {
     try {
+      const wb = await whenWorkbookReady()
+      if (!wb) { if (sheet.isConnected) throw new Error('SpreadJS 工作簿在 20s 内未就绪'); return }
+      if (!sheet.isConnected) return // 等待期间切走了 tab：放弃装载
       // 隐藏组件自带的极简公式栏（名称框 span + 裸 input）——报表设计器改用自建 Excel 样式 .rd-fxbar。
       if (typeof sheet.showFormulaBar === 'function') sheet.showFormulaBar(false)
       if (typeof sheet.showHeaders === 'function') sheet.showHeaders(true)
       if (typeof sheet.showGridlines === 'function') sheet.showGridlines(true)
-      // 打开报表：从后端加载已存版式（有 BLOB 无损复原，无则初始骨架）
+      // 打开报表：一次后端调用取全集（版式+cellMap+元素+函数）。失败回退旧多调用路径。
       st.__loading = true
-      loadLayout(sheet, st, root).catch(() => {
-        if (typeof sheet.setReportModel === 'function') sheet.setReportModel(model)
-      }).finally(() => {
-        setTimeout(() => { st.__loading = false }, 300)
-        bindWorkbookEditEvents(sheet, st) // 用户键盘编辑靠这个（组件只绑 CellChanged，用户输入不触发）
-        bindSelectionSync(sheet, st, root) // 选中单元格联动 property 单元格页（组件派发跨宿主到不了本 root）
-        initOpsSync(st) // 协同 B 档：对齐 op_log 游标 + 启动 30s 追平轮询
-      })
+      const bundled = await openReportBundle(sheet, st, root)
+      if (!bundled) {
+        await loadLayout(sheet, st, root).catch(() => {
+          if (typeof sheet.setReportModel === 'function') sheet.setReportModel(model)
+        })
+      }
+      setTimeout(() => { st.__loading = false }, 300)
+      bindWorkbookEditEvents(sheet, st) // 用户键盘编辑靠这个（组件只绑 CellChanged，用户输入不触发）
+      bindSelectionSync(sheet, st, root) // 选中单元格联动 property 单元格页（组件派发跨宿主到不了本 root）
+      initOpsSync(st) // 协同 B 档：对齐 op_log 游标 + 启动 30s 追平轮询
+      bindBadgeEvents(sheet, st) // 公式徽标：绑滚动/尺寸事件跟随 + 初次重绘（开关可能已开，如切页重挂）
+      renderBadges(st)
+      if (st.sheetUi.showCalc || st.sheetUi.showCheck || st.sheetUi.showElement) startBadgePoll(st)
+      if ((st.sheetUi.zoom || 1) !== 1) { try { sheet.getWorkbook?.()?.getActiveSheet?.()?.zoom?.(st.sheetUi.zoom) } catch (_) {} } // 会话级缩放：加载后保持本会话手感
       syncSheetUiFromSelection(sheet, st)
       updateToolbarControls(root, st)
     } catch (err) {
@@ -3874,4 +4546,235 @@ export default {
     async propertyCell (ctx) { return mount(ctx, 'propertyCell') },
     async propertyElement (ctx) { return mount(ctx, 'propertyElement') },
   },
+}
+
+// ===== 计算路由设置（rc 命名空间）=====
+// 报表取数路由绑定（cr_report_source_binding）的注册 CRUD 弹窗。
+// 单据类型(sourceKey) + 组织(orgId，空=默认兜底) → 物理目标(targetKind + targetRef)。
+// 仅注册；运行时三层继承解析与 scatter-gather 取数后续接入。
+// 接入点：runSheetCommand case 'route-config' → rcOpenDialog(reportCode, root)。
+// =====================================================================
+
+const rcEsc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+const RC_KINDS = [
+  { value: 'db_id', label: '数据源(db_id)' },
+  { value: 'service', label: '服务(service)' },
+]
+const RC_TRANSPORTS = [
+  { value: '', label: '(默认)' },
+  { value: 'local', label: 'local' },
+  { value: 'http', label: 'http' },
+  { value: 'grpc', label: 'grpc' },
+  { value: 'remote_pg', label: 'remote_pg' },
+]
+
+function rcKindOptions (sel) {
+  return RC_KINDS.map(k => `<option value="${rcEsc(k.value)}" ${sel === k.value ? 'selected' : ''}>${rcEsc(k.label)}</option>`).join('')
+}
+function rcTransportOptions (sel) {
+  return RC_TRANSPORTS.map(t => `<option value="${rcEsc(t.value)}" ${sel === t.value ? 'selected' : ''}>${rcEsc(t.label)}</option>`).join('')
+}
+
+/** 列表行 HTML */
+function rcRowHtml (b) {
+  return `<tr data-rc-id="${rcEsc(b.id)}">
+    <td>${rcEsc(b.sourceKey)}</td>
+    <td>${b.isDefault ? '<em style="color:var(--sapNeutralColor,#6a6d70)">(默认兜底)</em>' : rcEsc(b.orgId || '')}</td>
+    <td>${rcEsc(b.targetKind)}</td>
+    <td>${rcEsc(b.targetRef)}</td>
+    <td>${rcEsc(b.transport || '')}</td>
+    <td>${b.enabled ? '✓' : '—'}</td>
+    <td>
+      <button class="rd-sbtn" type="button" data-rc-edit="${rcEsc(b.id)}" title="编辑">编辑</button>
+      <button class="rd-sbtn danger" type="button" data-rc-del="${rcEsc(b.id)}" title="删除">删除</button>
+    </td>
+  </tr>`
+}
+
+/** 主弹窗：列表 + 新增按钮 */
+async function rcOpenDialog (reportCode, root) {
+  const dlg = document.createElement('div')
+  dlg.className = 'rd-rc-overlay'
+  dlg.innerHTML = `<div class="rd-rc-panel">
+    <div class="rd-rc-head">
+      <span>计算路由设置</span>
+      <button class="rd-rc-close" type="button" aria-label="关闭">✕</button>
+    </div>
+    <div class="rd-rc-toolbar">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+        单据类型：<input class="rd-rc-key-input" type="text" placeholder="source_key，如 gl_voucher" style="width:200px">
+      </label>
+      <button class="rd-sbtn" type="button" data-rc-load>查询</button>
+      <button class="rd-sbtn primary" type="button" data-rc-add>+ 新增绑定</button>
+    </div>
+    <div class="rd-rc-body">
+      <table class="rd-rc-table">
+        <thead><tr><th>单据类型</th><th>组织</th><th>目标类型</th><th>目标句柄</th><th>传输</th><th>启用</th><th>操作</th></tr></thead>
+        <tbody data-rc-tbody><tr><td colspan="7" style="text-align:center;color:#999;padding:16px">输入单据类型后点「查询」</td></tr></tbody>
+      </table>
+    </div>
+  </div>`
+
+  // 样式（仅注入一次）
+  if (!document.getElementById('rd-rc-style')) {
+    const s = document.createElement('style')
+    s.id = 'rd-rc-style'
+    s.textContent = `.rd-rc-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;display:flex;align-items:center;justify-content:center}
+.rd-rc-panel{background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.22);width:820px;max-width:96vw;max-height:80vh;display:flex;flex-direction:column;overflow:hidden}
+.rd-rc-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #e5e7eb;font-weight:600;font-size:15px}
+.rd-rc-close{background:none;border:none;cursor:pointer;font-size:18px;color:#6b7280;line-height:1;padding:2px 6px}
+.rd-rc-close:hover{color:#111}
+.rd-rc-toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #f0f0f0;flex-wrap:wrap}
+.rd-rc-body{overflow:auto;flex:1;padding:0 16px 16px}
+.rd-rc-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+.rd-rc-table th,.rd-rc-table td{padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:left;white-space:nowrap}
+.rd-rc-table th{background:#f8f9fa;font-weight:600;color:#374151}
+.rd-rc-table tr:hover td{background:#f5f7ff}`
+    document.head.appendChild(s)
+  }
+
+  document.body.appendChild(dlg)
+
+  const close = () => dlg.remove()
+  dlg.querySelector('.rd-rc-close').addEventListener('click', close)
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) close() })
+
+  const keyInput = dlg.querySelector('.rd-rc-key-input')
+  const tbody = dlg.querySelector('[data-rc-tbody]')
+
+  const loadList = async () => {
+    const key = keyInput.value.trim()
+    if (!key) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:16px">请输入单据类型</td></tr>'; return }
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:16px">加载中…</td></tr>'
+    try {
+      const data = await apiJson(`/api/report-source-bindings/${encodeURIComponent(key)}`)
+      const list = data?.bindings || []
+      tbody.innerHTML = list.length
+        ? list.map(rcRowHtml).join('')
+        : '<tr><td colspan="7" style="text-align:center;color:#999;padding:16px">暂无绑定，点「新增绑定」添加</td></tr>'
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#c00;padding:16px">加载失败：${rcEsc(err?.message || String(err))}</td></tr>`
+    }
+  }
+
+  dlg.querySelector('[data-rc-load]').addEventListener('click', loadList)
+  keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadList() })
+
+  dlg.querySelector('[data-rc-add]').addEventListener('click', () => {
+    rcOpenForm({ sourceKey: keyInput.value.trim() }, loadList)
+  })
+
+  tbody.addEventListener('click', async (e) => {
+    const editId = e.target.closest('[data-rc-edit]')?.getAttribute('data-rc-edit')
+    const delId = e.target.closest('[data-rc-del]')?.getAttribute('data-rc-del')
+    if (editId) {
+      // 从行 DOM 读回当前值（避免再发一次 GET）
+      const tr = tbody.querySelector(`[data-rc-id="${CSS.escape(editId)}"]`)
+      const cells = tr ? [...tr.querySelectorAll('td')] : []
+      const get = (i) => cells[i]?.textContent?.trim() || ''
+      rcOpenForm({
+        id: editId,
+        sourceKey: get(0),
+        orgId: get(1).startsWith('(') ? '' : get(1),
+        targetKind: get(2),
+        targetRef: get(3),
+        transport: get(4),
+        enabled: get(5) === '✓',
+      }, loadList)
+    }
+    if (delId) {
+      if (!confirm('确认删除该绑定？')) return
+      try {
+        await apiJson(`/api/report-source-bindings/id/${encodeURIComponent(delId)}`, { method: 'DELETE' })
+        await loadList()
+      } catch (err) {
+        alert(`删除失败：${err?.message || String(err)}`)
+      }
+    }
+  })
+}
+
+/** 新增/编辑表单弹窗 */
+function rcOpenForm (init, onSaved) {
+  const isEdit = !!init.id
+  const overlay = document.createElement('div')
+  overlay.className = 'rd-rc-overlay'
+  overlay.style.zIndex = '9100'
+  overlay.innerHTML = `<div class="rd-rc-panel" style="width:480px;max-height:90vh">
+    <div class="rd-rc-head">
+      <span>${isEdit ? '编辑绑定' : '新增绑定'}</span>
+      <button class="rd-rc-close" type="button" aria-label="关闭">✕</button>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:12px;overflow:auto">
+      <label class="rd-rc-field">单据类型 <span style="color:#c00">*</span>
+        <input name="sourceKey" type="text" value="${rcEsc(init.sourceKey || '')}" placeholder="如 gl_voucher" ${isEdit ? 'readonly style="background:#f5f5f5"' : ''}>
+      </label>
+      <label class="rd-rc-field">组织 ID <span style="font-size:11px;color:#888">（空=默认兜底）</span>
+        <input name="orgId" type="text" value="${rcEsc(init.orgId || '')}" placeholder="留空表示默认兜底绑定">
+      </label>
+      <label class="rd-rc-field">目标类型 <span style="color:#c00">*</span>
+        <select name="targetKind">${rcKindOptions(init.targetKind || 'db_id')}</select>
+      </label>
+      <label class="rd-rc-field">目标句柄 <span style="color:#c00">*</span>
+        <input name="targetRef" type="text" value="${rcEsc(init.targetRef || '')}" placeholder="如 fico-bj 或 doc-gl-bj">
+      </label>
+      <label class="rd-rc-field">传输方式
+        <select name="transport">${rcTransportOptions(init.transport || '')}</select>
+      </label>
+      <label class="rd-rc-field">优先级
+        <input name="priority" type="number" value="${rcEsc(String(init.priority ?? 0))}" min="0" max="9999" style="width:100px">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px">
+        <input name="enabled" type="checkbox" ${init.enabled !== false ? 'checked' : ''}> 启用
+      </label>
+      <label class="rd-rc-field">备注
+        <input name="remark" type="text" value="${rcEsc(init.remark || '')}" placeholder="可选">
+      </label>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #f0f0f0">
+      <button class="rd-sbtn" type="button" data-rc-cancel>取消</button>
+      <button class="rd-sbtn primary" type="button" data-rc-submit>保存</button>
+    </div>
+  </div>`
+
+  if (!document.getElementById('rd-rc-field-style')) {
+    const s = document.createElement('style')
+    s.id = 'rd-rc-field-style'
+    s.textContent = `.rd-rc-field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#374151}
+.rd-rc-field input,.rd-rc-field select{padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:13px;outline:none}
+.rd-rc-field input:focus,.rd-rc-field select:focus{border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.15)}`
+    document.head.appendChild(s)
+  }
+
+  document.body.appendChild(overlay)
+
+  const close = () => overlay.remove()
+  overlay.querySelector('.rd-rc-close').addEventListener('click', close)
+  overlay.querySelector('[data-rc-cancel]').addEventListener('click', close)
+
+  overlay.querySelector('[data-rc-submit]').addEventListener('click', async () => {
+    const f = (n) => overlay.querySelector(`[name="${n}"]`)
+    const sourceKey = f('sourceKey').value.trim()
+    const targetRef = f('targetRef').value.trim()
+    if (!sourceKey) { f('sourceKey').focus(); return }
+    if (!targetRef) { f('targetRef').focus(); return }
+    const body = {
+      sourceKey,
+      orgId: f('orgId').value.trim() || null,
+      targetKind: f('targetKind').value,
+      targetRef,
+      transport: f('transport').value || null,
+      priority: parseInt(f('priority').value, 10) || 0,
+      enabled: f('enabled').checked,
+      remark: f('remark').value.trim() || null,
+    }
+    try {
+      await apiJson('/api/report-source-bindings', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
+      close()
+      await onSaved()
+    } catch (err) {
+      alert(`保存失败：${err?.message || String(err)}`)
+    }
+  })
 }

@@ -368,9 +368,42 @@ pub async fn subscribe_events(
         }
     };
 
-    // 本节点属主（内存有热态）→ 走实时 hub 流（首帧 snapshot + 增量）。
-    if let Some(snapshot) = mgr.snapshot_event(id) {
-        let rx = mgr.hub().subscribe(id);
+    // 先订阅 hub，再判分支：避免"等待本地属主就绪"期间 claim 后立即广播的首批 item/log 被漏掉。
+    let rx = mgr.hub().subscribe(id);
+
+    // 分布式模式（默认开）下 `submit` 会把作业暂时移出本地内存表，直到 claim 循环（≤1s 一拍）
+    // 领取后 `run_claimed` 才放回。若前端在这窗口内订阅（自动选中"刚提交的最新作业"极易命中），
+    // `snapshot_event` 恰为 None → 会误落到下方 DB 轮询兜底分支，而兜底分支只合成 progress/state，
+    // **从不发 item/log** → 前端"最近处理/明细流"整个运行期一直空，直到作业停止后 REST 详情才读到。
+    // 修复：有界等待本地属主就绪（claim 领取即入表），拿到即走实时流（含 item/log）。
+    let mut snapshot = mgr.snapshot_event(id);
+    if snapshot.is_none() {
+        // 仅"尚未终态"的作业值得等待：终态作业永不回本地表，他节点属主也不会入本地表。
+        let worth_waiting = match mgr.get(id).await {
+            Some(j) => !j.status.is_terminal(),
+            None => false, // 作业不存在
+        };
+        if worth_waiting {
+            // claim 循环每 1s 一拍，给 ~2.4s 余量覆盖"提交刚好错过一拍"的最坏情况；
+            // 一旦入本地表即刻跳出（常态 ≤1.2s）。仍拿不到 → 作业确在他节点运行，落轮询兜底。
+            for _ in 0..12 {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                if let Some(s) = mgr.snapshot_event(id) {
+                    snapshot = Some(s);
+                    break;
+                }
+            }
+        }
+    }
+
+    // 本节点属主（内存有热态）→ 走实时 hub 流（首帧 snapshot + 增量 item/log/progress/…）。
+    if let Some(snapshot) = snapshot {
+        // 作业已在本地表但已是终态（刚跑完，finish 不移出表）：`done` 早在订阅前已广播，
+        // 若挂 rx.recv() 会永久阻塞。此时补发 snapshot(含items)+done 后即刻收流。
+        let terminal = mgr
+            .get_hot(id)
+            .map(|j| j.status.is_terminal())
+            .unwrap_or(false);
         let head = futures::stream::once(async move {
             Ok::<Event, std::convert::Infallible>(
                 Event::default()
@@ -378,6 +411,17 @@ pub async fn subscribe_events(
                     .data(snapshot.payload),
             )
         });
+        if terminal {
+            let done = futures::stream::once(async move {
+                Ok::<Event, std::convert::Infallible>(
+                    Event::default().event("done").data("{}"),
+                )
+            });
+            let stream = futures::StreamExt::chain(head, done);
+            return Sse::new(stream)
+                .keep_alive(KeepAlive::default())
+                .into_response();
+        }
         let tail = futures::stream::unfold(rx, |mut rx| async move {
             rx.recv().await.map(|ev| {
                 let event = Event::default().event(ev.event_name).data(ev.payload);
@@ -389,6 +433,8 @@ pub async fn subscribe_events(
             .keep_alive(KeepAlive::default())
             .into_response();
     }
+    // 等待超时仍非本地属主 → 作业确在他节点运行（或已终态）。释放 hub 订阅，走 DB 轮询兜底。
+    drop(rx);
 
     // 非本节点属主（分布式：作业在他节点跑）→ DB 轮询合成流。
     // 首帧 snapshot（读 DB）+ 每 1s 轮询 DB 合成 progress/state，直至终态 done。
@@ -426,28 +472,36 @@ pub async fn subscribe_events(
                     (mgr, id, None, job.progress.rev, false),
                 ));
             }
-            // 后续：轮询 DB。
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            match mgr.get(id).await {
-                Some(job) => {
-                    let terminal = job.status.is_terminal();
-                    let ev = if terminal {
-                        Event::default().event("state").data(
-                            serde_json::json!({ "status": job.status.as_str(), "rev": job.progress.rev }).to_string(),
-                        )
-                    } else {
-                        Event::default().event("progress").data(
+            // 后续：轮询 DB，仅在 rev 前进（有真实变化）时推帧，避免空闲每秒重发。
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                match mgr.get(id).await {
+                    Some(job) => {
+                        let terminal = job.status.is_terminal();
+                        let rev = job.progress.rev;
+                        if terminal {
+                            // 终态：末帧带全量 snapshot（含 items）再 state，确保明细补齐后收尾。
+                            let ev = Event::default().event("state").data(
+                                serde_json::json!({ "status": job.status.as_str(), "rev": rev }).to_string(),
+                            );
+                            return Some((Ok(ev), (mgr, id, None, rev.max(last_rev), true)));
+                        }
+                        if rev <= last_rev {
+                            continue; // 无变化：不推帧，继续轮询（SSE keep-alive 维持连接）。
+                        }
+                        // 有进展：推**全量 snapshot**（含 progress.items）——跨节点轮询下前端
+                        // "最近处理/明细流"也能刷新（progress 帧不含 items，本地属主才有实时 item 流）。
+                        let ev = Event::default().event("snapshot").data(
                             serde_json::json!({
-                                "done": job.progress.done, "total": job.progress.total,
-                                "ok": job.progress.ok, "failed": job.progress.failed,
-                                "percent": job.progress.percent(), "message": job.progress.message,
-                                "phase": job.progress.phase, "rev": job.progress.rev,
-                            }).to_string(),
-                        )
-                    };
-                    Some((Ok(ev), (mgr, id, None, job.progress.rev.max(last_rev), terminal)))
+                                "status": job.status.as_str(),
+                                "progress": job.progress,
+                            })
+                            .to_string(),
+                        );
+                        return Some((Ok(ev), (mgr, id, None, rev.max(last_rev), false)));
+                    }
+                    None => return None,
                 }
-                None => None,
             }
         },
     );

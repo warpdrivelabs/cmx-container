@@ -137,6 +137,18 @@ pub async fn report_design_query_data(
     Ok(Json(ApiResp::ok(store::query_data(&code, &body.0).await?)))
 }
 
+/// 打开报表：一次调用取全集（版式+cellMap+元素+函数[+数据]），替代前端顺序多调。
+/// body: { version?, orgCode?, periodCode? }；org+period 齐备则并入数据（应用器），否则 cells=[]（设计器）。
+pub async fn report_design_open_report(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    body: Option<Json<Value>>,
+) -> Result<Json<ApiResp<Value>>> {
+    let body = body.map(|b| b.0).unwrap_or_else(|| json!({}));
+    Ok(Json(ApiResp::ok(store::open_report(&code, &body).await?)))
+}
+
 pub async fn report_design_save_data(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -257,4 +269,74 @@ pub async fn rpt_compute(
         "definition": def_ref,
         "message": "旧报表设计器兼容预览接口已恢复；新报表设计工作台使用 /api/report-design/*。",
     }))))
+}
+
+// ============================================================================
+// 计算路由设置：报表取数路由绑定（cr_report_source_binding）的注册 CRUD
+//   单据类型(sourceKey) + 组织(orgId，空=默认兜底) → 物理目标(targetKind + targetRef)
+//   仅注册；运行时三层继承解析与 scatter-gather 取数后续接入。
+// ============================================================================
+
+/// 列某单据类型逻辑名的全部路由绑定（含默认兜底）。
+pub async fn list_report_source_bindings(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(key): Path<String>,
+) -> Result<Json<ApiResp<Value>>> {
+    Ok(Json(ApiResp::ok(store::list_source_bindings(&key).await?)))
+}
+
+/// upsert 请求体。orgId 为空/缺省 = 默认兜底绑定；同 (sourceKey, orgId) 视为一条。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertSourceBindingReq {
+    source_key: String,
+    #[serde(default)]
+    org_id: Option<String>,
+    target_kind: String,
+    target_ref: String,
+    #[serde(default)]
+    transport: Option<String>,
+    #[serde(default)]
+    priority: i64,
+    #[serde(default = "default_true")]
+    enabled: bool,
+    #[serde(default)]
+    remark: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// upsert 一条路由绑定。id 由 sourceKey + org 派生（幂等）。
+pub async fn upsert_report_source_binding(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Json(req): Json<UpsertSourceBindingReq>,
+) -> Result<Json<ApiResp<Value>>> {
+    let org = req.org_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let id = store::binding_id(&req.source_key, org);
+    let out = store::upsert_source_binding(
+        &id,
+        &req.source_key,
+        org,
+        &req.target_kind,
+        &req.target_ref,
+        req.transport.as_deref(),
+        req.priority,
+        req.enabled,
+        req.remark.as_deref(),
+    )
+    .await?;
+    Ok(Json(ApiResp::ok(out)))
+}
+
+/// 删除一条路由绑定（按 id）。
+pub async fn delete_report_source_binding(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResp<Value>>> {
+    Ok(Json(ApiResp::ok(store::delete_source_binding(&id).await?)))
 }

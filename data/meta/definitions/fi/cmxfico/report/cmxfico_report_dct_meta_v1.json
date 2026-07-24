@@ -1,5 +1,5 @@
 {
-  "moduleMeta": {
+  "dctMeta": {
     "moduleCode": "REPORT",
     "moduleName": "报表",
     "metaKind": "DCT",
@@ -4311,7 +4311,191 @@
           "col_id"
         ]
       ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_source_binding",
+        "dictName": "报表取数路由绑定",
+        "dictKind": "NORMAL",
+        "selfHierarchy": false,
+        "tableName": "cr_report_source_binding",
+        "idField": "id",
+        "codeField": "source_key",
+        "labelField": "target_ref",
+        "remark": "报表取数路由绑定表（治理面）：单据类型(source_key) + 组织(org_id，NULL=该类型默认兜底) → 物理目标(target_kind:db_id|service + target_ref)。运行时报表取数据据此把逻辑单据类型路由到具体库/服务；照 cmx-flow 子流程组织路由(cmx_flow_subflow_binding)范式。本次仅注册（CRUD），三层继承解析与 scatter-gather 后续接入。"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "绑定ID"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "source_key",
+          "name": "source_key",
+          "caption": {
+            "zh_CN": "单据类型逻辑名"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "org_id",
+          "name": "org_id",
+          "caption": {
+            "zh_CN": "组织(空=默认兜底)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "target_kind",
+          "name": "target_kind",
+          "caption": {
+            "zh_CN": "目标类型(db_id|service)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "target_ref",
+          "name": "target_ref",
+          "caption": {
+            "zh_CN": "目标句柄(数据源/服务名)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "transport",
+          "name": "transport",
+          "caption": {
+            "zh_CN": "传输方式(local|http|grpc|remote_pg)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "priority",
+          "name": "priority",
+          "caption": {
+            "zh_CN": "优先级(同级多命中裁决)"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "enabled",
+          "name": "enabled",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "source_key"
+      },
+      "uniqueKeys": []
     }
   ],
-  "updatedAt": "2026-07-15T12:55:35.773Z"
+  "updatedAt": "2026-07-24T08:00:00.000Z"
 }

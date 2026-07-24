@@ -24,6 +24,10 @@ pub mod compute;
 pub use compute::compute_report_service;
 pub mod ops;
 pub use ops::{apply_ops, list_ops};
+pub mod source_binding;
+pub use source_binding::{
+    binding_id, delete_source_binding, list_source_bindings, upsert_source_binding,
+};
 pub mod rpt_job;
 pub use rpt_job::{KIND_RPT_COMPUTE, KIND_RPT_VERIFY, RptComputeJob, RptVerifyJob};
 
@@ -1294,6 +1298,73 @@ pub async fn query_data(code: &str, body: &Value) -> Result<Value> {
         "count": cells.len(),
         "cells": cells,
     }))
+}
+
+/// 打开报表（一次后端调用取全集，替代前端顺序多调）：版式 BLOB + 关系投影 + cellMap（元素/公式）
+/// + 元素目录 + 函数目录，若 body 带 orgCode+periodCode 再并入数据（cr_cell_data）。
+///
+/// - 设计器打开：body 仅 {version} → 返回 fmt/sheets/regions/rows/cols/cellMap/categories/elements/functions，cells=[]。
+/// - 应用器打开：body {version,orgCode,periodCode} → 额外并入 cells（该 org+period 的已存数据）。
+///
+/// 各子服务顶层 key 互不冲突，平铺进一个对象合并返回；子服务各自复用（零重复 SQL）。
+pub async fn open_report(code: &str, body: &Value) -> Result<Value> {
+    let version = s(body, "version").unwrap_or_default();
+    let org = s(body, "orgCode").unwrap_or_default();
+    let period = s(body, "periodCode").unwrap_or_default();
+    let want_data = !org.trim().is_empty() && !period.trim().is_empty();
+
+    // 版式 + 关系投影 + cellMap（复用 load_layout 的整段返回）
+    let layout = load_layout(
+        code,
+        &LayoutQuery {
+            version: Some(version.clone()),
+        },
+    )
+    .await?;
+    // 元素目录（categories + elements）
+    let elements = elements().await?;
+    // 函数目录（内置 + 取数函数元数据，供向导/公式栏）
+    let functions = cmx_rpt_formula::catalog_json();
+    // 数据（仅应用器：org+period 齐备才取；设计器打开返回空 cells）
+    let cells = if want_data {
+        query_data(code, body).await?
+            .get("cells")
+            .cloned()
+            .unwrap_or_else(|| json!([]))
+    } else {
+        json!([])
+    };
+
+    // 平铺合并：layout 段（fmt/sheets/regions/rows/cols/cellMap）作基座，补 elements/functions/cells。
+    let mut out = layout;
+    if let Value::Object(map) = &mut out {
+        map.insert("dbId".into(), json!(RPT_DB_ID));
+        map.insert("reportCode".into(), json!(code));
+        map.insert("version".into(), json!(version));
+        map.insert(
+            "categories".into(),
+            elements
+                .get("categories")
+                .cloned()
+                .unwrap_or_else(|| json!([])),
+        );
+        map.insert(
+            "elements".into(),
+            elements.get("elements").cloned().unwrap_or_else(|| json!([])),
+        );
+        map.insert(
+            "functions".into(),
+            functions
+                .get("functions")
+                .cloned()
+                .unwrap_or_else(|| json!([])),
+        );
+        map.insert("orgCode".into(), json!(org));
+        map.insert("periodCode".into(), json!(period));
+        map.insert("hasData".into(), json!(want_data));
+        map.insert("cells".into(), cells);
+    }
+    Ok(out)
 }
 
 /// 存数：批量 UPSERT cr_cell_data（8元唯一键幂等），自管事务。返回 { ok, saved }。
