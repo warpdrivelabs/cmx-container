@@ -38,14 +38,20 @@ function isPrimaryKeyField (col, meta) {
   return !!meta.pk && col.name === meta.pk
 }
 
-/** 字符串主键（业务键，如 code）：主键 + dataType 为 VARCHAR/CHAR/TEXT。
- *  这类字段新增时由用户填写，保存后只读（由 readonlyWhen 行级条件控制）。
- *  与之相对：整数主键（INT/BIGINT）由后端铸号，前端不填。 */
-function isStringPk (col, meta) {
-  if (!isPrimaryKeyField(col, meta)) return false
+/** 业务键（新增可填、保存后只读）：
+ *  ① 字符串物理主键（isPrimaryKey:1 且 dataType 为 VARCHAR/CHAR/TEXT）；
+ *  ② 字典业务编码字段（meta.codeField 指向且 dataType 为 VARCHAR/CHAR/TEXT）。
+ *  codeField 虽非物理主键，但作为业务编码（通常唯一、有外键引用），修改会破坏一致性，
+ *  故与字符串主键同等对待。整数物理主键（id，后端铸号）非业务键，前端不可编辑。 */
+function isBusinessKey (col, meta) {
   const t = String(col.dataType || '').toUpperCase()
-  // VARCHAR/CHAR/TEXT/STRING 视为字符串业务键；INT/BIGINT 为后端铸号
-  return t.includes('CHAR') || t.includes('TEXT') || t === 'STRING'
+  const isString = t.includes('CHAR') || t.includes('TEXT') || t === 'STRING'
+  if (!isString) return false
+  // 字符串物理主键（isPrimaryKey 标记 或 meta.pk 声明）
+  if (isPrimaryKeyField(col, meta)) return true
+  // 字典业务编码字段（codeField）
+  if (!!meta.codeField && col.name === meta.codeField) return true
+  return false
 }
 
 function showInTable (col, meta) {
@@ -57,11 +63,14 @@ function showInTable (col, meta) {
 }
 
 /** 行内是否可编辑：
- *  - 字符串主键（业务键，如 code）→ 可编辑（用 readonlyWhen 限定：仅新增行可填，已存在行只读）
- *  - 整数主键（id，后端铸号）→ 不可编辑
+ *  - 整数物理主键（id，后端铸号）→ 不可编辑
+ *  - 业务键（字符串主键 / codeField）→ 可编辑（由 readonlyWhen 限定：仅新增行可填，已存在行只读）
  *  - 审计/系统标识/派生层级 → 不可编辑 */
 function isEditable (col, meta) {
-  if (isPrimaryKeyField(col, meta)) return isStringPk(col, meta)
+  // 整数物理主键（后端铸号）：不可编辑
+  if (isPrimaryKeyField(col, meta) && !isBusinessKey(col, meta)) return false
+  // 业务键（字符串主键 / codeField）：可编辑，由 readonlyWhen 限制存量行只读
+  if (isBusinessKey(col, meta)) return true
   if (AUDIT_FIELDS.has(col.name)) return false
   if (SYSTEM_FLAG_FIELDS.has(col.name)) return false
   if (DERIVED_HIERARCHY.has(col.name)) return false
@@ -120,9 +129,10 @@ function editModeFor (col, meta) {
   const metaMode = metaEdit ? String(metaEdit.mode || '') : ''
   const isParent = meta.selfHierarchy && name === meta.parentField
 
-  // 1) ref + refDict（或树形字典父节点列）→ cmx-dict-selct 字典选择弹窗
-  //    ref 本身无注册编辑器，统一转成 cmx-dict-selct（有完整实现）
-  if (metaMode === 'ref' || (col.refDict && !metaMode) || isParent) {
+  // 1) ref / cmx-dict-selct / refDict 列 / 树形父节点列 → cmx-dict-selct 字典选择弹窗
+  //    统一从 col.refDict/refField/displayField 构造完整参数（dictCode/idField/labelField），
+  //    无论元数据写的是 'ref'、'cmx-dict-selct' 还是仅给了 refDict，都走同一构造路径。
+  if (metaMode === 'ref' || metaMode === 'cmx-dict-selct' || (col.refDict && !metaMode) || isParent) {
     const dictCode = col.refDict || (isParent ? meta.dictCode : '')
     if (dictCode) {
       return {
@@ -582,12 +592,12 @@ function buildColumnModel (meta) {
         if (colOpts.edit.required === true || c.required === true || c.nullable === false) {
           colOpts.edit.required = true
         }
-        // 字符串主键（业务键，如 code）：新增时可填，保存后只读。
+        // 业务键（字符串主键 / codeField）：新增时可填，保存后只读。
         // 关键：必须用可编辑的 mode（cmx-text-input）+ readonlyWhen 行级条件来达成"新增可填/存量只读"。
         // 若沿用元数据的 edit.mode='readonly'，整列会被 cmx-column-adapter 标成 col.readonly=true，
         // revo-grid 在 focus 阶段直接跳过编辑，beforeedit 不派发，readonlyWhen 无从求值 → 新增也填不了。
         // readonlyWhen 用 grid 内部 id 字段的 't' 前缀判断新增态（addRow 生成 tempId='t...'）。
-        if (isStringPk(c, meta)) {
+        if (isBusinessKey(c, meta)) {
           colOpts.edit.mode = 'cmx-text-input'
           colOpts.edit.readonlyWhen = `NOT(STARTSWITH(id, 't'))`
           colOpts.edit.required = true
@@ -763,13 +773,14 @@ function addRow (root) {
   // 字符串主键（业务键）留空让用户填，readonlyWhen 用 id 的 't' 前缀判断新增态
   for (const c of (meta.columns || [])) {
     if (!isPrimaryKeyField(c, meta)) continue
-    newRow[c.name] = isStringPk(c, meta) ? '' : tempId
+    newRow[c.name] = isBusinessKey(c, meta) ? '' : tempId
   }
   // 可编辑非主键列给默认值：未填字段用 null（后端 build_upsert_sql 对 null 用 SQL NULL 字面量，
   // 正确处理；空字符串 "" 会被当真实值插入，对 INT/DATE 等类型报错）。
-  // 仅 status=1（启用）、sort_no=0 给业务默认值。
+  // 业务键（如 codeField，非物理主键）留空待填；status=1（启用）、sort_no=0 给业务默认值。
   const editableCols = (meta.columns || []).filter((c) => isEditable(c, meta) && !isPrimaryKeyField(c, meta))
   for (const c of editableCols) {
+    if (isBusinessKey(c, meta)) { newRow[c.name] = ''; continue }
     if (c.name === 'status') newRow.status = 1
     else if (c.name === 'sort_no') newRow.sort_no = 0
     else newRow[c.name] = null
