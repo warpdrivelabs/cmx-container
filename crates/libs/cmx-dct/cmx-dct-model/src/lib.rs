@@ -1,6 +1,6 @@
 //! cmx-dct-model —— 数据字典（DCT）模块的语义中立层（DB-free）。
 //!
-//! - `DctQuery` / `DctSearchBody`：请求 DTO（坐标 + 查询体）。
+//! - `DctQuery`：请求坐标 DTO（定位定义文件 + 其中哪张字典表）。
 //! - `DictView` / `DictColumn`：从定义 JSON 解析出的字典表强类型视图（由 cmx-dct-store-pg
 //!   的 `resolve_dict` 构造，供 SQL 构造 + 元数据投影用）。
 //! - 纯逻辑：列白名单校验、主键铸号判定 / 临时 id 识别 / 自分级 parent_id 重指向、
@@ -37,27 +37,6 @@ pub struct DctQuery {
     /// query key 即 `with_props`（serde 无 rename）。
     #[serde(default)]
     pub with_props: bool,
-}
-
-/// search 请求体。
-#[derive(Debug, Deserialize, Default)]
-pub struct DctSearchBody {
-    /// 自分级：按 parentField 过滤（None=不限；显式 null 表示根级）。
-    #[serde(default)]
-    pub parent_id: Option<Value>,
-    /// 是否传了 parent_id 键（区分「不过滤」与「过滤 null 根级」）。
-    #[serde(skip)]
-    pub _has_parent: bool,
-    /// 简单等值过滤：{col: value}。
-    #[serde(default)]
-    pub filters: Option<serde_json::Map<String, Value>>,
-    /// 关键字（对 code/label 模糊）。
-    #[serde(default)]
-    pub q: Option<String>,
-    #[serde(default)]
-    pub page: Option<i64>,
-    #[serde(default)]
-    pub page_size: Option<i64>,
 }
 
 // ============================================================================
@@ -110,6 +89,63 @@ pub struct DictColumn {
     /// 仅在 `DctQuery.with_props=true` 时填充，避免基本场景的 meta payload 膨胀。
     /// handler 投影时把键铺到列对象顶层（与字段定义 JSON 存储形态一致，前端可直接展开）。
     pub extra: Option<Value>,
+}
+
+// ============================================================================
+// 元数据投影（供 /dct/meta 投影列对象）
+// ============================================================================
+
+/// 把 `DictColumn` 投影成 `/dct/meta` 下发的列对象（JSON）。
+///
+/// 固定键（必有）：name / caption / dataType / isPrimaryKey / nullable。
+/// 条件键（有值才输出）：dimType / refDict / displayField / refField / physicalField /
+///   edit / editSettings / display。
+/// 扁平属性（with_props=true 时收集到 extra）：铺到列对象顶层，与字段定义 JSON 存储形态一致，
+/// 供前端 buildColumnModel 直接展开挂到 CmxColumn（构造器的「完整继承」机制自动收纳未建模键）。
+pub fn project_meta_column(c: &DictColumn) -> Value {
+    let mut obj = json!({
+        "name": c.name,
+        "caption": c.caption,
+        "dataType": c.data_type,
+        "isPrimaryKey": c.is_pk,
+        "nullable": c.nullable,
+    });
+    // 维度类型/字典引用/物理字段/录入控件/编辑设置/显示属性：有值才输出，
+    // 供前端 DCT→列模型转换时派生 cmx-dict-select 控件与字典外键回显。
+    if !c.dim_type.is_empty() {
+        obj["dimType"] = Value::String(c.dim_type.clone());
+    }
+    if !c.ref_dict.is_empty() {
+        obj["refDict"] = Value::String(c.ref_dict.clone());
+    }
+    if !c.display_field.is_empty() {
+        obj["displayField"] = Value::String(c.display_field.clone());
+    }
+    if !c.ref_field.is_empty() {
+        obj["refField"] = Value::String(c.ref_field.clone());
+    }
+    if !c.physical_field.is_empty() {
+        obj["physicalField"] = Value::String(c.physical_field.clone());
+    }
+    if let Some(edit) = &c.edit {
+        obj["edit"] = edit.clone();
+    }
+    if let Some(es) = &c.edit_settings {
+        obj["editSettings"] = es.clone();
+    }
+    if let Some(d) = &c.display {
+        obj["display"] = d.clone();
+    }
+    // 扁平属性（width/visible/pattern/enumValues/required/intDigits/decimalDigits 等）：
+    // with_props=true 时由 store 收集到 extra，此处铺到列对象顶层。
+    if let Some(extra) = &c.extra
+        && let Some(m) = extra.as_object()
+    {
+        for (k, v) in m {
+            obj[k] = v.clone();
+        }
+    }
+    obj
 }
 
 // ============================================================================
@@ -328,6 +364,20 @@ pub fn id_to_key(v: Option<&Value>) -> Option<String> {
 // search SQL 构造
 // ============================================================================
 
+/// 从请求 body 解析分页参数。
+///
+/// page：默认 1，最小 1。page_size：默认 500，范围 [1, 5000]。
+/// `build_search_sql`（构造 LIMIT/OFFSET）与 `search`（回传响应）共用，避免重复计算。
+pub fn parse_paging(raw: &Value) -> (i64, i64) {
+    let page = raw.get("page").and_then(|v| v.as_i64()).unwrap_or(1).max(1);
+    let page_size = raw
+        .get("pageSize")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(500)
+        .clamp(1, 5000);
+    (page, page_size)
+}
+
 /// 由 view + 请求 body 构造 (data_sql, count_sql, params)。data/search 与 zmc-msgpack 端点共用。
 ///
 /// params 直接产出 `Vec<DataValue>`（按列名走 [`to_dv_by_col`] 派发），与 save 路径统一：
@@ -406,12 +456,7 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Da
         format!(" ORDER BY \"{}\"", view.pk)
     };
 
-    let page = raw.get("page").and_then(|v| v.as_i64()).unwrap_or(1).max(1);
-    let page_size = raw
-        .get("pageSize")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(500)
-        .clamp(1, 5000);
+    let (page, page_size) = parse_paging(raw);
     let offset = (page - 1) * page_size;
 
     let data_sql = format!(
@@ -551,6 +596,17 @@ pub fn build_upsert_sql_dv(
         update_clause
     );
     Some((sql, params))
+}
+
+/// 构造按 pk 删除单行的 SQL：`DELETE FROM "table" WHERE "pk" = $1`。
+///
+/// `delete` 函数（DELETE /dct/entries/{id}）与 `save_apply` 的 deleted 分支共用。
+/// pk 参数绑定（按 pk 列类型，整型列字符串 id 转 Int）由调用方用 to_dv_by_col 构造。
+pub fn build_delete_sql(view: &DictView) -> String {
+    format!(
+        "DELETE FROM \"{}\" WHERE \"{}\" = $1",
+        view.table_name, view.pk
+    )
 }
 
 /// changeset 行取 fields：兼容 {id,fields:{...}} 与裸 {...}（含 id）两种形态。

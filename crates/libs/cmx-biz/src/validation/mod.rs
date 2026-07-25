@@ -248,6 +248,33 @@ pub struct ValidateOptions<'a> {
     pub check_not_null: bool,
 }
 
+impl<'a> ValidateOptions<'a> {
+    /// insert 校验选项：整行 + NOT NULL（跳过 server_filled 的 backfill 列）。
+    ///
+    /// 固化 `check_unknown=false`（容忍 UI 附加字段）。`server_filled` / `server_replaced`
+    /// 由各业务 crate 提供自己的列清单（与各自的 upsert SQL backfill 表同源）。
+    pub fn insert(server_filled: &'a [&'a str], server_replaced: &'a [&'a str]) -> Self {
+        Self {
+            server_filled,
+            server_replaced,
+            check_unknown: false,
+            check_not_null: true,
+        }
+    }
+
+    /// update 校验选项：仅校验传入字段，不做整表 NOT NULL。
+    ///
+    /// 固化 `check_unknown=false`。与 `insert` 仅 `check_not_null` 不同。
+    pub fn update(server_filled: &'a [&'a str], server_replaced: &'a [&'a str]) -> Self {
+        Self {
+            server_filled,
+            server_replaced,
+            check_unknown: false,
+            check_not_null: false,
+        }
+    }
+}
+
 /// 校验一行（insert 语义）：类型 / 长度 / 精度 / 范围 / 日期 / NOT NULL。
 ///
 /// `row_idx`：本行在提交中的索引（用于 Violation 定位）。返回**全部** violations。
