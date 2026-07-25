@@ -292,6 +292,35 @@ fn max_fn() -> RptFunction {
     }
 }
 
+// ─────────────────────── 浮动数据源类 ───────────────────────
+
+/// FLIST —— 罗列一组维度记录，驱动浮动行/列展开（非单元格取数函数）。
+///
+/// 与 QM/QC 等「单元格取数」不同：FLIST 产出**行集合**（带维度键），由展开引擎
+/// （`cmx-rpt-store-pg::expand`）消费，为浮动区把模板行复制成 N 条实例行。登记其元数据
+/// 供设计器「浮动区数据源向导」选择与拼串；求值不走单元格 eval（`is_fetch:false`）。
+fn flist() -> RptFunction {
+    RptFunction {
+        name: "FLIST",
+        category: FnCategory::Fetch,
+        ret_type: ValueType::Text,
+        is_fetch: false,
+        prototype: Prototype {
+            params: vec![
+                p("取数对象", ParamKind::Object, "维度对象码，如 'ar_cust' 应收客户"),
+                p_opt("组织机构", ParamKind::Org, Some("@current"), "@current 当前组织，或组织码"),
+                p_opt("期间", ParamKind::Period, Some("0"), "0本期/-1上期，或绝对期间码"),
+                p_opt("取前N", ParamKind::Number, Some("10"), "按度量降序取前 N（0=全量）"),
+                p_opt("排序度量", ParamKind::Text, Some("amt"), "排序依据的度量字段，如 amt 余额"),
+            ],
+            variadic: None,
+        },
+        help: "罗列维度记录驱动浮动展开（前 N 大客户/供应商等）",
+        example: "FLIST('ar_cust',@current,0,10,'amt')",
+        wizard: WizardSpec { preview: false },
+    }
+}
+
 // ─────────────────────── inventory 提交（每函数一条） ───────────────────────
 
 inventory::submit! { RegisteredRptFn { def: qm } }
@@ -305,3 +334,4 @@ inventory::submit! { RegisteredRptFn { def: round } }
 inventory::submit! { RegisteredRptFn { def: abs_fn } }
 inventory::submit! { RegisteredRptFn { def: min_fn } }
 inventory::submit! { RegisteredRptFn { def: max_fn } }
+inventory::submit! { RegisteredRptFn { def: flist } }

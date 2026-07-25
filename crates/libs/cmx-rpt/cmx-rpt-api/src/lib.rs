@@ -70,6 +70,40 @@ impl ModuleRoutes for ReportModule {
                 "/report-design/reports/{code}/open",
                 post(handlers::report_design_open_report),
             )
+            // 打开并展开：浮动行列（is_repeatable=1 区域的模板行）按数据源展开成 N 条实例行。
+            .route(
+                "/report-design/reports/{code}/expand",
+                post(handlers::report_design_expand_report),
+            )
+            // 浮动行/列存储态 CRUD（F2/F3）：cr_report_float_row/col 的增删改查 + 取数初始化。
+            .route(
+                "/report-design/reports/{code}/float/rows/query",
+                post(handlers::report_float_rows_query),
+            )
+            .route(
+                "/report-design/reports/{code}/float/rows",
+                post(handlers::report_float_rows_save),
+            )
+            .route(
+                "/report-design/reports/{code}/float/rows/{id}",
+                axum::routing::delete(handlers::report_float_rows_delete),
+            )
+            .route(
+                "/report-design/reports/{code}/float/cols/query",
+                post(handlers::report_float_cols_query),
+            )
+            .route(
+                "/report-design/reports/{code}/float/cols",
+                post(handlers::report_float_cols_save),
+            )
+            .route(
+                "/report-design/reports/{code}/float/cols/{id}",
+                axum::routing::delete(handlers::report_float_cols_delete),
+            )
+            .route(
+                "/report-design/reports/{code}/float/seed",
+                post(handlers::report_float_seed),
+            )
             .route(
                 "/report-design/reports/{code}/data",
                 post(handlers::report_design_save_data),

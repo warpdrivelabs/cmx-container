@@ -431,6 +431,15 @@ function styleCss () {
     .ra-sec{border:1px solid var(--ra-border);border-radius:8px;background:var(--sapTile_Background,#fff);padding:10px}.ra-sec>b{display:block;margin-bottom:7px;color:var(--ra-blue)}.ra-sec p{margin:0;color:var(--sapContent_LabelColor,#6a6d70);font-size:12px}
     .ra-empty{padding:18px;border:1px dashed var(--ra-border);border-radius:8px;background:var(--sapTile_Background,#fff);color:var(--sapContent_LabelColor,#6a6d70);text-align:center}
     .ra-note{margin:10px;border:1px dashed var(--ra-border);border-radius:8px;padding:12px;background:var(--sapList_HeaderBackground,#f7f9fc);color:var(--sapContent_LabelColor,#6a6d70)}
+    .ra-fp{margin-top:10px}.ra-fp>b{display:flex;align-items:center;gap:5px;color:var(--ra-accent,#0d9488)}.ra-fp-count{margin-left:auto;font-size:10px;background:color-mix(in srgb,var(--ra-accent,#0d9488) 16%,transparent);color:var(--ra-accent,#0d9488);border-radius:999px;padding:1px 7px;font-weight:700}
+    .ra-fp-hint{margin:2px 0 8px!important;font-size:11px}
+    .ra-fp-tablewrap{max-height:220px;overflow:auto;border:1px solid var(--ra-border);border-radius:7px}
+    .ra-fp-table{width:100%;border-collapse:collapse;font-size:11.5px}.ra-fp-table th{position:sticky;top:0;background:var(--sapList_HeaderBackground,#f2f5f9);color:var(--sapContent_LabelColor,#5b6b7b);font-weight:600;text-align:left;padding:5px 7px;border-bottom:1px solid var(--ra-border)}.ra-fp-table td{padding:3px 7px;border-bottom:1px solid color-mix(in srgb,var(--ra-border) 60%,transparent);vertical-align:middle}
+    .ra-fp-in{width:100%;box-sizing:border-box;height:24px;border:1px solid transparent;border-radius:4px;background:transparent;font:inherit;font-size:11.5px;padding:0 5px;color:var(--sapTextColor,#1d2d3e)}.ra-fp-in:hover{border-color:var(--ra-border)}.ra-fp-in:focus{outline:none;border-color:var(--ra-accent,#0d9488);background:var(--sapTile_Background,#fff)}.ra-fp-num{font-variant-numeric:tabular-nums}
+    .ra-fp-tag{font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px}.ra-fp-tag.manual{background:color-mix(in srgb,#a855f7 16%,transparent);color:#a855f7}.ra-fp-tag.seed{background:color-mix(in srgb,var(--ra-accent,#0d9488) 14%,transparent);color:var(--ra-accent,#0d9488)}
+    .ra-fp-del{width:24px;height:24px;border:0;border-radius:5px;background:transparent;color:var(--sapContent_IconColor,#8a94a0);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.ra-fp-del:hover{background:color-mix(in srgb,#ef4444 12%,transparent);color:#ef4444}
+    .ra-fp-empty{text-align:center;color:var(--sapContent_LabelColor,#6a6d70);padding:14px!important;font-size:11px}
+    .ra-fp-acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.ra-fp-acts .ra-btn{border:1px solid var(--ra-border)}.ra-fp-acts .ra-btn.primary{background:var(--ra-accent,#0d9488);color:#fff;border-color:var(--ra-accent,#0d9488)}
     .ra-toast{position:absolute;left:50%;bottom:22px;transform:translate(-50%,14px);z-index:60;max-width:min(560px,88%);padding:10px 16px;border-radius:9px;background:#1d2d3e;color:#fff;font-size:12.5px;font-weight:600;box-shadow:0 12px 32px rgba(10,31,68,.34);opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;display:flex;align-items:center;gap:8px}.ra-toast.show{opacity:1;transform:translate(-50%,0)}.ra-toast[data-kind="success"]{background:linear-gradient(180deg,#12b56b,#0f9d5c)}.ra-toast[data-kind="warn"]{background:linear-gradient(180deg,#e0a336,#d98200)}.ra-toast[data-kind="error"]{background:linear-gradient(180deg,#e5544b,#c0392b)}
     /* explorer：期间下拉（顶部标题区，高度与 content .ra-head 一致 46px）+ 组织详情 */
     .ra-explorer{overflow:hidden}
@@ -631,7 +640,45 @@ function propertyStatusHtml (st) {
       ${kv('已装载单元格', st.dataLoaded ? String(st.loadedCells) : '尚未取数')}
     </div>
     <div class="ra-sec"><b>说明</b><p>「取数」按组织+期间从 cr_cell_data 装载单元格值并覆盖到版式画布（保留格式与公式）；「存数」把画布上的手工/非公式值回写 cr_cell_data。公式计算另案。</p></div>
+    ${floatPanelHtml(st)}
   </section>`
+}
+
+/** 浮动明细维护面板：列出/增删改当前 org+period 的浮动行（cr_report_float_row）。 */
+function floatPanelHtml (st) {
+  const fp = st.__floatPanel || { loaded: false, items: [], kind: 'row' }
+  const rows = fp.items || []
+  const listRows = rows.length
+    ? rows.map((it, i) => `<tr data-fp-row="${i}">
+        <td>${esc(it.dimKey || '')}</td>
+        <td><input class="ra-fp-in" data-fp-field="label" data-fp-i="${i}" value="${esc(it.label || '')}"></td>
+        <td><input class="ra-fp-in ra-fp-num" data-fp-field="cellB" data-fp-i="${i}" value="${esc(cellVal(it, 'B'))}" placeholder="B列值/公式"></td>
+        <td>${Number(it.isManual) === 1 ? '<span class="ra-fp-tag manual">手工</span>' : '<span class="ra-fp-tag seed">取数</span>'}</td>
+        <td><button class="ra-fp-del" data-fp-del="${esc(String(it.id || ''))}" data-fp-i="${i}" title="删除"><ui5-icon name="delete"></ui5-icon></button></td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="ra-fp-empty">尚无浮动明细。点「从取数初始化」拉取，或「新增一行」手工录入。</td></tr>'
+  return `<div class="ra-sec ra-fp">
+    <b><ui5-icon name="multiselect-all"></ui5-icon> 浮动明细维护 ${rows.length ? `<span class="ra-fp-count">${rows.length}</span>` : ''}</b>
+    <p class="ra-fp-hint">按 <b>${esc(st.props.orgCode || '?')}</b> + <b>${esc(st.curPeriod || st.props.periodCode || '?')}</b> 维护浮动行；改动保存后「取数」刷新画布。</p>
+    <div class="ra-fp-tablewrap">
+      <table class="ra-fp-table">
+        <thead><tr><th>维度键</th><th>名称</th><th>B列值</th><th>来源</th><th></th></tr></thead>
+        <tbody>${listRows}</tbody>
+      </table>
+    </div>
+    <div class="ra-fp-acts">
+      <button class="ra-btn" type="button" data-fp-cmd="reload"><ui5-icon name="refresh"></ui5-icon>刷新</button>
+      <button class="ra-btn" type="button" data-fp-cmd="seed"><ui5-icon name="download"></ui5-icon>从取数初始化</button>
+      <button class="ra-btn" type="button" data-fp-cmd="add"><ui5-icon name="add"></ui5-icon>新增一行</button>
+      <button class="ra-btn primary" type="button" data-fp-cmd="save"><ui5-icon name="save"></ui5-icon>保存全部</button>
+    </div>
+  </div>`
+}
+
+/** 取浮动行某列的值（cells JSONB）。 */
+function cellVal (item, col) {
+  const c = item && item.cells
+  return (c && (c[col] != null)) ? String(c[col]) : ''
 }
 
 function kv (label, value) {
@@ -668,13 +715,13 @@ function toast (root, message, kind = 'info') {
 // 版式加载 + 数据取/存（复用后端端点，逻辑本地实现，不 import designer.js）
 // ============================================================================
 
-/** 打开报表：一次后端调用取全集（版式+cellMap+元素+函数+数据）。分发进各缓存，返回 bundle。
- *  失败返回 null，调用方回退旧多调用路径（保底不白屏）。 */
+/** 打开报表：一次后端调用取全集（版式+cellMap+元素+函数+数据+浮动展开）。分发进各缓存，返回 bundle。
+ *  走 /expand（/open 的超集：额外带 float.regions[] 浮动实例行）。失败返回 null，调用方回退旧多调用路径（保底不白屏）。 */
 async function openReportBundle (st) {
   try {
     const body = { version: st.props.version || '' }
     if (st.props.orgCode && st.props.periodCode) { body.orgCode = st.props.orgCode; body.periodCode = st.props.periodCode }
-    const data = await apiJson(`/api/report-design/reports/${enc(st.props.reportCode)}/open`, {
+    const data = await apiJson(`/api/report-design/reports/${enc(st.props.reportCode)}/expand`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     if (!data) return null
@@ -684,6 +731,7 @@ async function openReportBundle (st) {
     st.elementsLoaded = true                       // 预置：元素胶囊显名称，不再单独请求 /elements
     st.__functions = Array.isArray(data?.functions) ? data.functions : []
     st.__fnLoaded = true                           // 预置：fx 编辑器取数区，不再单独请求 /functions
+    st.__float = data?.float || null               // 浮动展开段（规则见 applyFloatExpansion）
     return data
   } catch (_) {
     return null
@@ -727,6 +775,9 @@ function applyCellFormulas (sheet, st) {
     for (const key of Object.keys(st.cellMap || {})) {
       const cm = st.cellMap[key]
       if (!cm || !cm.calcFormula) continue
+      // 浮动模板公式（含 {{占位符}}）由 applyFloatExpansion 逐实例行落格，这里跳过——
+      // 否则会把 QM(0,@current,'{{cust_code}}') 字面量写到模板行位置，污染表头/画布。
+      if (String(cm.calcFormula).includes('{{')) continue
       // key = `sheet名!地址`，只落本 sheet 的
       const bang = key.indexOf('!')
       if (bang < 0) continue
@@ -741,6 +792,182 @@ function applyCellFormulas (sheet, st) {
     }
   }
   return n
+}
+
+/**
+ * 浮动行展开落地：把后端 /expand 返回的 float.regions[].instances 逐行写到画布。
+ * 每条实例行 = 一行画布数据：col A 写行标题(name)、其余列 setFormula（已由后端替换 {{维度}}/{{r}}/{{total}}）。
+ * 实例行物理行号 physRow 为 1-based（后端按模板行起点顺序展开），转 0-based 落 setValue/setFormula。
+ * 展开的是「模板行 × 数据源 → N 实例行」——设计态只有 1 条模板行，运行态在此铺成 N 行。
+ * 分级浮动(rowType=subtotal/total、levelNo 层级)：小计/合计行加粗，明细/小计按 levelNo 缩进 col A。
+ * 返回落地的实例行数。空/无浮动段则 0。
+ */
+function applyFloatExpansion (sheet, st, bundle) {
+  const fl = bundle?.float || st.__float
+  const regions = fl && Array.isArray(fl.regions) ? fl.regions : []
+  if (!regions.length) return 0
+  const wb = sheet?.getWorkbook?.()
+  const ws = wb && wb.getActiveSheet && wb.getActiveSheet()
+  if (!ws) return 0
+  const GC = (typeof globalThis !== 'undefined' && globalThis.GC) || null
+  let n = 0
+  st.__floatIndex = {}   // physRow-1 → { rowId, dimKeyPath, regionCode, rowType }（存数时回填 8 元键用）
+  st.__floatColIndex = {} // colIndex → { colId, dimKeyPath, regionCode }（列浮动存数用）
+  for (const reg of regions) {
+    // ── 列浮动（P3）：axis='col'，横向铺列。每实例列写列头(第1行)+各行公式。
+    if (reg.axis === 'col') {
+      const colIdxs = []
+      for (const ci of (reg.colInstances || [])) {
+        const c0 = Number(ci.colIndex)
+        if (!(c0 >= 0)) continue
+        colIdxs.push(c0)
+        // 列头写到第 1 行（row 0）
+        try { ws.setValue(0, c0, ci.header != null ? String(ci.header) : '') } catch (_) {}
+        for (const cell of (ci.cells || [])) {
+          const r0 = Number(cell.row) - 1
+          if (!(r0 >= 0)) continue
+          const f = String(cell.formula || '')
+          try {
+            if (f.startsWith('=')) ws.setFormula(r0, c0, sanitizeExprForSpreadjs(f.replace(/^=+/, '')))
+            else ws.setFormula(r0, c0, sanitizeExprForSpreadjs(f))
+          } catch (_) {}
+        }
+        st.__floatColIndex[c0] = { colId: ci.colId, dimKeyPath: ci.dimKeyPath, regionCode: reg.regionCode, sheetCode: reg.sheetCode }
+        n++
+      }
+      // 列大纲：把连续的浮动列成组（可折叠整块浮动月份列）。
+      applyColGrouping(ws, colIdxs)
+      continue
+    }
+    for (const inst of (reg.instances || [])) {
+      const r0 = Number(inst.physRow) - 1
+      if (!(r0 >= 0)) continue
+      const rowType = inst.rowType || 'float'
+      const level = Number(inst.levelNo) || 1
+      // col A：行标题
+      try { ws.setValue(r0, 0, (inst.name != null ? String(inst.name) : '')) } catch (_) {}
+      // 其余列：公式（后端已重定位坐标/替换维度，前端只需 sanitize 成 SpreadJS 语法）
+      for (const c of (inst.cells || [])) {
+        const p = parseAddr(`${c.col}${inst.physRow}`)
+        if (!p) continue
+        const f = String(c.formula || '')
+        try {
+          if (f.startsWith('=')) ws.setFormula(p.row, p.col, sanitizeExprForSpreadjs(f.replace(/^=+/, '')))
+          else ws.setFormula(p.row, p.col, sanitizeExprForSpreadjs(f))
+        } catch (_) {}
+      }
+      // 分级视觉：小计/合计加粗；A 列缩进（用 cellPadding，退化则前缀空格）
+      try {
+        if (rowType === 'subtotal' || rowType === 'total') {
+          const style = ws.getStyle ? ws.getStyle(r0, 0) : null
+          if (GC && GC.Spread && GC.Spread.Sheets) {
+            const s = new GC.Spread.Sheets.Style(); s.font = 'bold 12px Arial'
+            for (let c = 0; c <= 3; c++) { try { ws.setStyle(r0, c, s) } catch (_) {} }
+          } else if (style && ws.setStyle) { /* 无 GC 全局：跳过样式，不阻断 */ }
+        }
+        if (level > 1 && ws.getCell) { try { ws.getCell(r0, 0).textIndent(level - 1) } catch (_) {} }
+      } catch (_) {}
+      st.__floatIndex[r0] = { rowId: inst.rowId, dimKeyPath: inst.dimKeyPath, regionCode: reg.regionCode, sheetCode: reg.sheetCode, rowType }
+      n++
+    }
+    // 分级折叠：按 parentRow 把子行分组成 SpreadJS 行大纲（可折叠 [−]，如图）。
+    applyRowGrouping(ws, reg.instances || [])
+  }
+  st.floatExpanded = n
+  return n
+}
+
+/**
+ * 分级折叠：把浮动实例行按层级建成 SpreadJS 行大纲（可折叠 [−]，如图）。
+ * 正确嵌套：先分内层（明细收在小计下），再分外层（小计+明细整体收在合计下）——
+ * 用「每个父行 → 其全部后代的物理行跨度[min,max]」分组，深层(level 大)先 group。
+ * ★ 必须 suspendPaint/resumePaint 包裹，否则 group() 静默不生效。
+ */
+function applyRowGrouping (ws, instances) {
+  try {
+    const wb = ws.getParent ? ws.getParent() : null
+    if (!ws.rowOutlines || !ws.rowOutlines.group) return
+    try { if (wb && wb.options) wb.options.showRowOutline = true } catch (_) {}
+
+    // physRow → instance；按 parentRow 建父→子映射（子=直接下级）。
+    const byPhys = {}
+    instances.forEach((i) => { byPhys[Number(i.physRow)] = i })
+    const directChildren = {}
+    instances.forEach((i) => {
+      const p = i.parentRow
+      if (p != null) { (directChildren[p] = directChildren[p] || []).push(Number(i.physRow)) }
+    })
+
+    // 递归求某父行的全部后代物理行（含各级子孙），用于算折叠跨度。
+    const descendants = (row) => {
+      const out = []
+      const kids = directChildren[row] || []
+      kids.forEach((k) => { out.push(k); out.push(...descendants(k)) })
+      return out
+    }
+
+    // 每个「有子行的父」→ 一个分组 [start0, count]；跨度=其全部后代的 min..max 物理行。
+    // 按父行的层级深度排序：level 大（深）的先分组，保证内层先于外层（正确嵌套）。
+    const parents = Object.keys(directChildren)
+      .map(Number)
+      .filter((p) => byPhys[p]) // 父必须是真实实例行（合计/小计）
+      .sort((a, b) => (byPhys[b].levelNo || 0) - (byPhys[a].levelNo || 0))
+
+    const segs = []
+    parents.forEach((p) => {
+      const desc = descendants(p)
+      if (!desc.length) return
+      const min = Math.min(...desc); const max = Math.max(...desc)
+      segs.push([min - 1, max - min + 1]) // [start0, count]（0-based）
+    })
+    if (!segs.length) return
+
+    if (wb && wb.suspendPaint) wb.suspendPaint()
+    try {
+      // 折叠按钮放在组的「上方」（我们的小计/合计 summary 行在明细之前）。
+      // SpreadJS OutlineDirection：默认 1=summary 在下方；0=summary 在上方。
+      try { ws.rowOutlines.direction && ws.rowOutlines.direction(0) } catch (_) {}
+      segs.forEach(([start0, count]) => {
+        if (count > 0 && start0 >= 0) { try { ws.rowOutlines.group(start0, count) } catch (_) {} }
+      })
+    } finally {
+      if (wb && wb.resumePaint) wb.resumePaint()
+    }
+  } catch (_) { /* 大纲失败不阻断渲染 */ }
+}
+
+/**
+ * 列大纲：把连续的浮动列成组（SpreadJS columnOutlines.group），呈现列头上方的折叠 [−]，
+ * 可整块收起浮动月份列。折叠按钮放在组「左侧」（第一列，与行大纲上方对称）。
+ */
+function applyColGrouping (ws, colIdxs) {
+  try {
+    const wb = ws.getParent ? ws.getParent() : null
+    if (!ws.columnOutlines || !ws.columnOutlines.group || !colIdxs || !colIdxs.length) return
+    try { if (wb && wb.options) wb.options.showColumnOutline = true } catch (_) {}
+    // 连续段分组（浮动列一般连续，如 C..H）。
+    const sorted = colIdxs.slice().sort((a, b) => a - b)
+    const segs = []
+    let segStart = null; let prev = null
+    const flush = (end) => { if (segStart != null) segs.push([segStart, end - segStart + 1]); segStart = null }
+    sorted.forEach((c) => {
+      if (segStart == null) { segStart = c; prev = c; return }
+      if (c === prev + 1) { prev = c; return }
+      flush(prev); segStart = c; prev = c
+    })
+    flush(prev)
+    if (!segs.length) return
+    if (wb && wb.suspendPaint) wb.suspendPaint()
+    try {
+      // 折叠按钮放列组「左侧」（第一列，即 summary 在前）。
+      try { ws.columnOutlines.direction && ws.columnOutlines.direction(0) } catch (_) {}
+      segs.forEach(([start, count]) => {
+        if (count > 0 && start >= 0) { try { ws.columnOutlines.group(start, count) } catch (_) {} }
+      })
+    } finally {
+      if (wb && wb.resumePaint) wb.resumePaint()
+    }
+  } catch (_) { /* 列大纲失败不阻断渲染 */ }
 }
 
 /**
@@ -976,6 +1203,7 @@ function initSpread (root, st) {
         if (wbJson && sheet.setWorkbookJson) await sheet.setWorkbookJson(wbJson)   // ① 复原版式（含原生公式）
         else if (sheet.setReportModel) sheet.setReportModel(skeletonModel(st))
         applyCellFormulas(sheet, st)                                               // ② 设计器取数/计算公式落格 → 自动计算
+        applyFloatExpansion(sheet, st, bundle)                                     // ②b 浮动区：模板行 × 数据源 → N 实例行落格
         if (bundle.hasData) applyCellsToCanvas(sheet, st, bundle.cells)            // ③ 灌数据（公式格取值自动算 / 非公式格直填）
         markDirty(st, false)
         refreshInstance(st, (v) => v === 'propertyStatus')
@@ -1064,7 +1292,124 @@ function bind (root, st, view) {
       updateApplierTab(st)
       if (st.dataLoaded) toast(root, `期间已切到 ${val}，请在报表页点「取数」刷新数据`, 'info')
     })
+  } else if (view === 'propertyStatus') {
+    bindFloatPanel(root, st)
   }
+}
+
+/** 浮动明细维护：当前 org+period 的浮动行 CRUD（调 /float/rows/* 端点）。 */
+function floatRegionCode (st) {
+  // 目标浮动区：取上次 expand 的第一个行浮动区（axis!=col）。
+  const regs = (st.__float && st.__float.regions) || []
+  const r = regs.find((x) => x.axis !== 'col') || regs[0]
+  return r ? { regionCode: r.regionCode, sheetCode: r.sheetCode } : { regionCode: '', sheetCode: '' }
+}
+
+function floatCtxBody (st, extra) {
+  const { regionCode, sheetCode } = floatRegionCode(st)
+  return Object.assign({
+    version: st.props.version || '',
+    sheetCode: sheetCode || 'Sheet1',
+    regionCode: regionCode || '',
+    orgCode: st.props.orgCode || '',
+    periodCode: st.curPeriod || st.props.periodCode || '',
+  }, extra || {})
+}
+
+async function loadFloatItems (st, root) {
+  if (!st.props.orgCode || !(st.curPeriod || st.props.periodCode)) {
+    st.__floatPanel = { loaded: true, items: [], kind: 'row' }
+    refreshInstance(st, (v) => v === 'propertyStatus'); return
+  }
+  try {
+    const data = await apiJson(`/api/report-design/reports/${enc(st.props.reportCode)}/float/rows/query`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(floatCtxBody(st)),
+    })
+    st.__floatPanel = { loaded: true, items: (data && data.items) || [], kind: 'row' }
+  } catch (e) {
+    st.__floatPanel = { loaded: true, items: [], kind: 'row' }
+    toast(root, `浮动明细加载失败：${e instanceof Error ? e.message : String(e)}`, 'error')
+  }
+  refreshInstance(st, (v) => v === 'propertyStatus')
+}
+
+/** 保存全部：把当前面板行批量 UPSERT（手工 is_manual=1）。 */
+async function saveFloatItems (st, root) {
+  const fp = st.__floatPanel || { items: [] }
+  const items = (fp.items || []).map((it, i) => ({
+    id: it.id || 0,
+    dimKey: it.dimKey,
+    label: it.label || '',
+    parentDimKey: it.parentDimKey || '',
+    seq: it.seq != null ? it.seq : i,
+    cells: it.cells || {},
+  })).filter((it) => it.dimKey)
+  try {
+    await apiJson(`/api/report-design/reports/${enc(st.props.reportCode)}/float/rows`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(floatCtxBody(st, { items })),
+    })
+    toast(root, `已保存 ${items.length} 条浮动明细`, 'success')
+    await loadFloatItems(st, root)
+    reExpandCanvas(st, root)
+  } catch (e) { toast(root, `保存失败：${e instanceof Error ? e.message : String(e)}`, 'error') }
+}
+
+async function seedFloatItems (st, root) {
+  try {
+    const r = await apiJson(`/api/report-design/reports/${enc(st.props.reportCode)}/float/seed`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(floatCtxBody(st)),
+    })
+    toast(root, `已从取数初始化 ${r?.seeded ?? 0} 条（源:${r?.dataSource || '-'}）`, 'success')
+    await loadFloatItems(st, root)
+    reExpandCanvas(st, root)
+  } catch (e) { toast(root, `初始化失败：${e instanceof Error ? e.message : String(e)}`, 'error') }
+}
+
+async function deleteFloatItem (st, root, id, idx) {
+  // 无 id（未保存的新行）→ 仅从面板移除
+  if (!id) { (st.__floatPanel.items || []).splice(idx, 1); refreshInstance(st, (v) => v === 'propertyStatus'); return }
+  try {
+    await apiJson(`/api/report-design/reports/${enc(st.props.reportCode)}/float/rows/${enc(String(id))}`, { method: 'DELETE' })
+    toast(root, '已删除', 'success')
+    await loadFloatItems(st, root)
+    reExpandCanvas(st, root)
+  } catch (e) { toast(root, `删除失败：${e instanceof Error ? e.message : String(e)}`, 'error') }
+}
+
+/** 重展开画布：重新调 /expand（读存储表）并把结果落画布。 */
+function reExpandCanvas (st, root) {
+  // content 宿主里的 sheet：跨宿主取在屏画布重灌。
+  for (const host of Array.from(st.hosts || [])) {
+    const r = host.renderRoot || host.shadowRoot?.querySelector('.native-page-root')
+    const sheet = r && r.querySelector && r.querySelector('[data-ra-spread]')
+    if (sheet) { openReportBundle(st).then((b) => { if (b) { applyFloatExpansion(sheet, st, b); if (b.hasData) applyCellsToCanvas(sheet, st, b.cells) } }).catch(() => {}); break }
+  }
+}
+
+function bindFloatPanel (root, st) {
+  if (!st.__floatPanel || !st.__floatPanel.loaded) { loadFloatItems(st, root); return }
+  root.querySelectorAll('[data-fp-cmd]').forEach((b) => b.addEventListener('click', () => {
+    const cmd = b.getAttribute('data-fp-cmd')
+    if (cmd === 'reload') loadFloatItems(st, root)
+    else if (cmd === 'seed') seedFloatItems(st, root)
+    else if (cmd === 'save') saveFloatItems(st, root)
+    else if (cmd === 'add') {
+      st.__floatPanel.items = st.__floatPanel.items || []
+      st.__floatPanel.items.push({ id: 0, dimKey: `manual_${Date.now()}`, label: '新客户', cells: {}, isManual: 1, seq: st.__floatPanel.items.length })
+      refreshInstance(st, (v) => v === 'propertyStatus')
+    }
+  }))
+  root.querySelectorAll('[data-fp-del]').forEach((b) => b.addEventListener('click', () =>
+    deleteFloatItem(st, root, b.getAttribute('data-fp-del'), Number(b.getAttribute('data-fp-i')))))
+  // 行内编辑：label / B列值 写回面板 items（保存时批量提交）
+  root.querySelectorAll('[data-fp-field]').forEach((el) => el.addEventListener('input', () => {
+    const i = Number(el.getAttribute('data-fp-i'))
+    const field = el.getAttribute('data-fp-field')
+    const it = (st.__floatPanel.items || [])[i]
+    if (!it) return
+    if (field === 'label') it.label = el.value
+    else if (field === 'cellB') { it.cells = it.cells || {}; it.cells.B = el.value }
+  }))
 }
 
 /** 缩放：拖动 range 实时 / −+ 步进 / 点胶囊回 100%。 */

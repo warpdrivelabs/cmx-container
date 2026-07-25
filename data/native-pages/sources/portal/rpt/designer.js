@@ -639,7 +639,8 @@ function styleCss () {
     .rd-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px}.rd-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--rd-border);border-radius:999px;padding:2px 8px;font-size:11px;background:var(--sapList_HeaderBackground,#f7f9fc)}.rd-chip.on{color:#fff;background:var(--rd-green);border-color:var(--rd-green)}
     .rd-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
     .rd-litem{border:1px solid var(--rd-border);border-radius:7px;background:var(--sapTile_Background,#fff);padding:7px 9px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;cursor:pointer}.rd-litem:hover{border-color:color-mix(in srgb,var(--rd-blue) 40%,var(--rd-border))}.rd-litem.active{border-color:var(--rd-blue);background:color-mix(in srgb,var(--rd-blue) 7%,var(--sapTile_Background,#fff))}.rd-litem-main{min-width:0}.rd-litem-main b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rd-litem-main small{display:block;font-size:10.5px;color:var(--sapContent_LabelColor,#6a6d70);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Menlo,Consolas,monospace}.rd-litem-act{display:flex;gap:4px}.rd-litem-act button{width:24px;height:24px;border:0;border-radius:5px;background:transparent;color:var(--sapContent_LabelColor,#6a6d70);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.rd-litem-act button:hover{background:color-mix(in srgb,var(--rd-blue) 10%,transparent);color:var(--rd-blue)}.rd-litem-act button.danger:hover{background:color-mix(in srgb,#bb0000 10%,transparent);color:#bb0000}.rd-litem-act ui5-icon{width:.82rem;height:.82rem}
-    .rd-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.04em;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,var(--rd-cyan) 14%,transparent);color:var(--rd-cyan);vertical-align:middle;margin-left:5px}.rd-badge.default{background:color-mix(in srgb,var(--rd-green) 14%,transparent);color:var(--rd-green)}
+    .rd-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.04em;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,var(--rd-cyan) 14%,transparent);color:var(--rd-cyan);vertical-align:middle;margin-left:5px}.rd-badge.default{background:color-mix(in srgb,var(--rd-green) 14%,transparent);color:var(--rd-green)}.rd-badge.float{background:color-mix(in srgb,var(--rd-purple,#a855f7) 16%,transparent);color:var(--rd-purple,#a855f7)}
+    .rd-chk{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--sapTextColor,#1d2d3e);cursor:pointer}.rd-chk input{margin:0}
     .rd-mini-empty{border:1px dashed var(--rd-border);border-radius:7px;padding:11px;text-align:center;color:var(--sapContent_LabelColor,#6a6d70);font-size:11.5px;background:var(--sapList_HeaderBackground,#f7f9fc)}
     .rd-live{display:flex;align-items:center;gap:7px;margin-bottom:8px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--rd-blue) 22%,var(--rd-border));border-radius:7px;background:color-mix(in srgb,var(--rd-blue) 5%,var(--sapTile_Background,#fff))}.rd-live b{font:800 13px/1 ui-monospace,Menlo,Consolas,monospace;color:var(--rd-blue)}.rd-live span{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70)}
     .rd-fx-mask{position:fixed;inset:0;background:rgba(20,30,45,.34);display:flex;align-items:center;justify-content:center;z-index:60}
@@ -1239,11 +1240,11 @@ function metaSheetBody (st) {
 function metaRegionBody (st) {
   const sheetCode = currentSheetCode(st)
   const regions = (st.regions || []).filter((r) => !r.sheetCode || r.sheetCode === sheetCode)
-  const draft = st.regionDraft || { name: '', type: 'data', range: '' }
+  const draft = st.regionDraft || { name: '', type: 'data', range: '', isRepeatable: false, dataSource: '' }
   const listHtml = regions.length
     ? regions.map((r) => `<div class="rd-litem" data-region-code="${esc(r.code)}">
-        <span class="rd-litem-main"><b>${esc(r.name || r.code)}${r.isDefault ? '<span class="rd-badge default">默认</span>' : ''}</b><small>${esc(r.code)}${r.startCell ? ` · ${esc(r.startCell)}:${esc(r.endCell || r.startCell)}` : ''} · ${esc(r.type || 'data')}</small></span>
-        ${r.isDefault ? '' : `<span class="rd-litem-act"><button type="button" class="danger" data-region-del="${esc(r.code)}" title="删除区域"><ui5-icon name="delete"></ui5-icon></button></span>`}
+        <span class="rd-litem-main"><b>${esc(r.name || r.code)}${r.isDefault ? '<span class="rd-badge default">默认</span>' : ''}${(r.isRepeatable || Number(r.is_repeatable) === 1) ? '<span class="rd-badge float">浮动</span>' : ''}</b><small>${esc(r.code)}${r.startCell ? ` · ${esc(r.startCell)}:${esc(r.endCell || r.startCell)}` : ''} · ${esc(r.type || 'data')}${(r.isRepeatable || Number(r.is_repeatable) === 1) ? ` · 源:${esc(r.dataSource || r.data_source || '未设')}` : ''}</small></span>
+        ${r.isDefault ? '' : `<span class="rd-litem-act">${(r.isRepeatable || Number(r.is_repeatable) === 1) ? `<button type="button" data-region-preview="${esc(r.code)}" title="预览展开"><ui5-icon name="show"></ui5-icon></button>` : ''}<button type="button" class="danger" data-region-del="${esc(r.code)}" title="删除区域"><ui5-icon name="delete"></ui5-icon></button></span>`}
       </div>`).join('')
     : '<div class="rd-mini-empty">尚无显式区域。未定义区域时，本 Sheet 有数据的单元格归入默认区域 __default__。</div>'
   return `<div class="rd-prop-grid">
@@ -1257,13 +1258,35 @@ function metaRegionBody (st) {
           ${['data', 'header', 'title', 'summary', 'repeat'].map((t) => `<option value="${t}" ${draft.type === t ? 'selected' : ''}>${t}</option>`).join('')}
         </select>
         <label>范围</label><input data-region-field="range" value="${esc(draft.range)}" placeholder="A1:E10（留空=选区）">
+        <label>浮动区</label><label class="rd-chk"><input type="checkbox" data-region-field="isRepeatable" ${draft.isRepeatable ? 'checked' : ''}> 明细随数据浮动展开</label>
+        <label>初始化数据源</label><select data-region-field="dataSource" ${draft.isRepeatable ? '' : 'disabled'}>
+          ${floatSourceOptions(draft.dataSource)}
+        </select>
+        <label>模板行号</label><input type="number" min="1" data-region-field="floatTemplateRow" value="${draft.floatTemplateRow != null ? esc(String(draft.floatTemplateRow)) : ''}" placeholder="画布行号，如 2" ${draft.isRepeatable ? '' : 'disabled'}>
       </div>
+      <div class="rd-note" style="margin:2px 0 8px">浮动区需指定<b>模板行号</b>（该行设为 <code>row_type=float</code>，其单元格公式用 <code>{{维度}}</code>/<code>{{r}}</code>/<code>{{total}}</code> 占位）；运行时按数据源把模板铺成 N 行。数据源仅用于<b>取数初始化</b>，之后在应用页手工增删改。</div>
       <div class="rd-actions">
         <button class="rd-sbtn" type="button" data-region-use-selection><ui5-icon name="pending"></ui5-icon>取当前选区</button>
         <button class="rd-sbtn primary" type="button" data-region-add><ui5-icon name="add"></ui5-icon>添加区域</button>
       </div>
     </section>
   </div>`
+}
+
+/** 浮动数据源下拉选项（P1-P4 已支持的源）。 */
+function floatSourceOptions (cur) {
+  const opts = [
+    ['sample', '示例·前5大客户（行）'],
+    ['sample-hier', '示例·按地区分级客户（行·分级）'],
+    ['sample-cols', '示例·近6月（列）'],
+    ['flist:ar_cust?top=10', '取数·前10大应收客户（真实）'],
+    ['flist:ar_cust?top=5', '取数·前5大应收客户（真实）'],
+    ['dict:cr_consol_org', '字典·合并组织'],
+    ['dict:cr_acct_calendar', '字典·会计日历'],
+  ]
+  const has = opts.some(([v]) => v === cur)
+  return opts.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`).join('') +
+    (cur && !has ? `<option value="${esc(cur)}" selected>${esc(cur)}（自定义）</option>` : '')
 }
 
 /** 版本 tab：版本序列（来自 /reports 详情），标注当前生效 + 设计资产统计。 */
@@ -1650,10 +1673,21 @@ function bindPropertyPage (root, st, host, view) {
   }))
 
   // —— 区域管理 ——
-  root.querySelectorAll('[data-region-field]').forEach((el) => el.addEventListener('input', () => {
-    st.regionDraft = st.regionDraft || { name: '', type: 'data', range: '' }
-    st.regionDraft[el.getAttribute('data-region-field')] = el.value
-  }))
+  root.querySelectorAll('[data-region-field]').forEach((el) => {
+    const field = el.getAttribute('data-region-field')
+    const evt = (el.type === 'checkbox' || el.tagName === 'SELECT') ? 'change' : 'input'
+    el.addEventListener(evt, () => {
+      st.regionDraft = st.regionDraft || { name: '', type: 'data', range: '', isRepeatable: false, dataSource: '' }
+      if (el.type === 'checkbox') {
+        st.regionDraft[field] = el.checked
+        if (el.checked && !st.regionDraft.dataSource) st.regionDraft.dataSource = 'sample'
+        rerender() // 勾选浮动 → 启用数据源下拉
+      } else {
+        st.regionDraft[field] = el.value
+      }
+    })
+  })
+  root.querySelectorAll('[data-region-preview]').forEach((b) => b.addEventListener('click', () => previewFloatRegion(st, root, b.getAttribute('data-region-preview'))))
   root.querySelector('[data-region-use-selection]')?.addEventListener('click', () => {
     const sheet = live()
     const sel = sheet?.readSelection ? sheet.readSelection() : (sheet?.getSelectionState?.().selection || '')
@@ -1775,12 +1809,41 @@ function addRegion (st, root) {
   const code = `RG_${slug(name)}_${(st.regions || []).length + 1}`
   const startCell = box ? `${indexToCol(box.c1)}${box.r1 + 1}` : ''
   const endCell = box ? `${indexToCol(box.c2)}${box.r2 + 1}` : ''
+  const isRepeatable = !!d.isRepeatable
+  const dataSource = isRepeatable ? String(d.dataSource || 'sample').trim() : ''
+  const floatTemplateRow = isRepeatable && d.floatTemplateRow != null && d.floatTemplateRow !== ''
+    ? Math.max(0, Number(d.floatTemplateRow) - 1) // UI 输入 1-based 画布行号 → 存 0-based row_no
+    : null
   st.regions = st.regions || []
-  st.regions.push({ code, name, type: d.type || 'data', startCell, endCell, isDefault: false, sheetCode: currentSheetCode(st) })
-  st.regionDraft = { name: '', type: 'data', range: '' }
+  st.regions.push({ code, name, type: d.type || 'data', startCell, endCell, isDefault: false, sheetCode: currentSheetCode(st), isRepeatable, dataSource, floatTemplateRow })
+  st.regionDraft = { name: '', type: 'data', range: '', isRepeatable: false, dataSource: '', floatTemplateRow: '' }
   markDirty(st, true)
-  toast(root, `已添加区域 ${name}${range ? ` (${range})` : ''}`, 'success')
+  toast(root, `已添加${isRepeatable ? '浮动' : ''}区域 ${name}${range ? ` (${range})` : ''}`, 'success')
   refreshInstance(st, (v) => v === 'propertyMeta')
+}
+
+/** 预览浮动区展开：调 /expand（设计态无 org/period 也能看结构），弹出该区展开的行/列数与前几条。 */
+async function previewFloatRegion (st, root, regionCode) {
+  try {
+    const data = await apiJson(`/api/report-design/reports/${enc(st.props.reportCode)}/expand`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version: st.props.version || '' }),
+    })
+    const regs = (data?.float?.regions) || []
+    const reg = regs.find((r) => r.regionCode === regionCode) || regs[0]
+    if (!reg) { toast(root, '未展开出浮动内容（确认区域内有 row_type/col_type=float 模板行/列，且已保存）', 'error'); return }
+    if (reg.axis === 'col') {
+      const cols = reg.colInstances || []
+      const heads = cols.slice(0, 6).map((c) => c.header).join('、')
+      toast(root, `列浮动：展开 ${cols.length} 列（${heads}${cols.length > 6 ? '…' : ''}）`, 'success')
+    } else {
+      const insts = reg.instances || []
+      const names = insts.slice(0, 5).map((i) => i.name).join('、')
+      toast(root, `行浮动：展开 ${insts.length} 行（${names}${insts.length > 5 ? '…' : ''}）`, 'success')
+    }
+  } catch (e) {
+    toast(root, `预览失败：${e instanceof Error ? e.message : String(e)}`, 'error')
+  }
 }
 
 /** 把值/公式写入在屏 sheet 的当前选中单元格。 */
@@ -2486,10 +2549,14 @@ function deriveProjection (sheet, st) {
         sheetCode, code: rc, name: rg?.name || (rc === DEFAULT_REGION ? '默认区域' : rc),
         type: rg?.type || (rc === DEFAULT_REGION ? 'data' : ''), startCell: rg?.startCell || '', endCell: rg?.endCell || '',
         isDefault: rc === DEFAULT_REGION ? 1 : 0,
+        isRepeatable: (rg?.isRepeatable || Number(rg?.is_repeatable) === 1) ? 1 : 0,
+        dataSource: rg?.dataSource || rg?.data_source || '',
       })
-      // 行记录（每区域内按行号排序，code 用 R{n}）
+      // 行记录（每区域内按行号排序，code 用 R{n}）。浮动区的模板行标 row_type='float'。
+      const floatTplRow = (rg && rg.isRepeatable) ? Number(rg.floatTemplateRow) : NaN
       for (const r of [...(rowsByRegion[rc] || new Set())].sort((a, b) => a - b)) {
-        out.rows.push({ sheetCode, regionCode: rc, code: `R${r + 1}`, name: '', rowNo: r, id: `t:${sheetCode}:${rc}:r${r}` })
+        const isFloatTpl = Number.isFinite(floatTplRow) && r === floatTplRow
+        out.rows.push({ sheetCode, regionCode: rc, code: `R${r + 1}`, name: '', rowNo: r, id: `t:${sheetCode}:${rc}:r${r}`, rowType: isFloatTpl ? 'float' : 'data' })
       }
       for (const c of [...(colsByRegion[rc] || new Set())].sort((a, b) => a - b)) {
         out.cols.push({ sheetCode, regionCode: rc, code: indexToCol(c), name: '', colNo: c, colLetter: indexToCol(c), id: `t:${sheetCode}:${rc}:c${c}` })
@@ -2741,6 +2808,8 @@ function hydratePropsFromLayout (st, data) {
       endCell: r.end_cell || '',
       isDefault: false,
       sheetCode: r.sheet_code || st.activeSheet,
+      isRepeatable: Number(r.is_repeatable) === 1,
+      dataSource: r.data_source || '',
     }))
   const cmRaw = Array.isArray(data?.cellMap) ? data.cellMap : []
   const cm = {}

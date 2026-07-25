@@ -22,6 +22,9 @@ pub use cmx_api_types::{Error, Result};
 
 pub mod compute;
 pub use compute::compute_report_service;
+pub mod expand;
+pub mod float_ddl;
+pub mod float_crud;
 pub mod ops;
 pub use ops::{apply_ops, list_ops};
 pub mod source_binding;
@@ -1365,6 +1368,775 @@ pub async fn open_report(code: &str, body: &Value) -> Result<Value> {
         map.insert("cells".into(), cells);
     }
     Ok(out)
+}
+
+// ============================================================================
+// 浮动行列展开（P1：行浮动 MVP）
+// ============================================================================
+//
+// 打开应用报表时，把「浮动模板行」按数据源展开成 N 条实例行，随 open bundle 一并返回，
+// 前端画布直接渲染最终 N 行（展开发生在后端，前端零展开逻辑）。设计见
+// `docs/报表浮动行列(动态明细展开)设计方案.html`。
+//
+// 浮动区识别：region.is_repeatable=1。模板行识别：该区域内 row_type='float' 的行。
+// 模板每列公式来自 cell_element_map.calc_formula（行=模板行 id，列=各列 id）。
+// 数据源来自 region.data_source（P1 支持 dict:表名 / sample:内置示例；P4 接 FLIST 真实取数）。
+
+use crate::expand::{
+    FloatTemplate, HierLevel, HierTemplate, InstanceRow, SourceRecord, expand_hierarchy,
+    expand_template,
+};
+
+/// 解析分级维度：data_source 指示分级浮动时返回有序维度列表，否则 None（走扁平）。
+/// - `sample-hier` → `["region","cust_code"]`（内置分级示例）。
+/// - `<任意源>;hier=dim1,dim2[,...]` → 显式声明层级维度（外→内）。
+fn parse_hier_dims(data_source: &str) -> Option<Vec<String>> {
+    let spec = data_source.trim();
+    if spec.eq_ignore_ascii_case("sample-hier") {
+        return Some(vec!["region".to_string(), "cust_code".to_string()]);
+    }
+    // 显式 ;hier=a,b 标记
+    for seg in spec.split(';') {
+        let seg = seg.trim();
+        if let Some(rest) = seg.strip_prefix("hier=") {
+            let dims: Vec<String> = rest
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !dims.is_empty() {
+                return Some(dims);
+            }
+        }
+    }
+    None
+}
+
+/// 列浮动检测：data_source 为 `sample-cols` 或带 `;axis=col` → 走列展开（横向铺列）。
+fn is_col_float(data_source: &str) -> bool {
+    let spec = data_source.trim();
+    spec.eq_ignore_ascii_case("sample-cols")
+        || spec.split(';').any(|s| s.trim().eq_ignore_ascii_case("axis=col"))
+}
+
+/// 列浮动数据源：产出「列集合」（P3 内置 `sample-cols` = 近 6 个月期间；或 `dict:cr_acct_calendar`）。
+/// 每条记录一列，dims 含 `period_code`。
+async fn resolve_col_source(data_source: &str) -> Result<Vec<SourceRecord>> {
+    let spec = data_source.trim();
+    // dict:cr_acct_calendar;axis=col → 复用字典源
+    if let Some(seg) = spec.split(';').find(|s| s.trim().starts_with("dict:")) {
+        return resolve_float_source(seg.trim()).await;
+    }
+    // sample-cols：内置 6 个月示例。
+    let months = [
+        "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06",
+    ];
+    Ok(months
+        .iter()
+        .map(|m| SourceRecord {
+            label: (*m).to_string(),
+            dims: vec![("period_code".to_string(), (*m).to_string())],
+            cells: Vec::new(),
+        })
+        .collect())
+}
+
+/// 构造并展开一个列浮动区：找 `col_type='float'` 模板列 → 其各行公式(cellMap) → expand_columns。
+/// 返回 float region JSON（含 `axis:"col"` + `colInstances[]`），无模板列则 None。
+async fn expand_col_region(
+    code: &str,
+    version: &str,
+    org: &str,
+    period: &str,
+    region_code: &str,
+    sheet_code: &str,
+    data_source: &str,
+    start_col: i64,
+    cols: &[Value],
+    cell_map: &[Value],
+) -> Result<Option<Value>> {
+    use crate::expand::{ColFloatTemplate, expand_columns};
+
+    // 模板列：同区域 col_type='float'。
+    let tpl_col = cols.iter().find(|c| {
+        c.get("region_code").and_then(|v| v.as_str()) == Some(region_code)
+            && c.get("sheet_code").and_then(|v| v.as_str()) == Some(sheet_code)
+            && c.get("col_type").and_then(|v| v.as_str()) == Some("float")
+    });
+    let Some(tpl_col) = tpl_col else {
+        return Ok(None);
+    };
+    let tpl_col_id = tpl_col.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+    let header_tpl = tpl_col
+        .get("name")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("{{label}}")
+        .to_string();
+
+    // 该模板列的各行公式：cellMap 中 col_id == 模板列 id 的记录，按 cell_ref 的行号定位。
+    let mut row_tpls: Vec<(i64, String)> = Vec::new();
+    for m in cell_map {
+        if m.get("col_id").and_then(|v| v.as_i64()) != Some(tpl_col_id) {
+            continue;
+        }
+        let f = m.get("calc_formula").and_then(|v| v.as_str()).unwrap_or("");
+        if f.is_empty() {
+            continue;
+        }
+        // 行号取自 cell_ref（如 "C5" → 5），退化用 row_id 不适用，故要求 cell_ref。
+        let row_no = m
+            .get("cell_ref")
+            .and_then(|v| v.as_str())
+            .and_then(|r| {
+                r.chars()
+                    .skip_while(|c| c.is_ascii_alphabetic())
+                    .collect::<String>()
+                    .parse::<i64>()
+                    .ok()
+            })
+            .unwrap_or(0);
+        if row_no > 0 {
+            row_tpls.push((row_no, f.to_string()));
+        }
+    }
+    row_tpls.sort_by_key(|(r, _)| *r);
+
+    let template = ColFloatTemplate {
+        template_col_id: tpl_col_id,
+        header_tpl,
+        row_tpls,
+    };
+    // 数据来源优先级（F3）：先读存储态浮动列表（cr_report_float_col）；空则回退实时数据源。
+    let stored = read_stored_float_records(
+        code, version, sheet_code, region_code, org, period, true,
+    )
+    .await?;
+    let records = if !stored.is_empty() {
+        stored
+    } else {
+        resolve_col_source(data_source).await?
+    };
+    // 模板列物理列序作为展开起点（0-based）。
+    let tpl_ci = tpl_col
+        .get("col_no")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(start_col.max(0));
+    let instances = expand_columns(&template, &records, tpl_ci);
+
+    let inst_json: Vec<Value> = instances
+        .iter()
+        .map(|c| {
+            json!({
+                "colId": c.col_id,
+                "dimKeyPath": c.dim_key_path,
+                "header": c.header,
+                "colLetter": c.col_letter,
+                "colIndex": c.col_index,
+                "sortNo": c.sort_no,
+                "cells": c.cells.iter().map(|(row, f)| json!({"row": row, "formula": f})).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+
+    Ok(Some(json!({
+        "sheetCode": sheet_code,
+        "regionCode": region_code,
+        "axis": "col",
+        "templateColId": tpl_col_id,
+        "dataSource": data_source,
+        "startCol": tpl_ci,
+        "count": inst_json.len(),
+        "colInstances": inst_json,
+    })))
+}
+
+/// 读存储态浮动记录（cr_report_float_row / _col）→ Vec<SourceRecord>（F3）。
+/// 表里有记录时以其为准（用户 CRUD 结果）；空则返回空（调用方回退实时数据源）。
+/// `is_col`：true 读浮动列表，false 读浮动行表。dim_key（`k=v;k=v`）解析回 dims 顺序保持。
+async fn read_stored_float_records(
+    code: &str,
+    version: &str,
+    sheet: &str,
+    region: &str,
+    org: &str,
+    period: &str,
+    is_col: bool,
+) -> Result<Vec<SourceRecord>> {
+    // 无 org/period（设计器打开）→ 不读存储（存储按 org+period 隔离）。
+    if org.trim().is_empty() || period.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    crate::float_ddl::ensure_float_schema().await?;
+    let table = if is_col {
+        "cr_report_float_col"
+    } else {
+        "cr_report_float_row"
+    };
+    let sql = format!(
+        "SELECT dim_key, label, cells::text AS cells_text FROM {table} \
+         WHERE report_code=$1 AND version_code=$2 AND sheet_code=$3 AND region_code=$4 \
+           AND org_code=$5 AND period_code=$6 AND COALESCE(status,1)=1 \
+         ORDER BY seq, id"
+    );
+    let rows = query_rows(
+        &sql,
+        json!([code, version, sheet, region, org, period]),
+        "rpt_float_stored",
+    )
+    .await?;
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let dim_key = r.get("dim_key").and_then(|v| v.as_str()).unwrap_or("");
+            let label = r
+                .get("label")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            // 存储态显式单元格值（cells JSONB）→ (列标, 值)，覆盖模板公式。
+            let cells: Vec<(String, String)> = r
+                .get("cells_text")
+                .and_then(|v| v.as_str())
+                .and_then(|t| serde_json::from_str::<Value>(t).ok())
+                .and_then(|v| v.as_object().cloned())
+                .map(|obj| {
+                    obj.into_iter()
+                        .map(|(k, v)| {
+                            let s = match v {
+                                Value::String(s) => s,
+                                other => other.to_string(),
+                            };
+                            (k, s)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            // dim_key `k=v;k=v` → dims（顺序保持，供占位符替换/分级）。
+            let dims = dim_key
+                .split(';')
+                .filter_map(|kv| {
+                    let mut it = kv.splitn(2, '=');
+                    match (it.next(), it.next()) {
+                        (Some(k), Some(v)) if !k.is_empty() => Some((k.to_string(), v.to_string())),
+                        _ => None,
+                    }
+                })
+                .collect();
+            SourceRecord { label, dims, cells }
+        })
+        .collect())
+}
+
+/// 从 open bundle 里，为某浮动区拉取实时数据源记录（未初始化到存储表时的回退/种子来源）。
+///
+/// - `sample` 或空 → 内置示例记录（无需真实业务库，先跑通展开链路，对齐方案 §8 占位阶梯）。
+/// - `dict:<表名>[?parent=<码>]` → 从字典表罗列（如 `dict:cr_consol_org`）。
+///
+/// 返回有序记录（保证维度键路径确定 → 稳定 id 确定）。
+async fn resolve_float_source(data_source: &str) -> Result<Vec<SourceRecord>> {
+    let spec = data_source.trim();
+    if spec.is_empty() || spec.eq_ignore_ascii_case("sample") {
+        // 内置示例：前 5 大待收款客户（方案目标示意）。
+        let sample = [
+            ("上海A公司", "C001"),
+            ("杭州B公司", "C002"),
+            ("南京C公司", "C003"),
+            ("北京D公司", "C004"),
+            ("天津E公司", "C005"),
+        ];
+        return Ok(sample
+            .iter()
+            .map(|(label, code)| SourceRecord {
+                label: (*label).to_string(),
+                dims: vec![("cust_code".to_string(), (*code).to_string())],
+                cells: Vec::new(),
+            })
+            .collect());
+    }
+
+    if spec.eq_ignore_ascii_case("sample-hier") {
+        // 内置分级示例：按地区▸客户（方案目标示意表）。每条含 region + cust_code 两维。
+        let sample = [
+            ("华东", "上海A公司", "C001"),
+            ("华东", "杭州B公司", "C002"),
+            ("华东", "南京C公司", "C003"),
+            ("华北", "北京D公司", "C004"),
+            ("华北", "天津E公司", "C005"),
+        ];
+        return Ok(sample
+            .iter()
+            .map(|(region, label, code)| SourceRecord {
+                label: (*label).to_string(),
+                dims: vec![
+                    ("region".to_string(), (*region).to_string()),
+                    ("cust_code".to_string(), (*code).to_string()),
+                ],
+                cells: Vec::new(),
+            })
+            .collect());
+    }
+
+    if let Some(rest) = spec.strip_prefix("flist:") {
+        // flist:<对象>[?top=N]  —— P4 真实取数：按度量降序取前 N（对齐 FLIST 函数语义）。
+        // 目前支持 ar_cust（应收客户，从 cv_aux_line 按客户汇总余额 local_dr-local_cr 降序）。
+        let obj = rest.split('?').next().unwrap_or("").trim();
+        let top: i64 = rest
+            .split('?')
+            .nth(1)
+            .and_then(|q| {
+                q.split('&').find_map(|kv| {
+                    let mut it = kv.splitn(2, '=');
+                    match (it.next(), it.next()) {
+                        (Some("top"), Some(v)) => v.trim().parse::<i64>().ok(),
+                        _ => None,
+                    }
+                })
+            })
+            .unwrap_or(10)
+            .clamp(1, 500);
+        match obj {
+            "ar_cust" => {
+                // 客户维度余额 = SUM(local_dr - local_cr)，取正余额（待收）前 N。
+                let sql = format!(
+                    "SELECT customer_id AS k, \
+                            SUM(COALESCE(local_dr,0)-COALESCE(local_cr,0)) AS bal \
+                     FROM cv_aux_line WHERE customer_id IS NOT NULL \
+                     GROUP BY customer_id \
+                     HAVING SUM(COALESCE(local_dr,0)-COALESCE(local_cr,0)) > 0 \
+                     ORDER BY bal DESC LIMIT {top}"
+                );
+                let rows = query_rows(&sql, json!([]), "rpt_flist_ar_cust").await?;
+                return Ok(rows
+                    .iter()
+                    .map(|r| {
+                        // customer_id 是 bigint；k 可能是数字或字符串，统一成字符串码。
+                        let code = r
+                            .get("k")
+                            .map(|v| match v {
+                                Value::Number(n) => n.to_string(),
+                                Value::String(s) => s.clone(),
+                                _ => String::new(),
+                            })
+                            .unwrap_or_default();
+                        SourceRecord {
+                            label: format!("客户 {code}"),
+                            dims: vec![("cust_code".to_string(), code)],
+                            cells: Vec::new(),
+                        }
+                    })
+                    .collect());
+            }
+            other => return Err(api_err(&format!("不支持的 FLIST 对象: {other}"))),
+        }
+    }
+
+    if let Some(rest) = spec.strip_prefix("dict:") {
+        // dict:<表名>  —— 从字典表罗列 code/name 作为浮动记录。P1 只支持无过滤的平铺罗列。
+        let table = rest.split('?').next().unwrap_or("").trim();
+        // 白名单：只允许已知报表维度字典，杜绝任意表名注入。
+        let allowed = ["cr_consol_org", "cr_acct_calendar"];
+        if !allowed.contains(&table) {
+            return Err(api_err(&format!("不支持的浮动数据源字典表: {table}")));
+        }
+        let (key_field, label_field) = match table {
+            "cr_consol_org" => ("code", "name"),
+            "cr_acct_calendar" => ("code", "name"),
+            _ => ("code", "name"),
+        };
+        let sql = format!(
+            "SELECT {key_field} AS k, {label_field} AS lbl FROM {table} \
+             WHERE COALESCE(status,1)=1 ORDER BY sort_no, {key_field} LIMIT 200"
+        );
+        let rows = query_rows(&sql, json!([]), "rpt_float_dict").await?;
+        let dim = if table == "cr_consol_org" {
+            "org_code"
+        } else {
+            "period_code"
+        };
+        return Ok(rows
+            .iter()
+            .map(|r| {
+                let k = r.get("k").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let lbl = r
+                    .get("lbl")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&k)
+                    .to_string();
+                SourceRecord {
+                    label: lbl,
+                    dims: vec![(dim.to_string(), k)],
+                    cells: Vec::new(),
+                }
+            })
+            .collect());
+    }
+
+    Err(api_err(&format!("无法解析浮动数据源: {spec}")))
+}
+
+/// 从 open bundle 的 rows/cols/cellMap 里，为一条模板行构造 [`FloatTemplate`]。
+///
+/// 列公式来源：cellMap 中 `row_id==模板行 id` 的记录，按其 col_id 找到 cols 里的列标（col_letter）。
+fn build_template(tpl_row: &Value, cols: &[Value], cell_map: &[Value]) -> FloatTemplate {
+    let tpl_id = tpl_row.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+    let name_tpl = tpl_row
+        .get("name")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("{{label}}")
+        .to_string();
+
+    // col_id → col_letter 映射。
+    let col_letter = |col_id: i64| -> Option<String> {
+        cols.iter()
+            .find(|c| c.get("id").and_then(|v| v.as_i64()) == Some(col_id))
+            .and_then(|c| c.get("col_letter").and_then(|v| v.as_str()))
+            .map(str::to_owned)
+    };
+
+    let mut cell_tpls = Vec::new();
+    for m in cell_map {
+        if m.get("row_id").and_then(|v| v.as_i64()) != Some(tpl_id) {
+            continue;
+        }
+        let f = m
+            .get("calc_formula")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if f.is_empty() {
+            continue;
+        }
+        if let Some(cid) = m.get("col_id").and_then(|v| v.as_i64()) {
+            if let Some(letter) = col_letter(cid) {
+                cell_tpls.push((letter, f.to_string()));
+            }
+        }
+    }
+
+    FloatTemplate {
+        template_row_id: tpl_id,
+        name_tpl,
+        cell_tpls,
+    }
+}
+
+/// 打开并展开应用报表：在 [`open_report`] 基座上，把浮动区的模板行展开为 N 条实例行。
+///
+/// 返回 open bundle 追加一个 `float` 段：
+/// ```json
+/// { ...open bundle..., "float": { "regions": [ {
+///     "sheetCode","regionCode","templateRowId","startRow","count",
+///     "instances": [ { "rowId","dimKeyPath","name","physRow","sortNo","cells":[{col,formula}] } ]
+/// } ] } }
+/// ```
+/// 前端据此在画布上插入 N 行、逐行 setValue(name)/setFormula(cells)。数据落库沿用既有 save_data
+/// （实例行 row_id 即稳定派生 id，8 元键幂等 UPSERT）。
+pub async fn expand_report(code: &str, body: &Value) -> Result<Value> {
+    let mut bundle = open_report(code, body).await?;
+
+    // 定位上下文（存储态浮动读表按 org+period 隔离；设计器打开时 org/period 空 → 读表返回空、回退实时源）。
+    let version = s(body, "version").unwrap_or_default();
+    let org = s(body, "orgCode").unwrap_or_default();
+    let period = s(body, "periodCode").unwrap_or_default();
+
+    let regions = bundle
+        .get("regions")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let rows = bundle
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let cols = bundle
+        .get("cols")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let cell_map = bundle
+        .get("cellMap")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut float_regions = Vec::new();
+    for region in &regions {
+        let is_rep = region
+            .get("is_repeatable")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        if is_rep != 1 {
+            continue;
+        }
+        let region_code = region
+            .get("region_code")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let sheet_code = region
+            .get("sheet_code")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let data_source = region
+            .get("data_source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let start_row = region
+            .get("start_row")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let start_col = region
+            .get("start_col")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+
+        // ── 列浮动（P3）：data_source 为 'sample-cols' 或带 ';axis=col' → 模板列 × 数据源 → N 实例列。
+        // 与行浮动互斥（一个浮动区一个轴）。命中则处理完 continue，不走行浮动分支。
+        if is_col_float(&data_source) {
+            if let Some(col_region) = expand_col_region(
+                code,
+                &version,
+                &org,
+                &period,
+                &region_code,
+                &sheet_code,
+                &data_source,
+                start_col,
+                &cols,
+                &cell_map,
+            )
+            .await?
+            {
+                float_regions.push(col_region);
+            }
+            continue;
+        }
+
+        // 该区域内的浮动模板行（row_type='float'）。P1：每区取第一条模板行。
+        let tpl_row = rows.iter().find(|r| {
+            r.get("region_code").and_then(|v| v.as_str()) == Some(region_code.as_str())
+                && r.get("sheet_code").and_then(|v| v.as_str()) == Some(sheet_code.as_str())
+                && r.get("row_type").and_then(|v| v.as_str()) == Some("float")
+        });
+        let Some(tpl_row) = tpl_row else {
+            continue;
+        };
+
+        let template = build_template(tpl_row, &cols, &cell_map);
+        // 数据来源优先级（F3）：先读存储态浮动表（cr_report_float_row，按 org+period）；
+        // 表里有记录 → 以存储为准（用户 CRUD 结果）；表空 → 回退实时数据源（未初始化时仍可预览）。
+        let stored = read_stored_float_records(
+            code, &version, &sheet_code, &region_code, &org, &period, false,
+        )
+        .await?;
+        let records = if !stored.is_empty() {
+            stored
+        } else {
+            resolve_float_source(&data_source).await?
+        };
+        // 模板行所在物理行作为展开起点（画布行 1-based）。
+        let tpl_phys = tpl_row
+            .get("row_no")
+            .and_then(|v| v.as_i64())
+            .map(|n| n + 1)
+            .unwrap_or(start_row.max(1));
+
+        // 分级浮动检测：data_source 为 'sample-hier' 或带 ';hier=<dim1,dim2>' 标记 → 走 expand_hierarchy。
+        // 否则走 P1 扁平 expand_template（合计行取同区域已存的 row_type='total' 行做 {{total}} 锚点）。
+        let hier_dims = parse_hier_dims(&data_source);
+        let (instances, is_hier): (Vec<InstanceRow>, bool) = if let Some(dims) = hier_dims {
+            // 分级：合计行占位由引擎生成（顶部）。归集列 = 模板列里以 = 开头/带取数的数值列，
+            // P2 简化为「除比率列(公式含 '/')外的模板列」都归集。
+            let rollup_cols: Vec<String> = template
+                .cell_tpls
+                .iter()
+                .filter(|(_, f)| !f.contains('/'))
+                .map(|(c, _)| c.clone())
+                .collect();
+            let levels: Vec<HierLevel> = dims
+                .iter()
+                .enumerate()
+                .map(|(i, d)| {
+                    let is_leaf = i + 1 == dims.len();
+                    HierLevel {
+                        dim: d.clone(),
+                        rollup: if is_leaf { "none" } else { "subtotal" }.to_string(),
+                        subtotal_name_tpl: "{{label}} 小计".to_string(),
+                    }
+                })
+                .collect();
+            let hier = HierTemplate {
+                leaf: template.clone(),
+                levels,
+                grand_total: "total".to_string(),
+                grand_total_name: "合计".to_string(),
+                rollup_cols,
+            };
+            (expand_hierarchy(&hier, &records, tpl_phys), true)
+        } else {
+            // 合计行（同区域 row_type='total'）物理行号，供 {{total}} 锚点重定位。
+            let total_row = rows
+                .iter()
+                .find(|r| {
+                    r.get("region_code").and_then(|v| v.as_str()) == Some(region_code.as_str())
+                        && r.get("sheet_code").and_then(|v| v.as_str())
+                            == Some(sheet_code.as_str())
+                        && r.get("row_type").and_then(|v| v.as_str()) == Some("total")
+                })
+                .and_then(|r| r.get("row_no").and_then(|v| v.as_i64()))
+                .map(|n| n + 1);
+            (expand_template(&template, &records, tpl_phys, total_row), false)
+        };
+
+        let inst_json: Vec<Value> = instances
+            .iter()
+            .map(|r| {
+                json!({
+                    "rowId": r.row_id,
+                    "dimKeyPath": r.dim_key_path,
+                    "name": r.name,
+                    "physRow": r.phys_row,
+                    "sortNo": r.sort_no,
+                    "rowType": r.row_type,
+                    "levelNo": r.level_no,
+                    "parentRow": r.parent_row,
+                    "cells": r.cells.iter().map(|(c, f)| json!({"col": c, "formula": f})).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+
+        float_regions.push(json!({
+            "sheetCode": sheet_code,
+            "regionCode": region_code,
+            "templateRowId": template.template_row_id,
+            "dataSource": data_source,
+            "hier": is_hier,
+            "startRow": tpl_phys,
+            "count": inst_json.len(),
+            "instances": inst_json,
+        }));
+    }
+
+    if let Value::Object(map) = &mut bundle {
+        map.insert(
+            "float".into(),
+            json!({ "regions": float_regions, "expanded": true }),
+        );
+    }
+    Ok(bundle)
+}
+
+/// 取数初始化种子：把浮动区的数据源（sample/flist/dict）结果**写入** cr_report_float_row/col
+/// （方案 F3，`is_manual=0`）。这就是"取数=一键初始化"——之后用户手工 CRUD 以存储表为准，
+/// 重取数默认不覆盖手工行（seed_upsert 的手工保护）。
+///
+/// body: { version, orgCode, periodCode, sheetCode, regionCode, dataSource?, overwriteManual? }
+/// dataSource 缺省时从该区域定义（cr_report_region.data_source）读。返回 { ok, kind, seeded }。
+pub async fn seed_float(code: &str, body: &Value) -> Result<Value> {
+    use crate::float_crud::{FloatKind, make_locator, seed_upsert};
+
+    let loc = make_locator(body);
+    if loc.org.trim().is_empty() || loc.period.trim().is_empty() {
+        return Err(api_err("取数初始化需要组织与期间上下文"));
+    }
+    let region_code = s(body, "regionCode")
+        .filter(|c| !c.is_empty())
+        .unwrap_or_else(|| DEFAULT_REGION.to_string());
+    let overwrite = body
+        .get("overwriteManual")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // 数据源：body 显式优先，否则读区域定义。
+    let data_source = match s(body, "dataSource").filter(|d| !d.is_empty()) {
+        Some(d) => d,
+        None => region_data_source(code, &loc.version, &loc.sheet, &region_code).await?,
+    };
+    if data_source.trim().is_empty() {
+        return Err(api_err("该浮动区未配置初始化数据源"));
+    }
+
+    // 列浮动 vs 行浮动，走不同源解析 + 落不同表。
+    let is_col = is_col_float(&data_source);
+    let records = if is_col {
+        resolve_col_source(&data_source).await?
+    } else {
+        resolve_float_source(&data_source).await?
+    };
+
+    // 记录 → 浮动表 item：dim_key/label/level/seq + cells（此处只存维度键与标签，
+    // cells 留空——展开时由模板公式按 dim_key 替换 {{dim}} 生成，保持存储行与版式解耦）。
+    let hier_dims = if is_col { None } else { parse_hier_dims(&data_source) };
+    let items: Vec<Value> = records
+        .iter()
+        .enumerate()
+        .map(|(i, rec)| {
+            let dim_key = rec
+                .dims
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<_>>()
+                .join(";");
+            // 分级：父维度键 = 除最后一维外的前缀（供展开分组）。
+            let parent = if let Some(dims) = &hier_dims {
+                if dims.len() > 1 {
+                    rec.dims
+                        .iter()
+                        .filter(|(k, _)| dims.first().map(|d| d == k).unwrap_or(false))
+                        .map(|(k, v)| format!("{k}={v}"))
+                        .collect::<Vec<_>>()
+                        .join(";")
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+            json!({
+                "dimKey": dim_key,
+                "label": rec.label,
+                "parentDimKey": parent,
+                "levelNo": 1,
+                "seq": i as i64,
+                "cells": {},
+            })
+        })
+        .collect();
+
+    let kind = if is_col { FloatKind::Col } else { FloatKind::Row };
+    let n = seed_upsert(code, kind, &loc, &items, &data_source, overwrite).await?;
+    Ok(json!({
+        "ok": true,
+        "kind": if is_col { "col" } else { "row" },
+        "seeded": n,
+        "dataSource": data_source,
+    }))
+}
+
+/// 读某区域定义的 data_source（cr_report_region）。供 seed 缺省数据源用。
+async fn region_data_source(
+    code: &str,
+    version: &str,
+    sheet: &str,
+    region: &str,
+) -> Result<String> {
+    let rows = query_rows(
+        "SELECT data_source FROM cr_report_region \
+         WHERE report_code=$1 AND version_code=$2 AND sheet_code=$3 AND region_code=$4",
+        json!([code, version, sheet, region]),
+        "rpt_region_src",
+    )
+    .await?;
+    Ok(rows
+        .first()
+        .and_then(|r| r.get("data_source"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string())
 }
 
 /// 存数：批量 UPSERT cr_cell_data（8元唯一键幂等），自管事务。返回 { ok, saved }。

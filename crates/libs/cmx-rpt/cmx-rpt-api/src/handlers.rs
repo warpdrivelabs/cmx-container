@@ -149,6 +149,106 @@ pub async fn report_design_open_report(
     Ok(Json(ApiResp::ok(store::open_report(&code, &body).await?)))
 }
 
+/// 打开并展开应用报表：在 open 基座上，把浮动区（is_repeatable=1）的模板行按数据源展开成 N 条实例行。
+/// body 同 open（version?, orgCode?, periodCode?）。返回 open bundle 追加 `float.regions[]` 段。
+pub async fn report_design_expand_report(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    body: Option<Json<Value>>,
+) -> Result<Json<ApiResp<Value>>> {
+    let body = body.map(|b| b.0).unwrap_or_else(|| json!({}));
+    Ok(Json(ApiResp::ok(store::expand_report(&code, &body).await?)))
+}
+
+// ============================================================================
+// 浮动行/列存储态 CRUD（方案 F2/F3）：cr_report_float_row/col 的增删改查 + 取数初始化。
+// ============================================================================
+
+use cmx_rpt_store_pg::float_crud::FloatKind;
+
+/// 列出浮动行。body: { version, sheetCode, regionCode, orgCode, periodCode }。
+pub async fn report_float_rows_query(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    body: Option<Json<Value>>,
+) -> Result<Json<ApiResp<Value>>> {
+    let body = body.map(|b| b.0).unwrap_or_else(|| json!({}));
+    Ok(Json(ApiResp::ok(
+        cmx_rpt_store_pg::float_crud::list_float(&code, FloatKind::Row, &body).await?,
+    )))
+}
+
+/// 列出浮动列。
+pub async fn report_float_cols_query(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    body: Option<Json<Value>>,
+) -> Result<Json<ApiResp<Value>>> {
+    let body = body.map(|b| b.0).unwrap_or_else(|| json!({}));
+    Ok(Json(ApiResp::ok(
+        cmx_rpt_store_pg::float_crud::list_float(&code, FloatKind::Col, &body).await?,
+    )))
+}
+
+/// 新增/批量保存浮动行（body.items[]，手工 is_manual=1）。
+pub async fn report_float_rows_save(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    body: Json<Value>,
+) -> Result<Json<ApiResp<Value>>> {
+    Ok(Json(ApiResp::ok(
+        cmx_rpt_store_pg::float_crud::save_float(&code, FloatKind::Row, &body.0).await?,
+    )))
+}
+
+/// 新增/批量保存浮动列。
+pub async fn report_float_cols_save(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    body: Json<Value>,
+) -> Result<Json<ApiResp<Value>>> {
+    Ok(Json(ApiResp::ok(
+        cmx_rpt_store_pg::float_crud::save_float(&code, FloatKind::Col, &body.0).await?,
+    )))
+}
+
+/// 删除一条浮动行（by id）。
+pub async fn report_float_rows_delete(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path((code, id)): Path<(String, i64)>,
+) -> Result<Json<ApiResp<Value>>> {
+    Ok(Json(ApiResp::ok(
+        cmx_rpt_store_pg::float_crud::delete_float(&code, FloatKind::Row, id).await?,
+    )))
+}
+
+/// 删除一条浮动列（by id）。
+pub async fn report_float_cols_delete(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path((code, id)): Path<(String, i64)>,
+) -> Result<Json<ApiResp<Value>>> {
+    Ok(Json(ApiResp::ok(
+        cmx_rpt_store_pg::float_crud::delete_float(&code, FloatKind::Col, id).await?,
+    )))
+}
+
+/// 取数初始化：把浮动区数据源结果写入浮动表（is_manual=0，默认不覆盖手工行）。
+pub async fn report_float_seed(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Path(code): Path<String>,
+    body: Json<Value>,
+) -> Result<Json<ApiResp<Value>>> {
+    Ok(Json(ApiResp::ok(store::seed_float(&code, &body.0).await?)))
+}
+
 pub async fn report_design_save_data(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
