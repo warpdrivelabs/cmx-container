@@ -26,7 +26,15 @@ cmx-model = { workspace = true }
 
 # JSON（定义解析 + 请求/结果集交换）
 serde_json = { workspace = true }
-# 异步运行时（DICT 文件解析缓存 RwLock）
+# 序列化框架（ImportSummary / ImportError 派生 Serialize）
+serde = { workspace = true }
+# 异步运行时（DCT 文件解析缓存 RwLock + 导出 mpsc + 导入批事务）
 tokio = { workspace = true }
 # 日志追踪
 tracing = { workspace = true }
+# CSV 解析（同步 Reader，导入场景一次性读入内存 + Cursor 包裹）
+csv = { workspace = true }
+# Future 工具（StreamExt 用于 export_stream body 转换）
+futures = { workspace = true }
+# 字节缓冲（mpsc<Bytes> 传输导出分片）
+bytes = { workspace = true }

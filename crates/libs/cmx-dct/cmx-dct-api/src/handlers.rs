@@ -8,11 +8,14 @@
 //!   - `POST /api/dct/entries`                 —— 回存（upsert，merge 语义）
 //!   - `DELETE /api/dct/entries/{id}`          —— 删除一行
 //!   - `POST /api/dct/save`                    —— 基于 changeset 的回存（事务 + 乐观锁 409）
+//!   - `GET  /api/dct/export`                  —— 流式导出全表（JSON NDJSON / CSV）
+//!   - `POST /api/dct/import`                  —— 流式导入（multipart/form-data：file + mode）
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::HeaderMap;
 use serde_json::{Value, json};
+use std::task::{Context, Poll};
 use tracing::debug;
 
 use cmx_api::CmxAppState;
@@ -20,7 +23,42 @@ use cmx_api::middleware::CmxSvrContext;
 use cmx_api::{ApiResp, Result};
 
 use cmx_dct_model::DctQuery;
+use cmx_dct_model::BatchConflictMode;
 use cmx_dct_store_pg as store;
+
+/// 把 `tokio::sync::mpsc::Receiver<Bytes>` 包成 `Stream<Item = Result<Bytes, io::Error>>`。
+///
+/// **为什么不直接用 `futures::stream::unfold`**：unfold 在 future 返回 `None` 后会把 state
+/// 设为 `Done`，再次 poll 会 panic（`Unfold must not be polled after it returned Poll::Ready(None)`）。
+/// hyper 1.x 在客户端断开 / 连接清理时可能再次 poll 已结束的 stream，导致 panic。
+/// 这里用 `Option<Receiver>` 显式 take，channel 关闭后下次 poll 安全返回 `Poll::Ready(None)`。
+struct SafeReceiverStream {
+    rx: Option<tokio::sync::mpsc::Receiver<bytes::Bytes>>,
+}
+
+impl SafeReceiverStream {
+    fn new(rx: tokio::sync::mpsc::Receiver<bytes::Bytes>) -> Self {
+        Self { rx: Some(rx) }
+    }
+}
+
+impl futures::Stream for SafeReceiverStream {
+    type Item = std::result::Result<bytes::Bytes, std::io::Error>;
+
+    fn poll_next(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let Some(rx) = self.rx.as_mut() else {
+            return Poll::Ready(None);
+        };
+        match rx.poll_recv(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Some(chunk)) => Poll::Ready(Some(Ok(chunk))),
+            Poll::Ready(None) => {
+                self.rx = None; // channel 关闭，取走，下次返回 None 不 panic
+                Poll::Ready(None)
+            }
+        }
+    }
+}
 
 /// 从请求头取 db_id（字符串），交给 store::resolve_db_id 路由（缺失回退业务库）。
 async fn db_id_from(headers: &HeaderMap) -> String {
@@ -237,4 +275,209 @@ pub async fn dct_save(
         })))
         .into_response()),
     }
+}
+
+// ============================================================================
+// 6) GET /api/dct/export —— 流式导出全表（JSON NDJSON / CSV）
+// ============================================================================
+
+/// 导出请求的 query 参数。
+#[derive(serde::Deserialize)]
+pub struct ExportParams {
+    /// 导出格式：`json`（默认，NDJSON）/ `csv`
+    #[serde(default = "default_export_format")]
+    pub format: String,
+}
+
+fn default_export_format() -> String {
+    "json".to_string()
+}
+
+/// 流式导出字典全表数据。
+///
+/// - 走 keyset 分页（`WHERE pk > $last_pk ORDER BY pk LIMIT N`）+ mpsc + `Body::from_stream`
+/// - 响应头：`Content-Type` + `Content-Disposition: attachment`
+/// - 文件名 `{dict_code}_{table_name}.{ext}`（纯 ASCII，无乱码风险）
+pub async fn dct_export(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DctQuery>,
+    headers: HeaderMap,
+    Query(params): Query<ExportParams>,
+) -> Result<axum::response::Response> {
+    use axum::body::Body;
+    use axum::response::IntoResponse;
+
+    let db_id = db_id_from(&headers).await;
+    let view = store::resolve_dict(&q, false).await?;
+    let fmt = match params.format.to_lowercase().as_str() {
+        "csv" => store::ImportFormat::Csv,
+        _ => store::ImportFormat::Json,
+    };
+
+    debug!(
+        "{:<12} - dct_export {} table={} fmt={}",
+        "HANDLER", q.dict, view.table_name, fmt.as_str()
+    );
+
+    // 启动导出流：mpsc::Receiver<Bytes>（内部 spawn tokio task 跑 keyset 分页）
+    let rx = store::export_stream(view.clone(), db_id, fmt, 5000, 8);
+
+    // 包装为 axum Body：用 SafeReceiverStream（channel 关闭后再次 poll 安全返回 None，不 panic）。
+    // 不能用 futures::stream::unfold：unfold 在返回 Ready(None) 后会 panic（hyper 1.x 可能再次 poll）。
+    let stream = SafeReceiverStream::new(rx);
+    let body = Body::from_stream(stream);
+
+    let filename = format!(
+        "{}_{}.{}",
+        view.dict_code,
+        view.table_name,
+        fmt.ext()
+    );
+    let content_disposition = format!("attachment; filename=\"{}\"", filename);
+
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_str(fmt.content_type())
+                    .unwrap_or_else(|_| {
+                        axum::http::HeaderValue::from_static("application/octet-stream")
+                    }),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                axum::http::HeaderValue::from_str(&content_disposition)
+                    .unwrap_or_else(|_| {
+                        axum::http::HeaderValue::from_static("attachment")
+                    }),
+            ),
+        ],
+        body,
+    )
+        .into_response())
+}
+
+// ============================================================================
+// 7) POST /api/dct/import —— 流式导入（multipart/form-data：file + mode）
+// ============================================================================
+
+/// 导入请求的 query 参数（mode 通过 multipart field 传，不在这里）。
+/// 保留 DctQuery 用于定位字典。
+#[derive(serde::Deserialize)]
+pub struct ImportParams {
+    /// 写入语义：upsert（默认）/ replace / insert_only（multipart `mode` 字段覆盖）
+    #[serde(default = "default_import_mode")]
+    pub mode: String,
+}
+
+fn default_import_mode() -> String {
+    "upsert".to_string()
+}
+
+/// 自动识别导入文件格式：扩展名 → Content-Type → 默认 JSON。
+///
+/// - 扩展名 `.csv` → Csv；`.json` / `.ndjson` → Json
+/// - Content-Type `text/csv` → Csv；`application/json` / `application/x-ndjson` → Json
+/// - 都识别不出 → 默认 Json（NDJSON）
+fn detect_format(filename: &str, content_type: &str) -> Result<store::ImportFormat> {
+    let ext_lower = filename.rsplit('.').next().map(|s| s.to_lowercase());
+    if matches!(ext_lower.as_deref(), Some("csv")) {
+        return Ok(store::ImportFormat::Csv);
+    }
+    if matches!(ext_lower.as_deref(), Some("json") | Some("ndjson")) {
+        return Ok(store::ImportFormat::Json);
+    }
+    let ct_lower = content_type.to_lowercase();
+    if ct_lower.contains("csv") {
+        return Ok(store::ImportFormat::Csv);
+    }
+    if ct_lower.contains("json") {
+        return Ok(store::ImportFormat::Json);
+    }
+    // 兜底：JSON NDJSON（与导出默认格式一致）
+    Ok(store::ImportFormat::Json)
+}
+
+/// 流式导入字典数据。
+///
+/// multipart/form-data：
+/// - `file`：文件字段（filename + content_type 用于格式识别）
+/// - `mode`：可选字符串字段（`upsert` / `replace` / `insert_only`，默认 `upsert`）
+///
+/// 返回 `ImportSummary`：`{total, affected, skipped, errors}`
+pub async fn dct_import(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DctQuery>,
+    headers: HeaderMap,
+    Query(params): Query<ImportParams>,
+    mut multipart: Multipart,
+) -> Result<Json<ApiResp<Value>>> {
+    let db_id = db_id_from(&headers).await;
+    let view = store::resolve_dict(&q, false).await?;
+
+    let mut mode = match params.mode.as_str() {
+        "replace" => BatchConflictMode::Replace,
+        "insert_only" => BatchConflictMode::InsertOnly,
+        _ => BatchConflictMode::Upsert,
+    };
+    let mut file_bytes: Option<bytes::Bytes> = None;
+    let mut file_name = String::new();
+    let mut file_content_type = String::new();
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| cmx_biz::BizError::business(format!("multipart 解析失败: {e}")))?
+    {
+        let name = field.name().unwrap_or("").to_string();
+        match name.as_str() {
+            "mode" => {
+                let mb = field.bytes().await.map_err(|e| {
+                    cmx_biz::BizError::business(format!("读取 mode 失败: {e}"))
+                })?;
+                let mode_str = std::str::from_utf8(&mb).unwrap_or("upsert");
+                mode = match mode_str {
+                    "replace" => BatchConflictMode::Replace,
+                    "insert_only" => BatchConflictMode::InsertOnly,
+                    _ => BatchConflictMode::Upsert,
+                };
+            }
+            "file" => {
+                file_name = field.file_name().unwrap_or("").to_string();
+                file_content_type = field.content_type().unwrap_or("").to_string();
+                let bytes = field.bytes().await.map_err(|e| {
+                    cmx_biz::BizError::business(format!("读取 file 失败: {e}"))
+                })?;
+                debug!(
+                    "{:<12} - dct_import {} file={} size={} ct={}",
+                    "HANDLER", q.dict, file_name, bytes.len(), file_content_type
+                );
+                file_bytes = Some(bytes);
+            }
+            _ => {}
+        }
+    }
+
+    let bytes = file_bytes.ok_or_else(|| {
+        cmx_biz::BizError::business("multipart 缺少 file 字段".to_string())
+    })?;
+    let fmt = detect_format(&file_name, &file_content_type)?;
+    debug!(
+        "{:<12} - dct_import {} table={} fmt={:?} mode={:?}",
+        "HANDLER", q.dict, view.table_name, fmt, mode
+    );
+
+    // 用 std::io::Cursor 包装 bytes（tokio 为 std::io::Cursor<T: AsRef<[u8]> + Unpin>
+    // 实现了 AsyncRead，Bytes 满足 AsRef<[u8]> + Unpin）。
+    let cursor = std::io::Cursor::new(bytes);
+    let summary = store::import_stream(view, db_id, fmt, mode, 1000, cursor).await?;
+
+    Ok(Json(ApiResp::ok(json!({
+        "total": summary.total,
+        "affected": summary.affected,
+        "skipped": summary.skipped,
+        "errors": summary.errors,
+    }))))
 }

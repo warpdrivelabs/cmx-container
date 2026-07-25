@@ -1180,13 +1180,16 @@ name = "cmx-dct-api"
 version = "0.1.12"
 dependencies = [
  "axum",
+ "bytes",
  "cmx-api",
  "cmx-biz",
  "cmx-dct-model",
  "cmx-dct-store-pg",
+ "futures",
  "rmp",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 
@@ -1206,12 +1209,16 @@ dependencies = [
 name = "cmx-dct-store-pg"
 version = "0.1.12"
 dependencies = [
+ "bytes",
  "cmx-api-types",
  "cmx-biz",
  "cmx-core",
  "cmx-database-pg",
  "cmx-dct-model",
  "cmx-model",
+ "csv",
+ "futures",
+ "serde",
  "serde_json",
  "tokio",
  "tracing",

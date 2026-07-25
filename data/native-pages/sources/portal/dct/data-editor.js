@@ -393,6 +393,8 @@ function pageHtml () {
     <ui5-button design="Default" icon="add" id="btnAdd">新增</ui5-button>
     <ui5-button design="Default" icon="delete" id="btnDel">删除</ui5-button>
     <ui5-button design="Positive" icon="save" id="btnSave">保存</ui5-button>
+    <ui5-button design="Default" icon="download" id="btnExport">导出</ui5-button>
+    <ui5-button design="Default" icon="upload" id="btnImport">导入</ui5-button>
   </div>
   <div class="de-filter">
     <ui5-input id="deQ" placeholder="关键字（编码/名称模糊匹配）" style="max-width:240px"></ui5-input>
@@ -931,6 +933,205 @@ function presentViolations (violations) {
   cmxNotify('error', `校验错误（${violations.length} 处）：\n${lines.join('\n')}`)
 }
 
+/* ─────────────── 导出（fetch + Blob 下载，支持 JWT header） ───────────────
+ * 项目用 JWT header 鉴权（cmx-api mw_auth），iframe/`<a download>` 无法携带 Authorization，
+ * 必须用 fetch。浏览器 Blob > 1MB 自动落盘（file-backed），100w 行规模 JS heap 占用极低。
+ * token 由前端框架统一注入（native-pages host 拦截 fetch），data-editor.js 直接 fetch 即可。
+ */
+
+async function onExportClick (root) {
+  const fmt = await pickExportFormat(root)
+  if (!fmt) return
+  await doExport(root, fmt)
+}
+
+/** 弹出格式选择对话框：返回 'json' / 'csv' / null（取消）。 */
+function pickExportFormat (_root) {
+  return new Promise((resolve) => {
+    const dlg = document.createElement('cmx-floating-dialog')
+    dlg.configure({
+      title: '选择导出格式',
+      icon: 'download',
+      confirmText: '导出',
+      cancelText: '取消',
+      showCancel: true,
+      dialogWidth: '420px',
+      dialogHeight: 'auto',
+    })
+    const body = document.createElement('div')
+    body.style.cssText = 'padding:16px;font-size:13px;color:var(--sapTextColor,#1d2d3e);font-family:var(--sapFontFamily,Arial,sans-serif);display:flex;flex-direction:column;gap:10px'
+    body.innerHTML = `
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:inherit">
+        <input type="radio" name="fmt" value="json" checked style="accent-color:var(--neo-cyan,#00b4d8);cursor:pointer">
+        <span>JSON（NDJSON 流式，推荐大数据量）</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:inherit">
+        <input type="radio" name="fmt" value="csv" style="accent-color:var(--neo-cyan,#00b4d8);cursor:pointer">
+        <span>CSV（含表头，Excel 友好）</span>
+      </label>
+      <div style="color:var(--sapContent_LabelColor,#6a6d70);font-size:12px;margin-top:6px">
+        将导出当前字典全表数据。
+      </div>
+    `
+    dlg.setContent(body)
+    document.body.appendChild(dlg)
+    dlg.openModal().then((r) => {
+      if (r && r.action === 'confirm') {
+        resolve(body.querySelector('input[name="fmt"]:checked')?.value || 'json')
+      } else {
+        resolve(null)
+      }
+    }).catch(() => resolve(null))
+  })
+}
+
+async function doExport (root, fmt) {
+  const def = state.def
+  const dictCode = state.dictCode
+  if (!def || !dictCode) { cmxNotify('warn', '请先选择字典'); return }
+  setMsg(root, `导出中（${fmt.toUpperCase()}）…`)
+  try {
+    // fetch 带 db_id header（Authorization 由前端框架统一注入）
+    const url = `/api/dct/export?${qs(def, { dict: dictCode, format: fmt })}`
+    const headers = { Accept: fmt === 'csv' ? 'text/csv' : 'application/x-ndjson' }
+    if (def.dbId) headers.db_id = def.dbId
+    const res = await fetch(url, { headers, credentials: 'same-origin' })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      throw new Error(`HTTP ${res.status}${txt ? `: ${txt.slice(0, 200)}` : ''}`)
+    }
+    // res.blob() 内部流式接收 chunked 响应；浏览器在 Blob > 1MB 时自动落盘到临时文件（file-backed）
+    const blob = await res.blob()
+    // 触发下载（文件名由后端 Content-Disposition 头指定，前端 download 属性仅作 hint）
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${def.module}_${dictCode}.${fmt === 'csv' ? 'csv' : 'json'}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    // 延迟释放 Blob 引用，确保下载已开始
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    setMsg(root, '导出完成', 'ok')
+    cmxNotify('ok', `导出已下载：${a.download}`)
+  } catch (e) {
+    setMsg(root, `导出失败：${e.message}`, 'err')
+    cmxNotify('error', `导出失败：${e.message}`)
+  }
+}
+
+/* ─────────────── 导入（弹窗选文件 + 模式 + multipart 上传） ─────────────── */
+
+async function onImportClick (root) {
+  const picked = await pickImportFileAndMode(root)
+  if (!picked) return
+  await doImport(root, picked.file, picked.mode)
+}
+
+/** 弹出导入配置对话框：选文件 + 写入模式，返回 { file, mode } 或 null（取消）。 */
+function pickImportFileAndMode (_root) {
+  return new Promise((resolve) => {
+    const dlg = document.createElement('cmx-floating-dialog')
+    dlg.configure({
+      title: '导入字典数据',
+      icon: 'upload',
+      confirmText: '开始导入',
+      cancelText: '取消',
+      showCancel: true,
+      dialogWidth: '520px',
+      dialogHeight: 'auto',
+    })
+    const body = document.createElement('div')
+    body.style.cssText = 'padding:16px;font-size:13px;color:var(--sapTextColor,#1d2d3e);font-family:var(--sapFontFamily,Arial,sans-serif);display:flex;flex-direction:column;gap:12px'
+    body.innerHTML = `
+      <div>
+        <div style="margin-bottom:6px;font-weight:600;color:inherit">文件：</div>
+        <input type="file" id="impFile" accept=".json,.ndjson,.csv" style="width:100%;color:inherit">
+        <div style="color:var(--sapContent_LabelColor,#6a6d70);font-size:12px;margin-top:4px">
+          支持 JSON（NDJSON）/ CSV，后端自动识别格式
+        </div>
+      </div>
+      <div>
+        <div style="margin-bottom:6px;font-weight:600;color:inherit">写入模式：</div>
+        <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer;color:inherit">
+          <input type="radio" name="imode" value="upsert" checked style="accent-color:var(--neo-cyan,#00b4d8);cursor:pointer">
+          <span><b>合并（Upsert）</b> — 按主键存在则更新、不存在则插入（推荐）</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer;color:inherit">
+          <input type="radio" name="imode" value="insert_only" style="accent-color:var(--neo-cyan,#00b4d8);cursor:pointer">
+          <span><b>仅新增（InsertOnly）</b> — 主键冲突跳过</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer;color:inherit">
+          <input type="radio" name="imode" value="replace" style="accent-color:var(--sapNegativeColor,#bb0000);cursor:pointer">
+          <span><b style="color:var(--sapNegativeColor,#bb0000)">替换（Replace）</b> — 先清空目标表再插入（危险）</span>
+        </label>
+      </div>
+    `
+    dlg.setContent(body)
+    document.body.appendChild(dlg)
+
+    // 未选择文件前禁用「开始导入」按钮：cmx-floating-dialog 的 confirm 按钮在 shadow DOM
+    // 内部（id='dlg-confirm-btn'），用 ui5-button 原生 disabled 属性控制。open shadow root
+    // 允许外部 host.shadowRoot.getElementById 访问；组件 id 是稳定文档化标识。
+    const fileInput = body.querySelector('#impFile')
+    const updateConfirmState = () => {
+      const btn = dlg.shadowRoot?.getElementById('dlg-confirm-btn')
+      if (!btn) return
+      if (fileInput.files.length === 0) btn.setAttribute('disabled', '')
+      else btn.removeAttribute('disabled')
+    }
+    fileInput.addEventListener('change', updateConfirmState)
+    // 初始禁用（appendChild 后 shadowRoot 已渲染）
+    Promise.resolve().then(updateConfirmState)
+
+    dlg.openModal().then((r) => {
+      if (r && r.action === 'confirm') {
+        const file = fileInput.files[0]
+        if (!file) { cmxNotify('warn', '请先选择文件'); resolve(null); return }
+        const mode = body.querySelector('input[name="imode"]:checked')?.value || 'upsert'
+        resolve({ file, mode })
+      } else {
+        resolve(null)
+      }
+    }).catch(() => resolve(null))
+  })
+}
+
+async function doImport (root, file, mode) {
+  const def = state.def
+  const dictCode = state.dictCode
+  if (!def || !dictCode) { cmxNotify('warn', '请先选择字典'); return }
+  if (mode === 'replace') {
+    const ok = await cmxConfirm(
+      `⚠️ 替换模式将先清空字典表 ${dictCode} 的全部数据，再从文件插入。\n此操作不可恢复，确定继续？`,
+      '危险操作确认'
+    )
+    if (!ok) return
+  }
+  setMsg(root, `导入中（${mode}）…`)
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('mode', mode)
+    const url = `/api/dct/import?${qs(def, { dict: dictCode })}`
+    const res = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' })
+    const body = await res.json().catch(() => null)
+    const data = unwrap(res, body)
+    const s = data || {}
+    const errs = s.errors || []
+    const errMsgs = errs.slice(0, 20).map((e) => `行 ${e.row}：${e.message}`).join('\n')
+    const tail = errs.length > 20 ? `\n…（共 ${errs.length} 处错误，仅显示前 20）` : ''
+    cmxNotify('ok',
+      `导入完成：总计 ${s.total || 0} 行 / 成功 ${s.affected || 0} 行 / 跳过 ${s.skipped || 0} 行` +
+      (errMsgs ? `\n\n错误明细：\n${errMsgs}${tail}` : '')
+    )
+    setMsg(root, `导入完成：${s.affected || 0} 行`, 'ok')
+    await reload(root)  // 刷新表格显示
+  } catch (e) {
+    setMsg(root, `导入失败：${e.message}`, 'err')
+    cmxNotify('error', `导入失败：${e.message}`)
+  }
+}
+
 /* ─────────────── 树形：左侧树 ─────────────── */
 async function loadTreeChildren (root, parentId) {
   const data = await apiPost(
@@ -1100,6 +1301,8 @@ function bindPage (root) {
   root.querySelector('#btnAdd')?.addEventListener('click', () => addRow(root))
   root.querySelector('#btnDel')?.addEventListener('click', () => void deleteSelected(root))
   root.querySelector('#btnSave')?.addEventListener('click', () => void save(root))
+  root.querySelector('#btnExport')?.addEventListener('click', () => void onExportClick(root))
+  root.querySelector('#btnImport')?.addEventListener('click', () => void onImportClick(root))
 
   // 搜索
   const search = () => {
