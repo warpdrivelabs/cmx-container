@@ -13,6 +13,7 @@
 use serde_json::{Value, json};
 use tracing::debug;
 
+use cmx_core::dv;
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 use cmx_database_pg::get_default_pg_db_manager;
 
@@ -35,16 +36,16 @@ fn is_structural(op_type: &str) -> bool {
     STRUCTURAL_OPS.contains(&op_type)
 }
 
-/// 事务内 JSON 查询（应用器的读全部在咨询锁内，须带 txn_id——crate 级 query_rows 不带）。
+/// 事务内 DataValue 查询（应用器的读全部在咨询锁内，须带 txn_id——crate 级 query_rows 不带）。
 async fn query_rows_txn(
     txn_id: &str,
     sql: &str,
-    params: Value,
+    params: Vec<DataValue>,
     label: &str,
 ) -> Result<Vec<Value>> {
     let mm = get_default_pg_db_manager();
     let ds = mm
-        .query_sql_with_json(RPT_DB_ID, Some(txn_id), sql, params, label)
+        .query_sql_with_datavalues(RPT_DB_ID, Some(txn_id), sql, params, label)
         .await
         .map_err(|e| api_err(&format!("操作日志查询失败: {e}")))?;
     let v = serde_json::to_value(&ds).map_err(|e| api_err(&format!("查询结果序列化失败: {e}")))?;
@@ -147,7 +148,7 @@ async fn apply_ops_in_txn(
     query_rows_txn(
         txn_id,
         "SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext($1))) t",
-        json!([format!("rpt-ops|{code}|{version}")]),
+        dv![format!("rpt-ops|{code}|{version}")],
         "rpt_ops_lock",
     )
     .await?;
@@ -156,7 +157,7 @@ async fn apply_ops_in_txn(
     let mut cur_seq = query_rows_txn(
         txn_id,
         "SELECT COALESCE(MAX(seq),0) AS max_seq FROM cr_report_op_log WHERE report_code=$1 AND version_code=$2",
-        json!([code, version]),
+        dv![code, version],
         "rpt_ops_seq",
     )
     .await?
@@ -181,7 +182,7 @@ async fn apply_ops_in_txn(
             let dup = query_rows_txn(
                 txn_id,
                 "SELECT seq FROM cr_report_op_log WHERE report_code=$1 AND version_code=$2 AND client_op_id=$3",
-                json!([code, version, client_op_id]),
+                dv![code, version, client_op_id.clone()],
                 "rpt_ops_dup",
             )
             .await?;
@@ -214,7 +215,7 @@ async fn apply_ops_in_txn(
                 r#"SELECT seq, payload, actor_name FROM cr_report_op_log
                    WHERE report_code=$1 AND version_code=$2 AND target=$3
                    ORDER BY seq DESC LIMIT 1"#,
-                json!([code, version, target]),
+                dv![code, version, target.clone()],
                 "rpt_ops_last_target",
             )
             .await?;
@@ -329,7 +330,7 @@ async fn apply_projection_op(
         txn_id,
         r#"SELECT id FROM cr_cell_element_map
            WHERE report_code=$1 AND version_code=$2 AND sheet_code=$3 AND region_code=$4 AND cell_ref=$5"#,
-        json!([code, version, sheet, region, cell]),
+        dv![code, version, sheet.clone(), region.clone(), cell.clone()],
         "rpt_ops_cell_lookup",
     )
     .await?;
@@ -412,13 +413,13 @@ pub async fn list_ops(code: &str, version: &str, since: i64, limit: i64) -> Resu
            WHERE report_code=$1 AND version_code=$2 AND seq > $3
            ORDER BY seq
            LIMIT $4"#,
-        json!([code, version, since, limit]),
+        dv![code, version, since, limit],
         "rpt_ops_list",
     )
     .await?;
     let cur_seq = crate::query_rows(
         "SELECT COALESCE(MAX(seq),0) AS max_seq FROM cr_report_op_log WHERE report_code=$1 AND version_code=$2",
-        json!([code, version]),
+        dv![code, version],
         "rpt_ops_cur",
     )
     .await?

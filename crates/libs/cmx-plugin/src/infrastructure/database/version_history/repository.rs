@@ -3,6 +3,7 @@
 //! 提供 `cmx_plugin_versions` 表的增删改查操作
 
 use chrono::{DateTime, Utc};
+use cmx_core::dv;
 use sea_query::{Alias, ExprTrait, PostgresQueryBuilder, Query};
 use sea_query_sqlx::SqlxBinder;
 use std::sync::Arc;
@@ -297,10 +298,10 @@ impl VersionHistoryRepository {
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
         let sql = "DELETE FROM cmx_plugin_versions WHERE plugin_id = $1 AND app_id = $2";
-        let params = serde_json::json!([plugin_id, app_id]);
+        let params = dv![plugin_id, app_id];
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, txn_id, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("删除版本历史记录失败: {}", e)))?;
 
@@ -311,11 +312,11 @@ impl VersionHistoryRepository {
     pub async fn list_versions(&self, plugin_id: &str) -> PluginResult<Vec<VersionRecord>> {
         let sql =
             "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 ORDER BY installed_at DESC";
-        let params = serde_json::json!([plugin_id]);
+        let params = dv![plugin_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -337,11 +338,11 @@ impl VersionHistoryRepository {
         txn_id: Option<&str>,
     ) -> PluginResult<Option<VersionRecord>> {
         let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 AND app_id = $2 AND version = $3";
-        let params = serde_json::json!([plugin_id, app_id, version]);
+        let params = dv![plugin_id, app_id, version];
 
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, txn_id, sql, params, "version_query")
+            .query_sql_with_datavalues(&self.default_db_id, txn_id, sql, params, "version_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询指定版本失败: {}", e)))?;
 
@@ -354,11 +355,11 @@ impl VersionHistoryRepository {
         plugin_id: &str,
     ) -> PluginResult<Option<VersionRecord>> {
         let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 AND is_current = true";
-        let params = serde_json::json!([plugin_id]);
+        let params = dv![plugin_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,

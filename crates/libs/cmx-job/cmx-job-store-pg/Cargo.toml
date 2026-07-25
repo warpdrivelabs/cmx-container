@@ -12,6 +12,8 @@ authors.workspace = true
 [dependencies]
 # 内部依赖 - 任务中心内核（JobStore trait + 模型 Job/JobStatus/ProgressSnapshot）
 cmx-job-core = { workspace = true }
+# 内部依赖 - 核心类型（DataValue / SqlTypeMarker / dv! 宏）
+cmx-core = { workspace = true }
 # 内部依赖 - tokio-postgres 并行 DB 层（execute/query 门面 + 全局 manager）
 cmx-database-pg = { workspace = true }
 # 内部依赖 - 业务错误翻译（可选：PG 错误 → 优雅提示）

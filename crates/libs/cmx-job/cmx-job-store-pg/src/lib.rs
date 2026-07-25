@@ -3,16 +3,18 @@
 //! 实现 [`cmx_job_core::JobStore`]：作业主表 cmx_job / 日志 cmx_job_log / 断点 cmx_job_checkpoint
 //! 的读写（主库 primary）。自 DDL（[`ddl`]，幂等）、崩溃恢复只读 [`PgJobStore::load_active`]、历史查询。
 //!
-//! DB 访问走 cmx-database-pg 全局 manager 的 JSON 门面（`execute_sql_with_json`/`query_sql_with_json`），
+//! DB 访问走 cmx-database-pg 全局 manager 的 DataValue 门面（`execute_sql_with_datavalues`/`query_sql_with_datavalues`），
 //! 对齐 cmx-rpt-store-pg 的 query_rows/execute 惯例。所有写方法容错：失败只 warn 不 panic
 //! （进度是内存权威，DB 是备份，方案 §14.1）。
 
 pub mod ddl;
 
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::Value;
 use tracing::warn;
 
+use cmx_core::dv;
+use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 use cmx_database_pg::get_default_pg_db_manager;
 use cmx_job_core::{
     Job, JobError, JobOrigin, JobStatus, JobStore, ProgressSnapshot,
@@ -38,19 +40,19 @@ impl PgJobStore {
         Self::new(JOB_DB_ID)
     }
 
-    /// JSON 参数执行（非事务，单语句）。失败记 warn（容错）。
-    async fn exec(&self, sql: &str, params: Value, label: &str) {
+    /// DataValue 参数执行（非事务，单语句）。失败记 warn（容错）。
+    async fn exec(&self, sql: &str, params: Vec<DataValue>, label: &str) {
         let mm = get_default_pg_db_manager();
-        if let Err(e) = mm.execute_sql_with_json(&self.db_id, None, sql, params).await {
+        if let Err(e) = mm.execute_sql_with_datavalues(&self.db_id, None, sql, params).await {
             warn!(label, error = %e, "任务中心持久化写失败（已忽略，内存态为准）");
         }
     }
 
-    /// JSON 参数查询 → 行数组。
-    async fn query(&self, sql: &str, params: Value, label: &str) -> Vec<Value> {
+    /// DataValue 参数查询 → 行数组。
+    async fn query(&self, sql: &str, params: Vec<DataValue>, label: &str) -> Vec<Value> {
         let mm = get_default_pg_db_manager();
         match mm
-            .query_sql_with_json(&self.db_id, None, sql, params, label)
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, label)
             .await
         {
             Ok(ds) => serde_json::to_value(&ds)
@@ -146,32 +148,29 @@ fn row_to_job(row: &Value) -> Option<Job> {
     })
 }
 
-/// Job 的 JSONB 列（progress/params/result/error）→ 绑定参数值。
+/// Job 的 JSONB 列（progress/params/result/error）→ DataValue 绑定值。
 ///
-/// cmx-database-pg 的 JSON 参数链路把每个数组元素反序列化成 `DataValue`：
-///   - 以 `{`/`[` 开头的字符串 → `DataValue::Json`（配 `$N::jsonb` 落 JSONB，正确）；
-///   - JSON `null` → `DataValue::Null`（绑成 Option::<String>::None）——对 BIGINT/JSONB 列会
-///     报「serializing parameter」类型错。故可空列一律用 `"$null:Int"`/`"$null:Json"` 显式类型 NULL。
-fn json_col(v: Option<&Value>) -> Value {
+/// DataValue::Json 直接绑 `$N::jsonb`，NullTyped(Json) 绑类型化 NULL。
+fn json_col(v: Option<&Value>) -> DataValue {
     match v {
-        Some(x) => Value::String(serde_json::to_string(x).unwrap_or_else(|_| "null".into())),
-        None => Value::String("$null:Json".into()),
+        Some(x) => DataValue::Json(serde_json::to_string(x).unwrap_or_else(|_| "null".into())),
+        None => DataValue::NullTyped(SqlTypeMarker::Json),
     }
 }
 
-/// 可空 bigint 列 → 值或类型化 NULL 标记。
-fn nullable_int(v: Option<i64>) -> Value {
+/// 可空 bigint 列 → DataValue::Int 或 NullTyped(Int)。
+fn nullable_int(v: Option<i64>) -> DataValue {
     match v {
-        Some(n) => json!(n),
-        None => Value::String("$null:Int".into()),
+        Some(n) => DataValue::Int(n),
+        None => DataValue::NullTyped(SqlTypeMarker::Int),
     }
 }
 
 /// Job 的四个 JSONB 列绑定值（progress/params 必非空，result/error 可空）。
-fn job_json_cols(job: &Job) -> (Value, Value, Value, Value) {
-    let params = Value::String(serde_json::to_string(&job.params).unwrap_or_else(|_| "{}".into()));
+fn job_json_cols(job: &Job) -> (DataValue, DataValue, DataValue, DataValue) {
+    let params = DataValue::Json(serde_json::to_string(&job.params).unwrap_or_else(|_| "{}".into()));
     let progress =
-        Value::String(serde_json::to_string(&job.progress).unwrap_or_else(|_| "{}".into()));
+        DataValue::Json(serde_json::to_string(&job.progress).unwrap_or_else(|_| "{}".into()));
     let result = json_col(job.result.as_ref());
     let error_val = job.error.as_ref().and_then(|e| serde_json::to_value(e).ok());
     let error = json_col(error_val.as_ref());
@@ -186,17 +185,17 @@ impl JobStore for PgJobStore {
         // 单条失败多为「对端已建」的良性竞争：逐条执行、失败仅 warn 不中断，最后校验主表存在即算成功。
         let mm = get_default_pg_db_manager();
         for stmt in ddl::DDL_STATEMENTS {
-            if let Err(e) = mm.execute_sql_with_json(&self.db_id, None, stmt, json!([])).await {
+            if let Err(e) = mm.execute_sql_with_datavalues(&self.db_id, None, stmt, dv![]).await {
                 tracing::warn!(error = %e, "任务中心 DDL 单句执行失败（多为并发建表良性竞争，忽略）");
             }
         }
         // 校验主表确已存在（无论本节点建的还是对端建的）。
         let check = mm
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.db_id,
                 None,
                 "SELECT to_regclass('public.cmx_job') IS NOT NULL AS ok",
-                json!([]),
+                dv![],
                 "job_schema_check",
             )
             .await
@@ -227,13 +226,13 @@ impl JobStore for PgJobStore {
             VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,
                     $9,$10,$11,$12,$13,$14,$15,$16)
             ON CONFLICT (id) DO NOTHING"#;
-        let params_arr = json!([
-            job.id, job.kind, job.title, job.status.as_str(),
+        let params_arr = dv![
+            job.id, job.kind.clone(), job.title.clone(), job.status.as_str(),
             params, progress, result, error,
             job.priority as i64, origin_tag, trigger,
             nullable_int(job.org_id), nullable_int(job.created_by),
             job.created_at, nullable_int(job.started_at), nullable_int(job.finished_at),
-        ]);
+        ];
         self.exec(sql, params_arr, "job_insert").await;
     }
 
@@ -241,27 +240,27 @@ impl JobStore for PgJobStore {
         let (_p, progress, _r, _e) = job_json_cols(job);
         let sql = r#"UPDATE cmx_job SET status=$2, progress=$3::jsonb,
                      started_at=$4, finished_at=$5 WHERE id=$1"#;
-        let params = json!([
+        let params = dv![
             job.id, job.status.as_str(), progress,
             nullable_int(job.started_at), nullable_int(job.finished_at)
-        ]);
+        ];
         self.exec(sql, params, "job_update_status").await;
     }
 
     async fn update_progress(&self, job: &Job) {
         let (_p, progress, _r, _e) = job_json_cols(job);
         let sql = "UPDATE cmx_job SET progress=$2::jsonb WHERE id=$1";
-        self.exec(sql, json!([job.id, progress]), "job_update_progress").await;
+        self.exec(sql, dv![job.id, progress], "job_update_progress").await;
     }
 
     async fn finish(&self, job: &Job) {
         let (_p, progress, result, error) = job_json_cols(job);
         let sql = r#"UPDATE cmx_job SET status=$2, progress=$3::jsonb,
                      result=$4::jsonb, error=$5::jsonb, finished_at=$6 WHERE id=$1"#;
-        let params = json!([
+        let params = dv![
             job.id, job.status.as_str(), progress, result, error,
             nullable_int(job.finished_at)
-        ]);
+        ];
         self.exec(sql, params, "job_finish").await;
     }
 
@@ -269,7 +268,7 @@ impl JobStore for PgJobStore {
         let id = cmx_utils_next_id();
         let sql = r#"INSERT INTO cmx_job_log (id, job_id, seq, level, event, text, at)
                      VALUES ($1,$2,$3,$4,$5,$6,$7)"#;
-        self.exec(sql, json!([id, job_id, seq, level, event, text, at]), "job_log").await;
+        self.exec(sql, dv![id, job_id, seq, level, event, text, at], "job_log").await;
     }
 
     async fn archive(&self, job_id: i64) {
@@ -286,7 +285,7 @@ impl JobStore for PgJobStore {
                 return;
             }
         };
-        let steps: [(&str, Value); 5] = [
+        let steps: [(&str, Vec<DataValue>); 5] = [
             (
                 r#"INSERT INTO cmx_job_hi
                    (id, kind, title, status, params, progress, result, error, priority, origin,
@@ -297,22 +296,22 @@ impl JobStore for PgJobStore {
                     heartbeat_at, control_intent, claimed_at, parent_job_id, $2
                    FROM cmx_job WHERE id = $1
                    ON CONFLICT (id) DO NOTHING"#,
-                json!([job_id, now]),
+                dv![job_id, now],
             ),
             (
                 r#"INSERT INTO cmx_job_hi_log (id, job_id, seq, level, event, text, data, at)
                    SELECT id, job_id, seq, level, event, text, data, at FROM cmx_job_log WHERE job_id = $1
                    ON CONFLICT (id) DO NOTHING"#,
-                json!([job_id]),
+                dv![job_id],
             ),
-            ("DELETE FROM cmx_job_log WHERE job_id = $1", json!([job_id])),
-            ("DELETE FROM cmx_job_checkpoint WHERE job_id = $1", json!([job_id])),
-            ("DELETE FROM cmx_job WHERE id = $1", json!([job_id])),
+            ("DELETE FROM cmx_job_log WHERE job_id = $1", dv![job_id]),
+            ("DELETE FROM cmx_job_checkpoint WHERE job_id = $1", dv![job_id]),
+            ("DELETE FROM cmx_job WHERE id = $1", dv![job_id]),
         ];
         let mut ok = true;
         for (sql, params) in steps.iter() {
             if let Err(e) = mm
-                .execute_sql_with_json(&self.db_id, Some(&txn_id), sql, params.clone())
+                .execute_sql_with_datavalues(&self.db_id, Some(&txn_id), sql, params.clone())
                 .await
             {
                 warn!(job_id, error = %e, "归档步骤失败，回滚");
@@ -337,13 +336,13 @@ impl JobStore for PgJobStore {
         limit: usize,
     ) -> Vec<Job> {
         let mut wheres = Vec::new();
-        let mut params: Vec<Value> = Vec::new();
+        let mut params: Vec<DataValue> = Vec::new();
         if let Some(k) = kind {
-            params.push(json!(k));
+            params.push(DataValue::String(k.to_string()));
             wheres.push(format!("kind = ${}", params.len()));
         }
         if let Some(s) = status {
-            params.push(json!(s.as_str()));
+            params.push(DataValue::String(s.as_str().to_string()));
             wheres.push(format!("status = ${}", params.len()));
         }
         let where_sql = if wheres.is_empty() {
@@ -361,7 +360,7 @@ impl JobStore for PgJobStore {
             limit.max(1),
             offset
         );
-        self.query(&sql, Value::Array(params), "job_list_history")
+        self.query(&sql, params, "job_list_history")
             .await
             .iter()
             .filter_map(row_to_job)
@@ -373,7 +372,7 @@ impl JobStore for PgJobStore {
                             priority, origin, trigger, org_id, created_by, created_at, started_at, finished_at,
                             node_id, archived_at
                      FROM cmx_job_hi WHERE id = $1"#;
-        self.query(sql, json!([job_id]), "job_get_history")
+        self.query(sql, dv![job_id], "job_get_history")
             .await
             .first()
             .and_then(row_to_job)
@@ -382,13 +381,13 @@ impl JobStore for PgJobStore {
     async fn count_history(&self, kind: Option<&str>, status: Option<JobStatus>) -> u64 {
         // 与 list_history 同过滤，保证 total 与 items 一致（否则前端「N 条却列表空」）。
         let mut wheres = Vec::new();
-        let mut params: Vec<Value> = Vec::new();
+        let mut params: Vec<DataValue> = Vec::new();
         if let Some(k) = kind {
-            params.push(json!(k));
+            params.push(DataValue::String(k.to_string()));
             wheres.push(format!("kind = ${}", params.len()));
         }
         if let Some(s) = status {
-            params.push(json!(s.as_str()));
+            params.push(DataValue::String(s.as_str().to_string()));
             wheres.push(format!("status = ${}", params.len()));
         }
         let where_sql = if wheres.is_empty() {
@@ -397,7 +396,7 @@ impl JobStore for PgJobStore {
             format!("WHERE {}", wheres.join(" AND "))
         };
         let sql = format!("SELECT COUNT(*) AS n FROM cmx_job_hi {where_sql}");
-        self.query(&sql, Value::Array(params), "job_count_history")
+        self.query(&sql, params, "job_count_history")
             .await
             .first()
             .and_then(|r| r.get("n"))
@@ -407,13 +406,13 @@ impl JobStore for PgJobStore {
 
     async fn list(&self, kind: Option<&str>, status: Option<JobStatus>, limit: usize) -> Vec<Job> {
         let mut wheres = Vec::new();
-        let mut params: Vec<Value> = Vec::new();
+        let mut params: Vec<DataValue> = Vec::new();
         if let Some(k) = kind {
-            params.push(json!(k));
+            params.push(DataValue::String(k.to_string()));
             wheres.push(format!("kind = ${}", params.len()));
         }
         if let Some(s) = status {
-            params.push(json!(s.as_str()));
+            params.push(DataValue::String(s.as_str().to_string()));
             wheres.push(format!("status = ${}", params.len()));
         }
         let where_sql = if wheres.is_empty() {
@@ -428,7 +427,7 @@ impl JobStore for PgJobStore {
                ORDER BY created_at DESC, id DESC LIMIT {}"#,
             limit.max(1)
         );
-        self.query(&sql, Value::Array(params), "job_list")
+        self.query(&sql, params, "job_list")
             .await
             .iter()
             .filter_map(row_to_job)
@@ -439,7 +438,7 @@ impl JobStore for PgJobStore {
         let sql = r#"SELECT id, kind, title, status, params, progress, result, error,
                             priority, origin, trigger, org_id, created_by, created_at, started_at, finished_at
                      FROM cmx_job WHERE id=$1"#;
-        self.query(sql, json!([job_id]), "job_get")
+        self.query(sql, dv![job_id], "job_get")
             .await
             .first()
             .and_then(row_to_job)
@@ -452,7 +451,7 @@ impl JobStore for PgJobStore {
                      FROM cmx_job
                      WHERE status IN ('pending','running','paused','cancelling')
                      ORDER BY created_at ASC"#;
-        self.query(sql, json!([]), "job_load_active")
+        self.query(sql, dv![], "job_load_active")
             .await
             .iter()
             .filter_map(row_to_job)
@@ -480,7 +479,7 @@ impl JobStore for PgJobStore {
                          priority, origin, trigger, org_id, created_by, created_at, started_at, finished_at"#,
             limit.max(1)
         );
-        self.query(&sql, json!([node_id, now]), "job_claim")
+        self.query(&sql, dv![node_id, now], "job_claim")
             .await
             .iter()
             .filter_map(row_to_job)
@@ -500,7 +499,7 @@ impl JobStore for PgJobStore {
         let sql = format!(
             "UPDATE cmx_job SET heartbeat_at=$2 WHERE node_id=$1 AND id IN ({ids}) AND status IN ('running','paused','cancelling')"
         );
-        self.exec(&sql, json!([node_id, now]), "job_heartbeat").await;
+        self.exec(&sql, dv![node_id, now], "job_heartbeat").await;
     }
 
     async fn reap_dead_owners(&self, timeout_ms: i64, now: i64) -> Vec<i64> {
@@ -512,7 +511,7 @@ impl JobStore for PgJobStore {
                      WHERE status IN ('running','paused','cancelling')
                        AND heartbeat_at IS NOT NULL AND heartbeat_at < $1
                      RETURNING id"#;
-        self.query(sql, json!([cutoff]), "job_reap")
+        self.query(sql, dv![cutoff], "job_reap")
             .await
             .iter()
             .filter_map(|r| row_i64(r, "id"))
@@ -525,10 +524,10 @@ impl JobStore for PgJobStore {
             let sql = r#"UPDATE cmx_job SET status='cancelled', finished_at=$2,
                          error='{"code":499,"message":"作业已被停止"}'::jsonb
                          WHERE id=$1 AND status='pending'"#;
-            self.exec(sql, json!([job_id, now_ms_pub()]), "job_cancel_pending").await;
+            self.exec(sql, dv![job_id, now_ms_pub()], "job_cancel_pending").await;
         }
         let sql = "UPDATE cmx_job SET control_intent=$2 WHERE id=$1 AND status IN ('running','paused','cancelling')";
-        self.exec(sql, json!([job_id, intent]), "job_set_intent").await;
+        self.exec(sql, dv![job_id, intent], "job_set_intent").await;
     }
 
     async fn take_control_intents(&self, node_id: &str) -> Vec<(i64, String)> {
@@ -545,7 +544,7 @@ impl JobStore for PgJobStore {
                 WHERE id IN (SELECT id FROM pend)
             )
             SELECT id, control_intent FROM pend"#;
-        self.query(sql, json!([node_id]), "job_take_intents")
+        self.query(sql, dv![node_id], "job_take_intents")
             .await
             .iter()
             .filter_map(|r| {

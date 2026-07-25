@@ -3,6 +3,7 @@
 //! 提供 `cmx_plugin` 表的增删改查操作
 
 use chrono::{DateTime, Utc};
+use cmx_core::dv;
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::{DataSet, Row, Schema};
 use cmx_database::DatabaseManager;
@@ -272,10 +273,10 @@ impl PluginRepository {
     /// 数据库执行失败时返回 `PluginError::Database`
     pub async fn delete_plugin(&self, plugin_id: &str, app_id: &str) -> PluginResult<()> {
         let sql = "DELETE FROM cmx_plugin WHERE plugin_id = $1 AND app_id = $2";
-        let params = serde_json::json!([plugin_id, app_id]);
+        let params = dv![plugin_id, app_id];
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("删除插件记录失败: {}", e)))?;
 
@@ -459,11 +460,11 @@ impl PluginRepository {
             LEFT JOIN cmx_module m ON p.module_code = m.code
             WHERE p.plugin_id = $1 AND p.app_id = $2
         "#;
-        let params = serde_json::json!([plugin_id, app_id]);
+        let params = dv![plugin_id, app_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "plugin_query")
+            .query_sql_with_datavalues(&self.default_db_id, None, sql, params, "plugin_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
 
@@ -483,11 +484,11 @@ impl PluginRepository {
     //         LEFT JOIN cmx_module m ON p.module_code = m.code
     //         WHERE p.id = $1
     //     "#;
-    //     let params = serde_json::json!([id]);
+    //     let params = dv![id];
     //
     //     let result = self
     //         .db_manager
-    //         .query_sql_with_json(&self.default_db_id, None, sql, params, "plugin_query")
+    //         .query_sql_with_datavalues(&self.default_db_id, None, sql, params, "plugin_query")
     //         .await
     //         .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
     //
@@ -497,42 +498,42 @@ impl PluginRepository {
     /// 列出所有插件（带 JOIN 域/应用/模块名称）
     pub async fn list_plugins(&self, filter: &PluginFilter) -> PluginResult<Vec<PluginRecord>> {
         let mut conditions = Vec::new();
-        let mut params = Vec::new();
+        let mut params: Vec<DataValue> = Vec::new();
         let mut param_index = 1;
 
         if let Some(ref app_id) = filter.app_id {
             conditions.push(format!("p.app_id = ${}", param_index));
-            params.push(serde_json::json!(app_id));
+            params.push(DataValue::from(app_id.clone()));
             param_index += 1;
         }
 
         if let Some(ref status) = filter.status {
             conditions.push(format!("p.status = ${}", param_index));
-            params.push(serde_json::json!(status.to_string()));
+            params.push(DataValue::from(status.to_string()));
             param_index += 1;
         }
 
         if let Some(ref name) = filter.name {
             conditions.push(format!("p.name LIKE ${}", param_index));
-            params.push(serde_json::json!(format!("%{}%", name)));
+            params.push(DataValue::from(format!("%{}%", name)));
             param_index += 1;
         }
 
         if let Some(ref domain_code) = filter.domain_code {
             conditions.push(format!("p.domain_code = ${}", param_index));
-            params.push(serde_json::json!(domain_code));
+            params.push(DataValue::from(domain_code.clone()));
             param_index += 1;
         }
 
         if let Some(ref application_code) = filter.application_code {
             conditions.push(format!("p.application_code = ${}", param_index));
-            params.push(serde_json::json!(application_code));
+            params.push(DataValue::from(application_code.clone()));
             param_index += 1;
         }
 
         if let Some(ref module_code) = filter.module_code {
             conditions.push(format!("p.module_code = ${}", param_index));
-            params.push(serde_json::json!(module_code));
+            params.push(DataValue::from(module_code.clone()));
         }
 
         let where_clause = if conditions.is_empty() {
@@ -558,11 +559,11 @@ impl PluginRepository {
 
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 &sql,
-                serde_json::json!(params),
+                params,
                 "plugin_list",
             )
             .await
@@ -574,11 +575,11 @@ impl PluginRepository {
     /// 检查插件是否存在
     pub async fn plugin_exists(&self, plugin_id: &str) -> PluginResult<bool> {
         let sql = "SELECT COUNT(*) as count FROM cmx_plugin WHERE plugin_id = $1";
-        let params = serde_json::json!([plugin_id]);
+        let params = dv![plugin_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "count_query")
+            .query_sql_with_datavalues(&self.default_db_id, None, sql, params, "count_query")
             .await
             .map_err(|e| PluginError::Database(format!("检查插件存在失败: {}", e)))?;
 
@@ -602,11 +603,11 @@ impl PluginRepository {
     /// 查询插件基线版本
     pub async fn get_baseline_version(&self, plugin_id: &str) -> PluginResult<Option<String>> {
         let sql = "SELECT version FROM cmx_plugin WHERE plugin_id = $1";
-        let params = serde_json::json!([plugin_id]);
+        let params = dv![plugin_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -659,11 +660,11 @@ impl PluginRepository {
             FROM cmx_meta_table_define
             WHERE plugin_id = $1
         "#;
-        let params = serde_json::json!([plugin_id]);
+        let params = dv![plugin_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "ddl_status_check")
+            .query_sql_with_datavalues(&self.default_db_id, None, sql, params, "ddl_status_check")
             .await
             .map_err(|e| PluginError::Database(format!("查询 ddl_status 失败: {}", e)))?;
 

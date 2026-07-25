@@ -46,53 +46,7 @@ pub async fn dct_meta(
     let cols: Vec<Value> = view
         .columns
         .iter()
-        .map(|c| {
-            let mut obj = json!({
-                "name": c.name,
-                "caption": c.caption,
-                "dataType": c.data_type,
-                "isPrimaryKey": c.is_pk,
-                "nullable": c.nullable,
-            });
-            // 维度类型/字典引用/物理字段/录入控件/编辑设置/显示属性：有值才输出，
-            // 供前端 DCT→列模型转换时派生 cmx-dict-select 控件与字典外键回显。
-            if !c.dim_type.is_empty() {
-                obj["dimType"] = Value::String(c.dim_type.clone());
-            }
-            if !c.ref_dict.is_empty() {
-                obj["refDict"] = Value::String(c.ref_dict.clone());
-            }
-            if !c.display_field.is_empty() {
-                obj["displayField"] = Value::String(c.display_field.clone());
-            }
-            if !c.ref_field.is_empty() {
-                obj["refField"] = Value::String(c.ref_field.clone());
-            }
-            if !c.physical_field.is_empty() {
-                obj["physicalField"] = Value::String(c.physical_field.clone());
-            }
-            if let Some(edit) = &c.edit {
-                obj["edit"] = edit.clone();
-            }
-            if let Some(es) = &c.edit_settings {
-                obj["editSettings"] = es.clone();
-            }
-            if let Some(d) = &c.display {
-                obj["display"] = d.clone();
-            }
-            // 扁平属性（width/visible/pattern/enumValues/required/intDigits/decimalDigits 等）：
-            // with_props=true 时由 store 收集到 extra，此处铺到列对象顶层——与字段定义 JSON
-            // 存储形态一致，前端 buildColumnModel 可直接展开挂到 CmxColumn（构造器的"完整继承"
-            // 机制会自动收纳未建模键，toDescriptor 会输出 width/visible/frozen）。
-            if let Some(extra) = &c.extra
-                && let Some(m) = extra.as_object()
-            {
-                for (k, v) in m {
-                    obj[k] = v.clone();
-                }
-            }
-            obj
-        })
+        .map(cmx_dct_model::project_meta_column)
         .collect();
     Ok(Json(ApiResp::ok(json!({
         "dictCode": view.dict_code,
@@ -161,15 +115,18 @@ pub async fn dct_search_zmc_msgpack(
 }
 
 /// 成功信封的 msgpack 字节：`{code:0, msg:"success", data:<列式包字节>}`（对标 doc）。
+///
+/// `rmp::encode` 的写入方法只在 buf 写入失败时返回 Err（Vec 写入不会失败），
+/// 故用 expect 表达「固定结构写入不可能失败」的断言。
 fn encode_envelope_ok(data_msgpack: &[u8]) -> Vec<u8> {
     use rmp::encode as mp;
     let mut buf = Vec::with_capacity(data_msgpack.len() + 32);
-    mp::write_map_len(&mut buf, 3).unwrap();
-    mp::write_str(&mut buf, "code").unwrap();
-    mp::write_uint(&mut buf, 0).unwrap();
-    mp::write_str(&mut buf, "msg").unwrap();
-    mp::write_str(&mut buf, "success").unwrap();
-    mp::write_str(&mut buf, "data").unwrap();
+    mp::write_map_len(&mut buf, 3).expect("msgpack 写 map_len 不应失败");
+    mp::write_str(&mut buf, "code").expect("msgpack 写 str 不应失败");
+    mp::write_uint(&mut buf, 0).expect("msgpack 写 uint 不应失败");
+    mp::write_str(&mut buf, "msg").expect("msgpack 写 str 不应失败");
+    mp::write_str(&mut buf, "success").expect("msgpack 写 str 不应失败");
+    mp::write_str(&mut buf, "data").expect("msgpack 写 str 不应失败");
     buf.extend_from_slice(data_msgpack);
     buf
 }

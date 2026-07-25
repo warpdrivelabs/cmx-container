@@ -148,23 +148,18 @@ pub async fn create_oauth2_client(
         None
     };
 
-    let params = serde_json::Value::Array(vec![
-        serde_json::Value::String(id.clone()),
-        serde_json::Value::String(req.client_id.clone()),
-        serde_json::Value::String(req.client_name.clone()),
-        secret_hash
-            .map(serde_json::Value::String)
-            .unwrap_or(serde_json::Value::Null),
-        serde_json::Value::String(req.client_type.clone()),
-        serde_json::Value::String(redirect_uris_json),
-        serde_json::Value::String(grant_types_str),
-        serde_json::Value::String(allowed_scopes_str),
-        serde_json::Value::Bool(req.pkce_required),
-        req.description
-            .clone()
-            .map(serde_json::Value::String)
-            .unwrap_or(serde_json::Value::Null),
-    ]);
+    let params: Vec<cmx_core::model::cell::DataValue> = vec![
+        cmx_core::model::cell::DataValue::String(id.clone()),
+        cmx_core::model::cell::DataValue::String(req.client_id.clone()),
+        cmx_core::model::cell::DataValue::String(req.client_name.clone()),
+        secret_hash.into(),
+        cmx_core::model::cell::DataValue::String(req.client_type.clone()),
+        cmx_core::model::cell::DataValue::String(redirect_uris_json),
+        cmx_core::model::cell::DataValue::String(grant_types_str),
+        cmx_core::model::cell::DataValue::String(allowed_scopes_str),
+        cmx_core::model::cell::DataValue::Bool(req.pkce_required),
+        req.description.clone().into(),
+    ];
     cmx_iam::oauth_client::store::insert_client(params)
         .await
         .map_err(|e| {
@@ -347,12 +342,12 @@ pub async fn update_oauth2_client_by_id(
     );
 
     let mut sets: Vec<String> = Vec::new();
-    let mut params: Vec<serde_json::Value> = vec![serde_json::Value::String(req.client_id.clone())];
+    let mut params: Vec<cmx_core::model::cell::DataValue> = vec![cmx_core::model::cell::DataValue::String(req.client_id.clone())];
     let mut idx = 2;
 
     if let Some(name) = &req.client_name {
         sets.push(format!("client_name = ${idx}"));
-        params.push(serde_json::Value::String(name.clone()));
+        params.push(cmx_core::model::cell::DataValue::String(name.clone()));
         idx += 1;
     }
     if let Some(secret) = &req.client_secret {
@@ -362,38 +357,38 @@ pub async fn update_oauth2_client_by_id(
             ));
         }
         sets.push(format!("client_secret = ${idx}"));
-        params.push(serde_json::Value::String(hash_secret(secret)));
+        params.push(cmx_core::model::cell::DataValue::String(hash_secret(secret)));
         idx += 1;
     }
     if let Some(uris) = &req.redirect_uris {
         let json = serde_json::to_string(uris).unwrap_or_else(|_| "[]".to_string());
         sets.push(format!("redirect_uris = ${idx}"));
-        params.push(serde_json::Value::String(json));
+        params.push(cmx_core::model::cell::DataValue::String(json));
         idx += 1;
     }
     if let Some(gt) = &req.grant_types {
         sets.push(format!("grant_types = ${idx}"));
-        params.push(serde_json::Value::String(gt.join(",")));
+        params.push(cmx_core::model::cell::DataValue::String(gt.join(",")));
         idx += 1;
     }
     if let Some(scopes) = &req.allowed_scopes {
         sets.push(format!("allowed_scopes = ${idx}"));
-        params.push(serde_json::Value::String(scopes.join(",")));
+        params.push(cmx_core::model::cell::DataValue::String(scopes.join(",")));
         idx += 1;
     }
     if let Some(pkce) = req.pkce_required {
         sets.push(format!("pkce_required = ${idx}"));
-        params.push(serde_json::Value::Bool(pkce));
+        params.push(cmx_core::model::cell::DataValue::Bool(pkce));
         idx += 1;
     }
     if let Some(desc) = &req.description {
         sets.push(format!("description = ${idx}"));
-        params.push(serde_json::Value::String(desc.clone()));
+        params.push(cmx_core::model::cell::DataValue::String(desc.clone()));
         idx += 1;
     }
     if let Some(status) = req.status {
         sets.push(format!("status = ${idx}"));
-        params.push(serde_json::Value::Number(status.into()));
+        params.push(cmx_core::model::cell::DataValue::Int(status as i64));
         // idx += 1;
     }
 
@@ -404,7 +399,7 @@ pub async fn update_oauth2_client_by_id(
     sets.push("update_time = NOW()".to_string());
     let affected = cmx_iam::oauth_client::store::update_client(
         &sets.join(", "),
-        serde_json::Value::Array(params),
+        params,
     )
     .await
     .map_err(|e| Error::InternalError(format!("更新 OAuth2 客户端失败: {e}")))?;

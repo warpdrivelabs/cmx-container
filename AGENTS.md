@@ -61,7 +61,56 @@ use log::info;
 
 ### 2.2 日志格式
 
-使用结构化日志：`info!("message", key = value)`
+**使用 tracing 结构化字段输出，禁止仅用占位符拼接。** 消息模板必须为静态字符串（便于日志聚合检索），动态上下文走 `key = value` 字段；这样下游（ELK / Loki / 检索）才能按字段过滤和聚合，而不是从一坨字符串里抠信息。
+
+#### 静态消息模板 + 字段（✅ 正例）
+
+```rust
+// ✅ 正确：静态消息 + 结构化字段
+info!(
+    target: "cmx::payment",
+    payment.id = %payment_id,
+    user.id = %user_id,
+    amount = amount,
+    "开始处理支付"
+);
+
+warn!(
+    target: "cmx::order",
+    order.id = %order_id,
+    retry.count = retry,
+    error = %err,
+    "订单处理失败，将重试"
+);
+```
+
+要点：
+- **消息模板是静态字符串**（编译期字面量），不要在里面塞 `{}` 拼接。
+- **字段名用 `.` 分层命名空间**（`payment.id`、`user.id`），便于聚合与索引。
+- **Display 类型用 `%` 前缀**（如 `%payment_id`），`Debug` 类型用 `?` 前缀（如 `?err`）。
+- **必填业务字段全部上送**（ID、租户、关键数值），不要漏。
+- **业务模块用 `target:`** 显式声明（`"cmx::payment"`），便于按模块过滤。
+
+#### 常见反例（❌ 禁止）
+
+```rust
+// ❌ 错误：字符串里塞变量，无法按字段检索
+info!("开始处理支付 payment_id={} user_id={}", payment_id, user_id);
+
+// ❌ 错误：动态拼接的"消息模板"，失去静态检索能力
+info!(format!("处理支付 {}", payment_id), user_id = user_id);
+
+// ❌ 错误：把上下文塞进消息里、字段为空
+info!("处理支付成功");
+
+// ❌ 错误：Debug 整对象，泄漏结构且字段不可索引
+info!("payment = {:?}", payment);
+
+// ❌ 错误：把业务数据塞进 target 或 message
+info!(target: &format!("cmx::payment::{}", payment_id), "处理中");
+```
+
+反例共同问题：**字段不可结构化检索、敏感数据混在消息里、聚合统计困难、日志解析性能差**。
 
 ---
 
@@ -125,48 +174,9 @@ log = "0.4"
 
 ## 四、Git 提交规则
 
-### 4.1 禁止提交根目录 .env 文件
-
-Git 提交代码时，必须忽略根目录的 `.env` 文件，**即使该文件已经被 `git add` 加入暂存区，也不得提交**。
-
-**正确做法**：
-1. 提交时不通过 `git add .` 或 `git add -A` 批量添加，逐个指定文件
-
-**错误示例**：
-
-```bash
-# ❌ 错误 - 可能误提交 .env
-git add .
-git commit -m "update config"
-
-# ❌ 错误 - 强制提交 .env
-git add -f .env
-```
-
-### 4.2 禁止自动提交代码
+### 4.1 禁止自动提交代码
 
 AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作**，必须由用户主动确认并提出提交请求后才能提交。
-
-**正确做法**：
-
-1. AI 完成代码修改后，仅向用户汇报改动内容，等待用户明确指令（如「提交代码」「commit」「提交一下」等）
-2. 收到用户明确指令后，再按规范执行 `git status` → `git diff` → 暂存指定文件 → `git commit` 流程
-3. 提交信息需遵循 Conventional Commits 规范（feat / fix / refactor / docs / chore 等）
-
-**错误示例**：
-
-```bash
-# ❌ 错误 - 未经用户允许直接提交
-git add .
-git commit -m "update"
-
-# ❌ 错误 - 完成任务后自动 push
-git push origin main
-```
-
-**例外情况**：
-
-仅在用户明确表示「帮我提交」「请提交这次改动」等明确指令时，AI 才可以执行提交操作。
 
 ---
 

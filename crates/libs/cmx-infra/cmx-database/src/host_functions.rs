@@ -9,6 +9,7 @@ use cmx_traits::runtime::{HostFunctionDef, HostFunctionProvider};
 use std::sync::Arc;
 
 use crate::DatabaseManager;
+use crate::executor::json_to_data_values;
 
 /// 数据库宿主函数提供者
 ///
@@ -72,7 +73,7 @@ impl DatabaseHostFunctions {
                     _ => db_manager.get_default_db_id().await,
                 };
 
-                // data_values 优先(带类型 NULL),其次 params JSON(向后兼容),最后无参数
+                // data_values 优先(带类型 NULL),其次 params JSON(转换为 DataValues),最后无参数
                 match (data_values, params) {
                     (Some(data_values), _) => db_manager
                         .query_sql_with_datavalues(
@@ -84,16 +85,20 @@ impl DatabaseHostFunctions {
                         )
                         .await
                         .map_err(|e| e.to_string()),
-                    (None, Some(params_value)) => db_manager
-                        .query_sql_with_json(
-                            &db_id,
-                            request_txn_id.as_deref(),
-                            &sql,
-                            params_value,
-                            &dataset_id,
-                        )
-                        .await
-                        .map_err(|e| e.to_string()),
+                    (None, Some(params_value)) => {
+                        let data_values = json_to_data_values(params_value)
+                            .map_err(|e| e.to_string())?;
+                        db_manager
+                            .query_sql_with_datavalues(
+                                &db_id,
+                                request_txn_id.as_deref(),
+                                &sql,
+                                data_values,
+                                &dataset_id,
+                            )
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
                     (None, None) => db_manager
                         .query_sql(&db_id, request_txn_id.as_deref(), &sql, &dataset_id)
                         .await
@@ -150,7 +155,7 @@ impl DatabaseHostFunctions {
                     _ => db_manager.get_default_db_id().await,
                 };
 
-                // data_values 优先(带类型 NULL),其次 params JSON(向后兼容),最后无参数
+                // data_values 优先(带类型 NULL),其次 params JSON(转换为 DataValues),最后无参数
                 match (data_values, params) {
                     (Some(data_values), _) => db_manager
                         .execute_sql_with_datavalues(
@@ -161,15 +166,19 @@ impl DatabaseHostFunctions {
                         )
                         .await
                         .map_err(|e| e.to_string()),
-                    (None, Some(params_value)) => db_manager
-                        .execute_sql_with_json(
-                            &db_id,
-                            request_txn_id.as_deref(),
-                            &sql,
-                            params_value,
-                        )
-                        .await
-                        .map_err(|e| e.to_string()),
+                    (None, Some(params_value)) => {
+                        let data_values = json_to_data_values(params_value)
+                            .map_err(|e| e.to_string())?;
+                        db_manager
+                            .execute_sql_with_datavalues(
+                                &db_id,
+                                request_txn_id.as_deref(),
+                                &sql,
+                                data_values,
+                            )
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
                     (None, None) => db_manager
                         .execute_sql(&db_id, request_txn_id.as_deref(), &sql)
                         .await

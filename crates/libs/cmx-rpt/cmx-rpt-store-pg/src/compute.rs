@@ -18,6 +18,7 @@ use rust_decimal::Decimal;
 use serde_json::{Value, json};
 use tracing::debug;
 
+use cmx_core::dv;
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 use cmx_database_pg::get_default_pg_db_manager;
 
@@ -55,7 +56,7 @@ async fn load_snapshot(
            FROM cr_cell_element_map
            WHERE report_code=$1 AND version_code=$2
            ORDER BY sheet_code, region_code, row_id, col_id"#,
-        json!([report, version]),
+        dv![report, version],
         "compute_cell_map",
     )
     .await?;
@@ -67,7 +68,7 @@ async fn load_snapshot(
     let elem_rows = query_rows(
         r#"SELECT code, calc_formula FROM cr_data_element
            WHERE COALESCE(status,1)=1 AND calc_formula IS NOT NULL AND calc_formula <> ''"#,
-        json!([]),
+        dv![],
         "compute_data_elements",
     )
     .await?;
@@ -84,7 +85,7 @@ async fn load_snapshot(
                   data_status, is_manual
            FROM cr_cell_data
            WHERE report_code=$1 AND version_code=$2 AND org_code=$3 AND period_code=$4"#,
-        json!([report, version, org, period]),
+        dv![report, version, org, period],
         "compute_existing_data",
     )
     .await?;
@@ -154,7 +155,7 @@ async fn load_periods() -> Result<Vec<String>> {
         r#"SELECT code FROM cr_acct_calendar
            WHERE COALESCE(status,1)=1 AND COALESCE(is_leaf,1)=1
            ORDER BY fiscal_year, period_no"#,
-        json!([]),
+        dv![],
         "compute_periods",
     )
     .await?;
@@ -165,7 +166,7 @@ async fn load_periods() -> Result<Vec<String>> {
 async fn load_org_parent() -> Result<HashMap<String, String>> {
     let rows = query_rows(
         r#"SELECT id, code, parent_id FROM cr_consol_org WHERE COALESCE(status,1)=1"#,
-        json!([]),
+        dv![],
         "compute_org_parent",
     )
     .await?;
@@ -417,7 +418,7 @@ async fn resolve_version(code: &str, given: Option<String>) -> Result<String> {
            WHERE report_code=$1
            ORDER BY COALESCE(is_current,0) DESC, version_no DESC, code DESC
            LIMIT 1"#,
-        json!([code]),
+        dv![code],
         "compute_resolve_version",
     )
     .await?;

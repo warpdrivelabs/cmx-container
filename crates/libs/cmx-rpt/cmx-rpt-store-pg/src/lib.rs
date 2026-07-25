@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use serde_json::{Value, json};
 use tracing::debug;
 
+use cmx_core::dv;
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 use cmx_database_pg::{ZmcRowSource, get_default_pg_db_manager};
 
@@ -76,11 +77,11 @@ fn db_err(e: cmx_database_pg::Error) -> Error {
 // DB 门面 helper
 // ============================================================================
 
-/// JSON 参数查询 → 行数组（sqlx/json 链路；报表读取多为小体量关系投影）。
-pub(crate) async fn query_rows(sql: &str, params: Value, label: &str) -> Result<Vec<Value>> {
+/// DataValue 参数查询 → 行数组（报表读取多为小体量关系投影）。
+pub(crate) async fn query_rows(sql: &str, params: Vec<DataValue>, label: &str) -> Result<Vec<Value>> {
     let mm = get_default_pg_db_manager();
     let ds = mm
-        .query_sql_with_json(RPT_DB_ID, None, sql, params, label)
+        .query_sql_with_datavalues(RPT_DB_ID, None, sql, params, label)
         .await
         .map_err(|e| api_err(&format!("报表设计数据查询失败: {e}")))?;
     let v = serde_json::to_value(&ds).map_err(|e| api_err(&format!("查询结果序列化失败: {e}")))?;
@@ -90,10 +91,10 @@ pub(crate) async fn query_rows(sql: &str, params: Value, label: &str) -> Result<
         .unwrap_or_default())
 }
 
-/// JSON 参数执行（非事务，单语句）。
-async fn execute(sql: &str, params: Value) -> Result<()> {
+/// DataValue 参数执行（非事务，单语句）。
+async fn execute(sql: &str, params: Vec<DataValue>) -> Result<()> {
     let mm = get_default_pg_db_manager();
-    mm.execute_sql_with_json(RPT_DB_ID, None, sql, params)
+    mm.execute_sql_with_datavalues(RPT_DB_ID, None, sql, params)
         .await
         // 落库失败：翻译成优雅提示 + 稳定错误码，不暴露 PG 英文原文（对齐 DOC saver）。
         .map_err(db_err)?;
@@ -238,7 +239,7 @@ async fn preload_id_map(
         "SELECT sheet_code, region_code, {key_col} AS bkey, id \
          FROM {table} WHERE report_code=$1 AND version_code=$2"
     );
-    let rows = query_rows(&sql, json!([code, version]), "rpt_preload_ids").await?;
+    let rows = query_rows(&sql, dv![code, version], "rpt_preload_ids").await?;
     let mut m = HashMap::new();
     for r in &rows {
         let sheet = r.get("sheet_code").and_then(|v| v.as_str()).unwrap_or("");
@@ -266,7 +267,7 @@ pub async fn overview() -> Result<Value> {
            FROM cr_report_category
            WHERE COALESCE(status, 1) = 1
            ORDER BY COALESCE(sort_no, 999999), code"#,
-        json!([]),
+        dv![],
         "report_design_categories",
     )
     .await?;
@@ -275,7 +276,7 @@ pub async fn overview() -> Result<Value> {
            FROM cr_period_type
            WHERE COALESCE(status, 1) = 1
            ORDER BY COALESCE(sort_no, 999999), code"#,
-        json!([]),
+        dv![],
         "report_design_periods",
     )
     .await?;
@@ -291,7 +292,7 @@ pub async fn overview() -> Result<Value> {
 /// 过滤报表列表（供 overview + /reports 复用）。
 pub async fn report_rows(q: &ReportListQuery) -> Result<Vec<Value>> {
     let mut wheres = Vec::new();
-    let mut params = Vec::new();
+    let mut params: Vec<DataValue> = Vec::new();
     let mut n = 0usize;
     if let Some(category) = q
         .category
@@ -301,7 +302,7 @@ pub async fn report_rows(q: &ReportListQuery) -> Result<Vec<Value>> {
     {
         n += 1;
         wheres.push(format!("rl.report_category = ${n}"));
-        params.push(json!(category));
+        params.push(DataValue::String(category.to_string()));
     }
     if let Some(period_type) = q
         .period_type
@@ -311,14 +312,14 @@ pub async fn report_rows(q: &ReportListQuery) -> Result<Vec<Value>> {
     {
         n += 1;
         wheres.push(format!("rl.period_type = ${n}"));
-        params.push(json!(period_type));
+        params.push(DataValue::String(period_type.to_string()));
     }
     if let Some(kw) = q.q.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         n += 1;
         wheres.push(format!(
             "(rl.code ILIKE ${n} OR rl.name ILIKE ${n} OR COALESCE(rl.remark, '') ILIKE ${n})"
         ));
-        params.push(json!(format!("%{kw}%")));
+        params.push(DataValue::String(format!("%{kw}%")));
     }
     let where_sql = if wheres.is_empty() {
         String::new()
@@ -354,7 +355,7 @@ pub async fn report_rows(q: &ReportListQuery) -> Result<Vec<Value>> {
            {where_sql}
            ORDER BY COALESCE(rl.sort_no, 999999), rl.code"#
     );
-    query_rows(&sql, Value::Array(params), "report_design_reports").await
+    query_rows(&sql, params, "report_design_reports").await
 }
 
 /// 报表列表（含 dbId 信封）。
@@ -371,7 +372,7 @@ pub async fn elements() -> Result<Value> {
            FROM cr_element_category
            WHERE COALESCE(status, 1) = 1
            ORDER BY COALESCE(sort_no, 999999), code"#,
-        json!([]),
+        dv![],
         "report_design_element_categories",
     )
     .await?;
@@ -382,7 +383,7 @@ pub async fn elements() -> Result<Value> {
            FROM cr_data_element
            WHERE COALESCE(status, 1) = 1
            ORDER BY COALESCE(sort_no, 999999), code"#,
-        json!([]),
+        dv![],
         "report_design_data_elements",
     )
     .await?;
@@ -403,7 +404,7 @@ pub async fn calendar() -> Result<Value> {
            FROM cr_acct_calendar
            WHERE COALESCE(status, 1) = 1
            ORDER BY COALESCE(sort_no, 999999), code"#,
-        json!([]),
+        dv![],
         "report_design_calendar",
     )
     .await?;
@@ -420,7 +421,7 @@ pub async fn consol_org() -> Result<Value> {
            FROM cr_consol_org
            WHERE COALESCE(status, 1) = 1
            ORDER BY COALESCE(sort_no, 999999), id"#,
-        json!([]),
+        dv![],
         "report_design_consol_org",
     )
     .await?;
@@ -435,7 +436,7 @@ pub async fn report_detail(code: &str, version: Option<String>) -> Result<Value>
                   is_statutory, remark, sort_no, status, create_time, update_time
            FROM cr_report_list
            WHERE code = $1"#,
-        json!([code]),
+        dv![code],
         "report_design_report",
     )
     .await?
@@ -455,7 +456,7 @@ pub async fn report_detail(code: &str, version: Option<String>) -> Result<Value>
            FROM cr_report_version
            WHERE report_code = $1
            ORDER BY version_no DESC, code DESC"#,
-        json!([code]),
+        dv![code.clone()],
         "report_design_versions",
     )
     .await?;
@@ -487,7 +488,7 @@ pub async fn report_detail(code: &str, version: Option<String>) -> Result<Value>
                  (SELECT COUNT(*) FROM cr_report_row WHERE report_code = $1 AND version_code = $2) AS row_count,
                  (SELECT COUNT(*) FROM cr_report_col WHERE report_code = $1 AND version_code = $2) AS col_count,
                  (SELECT COUNT(*) FROM cr_report_fmt WHERE report_code = $1 AND version_code = $2) AS format_count"#,
-            json!([code, ver]),
+            dv![code, ver],
             "report_design_detail_stats",
         )
         .await?
@@ -529,7 +530,7 @@ pub async fn create_report(body: &Value) -> Result<Value> {
             currency_code, amount_unit, entity_scope, template_version, data_source,
             is_statutory, remark, sort_no, status, create_time, update_time)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"#,
-        json!([
+        dv![
             code.clone(),
             name.clone(),
             report_type,
@@ -545,7 +546,7 @@ pub async fn create_report(body: &Value) -> Result<Value> {
             str_field(body, "remark"),
             sort_no,
             status
-        ]),
+        ],
     )
     .await?;
 
@@ -577,7 +578,7 @@ pub async fn delete_report(code: &str) -> Result<Value> {
         "DELETE FROM cr_report_version WHERE report_code = $1",
         "DELETE FROM cr_report_list WHERE code = $1",
     ] {
-        execute(sql, json!([code])).await?;
+        execute(sql, dv![code]).await?;
     }
     Ok(json!({ "code": code }))
 }
@@ -586,7 +587,7 @@ pub async fn delete_report(code: &str) -> Result<Value> {
 pub async fn create_version(report_code: &str, body: &CreateVersionBody) -> Result<Value> {
     let rows = query_rows(
         "SELECT COALESCE(MAX(version_no), 0) AS max_no FROM cr_report_version WHERE report_code = $1",
-        json!([report_code]),
+        dv![report_code],
         "report_design_version_no",
     )
     .await?;
@@ -618,7 +619,7 @@ pub async fn create_version(report_code: &str, body: &CreateVersionBody) -> Resu
     if is_current == 1 {
         execute(
             "UPDATE cr_report_version SET is_current = 0, update_time = CURRENT_TIMESTAMP WHERE report_code = $1",
-            json!([report_code]),
+            dv![report_code],
         )
         .await?;
     }
@@ -644,7 +645,7 @@ pub async fn create_version(report_code: &str, body: &CreateVersionBody) -> Resu
 pub async fn set_default_version(report_code: &str, version: &str) -> Result<Value> {
     let exists = query_rows(
         "SELECT code FROM cr_report_version WHERE report_code = $1 AND code = $2",
-        json!([report_code, version]),
+        dv![report_code, version],
         "report_design_default_version_check",
     )
     .await?;
@@ -653,7 +654,7 @@ pub async fn set_default_version(report_code: &str, version: &str) -> Result<Val
     }
     execute(
         "UPDATE cr_report_version SET is_current = CASE WHEN code = $2 THEN 1 ELSE 0 END, update_time = CURRENT_TIMESTAMP WHERE report_code = $1",
-        json!([report_code, version]),
+        dv![report_code, version],
     )
     .await?;
     Ok(json!({ "reportCode": report_code, "version": version }))
@@ -675,7 +676,7 @@ async fn create_version_row(
            (code, name, report_code, version_no, version_status, is_current,
             base_version_code, change_summary, remark, sort_no, status, create_time, update_time)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"#,
-        json!([
+        dv![
             version_code,
             version_name,
             report_code,
@@ -686,7 +687,7 @@ async fn create_version_row(
             change_summary,
             change_summary,
             version_no
-        ]),
+        ],
     )
     .await
 }
@@ -745,7 +746,7 @@ pub async fn load_layout(code: &str, q: &LayoutQuery) -> Result<Value> {
     };
 
     // —— 关系投影：小体量，直接 query_rows(JSON) 即可 ——
-    let p = json!([code, version]);
+    let p = dv![code, version.clone()];
     let sheets = query_rows(
         r#"SELECT report_code, version_code, sheet_index, name, sheet_type, tab_color,
                   row_count, col_count, header_rows, fixed_rows, fixed_cols, paper_size,
@@ -853,7 +854,7 @@ pub async fn save_layout(code: &str, body: &Value) -> Result<SaveLayoutOutcome> 
     // —— 乐观锁：比对 DB 现存 content_hash 与前端携带的 hash ——
     let cur = query_rows(
         "SELECT content_hash FROM cr_report_fmt WHERE report_code=$1 AND version_code=$2",
-        json!([code, version]),
+        dv![code, version.clone()],
         "rpt_fmt_hash",
     )
     .await?;

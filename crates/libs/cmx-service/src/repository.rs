@@ -4,7 +4,8 @@
 
 use cmx_core::model::service::ServiceDefinition;
 use cmx_database::DatabaseManager;
-use serde_json::json;
+use cmx_core::dv;
+use cmx_core::model::cell::DataValue;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -93,22 +94,22 @@ impl ServiceRepository {
                 update_time = NOW()
         "#;
 
-        let params = json!([
-            service.id,
-            service.app_id,
-            service.service_key,
-            service.service_name,
-            service.description,
-            service.plugin_id,
+        let params = dv![
+            service.id.clone(),
+            service.app_id.clone(),
+            service.service_key.clone(),
+            service.service_name.clone(),
+            service.description.clone(),
+            service.plugin_id.clone(),
             service.status,
-            service.version,
-            service.domain_code,
-            service.application_code,
-            service.module_code,
-        ]);
+            service.version.clone(),
+            service.domain_code.clone(),
+            service.application_code.clone(),
+            service.module_code.clone(),
+        ];
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, txn_id, sql, params)
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -139,11 +140,11 @@ impl ServiceRepository {
             LIMIT 1
         "#;
 
-        let params = json!([service_key, app_id]);
+        let params = dv![service_key, app_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "cmx_service_define")
+            .query_sql_with_datavalues(&self.default_db_id, None, sql, params, "cmx_service_define")
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -203,11 +204,11 @@ impl ServiceRepository {
             ORDER BY d.update_time DESC
         "#;
 
-        let params = json!([app_id]);
+        let params = dv![app_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "list_services")
+            .query_sql_with_datavalues(&self.default_db_id, None, sql, params, "list_services")
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -272,11 +273,11 @@ impl ServiceRepository {
             WHERE d.plugin_id = $1 AND d.app_id = $3
             ORDER BY d.create_time DESC
         "#;
-        let params = json!([plugin_id, app_id, app_id]);
+        let params = dv![plugin_id, app_id, app_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -350,9 +351,9 @@ impl ServiceRepository {
         let sql_version = r#"
             DELETE FROM cmx_service_define_version WHERE service_key = $1 AND app_id = $2
         "#;
-        let params = json!([service_key, app_id]);
+        let params = dv![service_key, app_id];
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, txn_id, sql_version, params.clone())
+            .execute_sql_with_datavalues(&self.default_db_id, txn_id, sql_version, params.clone())
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -360,7 +361,7 @@ impl ServiceRepository {
             DELETE FROM cmx_service_define WHERE service_key = $1 AND app_id = $2
         "#;
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, txn_id, sql_define, params)
+            .execute_sql_with_datavalues(&self.default_db_id, txn_id, sql_define, params)
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -454,7 +455,7 @@ impl ServiceRepository {
         "#;
 
         let id = Uuid::new_v4().to_string();
-        let params = json!([
+        let params = dv![
             id,
             service_key,
             app_id,
@@ -463,10 +464,10 @@ impl ServiceRepository {
             plugin_version,
             config,
             api_doc
-        ]);
+        ];
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, txn_id, sql, params)
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -493,11 +494,11 @@ impl ServiceRepository {
             ORDER BY create_time DESC
         "#;
 
-        let params = json!([service_key, app_id]);
+        let params = dv![service_key, app_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -541,11 +542,11 @@ impl ServiceRepository {
             WHERE service_key = $1 AND version = $2 AND app_id = $3
         "#;
 
-        let params = json!([service_key, version, app_id]);
+        let params = dv![service_key, version, app_id];
 
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "get_service_config")
+            .query_sql_with_datavalues(&self.default_db_id, None, sql, params, "get_service_config")
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -583,12 +584,12 @@ impl ServiceRepository {
         let offset = (page.saturating_sub(1)) * size;
 
         let mut where_clauses: Vec<String> = Vec::new();
-        let mut params: Vec<serde_json::Value> = Vec::new();
+        let mut params: Vec<DataValue> = Vec::new();
         let mut param_index = 1;
 
         if let Some(ref app_id) = filter.app_id {
             where_clauses.push(format!("s.app_id = ${}", param_index));
-            params.push(json!(app_id));
+            params.push(app_id.as_str().into());
             param_index += 1;
         }
 
@@ -600,32 +601,32 @@ impl ServiceRepository {
                 param_index,
                 param_index + 1
             ));
-            params.push(json!(format!("%{}%", keyword)));
-            params.push(json!(format!("%{}%", keyword)));
+            params.push(format!("%{}%", keyword).into());
+            params.push(format!("%{}%", keyword).into());
             param_index += 2;
         }
 
         if let Some(ref plugin_id) = filter.plugin_id {
             where_clauses.push(format!("s.plugin_id = ${}", param_index));
-            params.push(json!(plugin_id));
+            params.push(plugin_id.as_str().into());
             param_index += 1;
         }
 
         if let Some(ref domain_code) = filter.domain_code {
             where_clauses.push(format!("s.domain_code = ${}", param_index));
-            params.push(json!(domain_code));
+            params.push(domain_code.as_str().into());
             param_index += 1;
         }
 
         if let Some(ref application_code) = filter.application_code {
             where_clauses.push(format!("s.application_code = ${}", param_index));
-            params.push(json!(application_code));
+            params.push(application_code.as_str().into());
             param_index += 1;
         }
 
         if let Some(ref module_code) = filter.module_code {
             where_clauses.push(format!("s.module_code = ${}", param_index));
-            params.push(json!(module_code));
+            params.push(module_code.as_str().into());
             param_index += 1;
         }
 
@@ -642,11 +643,11 @@ impl ServiceRepository {
 
         let count_result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 &count_sql,
-                json!(params.clone()),
+                params.clone(),
                 "count_services",
             )
             .await
@@ -686,16 +687,16 @@ impl ServiceRepository {
             param_index + 1
         );
 
-        params.push(json!(size));
-        params.push(json!(offset));
+        params.push(DataValue::Int(size as i64));
+        params.push(DataValue::Int(offset as i64));
 
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 &data_sql,
-                json!(params),
+                params,
                 "page_services",
             )
             .await
