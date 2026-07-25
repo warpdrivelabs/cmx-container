@@ -2,7 +2,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use serde_json::json;
+use cmx_core::dv;
+use cmx_core::model::cell::DataValue;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, error, info, warn};
 
@@ -631,18 +632,18 @@ impl MigrationRunner {
                 updated_at = NOW()
         "#;
 
-        let params = json!([
-            migration.version,
-            migration.name,
-            migration.checksum,
+        let params: Vec<DataValue> = dv![
+            migration.version.clone(),
+            migration.name.clone(),
+            migration.checksum.clone(),
             status.to_string(),
             "".to_string(),
             execution_time_ms,
             error_message
-        ]);
+        ];
 
         self.db
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| MigrationError::SqlExecutionError(e.to_string()))?;
 
@@ -690,10 +691,10 @@ impl MigrationRunner {
         // 更新状态为 rolled_back
         let update_sql =
             "UPDATE cmx_schema_migrations SET status = $1, updated_at = NOW() WHERE version = $2";
-        let params = json!(["rolled_back", version]);
+        let params: Vec<DataValue> = dv!["rolled_back", version];
 
         self.db
-            .execute_sql_with_json(&self.default_db_id, None, update_sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, update_sql, params)
             .await
             .map_err(|e| MigrationError::SqlExecutionError(e.to_string()))?;
 

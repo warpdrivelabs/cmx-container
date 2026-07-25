@@ -8,8 +8,9 @@
 //! - 复杂 SQL（多表 JOIN、UPSERT、聚合统计、子查询）在此层实现
 //! - 仅包含无法用 GenericCrudService 表达的业务 SQL
 
+use cmx_core::dv;
+use cmx_core::model::cell::DataValue;
 use cmx_database::DatabaseManager;
-use serde_json::json;
 use std::sync::Arc;
 
 use super::model::{
@@ -87,10 +88,10 @@ impl MarketplaceRepository {
             WHERE plugin_id = $1
         "#;
 
-        let params = json!([plugin_id]);
+        let params = dv![plugin_id];
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -155,32 +156,32 @@ impl MarketplaceRepository {
             WHERE plugin_id = $1::varchar
         "#;
 
-        let params = json!([
+        let params = dv![
             plugin_id,
-            data.name,
-            data.description,
-            data.short_description,
-            data.icon_url,
-            data.category,
-            data.tags,
-            data.vendor_name,
-            data.vendor_url,
-            data.vendor_contact,
-            data.license_type,
-            data.homepage_url,
-            data.documentation_url,
-            data.repository_url,
-            data.status,
-            data.is_featured,
-            data.is_official,
-            data.domain_code,
-            data.application_code,
-            data.module_code,
-            data.plugin_type,
-        ]);
+            data.name.clone(),
+            data.description.clone(),
+            data.short_description.clone(),
+            data.icon_url.clone(),
+            data.category.clone(),
+            data.tags.clone(),
+            data.vendor_name.clone(),
+            data.vendor_url.clone(),
+            data.vendor_contact.clone(),
+            data.license_type.clone(),
+            data.homepage_url.clone(),
+            data.documentation_url.clone(),
+            data.repository_url.clone(),
+            data.status.clone(),
+            data.is_featured.map(|v| v as i64),
+            data.is_official.map(|v| v as i64),
+            data.domain_code.clone(),
+            data.application_code.clone(),
+            data.module_code.clone(),
+            data.plugin_type.clone(),
+        ];
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("更新市场插件失败: {}", e)))?;
 
@@ -204,9 +205,9 @@ impl MarketplaceRepository {
             WHERE plugin_id = $1
         "#;
 
-        let params = json!([plugin_id]);
+        let params = dv![plugin_id];
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("删除市场插件失败: {}", e)))?;
 
@@ -245,10 +246,10 @@ impl MarketplaceRepository {
             ORDER BY version_rank DESC
         "#;
 
-        let params = json!([plugin_id]);
+        let params = dv![plugin_id];
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -296,10 +297,10 @@ impl MarketplaceRepository {
             WHERE id = $1
         "#;
 
-        let params = json!([id]);
+        let params = dv![id];
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -354,10 +355,10 @@ impl MarketplaceRepository {
             LIMIT 1
         "#;
 
-        let params = json!([plugin_id]);
+        let params = dv![plugin_id];
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -412,10 +413,10 @@ impl MarketplaceRepository {
             WHERE plugin_id = $1 AND version = $2 AND archived = 0
         "#;
 
-        let params = json!([plugin_id, version]);
+        let params = dv![plugin_id, version];
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -477,28 +478,28 @@ impl MarketplaceRepository {
             WHERE plugin_id = $1::varchar AND version = $2::varchar AND archived = 0
         "#;
 
-        let params = json!([
+        let params = dv![
             plugin_id,
             version,
             data.version_rank,
-            data.changelog,
-            data.release_notes,
-            data.download_url,
-            data.storage_file_id,
+            data.changelog.clone(),
+            data.release_notes.clone(),
+            data.download_url.clone(),
+            data.storage_file_id.clone(),
             data.package_size,
-            data.checksum,
-            data.min_platform_version,
-            data.max_platform_version,
-            data.dependencies,
-            data.compatibility,
-            data.status,
-            data.is_latest,
-            data.is_stable,
+            data.checksum.clone(),
+            data.min_platform_version.clone(),
+            data.max_platform_version.clone(),
+            data.dependencies.clone(),
+            data.compatibility.clone(),
+            data.status.clone(),
+            data.is_latest.map(|v| v as i64),
+            data.is_stable.map(|v| v as i64),
             data.published_at,
-        ]);
+        ];
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("更新市场版本记录失败: {}", e)))?;
 
@@ -532,16 +533,16 @@ impl MarketplaceRepository {
                 update_time = NOW()
         "#;
 
-        let params = json!([
-            req.plugin_id,
-            req.user_id,
+        let params = dv![
+            req.plugin_id.clone(),
+            req.user_id.clone(),
             req.rating,
-            req.review,
-            req.status,
-        ]);
+            req.review.clone(),
+            req.status.clone(),
+        ];
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("插入/更新评分失败: {}", e)))?;
 
@@ -576,9 +577,9 @@ impl MarketplaceRepository {
             WHERE plugin_id = $1
         "#;
 
-        let params = json!([plugin_id]);
+        let params = dv![plugin_id];
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("更新评分汇总失败: {}", e)))?;
 
@@ -602,9 +603,9 @@ impl MarketplaceRepository {
             WHERE plugin_id = $1
         "#;
 
-        let params = json!([plugin_id]);
+        let params = dv![plugin_id];
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("更新下载量失败: {}", e)))?;
 
@@ -628,9 +629,9 @@ impl MarketplaceRepository {
             WHERE plugin_id = $1
         "#;
 
-        let params = json!([plugin_id]);
+        let params = dv![plugin_id];
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("更新安装量失败: {}", e)))?;
 
@@ -669,10 +670,10 @@ impl MarketplaceRepository {
                 update_time = NOW()
         "#;
 
-        let params = json!([plugin_id, version, download_date, source_type]);
+        let params = dv![plugin_id, version, download_date, source_type];
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("更新下载统计失败: {}", e)))?;
 
@@ -722,10 +723,10 @@ impl MarketplaceRepository {
             ORDER BY ds.recent_downloads DESC
         "#;
 
-        let params = json!([since_date, limit]);
+        let params = dv![since_date, limit];
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,
@@ -802,9 +803,9 @@ impl MarketplaceRepository {
             SET is_latest = 0, update_time = NOW()
             WHERE plugin_id = $1
         "#;
-        let params = json!([plugin_id]);
+        let params = dv![plugin_id];
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("重置is_latest失败: {}", e)))?;
         Ok(())
@@ -845,10 +846,10 @@ impl MarketplaceRepository {
             WHERE plugin_id = ANY($1) AND status = 'published' AND archived = 0
             ORDER BY plugin_id, version_rank DESC
         "#;
-        let params = json![plugin_ids];
+        let params = vec![DataValue::Array(plugin_ids.iter().map(|s| DataValue::String(s.clone())).collect())];
         let result = self
             .db_manager
-            .query_sql_with_json(
+            .query_sql_with_datavalues(
                 &self.default_db_id,
                 None,
                 sql,

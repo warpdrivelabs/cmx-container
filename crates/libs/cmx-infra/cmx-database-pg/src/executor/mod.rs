@@ -235,7 +235,12 @@ impl ParamValue {
     }
 }
 
-/// 将 serde_json::Value 数组转换为 Vec<DataValue>（与 sqlx 版一致）
+/// 将 serde_json::Value 数组转换为 Vec<DataValue>（与 sqlx 版一致）。
+///
+/// **仅限 cmx-database 内部使用**——此函数是为兼容已废弃的 `*_with_json` 系列 API 而保留的
+/// 桥接层。`serde_json::Value` → `DataValue` 转换存在类型退化风险（如整型 NULL 丢失目标列类型），
+/// 不安全、不健壮。database 以外的库禁止直接调用；新代码应直接构造 `Vec<DataValue>` 或使用
+/// `dv!` 宏。
 pub fn json_to_data_values(json: serde_json::Value) -> Result<Vec<DataValue>, String> {
     match json {
         serde_json::Value::Array(arr) => arr

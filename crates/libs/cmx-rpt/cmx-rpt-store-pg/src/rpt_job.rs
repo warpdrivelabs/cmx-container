@@ -9,6 +9,7 @@
 //! 幂等（compute_report_service 按 org+period 覆盖写 cr_cell_data）→ 支持 Fresh 重启。
 
 use async_trait::async_trait;
+use cmx_core::dv;
 use serde_json::{Value, json};
 
 use cmx_job_core::{
@@ -68,7 +69,7 @@ async fn all_report_codes() -> Result<Vec<(String, String)>, JobError> {
                  FROM cr_report_list
                  WHERE COALESCE(status, 1) = 1
                  ORDER BY COALESCE(sort_no, 999999), code"#;
-    let rows = query_rows(sql, Value::Array(vec![]), "rpt_compute_job.all_codes")
+    let rows = query_rows(sql, dv!(), "rpt_compute_job.all_codes")
         .await
         .map_err(|e| JobError::new(500, format!("装载报表清单失败: {e}")))?;
     Ok(rows
@@ -264,7 +265,7 @@ impl JobHandler for RptVerifyJob {
             let sql = r#"SELECT COUNT(*) AS n FROM cr_cell_data
                          WHERE report_code = $1 AND org_code = $2 AND period_code = $3
                            AND data_status = 'error'"#;
-            let rows = query_rows(sql, json!([code, org, period]), "rpt_verify_job")
+            let rows = query_rows(sql, dv![code.as_str(), org.as_str(), period.as_str()], "rpt_verify_job")
                 .await
                 .unwrap_or_default();
             let err_cells = rows
