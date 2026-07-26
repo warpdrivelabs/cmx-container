@@ -149,8 +149,8 @@ cmx-container/
 ├── logs/                            # 日志输出目录
 ├── Cargo.toml                       # Workspace 配置（version 0.1.12）
 ├── Cross.toml                       # 跨平台构建配置
-├── dev.toml                         # 开发环境配置
-├── dev-vpn.toml                     # VPN 环境配置
+├── dev.toml                         # 开发环境配置（本地，不入库；复制 config_template.toml）
+├── dev-vpn.toml                     # VPN 环境配置（本地，不入库）
 ├── Cargo.lock
 └── README.md
 ```
@@ -168,7 +168,7 @@ cmx-container/
 ### 1. 克隆与构建
 
 ```bash
-git clone https://git.openserver.cn:8089/CPPSPACE/cmxspace/cmxcontainerservice/cmx-container.git
+git clone <仓库地址>
 cd cmx-container
 
 # Debug 构建
@@ -465,4 +465,10 @@ rm -rf target/debug/build/cmx-rpc-gen-* && cargo build
 
 ## 许可证
 
-MIT
+[Apache-2.0](LICENSE)。
+
+## 参与贡献 / 安全
+
+- 贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- 安全漏洞请**勿开公开 Issue**，见 [SECURITY.md](SECURITY.md)。
+- 配置凭据只走本地未跟踪配置（复制 `config/config_template.toml` 为 `dev.toml` 填真值）；仓库内无真实凭据。
