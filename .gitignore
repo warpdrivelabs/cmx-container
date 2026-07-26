@@ -36,6 +36,19 @@ docker/V2/certs/cert.pem
 # 但保留供参考的模板（无真实密钥）
 !.env.example
 
+# ── 本地配置文件（含真实凭据：DB 密码 / api_key / secret / OAuth），绝不入库 ──
+# 开发者复制 config/dev.toml.example 为下列之一并填真实值。
+/dev.toml
+/dev-local.toml
+/dev-vpn.toml
+
+# ── 第三方大体积二进制（走构建脚本 curl 下载 / release 分发，不入 git）──
+docker/**/*.tar.gz
+docker/**/*.tar.xz
+docker/**/*.vsix
+docker/**/*.zip
+**/qq.zip
+
 
 __pycache__/
 /.zcode/
