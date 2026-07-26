@@ -44,6 +44,7 @@ pub struct DctQuery {
 // ============================================================================
 
 /// 解析出的字典表视图（供 SQL 构造 + 元数据投影用）。
+#[derive(Clone)]
 pub struct DictView {
     pub dict_code: String,
     pub dict_name: String,
@@ -207,19 +208,17 @@ pub fn to_dv_by_col(view: &DictView, col_name: &str, v: &Value) -> DataValue {
     // 时间/日期列的字符串 coerce：前端 update_time baseline / 日期字段常以字符串回传
     // （如 "2026-07-24T03:17:42.078808+00:00"、"2026-07-24"）。解析失败仍回退到
     // json_to_datavalue（由绑定层报 WrongType，避免静默错误）。
-    if dt.contains("DATETIME") || dt.contains("TIMESTAMP") {
-        if let Some(s) = v.as_str()
-            && let Some(dv) = parse_datetime_str(s)
-        {
-            return dv;
-        }
+    if (dt.contains("DATETIME") || dt.contains("TIMESTAMP"))
+        && let Some(s) = v.as_str()
+        && let Some(dv) = parse_datetime_str(s)
+    {
+        return dv;
     }
-    if dt == "DATE" {
-        if let Some(s) = v.as_str()
-            && let Some(dv) = parse_date_str(s)
-        {
-            return dv;
-        }
+    if dt == "DATE"
+        && let Some(s) = v.as_str()
+        && let Some(dv) = parse_date_str(s)
+    {
+        return dv;
     }
     // 其余按 JSON 值类型自然映射（Number→Int/Float、String→String、Bool→Bool）
     json_to_datavalue(v)
@@ -624,3 +623,9 @@ pub fn row_fields(row: &Value) -> Option<serde_json::Map<String, Value>> {
         row.as_object().cloned()
     }
 }
+
+// ============================================================================
+// 子模块：批量导入导出 SQL 构造（DB-free 纯逻辑）
+// ============================================================================
+mod bulk;
+pub use bulk::*;

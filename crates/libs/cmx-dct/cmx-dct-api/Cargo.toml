@@ -20,7 +20,7 @@ cmx-api = { workspace = true }
 # 内部依赖 - 业务错误码（Violation：校验失败结构化响应）
 cmx-biz = { workspace = true }
 
-# Web 框架（handler 提取器 + Router + msgpack 裸响应）
+# Web 框架（handler 提取器 + Router + msgpack 裸响应 + multipart 导入）
 axum = { workspace = true }
 # 请求 DTO 反序列化
 serde = { workspace = true }
@@ -30,3 +30,9 @@ serde_json = { workspace = true }
 rmp = { workspace = true }
 # 日志追踪
 tracing = { workspace = true }
+# Future 工具（StreamExt::map 把 mpsc::Receiver<Bytes> 转 TryStream 给 Body::from_stream）
+futures = { workspace = true }
+# 字节缓冲（handler 中接收 multipart field 字节 + 构造 tokio::io::Cursor）
+bytes = { workspace = true }
+# 异步运行时（tokio::io::Cursor 包装 multipart field bytes 传给 import_stream）
+tokio = { workspace = true }

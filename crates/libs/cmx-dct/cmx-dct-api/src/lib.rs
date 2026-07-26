@@ -36,6 +36,10 @@ impl ModuleRoutes for DctModule {
             .route("/dct/entries/{id}", axum::routing::delete(dct::dct_delete))
             // 基于 changeset 的回存（对标 doc ChangeSetCollector/DocSaver）
             .route("/dct/save", post(dct::dct_save))
+            // 流式导出全表（JSON NDJSON / CSV）：keyset 分页 + mpsc + Body::from_stream
+            .route("/dct/export", get(dct::dct_export))
+            // 流式导入（multipart/form-data：file + mode）：自动格式识别 + 批量 INSERT
+            .route("/dct/import", post(dct::dct_import))
     }
 
     fn prefix() -> &'static str {
