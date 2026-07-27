@@ -117,6 +117,18 @@
                 "thousandSeparator": true
               }
             }
+          },
+          {
+            "ref": "cv_acc_line.local_dr"
+          },
+          {
+            "ref": "cv_acc_line.local_cr"
+          },
+          {
+            "ref": "cv_acc_line.group_dr"
+          },
+          {
+            "ref": "cv_acc_line.group_cr"
           }
         ],
         "groups": [
@@ -134,125 +146,8 @@
             ]
           }
         ],
-        "fields": [
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "DMBTR_DR",
-            "id": "local_dr",
-            "name": "local_dr",
-            "caption": {
-              "zh_CN": "公司代码本位币借方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "DMBTR_CR",
-            "id": "local_cr",
-            "name": "local_cr",
-            "caption": {
-              "zh_CN": "公司代码本位币贷方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "DMBE2_DR",
-            "id": "group_dr",
-            "name": "group_dr",
-            "caption": {
-              "zh_CN": "集团币借方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "DMBE2_CR",
-            "id": "group_cr",
-            "name": "group_cr",
-            "caption": {
-              "zh_CN": "集团币贷方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          }
-        ],
-        "fieldTabs": []
+        "fieldTabs": [],
+        "fields": []
       }
     },
     {
@@ -461,6 +356,24 @@
                 "thousandSeparator": true
               }
             }
+          },
+          {
+            "ref": "cv_acc_line.entered_dr"
+          },
+          {
+            "ref": "cv_acc_line.entered_cr"
+          },
+          {
+            "ref": "cv_acc_line.local_dr"
+          },
+          {
+            "ref": "cv_acc_line.local_cr"
+          },
+          {
+            "ref": "cv_acc_line.group_dr"
+          },
+          {
+            "ref": "cv_acc_line.group_cr"
           }
         ],
         "groups": [
@@ -485,182 +398,7 @@
             ]
           }
         ],
-        "fields": [
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "WRBTR_DR",
-            "id": "entered_dr",
-            "name": "entered_dr",
-            "caption": {
-              "zh_CN": "输入币借方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "WRBTR_CR",
-            "id": "entered_cr",
-            "name": "entered_cr",
-            "caption": {
-              "zh_CN": "输入币贷方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "DMBTR_DR",
-            "id": "local_dr",
-            "name": "local_dr",
-            "caption": {
-              "zh_CN": "公司代码本位币借方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "DMBTR_CR",
-            "id": "local_cr",
-            "name": "local_cr",
-            "caption": {
-              "zh_CN": "公司代码本位币贷方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "DMBE2_DR",
-            "id": "group_dr",
-            "name": "group_dr",
-            "caption": {
-              "zh_CN": "集团币借方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 23,
-            "intDigits": 21,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "physicalField": "DMBE2_CR",
-            "id": "group_cr",
-            "name": "group_cr",
-            "caption": {
-              "zh_CN": "集团币贷方"
-            },
-            "edit": {
-              "mode": "cmx-number-input"
-            },
-            "display": {
-              "mode": "number",
-              "decimalDigits": 2,
-              "thousandSeparator": true,
-              "zeroAsBlank": true,
-              "negativeColor": true,
-              "align": "right"
-            },
-            "width": "140px",
-            "required": false,
-            "align": "right"
-          }
-        ]
+        "fields": []
       }
     },
     {
@@ -713,7 +451,7 @@
       }
     }
   ],
-  "updatedAt": "2026-07-22T12:42:29.012Z",
+  "updatedAt": "2026-07-24T01:03:02.311Z",
   "docRef": {
     "domain": "fi",
     "application": "cmxfico",
