@@ -195,10 +195,11 @@ pub async fn doc_data_sqlx_dataset_json(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     debug!(
-        "{:<12} - sqlx-dataset-json {}/{}",
-        "HANDLER",
-        q.module,
-        q.file.as_deref().unwrap_or("(auto)")
+        target: "cmx_doc::api",
+        handler = "doc_data_sqlx_dataset_json",
+        doc.module = %q.module,
+        doc.file = %q.file.as_deref().unwrap_or("(auto)"),
+        "handler invoked"
     );
     doc_load_entry(
         Driver::Sqlx,
@@ -219,10 +220,11 @@ pub async fn doc_data_tokio_zmc_msgpack(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     debug!(
-        "{:<12} - tokio-zmc-msgpack {}/{}",
-        "HANDLER",
-        q.module,
-        q.file.as_deref().unwrap_or("(auto)")
+        target: "cmx_doc::api",
+        handler = "doc_data_tokio_zmc_msgpack",
+        doc.module = %q.module,
+        doc.file = %q.file.as_deref().unwrap_or("(auto)"),
+        "handler invoked"
     );
     doc_load_entry(
         Driver::Tokio,
@@ -243,10 +245,11 @@ pub async fn doc_data_sqlx_zmc_msgpack(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     debug!(
-        "{:<12} - sqlx-zmc-msgpack {}/{}",
-        "HANDLER",
-        q.module,
-        q.file.as_deref().unwrap_or("(auto)")
+        target: "cmx_doc::api",
+        handler = "doc_data_sqlx_zmc_msgpack",
+        doc.module = %q.module,
+        doc.file = %q.file.as_deref().unwrap_or("(auto)"),
+        "handler invoked"
     );
     doc_load_entry(
         Driver::Sqlx,
@@ -267,10 +270,11 @@ pub async fn doc_data_tokio_zmc_json(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     debug!(
-        "{:<12} - tokio-zmc-json {}/{}",
-        "HANDLER",
-        q.module,
-        q.file.as_deref().unwrap_or("(auto)")
+        target: "cmx_doc::api",
+        handler = "doc_data_tokio_zmc_json",
+        doc.module = %q.module,
+        doc.file = %q.file.as_deref().unwrap_or("(auto)"),
+        "handler invoked"
     );
     doc_load_entry(Driver::Tokio, Exit::ZmcJson, q, headers, body.map(|b| b.0)).await
 }
@@ -284,10 +288,11 @@ pub async fn doc_data_sqlx_zmc_json(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     debug!(
-        "{:<12} - sqlx-zmc-json {}/{}",
-        "HANDLER",
-        q.module,
-        q.file.as_deref().unwrap_or("(auto)")
+        target: "cmx_doc::api",
+        handler = "doc_data_sqlx_zmc_json",
+        doc.module = %q.module,
+        doc.file = %q.file.as_deref().unwrap_or("(auto)"),
+        "handler invoked"
     );
     doc_load_entry(Driver::Sqlx, Exit::ZmcJson, q, headers, body.map(|b| b.0)).await
 }
@@ -332,8 +337,11 @@ pub async fn doc_children(
     use cmx_doc_store_pg::{ZmcDocLoader, ZmcDocLoaderSqlx};
 
     debug!(
-        "{:<12} - doc_children {}/{}",
-        "HANDLER", req.module, req.layer
+        target: "cmx_doc::api",
+        handler = "doc_children",
+        doc.module = %req.module,
+        doc.layer = %req.layer,
+        "handler invoked"
     );
     let db_id = get_db_id_from_header(&headers).await;
     let meta = resolve_doc_meta(
@@ -400,10 +408,11 @@ pub async fn doc_data_stream(
     use cmx_doc_store_pg::{LayerQuery, build_layer_select};
 
     debug!(
-        "{:<12} - doc_data_stream {}/{}",
-        "HANDLER",
-        q.module,
-        q.file.as_deref().unwrap_or("(auto)")
+        target: "cmx_doc::api",
+        handler = "doc_data_stream",
+        doc.module = %q.module,
+        doc.file = %q.file.as_deref().unwrap_or("(auto)"),
+        "handler invoked"
     );
     let db_id = get_db_id_from_header(&headers).await;
     let meta = resolve_doc_meta(
@@ -463,7 +472,12 @@ pub async fn doc_data_stream(
             .query_sql_zmc_stream_chunks(&db_id, &sql, params, &dataset_id, col_names, tx)
             .await
         {
-            tracing::warn!("流式装载失败 {}: {e}", dataset_id);
+            tracing::warn!(
+                target: "cmx_doc::load",
+                dataset_id = %dataset_id,
+                error = %e,
+                "stream load failed"
+            );
         }
     });
 
@@ -498,10 +512,11 @@ pub async fn doc_meta(
 ) -> Result<Json<ApiResp<Value>>> {
     let _ = &headers; // meta 与 db_id 无关(定义读取不走数据源);保留签名一致
     debug!(
-        "{:<12} - doc_meta {}/{}",
-        "HANDLER",
-        q.module,
-        q.file.as_deref().unwrap_or("(auto)")
+        target: "cmx_doc::api",
+        handler = "doc_meta",
+        doc.module = %q.module,
+        doc.file = %q.file.as_deref().unwrap_or("(auto)"),
+        "handler invoked"
     );
 
     let meta = resolve_doc_meta(
@@ -656,7 +671,13 @@ pub async fn doc_save(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
-    debug!("{:<12} - doc_save {}/{}", "HANDLER", q.module, q.file);
+    debug!(
+        target: "cmx_doc::api",
+        handler = "doc_save",
+        doc.module = %q.module,
+        doc.file = %q.file,
+        "handler invoked"
+    );
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 

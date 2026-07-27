@@ -1269,8 +1269,10 @@ dependencies = [
  "chrono",
  "cmx-biz",
  "cmx-core",
+ "rust_decimal",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
  "tokio",
 ]
 
@@ -1278,14 +1280,15 @@ dependencies = [
 name = "cmx-doc-store-pg"
 version = "0.1.12"
 dependencies = [
- "base64",
  "chrono",
  "cmx-biz",
  "cmx-core",
  "cmx-database",
  "cmx-database-pg",
  "cmx-doc-model",
+ "cmx-rowsource",
  "cmx-utils",
+ "dashmap",
  "rmp-serde",
  "rust_decimal",
  "serde",

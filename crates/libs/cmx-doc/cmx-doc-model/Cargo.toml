@@ -23,6 +23,10 @@ serde_json = { workspace = true }
 base64 = { workspace = true }
 # 日期解析（query.rs 日期过滤值 RFC3339 归一）
 chrono = { workspace = true, features = ["serde"] }
+# 错误类型派生（error.rs ModelError/FormulaError）
+thiserror = { workspace = true }
+# 高精度十进制（codec.rs Decimal 列转换）
+rust_decimal = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

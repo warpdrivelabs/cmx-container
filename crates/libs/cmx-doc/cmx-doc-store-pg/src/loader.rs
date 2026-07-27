@@ -190,8 +190,10 @@ impl DocLoader {
                             .await;
                     }
                     tracing::warn!(
-                        "跳过并列兄弟子表 {}（装载失败，可能未物理部署）: {e}",
-                        child_layer.table_name
+                        target: "cmx_doc::load",
+                        layer_table = %child_layer.table_name,
+                        error = %e,
+                        "skip sibling layer (load failed, maybe not deployed)"
                     );
                     continue;
                 }
