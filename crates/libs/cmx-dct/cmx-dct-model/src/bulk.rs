@@ -139,6 +139,9 @@ pub fn build_batch_insert_sql(
     }
 
     // 服务端 backfill 列（与 build_upsert_sql_dv 一致）
+    //
+    // **不含** `effective_from`：元数据 `required: true` 必填，必须由客户端显式提供。
+    // 若列入 backfill，客户端传 null 会走参数绑定而非 CURRENT_DATE 兜底，触发数据库 NOT NULL 违反。
     let backfill: &[(&str, &str, bool)] = &[
         ("create_time", "now()", false),
         ("update_time", "now()", true),
@@ -147,7 +150,6 @@ pub fn build_batch_insert_sql(
         ("is_system", "0", false),
         ("is_leaf", "1", false),
         ("level_no", "1", false),
-        ("effective_from", "CURRENT_DATE", false),
     ];
 
     // 第一行决定 backfill 列是否纳入（与单行 upsert 一致：列在 view 中且首行未提供时）

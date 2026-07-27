@@ -22,7 +22,7 @@ use cmx_dct_model::{
     BatchConflictMode, DictView, build_batch_insert_sql, build_truncate_sql, extract_pk,
 };
 
-use crate::{api_err, map_db_err};
+use crate::{api_err, map_db_err, pg_detail};
 
 // ============================================================================
 // 公共类型
@@ -533,20 +533,21 @@ async fn apply_import_batch(
             // 错误细化：
             //   - `cmx_biz::BizError::from_db_error` 用子串匹配 SQLSTATE 关键词翻译成中文
             //     （duplicate key / null value / not-null / foreign key / check constraint），
-            //     需要传入包含 PG 原文的字符串。普通 `e.to_string()` 走 Display 可能被
-            //     `#[error(transparent)]` 简化丢失细节，故用 Debug（暴露完整内部结构 +
-            //     PG DbError 原文）作为分类输入。
-            //   - 日志同时打印 raw_error（Debug）+ first_row + sql_preview，便于定位是
-            //     哪一列/哪一行数据触发约束。
-            let raw_full = format!("{e:?}");
-            let biz = cmx_biz::BizError::from_db_error(&raw_full);
+            //     需要传入包含 PG 原文的字符串。`tokio_postgres::Error` 顶层 Display 恒为
+            //     "db error"（真错藏在 `as_db_error()`），故统一走 `pg_detail` 抽真实
+            //     message/detail/constraint（与 `map_db_err` / cmx-rpt-store-pg 一致）。
+            //   - 日志同时打印 raw_error（Display）+ pg_detail（真实 PG 明细）+ first_row +
+            //     sql_preview，便于定位是哪一列/哪一行数据触发约束。
+            let detail = pg_detail(&e);
+            let biz = cmx_biz::BizError::from_db_error(&detail);
             let translated = biz.to_string();
             let msg = format!("批次写入失败：{}", translated);
             error!(
                 target: "cmx_dct::import",
                 dict_code = %view.dict_code, table = %view.table_name,
                 batch_len,
-                raw_error = ?e,
+                raw_error = %e,
+                pg_detail = %detail,
                 translated = %translated,
                 first_row = ?rows.first(),
                 sql_preview = %sql.chars().take(300).collect::<String>(),
