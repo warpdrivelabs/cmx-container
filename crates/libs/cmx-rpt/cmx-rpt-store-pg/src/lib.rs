@@ -1582,7 +1582,7 @@ async fn read_stored_float_records(
     );
     let rows = query_rows(
         &sql,
-        json!([code, version, sheet, region, org, period]),
+        dv![code, version, sheet, region, org, period],
         "rpt_float_stored",
     )
     .await?;
@@ -1707,7 +1707,7 @@ async fn resolve_float_source(data_source: &str) -> Result<Vec<SourceRecord>> {
                      HAVING SUM(COALESCE(local_dr,0)-COALESCE(local_cr,0)) > 0 \
                      ORDER BY bal DESC LIMIT {top}"
                 );
-                let rows = query_rows(&sql, json!([]), "rpt_flist_ar_cust").await?;
+                let rows = query_rows(&sql, dv![], "rpt_flist_ar_cust").await?;
                 return Ok(rows
                     .iter()
                     .map(|r| {
@@ -1749,7 +1749,7 @@ async fn resolve_float_source(data_source: &str) -> Result<Vec<SourceRecord>> {
             "SELECT {key_field} AS k, {label_field} AS lbl FROM {table} \
              WHERE COALESCE(status,1)=1 ORDER BY sort_no, {key_field} LIMIT 200"
         );
-        let rows = query_rows(&sql, json!([]), "rpt_float_dict").await?;
+        let rows = query_rows(&sql, dv![], "rpt_float_dict").await?;
         let dim = if table == "cr_consol_org" {
             "org_code"
         } else {
@@ -2128,7 +2128,7 @@ async fn region_data_source(
     let rows = query_rows(
         "SELECT data_source FROM cr_report_region \
          WHERE report_code=$1 AND version_code=$2 AND sheet_code=$3 AND region_code=$4",
-        json!([code, version, sheet, region]),
+        dv![code, version, sheet, region],
         "rpt_region_src",
     )
     .await?;
