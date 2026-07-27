@@ -11,6 +11,7 @@
 
 use serde_json::{Value, json};
 
+use cmx_core::dv;
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 use cmx_database_pg::get_default_pg_db_manager;
 
@@ -28,7 +29,7 @@ pub async fn list_source_bindings(source_key: &str) -> Result<Value> {
                FROM cr_report_source_binding \
                WHERE source_key = $1 \
                ORDER BY (org_id IS NULL), priority DESC, org_id";
-    let rows = query_rows(sql, json!([source_key]), "rpt_source_binding_list").await?;
+    let rows = query_rows(sql, dv![source_key], "rpt_source_binding_list").await?;
     let items: Vec<Value> = rows.iter().map(project_binding).collect();
     Ok(json!({ "sourceKey": source_key, "bindings": items }))
 }
