@@ -691,7 +691,8 @@ async function applyRowsToGrid (root, rows) {
   // 引用字典列回显：让 code/id 自动显示为字典名称（country_code → 国家名）
   if (typeof grid.enableDictEcho === 'function') {
     try {
-      await grid.enableDictEcho({ coord: state.def, dbId: state.def.dbId }, undefined)
+      //fixme 0727 性能问题，注释字典回显
+      // await grid.enableDictEcho({ coord: state.def, dbId: state.def.dbId }, undefined)
     } catch (_) { /* 回显失败不阻断 */ }
   }
   try { grid.refreshLayout && grid.refreshLayout() } catch (_) {}
