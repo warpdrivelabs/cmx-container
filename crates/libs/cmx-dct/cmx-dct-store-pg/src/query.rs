@@ -5,7 +5,7 @@
 
 use cmx_api_types::Result;
 use cmx_core::model::cell::DataValue;
-use cmx_database_pg::get_default_pg_db_manager;
+use cmx_database_pg::{ZmcRowSource, get_default_pg_db_manager};
 use cmx_dct_model::{DictView, build_search_sql};
 use serde_json::{Value, json};
 
@@ -86,13 +86,17 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
 }
 
 /// 零拷贝装载：tokio-postgres + ZmcDataSet + 列式二进制。返回列式包字节（handler 包 msgpack 信封）。
+///
+/// 与 [`search`] 对齐：跑一次 COUNT(*) 把总条数挂到 `zmc.total`，编码进列式包的 `total` 字段，
+/// 供前端分页工具栏算总页数（前端 `pkg.total` 读取，缺省 null）。COUNT 与主 SELECT 共用同一份
+/// filter 下推（同一 where_sql + params），看到的行集一致。
 pub async fn search_zmc(view: &DictView, raw: &Value, db_id: &str) -> Result<Vec<u8>> {
-    let (sql, _count_sql, params) = build_search(view, raw);
+    let (sql, count_sql, params) = build_search(view, raw);
 
     let mm = get_default_pg_db_manager();
     // 零拷贝：ZmcDataSet 持有原始 tokio-postgres Row，惰性列式二进制编码。
-    let zmc = mm
-        .query_sql_zmc_with_datavalues(db_id, &sql, params, &view.dict_code)
+    let mut zmc = mm
+        .query_sql_zmc_with_datavalues(db_id, &sql, params.clone(), &view.dict_code)
         .await
         .map_err(|e| {
             tracing::error!(
@@ -103,6 +107,26 @@ pub async fn search_zmc(view: &DictView, raw: &Value, db_id: &str) -> Result<Vec
             tracing::debug!(target: "cmx_dct::search", sql = %sql, "failed sql");
             api_err(&format!("字典零拷贝查询失败: {e}"))
         })?;
+
+    // COUNT(*) → zmc.total（与 search 端点契约对齐：zmc 路径也回传 total 供前端分页）。
+    let count_ds = mm
+        .query_sql_zmc_with_datavalues(db_id, &count_sql, params, "cnt")
+        .await
+        .map_err(|e| {
+            tracing::error!(
+                target: "cmx_dct::search",
+                dict_code = %view.dict_code, table = %view.table_name, error = %e,
+                "search_zmc count query failed"
+            );
+            tracing::debug!(target: "cmx_dct::search", sql = %count_sql, "failed sql");
+            api_err(&format!("字典零拷贝计数失败: {e}"))
+        })?;
+    if let Some(row0) = count_ds.rows.first()
+        && let Some(n) = row0.get_i64(0)
+    {
+        zmc.total = Some(n);
+    }
+
     let mut buf = Vec::new();
     zmc.encode_columnar_binary(&mut buf);
     Ok(buf)
