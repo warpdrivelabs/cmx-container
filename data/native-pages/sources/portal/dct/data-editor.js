@@ -380,6 +380,20 @@ function styleHtml () {
 .de-tree-root{font-size:13px;padding:5px 8px;cursor:pointer;border-radius:4px;color:var(--sapContent_LabelColor,#6a6d70)}
 .de-tree-root:hover{background:color-mix(in srgb,var(--neo-cyan) 10%,var(--sapList_Background,#fff))}
 .de-tree-root.active{color:var(--neo-cyan);font-weight:600;background:color-mix(in srgb,var(--neo-cyan) 14%,var(--sapList_Background,#fff))}
+/* "全部"虚拟节点：与 .de-tree-root 对齐视觉但用 --neo-mint 强调（区分"全量"与"根级"语义）。
+   选中态用更明显的背景 + 左侧 3px 强调条 + 阴影，让用户能直接看出"我在全部模式下"。 */
+.de-tree-virtual{font-size:13px;padding:5px 8px;cursor:pointer;border-radius:4px;
+  color:var(--sapContent_LabelColor,#6a6d70);display:flex;align-items:center;gap:4px;
+  position:relative;border:1px solid transparent}
+.de-tree-virtual:hover{background:color-mix(in srgb,var(--neo-mint) 10%,var(--sapList_Background,#fff))}
+.de-tree-virtual.active{color:var(--neo-mint,#10b981);font-weight:700;
+  background:color-mix(in srgb,var(--neo-mint) 16%,var(--sapList_Background,#fff));
+  border-color:color-mix(in srgb,var(--neo-mint) 35%,transparent);
+  box-shadow:inset 3px 0 0 var(--neo-mint,#10b981)}
+.de-tree-count{margin-left:auto;font-size:11px;color:var(--sapContent_LabelColor,#6a6d70);
+  background:color-mix(in srgb,var(--neo-mint) 12%,transparent);padding:1px 6px;border-radius:8px}
+.de-tree-virtual.active .de-tree-count{color:var(--neo-mint,#10b981);
+  background:color-mix(in srgb,var(--neo-mint) 22%,transparent);font-weight:600}
 .de-children{margin-left:16px}
 .de-dirty{color:var(--neo-warn);font-weight:700}
 .de-loading,.de-empty{padding:32px;text-align:center;color:var(--sapContent_LabelColor,#6a6d70);font-size:13px}
@@ -645,7 +659,12 @@ async function loadData (def, dictCode, meta) {
     pageSize: state.pageSize,
     filters: buildFiltersFromConds(meta),
   }
-  if (meta.selfHierarchy) body.parentId = state.currentParentId
+  if (meta.selfHierarchy) {
+    /* "全部"虚拟节点：state.currentParentId=undefined → body 不带 parentId 键 → 后端全量。
+       "全部根节点"：state.currentParentId=null → body.parentId=null → 后端 IS NULL → 根级。
+       具体节点：state.currentParentId=<id> → body.parentId=<id> → 后端等值匹配 → 直接子级。 */
+    if (state.currentParentId !== undefined) body.parentId = state.currentParentId
+  }
   return apiPost(`/api/dct/data/search?${qs(def, { dict: dictCode })}`, body, def.dbId)
 }
 
@@ -1247,18 +1266,30 @@ function renderTree (root) {
   const meta = state.meta
   const pk = meta.pk
   const rootChildren = state.treeNodes['null'] || state.treeNodes[null] || []
-  const isRootActive = state.currentParentId == null
+  /* "全部"=全量（mode='all'）：搜索/浏览跨所有层级。
+     "全部根节点"=根级（mode='root'）：只显示 parent_id 为空的根行。
+     默认初始 selectedTreeNodeId='__all__'——让用户进入就看到全量。
+     selectedTreeNodeId='__root__' = 全部根节点；其他 = 具体节点。 */
+  const isAllActive = state.selectedTreeNodeId === '__all__'
+  const isRootActive = state.selectedTreeNodeId === '__root__'
   body.innerHTML = `
+    <div class="de-tree-virtual ${isAllActive ? 'active' : ''}" data-node-id="__all__" title="显示全部数据（跨所有层级）">⊕ 全部 <span class="de-tree-count">全量</span></div>
     <div class="de-tree-root ${isRootActive ? 'active' : ''}" data-node-id="__root__">▶ 全部根节点（${rootChildren.length}）</div>
     <div class="de-children" id="deTreeChildren">
       ${renderTreeNodes(rootChildren, pk)}
     </div>
   `
-  body.querySelector('[data-node-id="__root__"]').addEventListener('click', async () => {
-    state.currentParentId = null
-    state.selectedTreeNodeId = null
+  body.querySelector('[data-node-id="__all__"]').addEventListener('click', async () => {
+    state.selectedTreeNodeId = '__all__'
+    state.currentParentId = undefined   // undefined 让 searchReq 不传 parentId 键 → 后端全量
     state.page = 1
-    // 仅更新高亮，不重建树（保留展开态）
+    highlightTreeNode(body)
+    await reload(root)
+  })
+  body.querySelector('[data-node-id="__root__"]').addEventListener('click', async () => {
+    state.currentParentId = null       // null 让 searchReq 传 parentId:null → 后端 IS NULL → 根级
+    state.selectedTreeNodeId = '__root__'
+    state.page = 1
     highlightTreeNode(body)
     await reload(root)
   })
@@ -1269,10 +1300,16 @@ function renderTree (root) {
  *  点击节点本身或根节点时调用——这类操作只改选中态 + 右侧数据，树结构应保持原样。 */
 function highlightTreeNode (body) {
   const sel = state.selectedTreeNodeId
-  const isRoot = state.currentParentId == null
+  const isAll = sel === '__all__'
+  const isRoot = sel === '__root__'
+  // 普通节点：仅当非虚拟节点选中且 node-id 匹配时高亮
   body.querySelectorAll('.de-tree-node[data-node-id]').forEach((el) => {
-    el.classList.toggle('active', !isRoot && String(el.dataset.nodeId) === String(sel))
+    el.classList.toggle('active', !isAll && !isRoot && String(el.dataset.nodeId) === String(sel))
   })
+  // 全部虚拟节点
+  const allEl = body.querySelector('.de-tree-virtual[data-node-id="__all__"]')
+  if (allEl) allEl.classList.toggle('active', isAll)
+  // 全部根节点虚拟节点
   const rootEl = body.querySelector('.de-tree-root[data-node-id="__root__"]')
   if (rootEl) rootEl.classList.toggle('active', isRoot)
 }
@@ -1397,8 +1434,10 @@ async function switchDict (root, dictCode) {
   state.page = 1
   state.q = ''
   state.conds = []
-  state.currentParentId = null
-  state.selectedTreeNodeId = null
+  /* 默认"全部"模式：currentParentId=undefined → loadData searchReq 不传 parentId → 后端全量。
+     用户主动选"全部根节点"（__root__）则 currentParentId=null（IS NULL），选具体节点则 =<id>。 */
+  state.currentParentId = undefined
+  state.selectedTreeNodeId = '__all__'
   state.treeNodes = {}
   state.dirtyMap = {}
   state.newIds = new Set()
@@ -1473,6 +1512,17 @@ function bindPage (root) {
   const search = () => {
     state.q = (root.querySelector('#deQ')?.value || '').trim()
     state.page = 1
+    /* 关键字搜索强制切到"全部"模式：保证跨层级命中都能看到，不被 parentId 过滤。
+       后端 /api/dct/data/search 接 q 后对 code/label 模糊匹配，parentId 不传时全量返回。
+       与"全部"虚拟节点（renderTree 中 data-node-id="__all__"）的语义对齐：
+       用户在树形字典下搜索时，无论当前选中哪个节点，搜索结果都应该是全量。 */
+    if (state.meta && state.meta.selfHierarchy) {
+      state.currentParentId = undefined   // 触发 loadData 不带 parentId 键 → 后端全量
+      state.selectedTreeNodeId = '__all__'
+      // 同步更新左侧树高亮（保持按钮 active 一致）
+      const treeBody = root.querySelector('#deTreeBody')
+      if (treeBody) highlightTreeNode(treeBody)
+    }
     void reload(root)
   }
   root.querySelector('#btnSearch')?.addEventListener('click', search)
