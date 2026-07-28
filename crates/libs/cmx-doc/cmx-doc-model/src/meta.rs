@@ -106,7 +106,7 @@ pub struct ColumnView {
     pub display_field: String,
     /// 写回字段（字典选值写回行，如 id/code）。
     pub ref_field: String,
-    /// 录入控件配置（原样透传 edit{}，如 {mode:"cmx-dict-selct"}）。
+    /// 录入控件配置（原样透传 edit{}，如 {mode:"cmx-dict-select"}）。
     pub edit: Option<Value>,
     /// 编辑设置（原样透传 editSettings{}，如 {dictCode, coord}）。
     pub edit_settings: Option<Value>,
@@ -658,7 +658,7 @@ fn parse_column(f: &Value) -> Option<ColumnView> {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    // 字典/录入控件配置：原样透传，供前端动态列模型复用（cmx-dict-selct 等）。
+    // 字典/录入控件配置：原样透传，供前端动态列模型复用（cmx-dict-select 等）。
     let ref_dict = f
         .get("refDict")
         .and_then(|v| v.as_str())

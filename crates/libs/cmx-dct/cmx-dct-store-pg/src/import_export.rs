@@ -22,7 +22,7 @@ use cmx_dct_model::{
     BatchConflictMode, DictView, build_batch_insert_sql, build_truncate_sql, extract_pk,
 };
 
-use crate::{api_err, map_db_err, pg_detail};
+use crate::error::{api_err, map_db_err, pg_detail};
 
 // ============================================================================
 // 公共类型

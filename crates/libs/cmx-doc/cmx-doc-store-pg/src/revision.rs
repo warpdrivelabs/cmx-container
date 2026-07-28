@@ -142,8 +142,11 @@ impl DocRevision {
         root_id: &str,
     ) -> Result<i32> {
         let sql = format!(
-            "SELECT COALESCE(MAX(rev_no), 0) AS m FROM {REV_TABLE} \
-             WHERE doc_file = $1 AND root_id = $2 FOR UPDATE"
+            // PostgreSQL 不允许 FOR UPDATE 直接与聚合函数同用（聚合后无具体行可锁），
+            // 用子查询先锁该 root_id 的所有版本行，再在外层取 MAX，达到「锁行 + 取最大版本号」双重目的。
+            "SELECT COALESCE(MAX(rev_no), 0) AS m FROM ( \
+               SELECT rev_no FROM {REV_TABLE} WHERE doc_file = $1 AND root_id = $2 FOR UPDATE \
+             ) locked"
         );
         let ds = mm
             .query_sql_with_datavalues(

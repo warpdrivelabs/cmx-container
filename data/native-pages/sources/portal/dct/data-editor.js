@@ -31,39 +31,12 @@ const AUDIT_FIELDS = new Set(['create_by', 'create_time', 'update_by', 'update_t
 const SYSTEM_FLAG_FIELDS = new Set(['is_system'])
 const DERIVED_HIERARCHY = new Set(['full_path', 'level_no', 'is_leaf'])
 
-/** 判断字段是否为主键（兼容 isPrimaryKey:1/true 与 meta.pk 两种标记）。
- *  元数据字段可能用 isPrimaryKey（0/1 或 boolean）显式标记，也可能仅由 meta.pk 声明。 */
-function isPrimaryKeyField (col, meta) {
-  if (Number(col.isPrimaryKey) === 1 || col.isPrimaryKey === true) return true
-  return !!meta.pk && col.name === meta.pk
-}
-
-/** 业务键（新增可填、保存后只读）：
- *  ① 字符串物理主键（isPrimaryKey:1 且 dataType 为 VARCHAR/CHAR/TEXT）；
- *  ② 字典业务编码字段（meta.codeField 指向且 dataType 为 VARCHAR/CHAR/TEXT）。
- *  codeField 虽非物理主键，但作为业务编码（通常唯一、有外键引用），修改会破坏一致性，
- *  故与字符串主键同等对待。整数物理主键（id，后端铸号）非业务键，前端不可编辑。 */
-function isBusinessKey (col, meta) {
-  const t = String(col.dataType || '').toUpperCase()
-  const isString = t.includes('CHAR') || t.includes('TEXT') || t === 'STRING'
-  if (!isString) return false
-  // 字符串物理主键（isPrimaryKey 标记 或 meta.pk 声明）
-  if (isPrimaryKeyField(col, meta)) return true
-  // 字典业务编码字段（codeField）
-  if (!!meta.codeField && col.name === meta.codeField) return true
-  return false
-}
-
-/** 必填列判定（列头标识与保存校验共用，与 buildColumnModel 一致）：
- *  元数据 edit.required / 顶层 required 优先；其次 nullable=false 推断；业务键强制必填。 */
-function isRequiredCol (c, meta) {
-  if (isBusinessKey(c, meta)) return true
-  const metaEdit = c.edit && typeof c.edit === 'object' ? c.edit : null
-  if (metaEdit && metaEdit.required === true) return true
-  if (c.required === true) return true
-  if (c.nullable === false) return true
-  return false
-}
+/* 主键/业务键/必填判定已下移到 cmx-data-comp（init-page-models.js），通过 cmx() 引用统一实现。
+   消除本地副本与组件库的重复——组件库修改判定规则时，data-editor.js 自动受益。
+   函数签名不变（col, meta），所有调用点（isEditable/addRow/save）无需改动。 */
+const isPrimaryKeyField = (col, meta) => cmx().isPrimaryKeyField(col, meta)
+const isBusinessKey = (col, meta) => cmx().isBusinessKey(col, meta)
+const isRequiredCol = (col, meta) => cmx().isRequiredCol(col, meta)
 
 /** 必填校验用的空值判定：null/undefined/空串/纯空白 视为空。 */
 function isEmptyValue (v) {
@@ -98,164 +71,8 @@ function colCaption (col) {
   return col.caption || col.name
 }
 
-function defaultWidthFor (col) {
-  const t = String(col.dataType || '').toUpperCase()
-  if (t === 'DATETIME') return '160px'
-  if (t === 'DATE') return '130px'
-  if (t === 'TEXT') return '240px'
-  if (t === 'TINYINT') return '90px'
-  if (t === 'INT' || t === 'BIGINT') return '110px'
-  return '150px'
-}
-
-/** 把 DCT 元数据的 edit.mode 映射到 cmx-revo-grid 列的规范 edit.mode（EDIT_MODES 值域）。
- *
- * 规范值域见 cmx-field-uicontrol.js 的 EDIT_MODES：
- *   cmx-text-input / cmx-textarea-input / cmx-richtext-input / cmx-number-input /
- *   cmx-date-input / cmx-datetime-input / checkbox / select / ref / combo /
- *   ignite-combo / cmx-dict-selct / image / video / readonly / none
- *
- * 其中：
- *   - `ref` 是合法 edit.mode，但**无注册编辑器**（adapter 认但 runtime 退化），
- *     本页把 ref + refDict 转成 `cmx-dict-selct`（字典选择弹窗，有完整编辑器实现）。
- *   - `cmx-dict-selct` 是字典选择的规范存储值（历史拼写），runtime kind 映射到 dict-select。
- *
- * 元数据 column 自带的 edit.mode 可能是规范值，也可能是简写（input/text/number/date/datetime），
- * 这里统一收敛到规范值。返回 { mode, ...附加配置 }。 */
-// 元数据简写 → 规范值的映射（非 EDIT_MODES 的简写收敛）
-const META_MODE_TO_SPEC = {
-  input: 'cmx-text-input',
-  text: 'cmx-text-input',
-  textarea: 'cmx-textarea-input',
-  number: 'cmx-number-input',
-  date: 'cmx-date-input',
-  datetime: 'cmx-datetime-input',
-}
-// EDIT_MODES 规范值集合（用于判断 metaMode 是否已是规范值）
-const SPEC_MODES = new Set([
-  'cmx-text-input', 'cmx-textarea-input', 'cmx-richtext-input', 'cmx-number-input',
-  'cmx-date-input', 'cmx-datetime-input', 'checkbox', 'select', 'ref', 'combo',
-  'ignite-combo', 'cmx-dict-selct', 'image', 'video', 'readonly', 'none',
-])
-
-function editModeFor (col, meta) {
-  const name = col.name
-  const t = String(col.dataType || '').toUpperCase()
-  const metaEdit = col.edit && typeof col.edit === 'object' ? col.edit : null
-  const metaMode = metaEdit ? String(metaEdit.mode || '') : ''
-  const isParent = meta.selfHierarchy && name === meta.parentField
-
-  // 1) ref / cmx-dict-selct / refDict 列 / 树形父节点列 → cmx-dict-selct 字典选择弹窗
-  //    统一从 col.refDict/refField/displayField 构造完整参数（dictCode/idField/labelField），
-  //    无论元数据写的是 'ref'、'cmx-dict-selct' 还是仅给了 refDict，都走同一构造路径。
-  if (metaMode === 'ref' || metaMode === 'cmx-dict-selct' || (col.refDict && !metaMode) || isParent) {
-    const dictCode = col.refDict || (isParent ? meta.dictCode : '')
-    if (dictCode) {
-      return {
-        mode: 'cmx-dict-selct',
-        dictCode,
-        idField: col.refField || (isParent ? meta.pk : 'code'),
-        labelField: col.displayField || (isParent ? meta.labelField : 'name'),
-        parentField: isParent ? meta.parentField : undefined,
-        hierarchical: !!isParent,
-      }
-    }
-  }
-
-  // 2) 元数据已是 EDIT_MODES 规范值 → 直接用（checkbox/select/combo/readonly/none/cmx-*-input 等）
-  if (metaMode && SPEC_MODES.has(metaMode)) {
-    const out = { mode: metaMode }
-    if (metaMode === 'select') {
-      out.options = (metaEdit && Array.isArray(metaEdit.options)) ? metaEdit.options
-        : (name === 'status' ? [{ value: 1, label: '启用' }, { value: 0, label: '停用' }] : [])
-    }
-    return out
-  }
-
-  // 3) 元数据简写（input/text/number/date/datetime 等）→ 规范值
-  const lower = metaMode.toLowerCase()
-  if (META_MODE_TO_SPEC[lower]) {
-    return { mode: META_MODE_TO_SPEC[lower] }
-  }
-
-  // 4) 兜底：按 dataType 推断（元数据未给 edit.mode 或未识别）
-  if (t === 'DATE') return { mode: 'cmx-date-input' }
-  if (t === 'DATETIME') return { mode: 'cmx-datetime-input' }
-  // TINYINT 默认当布尔勾选（0/1）；字典里 TINYINT 基本是 status/is_default 等标志位。
-  // 若为小整数语义，元数据应显式 edit.mode='cmx-number-input' 覆盖（上方步骤 1-3 优先）。
-  if (t === 'TINYINT') return { mode: 'checkbox' }
-  if (t === 'INT' || t === 'BIGINT' || t === 'DECIMAL') return { mode: 'cmx-number-input' }
-  return { mode: 'cmx-text-input' }
-}
-
-/** 把字段的 enumValues（数组或逗号串）映射成 select 的 options。
- *  规范（field-edit-display-modes §四 constraint）：enumValues 映射成 edit.options + 强制 select。
- *  该映射在 FLC 引擎（flexible-combination-engine.js）内自动做；data-editor 直接构造 CmxColumn，
- *  故在此复刻同样逻辑。支持两种形态：
- *    - 数组：['open','closed'] 或 [{value,label}]
- *    - 逗号串：'open,closed'
- *  返回 null 表示无可用枚举（调用方据此决定是否强制 select）。 */
-function enumOptionsFromField (col) {
-  const ev = col.enumValues
-  if (ev == null) return null
-  let arr = null
-  if (Array.isArray(ev)) arr = ev
-  else if (typeof ev === 'string' && ev.trim()) arr = ev.split(',').map((s) => s.trim()).filter(Boolean)
-  if (!arr || !arr.length) return null
-  return arr.map((v) => {
-    if (v && typeof v === 'object') return { value: v.value, label: v.label != null ? v.label : v.value }
-    return { value: v, label: String(v) }
-  })
-}
-
-/** 后端 with_props=true 下发的扁平字段属性白名单（field-edit-display-modes §四 所列规范键）。
- *  这些键直接挂 CmxColumn 顶层：构造器的"完整继承"机制（cmx-column.js:118-122）会自动收纳，
- *  toDescriptor 会输出 width/visible/frozen；其余键供编辑器/适配层按需读取。 */
-const FLAT_PROP_KEYS = [
-  'width', 'frozen', 'visible', 'align', 'intDigits', 'decimalDigits',
-  'maxlength', 'min', 'max', 'placeholder', 'defaultValue', 'agg',
-  'label', 'i18n', 'searchable', 'filterable', 'sensitive',
-]
-function flatPropsFor (col) {
-  const out = {}
-  for (const k of FLAT_PROP_KEYS) {
-    if (col[k] != null) out[k] = col[k]
-  }
-  return out
-}
-
-/** 把 DCT 元数据的 display 配置映射到 cmx-revo-grid 列的 display 对象。
- *
- *  display.mode 规范取值（以 cmx-field-schema.js DISPLAY 段录入选项为准）：
- *    '' / 'text' / 'number' / 'badge' / 'link' / 'icon'
- *  - 'number' 是合法模式：联动显示 format/decimalDigits/thousandSeparator/zeroAsBlank/negativeColor
- *  - 'text' 原样字符串；'badge'/'link'/'icon' 各有专属属性（badgeMap/icon/link）
- *  - 元数据可能给非规范值（如 date/checkbox），这些由 dataType 自动派生，丢弃
- *
- *  数值类属性（schema 用 visibleWhen=displayModeIn(['','number']) 联动）：
- *    format / decimalDigits / thousandSeparator / zeroAsBlank / negativeColor
- *  全部透传给列 display。negativeColor 是 boolean（false 关闭负数红字，adapter 默认开）。 */
-const SPEC_DISPLAY_MODES = new Set(['', 'text', 'number', 'badge', 'link', 'icon'])
-function displayFor (col) {
-  const d = col.display && typeof col.display === 'object' ? col.display : null
-  if (!d) return undefined
-  const out = {}
-  // mode：只透传 schema 规范值（含 ''/text/number/badge/link/icon），非规范值（date/checkbox 等）丢弃
-  const m = d.mode == null ? '' : String(d.mode).toLowerCase()
-  if (SPEC_DISPLAY_MODES.has(m)) out.mode = m
-  if (d.align) out.align = d.align
-  if (d.format) out.format = d.format
-  if (d.decimalDigits != null) out.decimalDigits = d.decimalDigits
-  if (d.thousandSeparator != null) out.thousandSeparator = d.thousandSeparator
-  if (d.zeroAsBlank != null) out.zeroAsBlank = d.zeroAsBlank
-  if (d.negativeColor != null) out.negativeColor = d.negativeColor
-  if (d.emptyText != null) out.emptyText = d.emptyText
-  if (d.badgeMap) out.badgeMap = d.badgeMap
-  if (d.icon) out.icon = d.icon
-  if (d.link) out.link = d.link
-  if (d.cellStyle) out.cellStyle = d.cellStyle
-  return Object.keys(out).length ? out : undefined
-}
+/* 列模型构建已下移到 cmx-data-comp 的 metaTableFieldsToColumns（init-page-models.js）。
+   以下仅保留页面级逻辑所需的字段角色判定函数（save/addRow 使用）。 */
 
 /* ─────────────── 模块级 state（每次 content 入口重置） ─────────────── */
 const state = {
@@ -380,6 +197,20 @@ function styleHtml () {
 .de-tree-root{font-size:13px;padding:5px 8px;cursor:pointer;border-radius:4px;color:var(--sapContent_LabelColor,#6a6d70)}
 .de-tree-root:hover{background:color-mix(in srgb,var(--neo-cyan) 10%,var(--sapList_Background,#fff))}
 .de-tree-root.active{color:var(--neo-cyan);font-weight:600;background:color-mix(in srgb,var(--neo-cyan) 14%,var(--sapList_Background,#fff))}
+/* "全部"虚拟节点：与 .de-tree-root 对齐视觉但用 --neo-mint 强调（区分"全量"与"根级"语义）。
+   选中态用更明显的背景 + 左侧 3px 强调条 + 阴影，让用户能直接看出"我在全部模式下"。 */
+.de-tree-virtual{font-size:13px;padding:5px 8px;cursor:pointer;border-radius:4px;
+  color:var(--sapContent_LabelColor,#6a6d70);display:flex;align-items:center;gap:4px;
+  position:relative;border:1px solid transparent}
+.de-tree-virtual:hover{background:color-mix(in srgb,var(--neo-mint) 10%,var(--sapList_Background,#fff))}
+.de-tree-virtual.active{color:var(--neo-mint,#10b981);font-weight:700;
+  background:color-mix(in srgb,var(--neo-mint) 16%,var(--sapList_Background,#fff));
+  border-color:color-mix(in srgb,var(--neo-mint) 35%,transparent);
+  box-shadow:inset 3px 0 0 var(--neo-mint,#10b981)}
+.de-tree-count{margin-left:auto;font-size:11px;color:var(--sapContent_LabelColor,#6a6d70);
+  background:color-mix(in srgb,var(--neo-mint) 12%,transparent);padding:1px 6px;border-radius:8px}
+.de-tree-virtual.active .de-tree-count{color:var(--neo-mint,#10b981);
+  background:color-mix(in srgb,var(--neo-mint) 22%,transparent);font-weight:600}
 .de-children{margin-left:16px}
 .de-dirty{color:var(--neo-warn);font-weight:700}
 .de-loading,.de-empty{padding:32px;text-align:center;color:var(--sapContent_LabelColor,#6a6d70);font-size:13px}
@@ -533,108 +364,33 @@ async function loadMeta (def, dictCode) {
   return apiGet(`/api/dct/meta?${qs(def, { dict: dictCode, with_props: 'true' })}`, def.dbId)
 }
 
-/* ─────────────── 列模型（含 edit.mode 行内编辑配置） ─────────────── */
+/* ─────────────── 列模型（委托 cmx-data-comp metaTableFieldsToColumns 增强路径） ─────────────── */
 function buildColumnModel (meta) {
   const C = cmx()
-  if (!C.CmxColumnModel || !C.CmxColumn) return null
-  const members = (meta.columns || [])
-    .filter((c) => showInTable(c, meta))
-    .map((c) => {
-      const editable = isEditable(c, meta)
-      // 元数据 edit 基底：原样保留全部子属性（intDigits/decimalDigits/min/max/maxlength/
-      // pattern/placeholder/readonly/requiredWhen/editableWhen/visibleWhen/formatPattern/minDate/
-      // maxDate/inputType 等，见 EDITOR_PROPERTY_SCHEMA）。editModeFor 推断的 mode/options 仅覆盖
-      // 对应键，不破坏其余录入控件专属属性。
-      const metaEdit = (c.edit && typeof c.edit === 'object') ? { ...c.edit } : {}
-      // 扁平属性（后端 with_props=true 下发）：width/frozen/visible/align/intDigits/decimalDigits/
-      // maxlength/min/max/placeholder/defaultValue/agg/label/i18n/... 直接挂顶层。
-      const flat = flatPropsFor(c)
-      const colOpts = {
-        id: c.name,
-        caption: colCaption(c),
-        dataType: c.dataType,
-        ...flat,
-      }
-      // 列宽：元数据优先（规范 width），缺失才回退按类型推断的默认值
-      colOpts.width = flat.width || defaultWidthFor(c)
-      // 应用元数据的 display 配置（align/decimalDigits/format/thousandSeparator/zeroAsBlank/
-      // negativeColor/badgeMap/link/icon 等）。displayFor 只透传规范值。
-      const disp = displayFor(c)
-      if (disp) colOpts.display = disp
-      // 引用字典列：挂 refDict/displayField/refField 供 grid 回显（code → name）
-      if (c.refDict) {
-        colOpts.refDict = c.refDict
-        colOpts.refField = c.refField || 'code'
-        colOpts.displayField = c.displayField || 'name'
-      }
-
-      if (editable) {
-        const em = editModeFor(c, meta)
-        // edit 以元数据为基底，叠加推断的 mode/trigger/options；pattern 从扁平键补入 edit
-        // （cmx-text-input 编辑器从 field.pattern ?? edit.pattern 读正则做即时校验，
-        //  cmx-builtin-field-types.js 的 _fieldFromColData 透传）。
-        colOpts.edit = { ...metaEdit, mode: em.mode, trigger: 'click' }
-        if (em.options) colOpts.edit.options = em.options
-        if (!colOpts.edit.pattern && c.pattern) colOpts.edit.pattern = c.pattern
-        // enumValues → select：无 refDict 且元数据未显式指定 edit.mode 时，强制 select + options
-        // （复刻 FLC 引擎 flexible-combination-engine.js:467-473 的映射）。
-        if (!c.refDict && !metaEdit.mode) {
-          const opts = enumOptionsFromField(c)
-          if (opts) {
-            colOpts.edit.mode = 'select'
-            colOpts.edit.options = opts
-          }
-        }
-        // 字典选择列（cmx-dict-selct）需要 editSettings 传字典坐标（cmx-dict-select 弹窗用）。
-        // 以元数据 editSettings（设计器配的 helpLayout/displayMode/dictTitle/showClear/mruMax 等）
-        // 为基底，再覆盖运行时必需的 dictCode/idCol/labelCol/hierarchical/coord/parentCol。
-        if (em.mode === 'cmx-dict-selct') {
-          const metaEs = (c.editSettings && typeof c.editSettings === 'object') ? { ...c.editSettings } : {}
-          colOpts.editSettings = {
-            ...metaEs,
-            dictCode: em.dictCode,
-            idCol: em.idField,
-            labelCol: em.labelField,
-            hierarchical: !!em.hierarchical,
-            // 字典坐标：cmx-dict-select 拼 /api/dct/data/search URL 的必需来源
-            // （运行时 host 无坐标，组件唯一取数来源是 editSettings.coord）
-            coord: {
-              domain: meta.domain || (state.def && state.def.domain) || '',
-              application: meta.application || (state.def && state.def.application) || '',
-              module: meta.module || (state.def && state.def.module) || '',
-              ...(state.def && state.def.dbId ? { dbId: state.def.dbId } : {}),
-            },
-          }
-          if (em.parentField) colOpts.editSettings.parentCol = em.parentField
-        }
-        // 必填：统一用 isRequiredCol（与列头标识、保存校验共用判定）
-        if (isRequiredCol(c, meta)) {
-          colOpts.edit.required = true
-        }
-        // 业务键（字符串主键 / codeField）：新增时可填，保存后只读。
-        // 关键：必须用可编辑的 mode（cmx-text-input）+ readonlyWhen 行级条件来达成"新增可填/存量只读"。
-        // 若沿用元数据的 edit.mode='readonly'，整列会被 cmx-column-adapter 标成 col.readonly=true，
-        // revo-grid 在 focus 阶段直接跳过编辑，beforeedit 不派发，readonlyWhen 无从求值 → 新增也填不了。
-        // readonlyWhen 用 grid 内部 id 字段的 't' 前缀判断新增态（addRow 生成 tempId='t...'）。
-        if (isBusinessKey(c, meta)) {
-          colOpts.edit.mode = 'cmx-text-input'
-          colOpts.edit.readonlyWhen = `NOT(STARTSWITH(id, 't'))`
-          colOpts.edit.required = true
-        }
-      } else {
-        // 不可编辑列：保留元数据的 edit.mode（如 checkbox 显示复选框样式），否则 readonly。
-        // 仍透传元数据 edit 的其余子属性（如 pattern 供展示态校验信息）。
-        const metaMode = metaEdit.mode ? String(metaEdit.mode).toLowerCase() : ''
-        colOpts.edit = (metaMode === 'checkbox') ? { ...metaEdit, mode: 'checkbox' } : { ...metaEdit, mode: 'readonly' }
-      }
-      // checkbox 列内容居中（✓ / 空心框），呼应 cmx-checkbox-field-type 的 cellTemplate
-      if (colOpts.edit && colOpts.edit.mode === 'checkbox') {
-        colOpts.display = colOpts.display || {}
-        colOpts.display.align = 'center'
-      }
-      return new C.CmxColumn(colOpts)
-    })
-  return new C.CmxColumnModel({ members })
+  if (!C.CmxColumnModel || !C.metaTableFieldsToColumns) return null
+  const cols = C.metaTableFieldsToColumns(meta.columns || [], {
+    kind: 'DCT',
+    pk: meta.pk,
+    codeField: meta.codeField,
+    selfHierarchy: meta.selfHierarchy,
+    parentField: meta.parentField,
+    dictCode: meta.dictCode || state.dictCode,
+    labelField: meta.labelField,
+    domain: meta.domain || (state.def && state.def.domain) || '',
+    application: meta.application || (state.def && state.def.application) || '',
+    module: meta.module || (state.def && state.def.module) || '',
+  }, {
+    respectOrder: false,
+    coord: {
+      domain: (state.def && state.def.domain) || '',
+      application: (state.def && state.def.application) || '',
+      module: (state.def && state.def.module) || '',
+      ...(state.def && state.def.dbId ? { dbId: state.def.dbId } : {}),
+    },
+  })
+  const cm = new C.CmxColumnModel({ datasetId: 'dict' })
+  cm.setMembers(cols)
+  return cm
 }
 
 /* ─────────────── 数据装载 ─────────────── */
@@ -645,7 +401,12 @@ async function loadData (def, dictCode, meta) {
     pageSize: state.pageSize,
     filters: buildFiltersFromConds(meta),
   }
-  if (meta.selfHierarchy) body.parentId = state.currentParentId
+  if (meta.selfHierarchy) {
+    /* "全部"虚拟节点：state.currentParentId=undefined → body 不带 parentId 键 → 后端全量。
+       "全部根节点"：state.currentParentId=null → body.parentId=null → 后端 IS NULL → 根级。
+       具体节点：state.currentParentId=<id> → body.parentId=<id> → 后端等值匹配 → 直接子级。 */
+    if (state.currentParentId !== undefined) body.parentId = state.currentParentId
+  }
   return apiPost(`/api/dct/data/search?${qs(def, { dict: dictCode })}`, body, def.dbId)
 }
 
@@ -838,20 +599,48 @@ async function deleteSelected (root) {
   }
   const ok = await cmxConfirm(`确认删除选中的 ${idSet.size} 项？`, '删除确认')
   if (!ok) return
+  // 区分新增行（未入库，仅本地移除）与已入库行（调接口删除）
+  const realIds = []
   for (const id of idSet) {
-    // 新增行直接从 newIds 移除
     if (state.newIds.has(id)) {
       state.newIds.delete(id)
     } else {
-      state.deletedIds.push(id)
-      // 移除 dirtyMap 中对应记录
-      delete state.dirtyMap[id]
+      realIds.push(id)
+      delete state.dirtyMap[id]  // 清理该行的未保存修改
     }
   }
-  // grid 内删除（视觉即时反馈）
+  // grid 内即时移除（视觉反馈）
   if (grid.removeRows) grid.removeRows(ids)
-  setMsg(root, '已暂存删除，点击「保存」提交', 'ok')
-  renderPageInfo(root)
+  // 仅删除未入库的新增行：无需调接口
+  if (!realIds.length) {
+    cmxNotify('ok', `已移除 ${ids.length} 项未保存的新增行`)
+    setMsg(root, `已移除 ${ids.length} 项`, 'ok')
+    renderPageInfo(root)
+    return
+  }
+  const def = state.def
+  if (!def) { cmxNotify('error', '缺少字典坐标，无法删除'); return }
+  // 直接调用接口删除（即时生效，不再暂存等"保存"按钮）
+  setMsg(root, '删除中…')
+  try {
+    const payload = {
+      saveMode: 'merge',
+      changes: { [meta.tableName]: { inserted: [], updated: [], deleted: realIds } },
+    }
+    const r = await apiPost(`/api/dct/save?${qs(def, { dict: state.dictCode })}`, payload, def.dbId)
+    const aff = (r && r.affected) || 0
+    cmxNotify('ok', `已删除 ${realIds.length} 项（影响 ${aff} 行）`)
+    setMsg(root, `已删除 ${realIds.length} 项`, 'ok')
+    await reload(root)
+    // 树形字典：删除节点后左侧结构也要刷新（保持展开态）
+    await refreshTree(root)
+  } catch (e) {
+    cmxNotify('error', `删除失败：${e.message}`)
+    setMsg(root, `删除失败：${e.message}`, 'err')
+    // 失败重载恢复：grid.removeRows 已移除显示，需从服务端拉回
+    await reload(root)
+    await refreshTree(root)
+  }
 }
 
 /* ─────────────── commitGridEdits：收拢未提交的行内编辑（仿 dictflat-content.html） ─────────────── */
@@ -954,6 +743,8 @@ async function save (root) {
       state.deletedIds = []
       state.baselineMap = {}
       await reload(root)
+      // 新增/删除/修改入库后，树形字典的左侧结构也要刷新（保持展开态）
+      await refreshTree(root)
     } catch (e) {
       if (e.status === 409) {
         cmxNotify('error', '字典项已被他人修改，已自动刷新到最新版本')
@@ -961,6 +752,7 @@ async function save (root) {
         state.newIds = new Set()
         state.deletedIds = []
         await reload(root)
+        await refreshTree(root)
       } else if (e.status === 422 && e.body && e.body.data && Array.isArray(e.body.data.violations)) {
         presentViolations(e.body.data.violations)
         setMsg(root, `保存失败：${e.message}`, 'err')
@@ -1173,6 +965,8 @@ async function doImport (root, file, mode) {
     )
     setMsg(root, `导入完成：${s.affected || 0} 行`, 'ok')
     await reload(root)  // 刷新表格显示
+    // 树形字典：导入可能新增/改了节点，左侧结构同步刷新（保持展开态）
+    await refreshTree(root)
   } catch (e) {
     setMsg(root, `导入失败：${e.message}`, 'err')
     cmxNotify('error', `导入失败：${e.message}`)
@@ -1214,18 +1008,30 @@ function renderTree (root) {
   const meta = state.meta
   const pk = meta.pk
   const rootChildren = state.treeNodes['null'] || state.treeNodes[null] || []
-  const isRootActive = state.currentParentId == null
+  /* "全部"=全量（mode='all'）：搜索/浏览跨所有层级。
+     "全部根节点"=根级（mode='root'）：只显示 parent_id 为空的根行。
+     默认初始 selectedTreeNodeId='__all__'——让用户进入就看到全量。
+     selectedTreeNodeId='__root__' = 全部根节点；其他 = 具体节点。 */
+  const isAllActive = state.selectedTreeNodeId === '__all__'
+  const isRootActive = state.selectedTreeNodeId === '__root__'
   body.innerHTML = `
+    <div class="de-tree-virtual ${isAllActive ? 'active' : ''}" data-node-id="__all__" title="显示全部数据（跨所有层级）">⊕ 全部 <span class="de-tree-count">全量</span></div>
     <div class="de-tree-root ${isRootActive ? 'active' : ''}" data-node-id="__root__">▶ 全部根节点（${rootChildren.length}）</div>
     <div class="de-children" id="deTreeChildren">
       ${renderTreeNodes(rootChildren, pk)}
     </div>
   `
-  body.querySelector('[data-node-id="__root__"]').addEventListener('click', async () => {
-    state.currentParentId = null
-    state.selectedTreeNodeId = null
+  body.querySelector('[data-node-id="__all__"]').addEventListener('click', async () => {
+    state.selectedTreeNodeId = '__all__'
+    state.currentParentId = undefined   // undefined 让 searchReq 不传 parentId 键 → 后端全量
     state.page = 1
-    // 仅更新高亮，不重建树（保留展开态）
+    highlightTreeNode(body)
+    await reload(root)
+  })
+  body.querySelector('[data-node-id="__root__"]').addEventListener('click', async () => {
+    state.currentParentId = null       // null 让 searchReq 传 parentId:null → 后端 IS NULL → 根级
+    state.selectedTreeNodeId = '__root__'
+    state.page = 1
     highlightTreeNode(body)
     await reload(root)
   })
@@ -1236,10 +1042,16 @@ function renderTree (root) {
  *  点击节点本身或根节点时调用——这类操作只改选中态 + 右侧数据，树结构应保持原样。 */
 function highlightTreeNode (body) {
   const sel = state.selectedTreeNodeId
-  const isRoot = state.currentParentId == null
+  const isAll = sel === '__all__'
+  const isRoot = sel === '__root__'
+  // 普通节点：仅当非虚拟节点选中且 node-id 匹配时高亮
   body.querySelectorAll('.de-tree-node[data-node-id]').forEach((el) => {
-    el.classList.toggle('active', !isRoot && String(el.dataset.nodeId) === String(sel))
+    el.classList.toggle('active', !isAll && !isRoot && String(el.dataset.nodeId) === String(sel))
   })
+  // 全部虚拟节点
+  const allEl = body.querySelector('.de-tree-virtual[data-node-id="__all__"]')
+  if (allEl) allEl.classList.toggle('active', isAll)
+  // 全部根节点虚拟节点
   const rootEl = body.querySelector('.de-tree-root[data-node-id="__root__"]')
   if (rootEl) rootEl.classList.toggle('active', isRoot)
 }
@@ -1319,6 +1131,44 @@ function wireTreeNodeClick (root, body) {
   })
 }
 
+/* ─────────────── 刷新左侧树（数据变更后保持展开态） ───────────────
+ * 删除 / 新增入库 / 导入 / 手动刷新时调用：清空 treeNodes 缓存重新拉取，
+ * 并恢复刷新前已展开的节点（▾ 态），避免每次变更后整棵树收起、用户体验割裂。
+ * 仅对树形字典（selfHierarchy）生效；平级字典是空操作（reload 已覆盖表格）。 */
+async function refreshTree (root) {
+  if (!state.meta || !state.meta.selfHierarchy) return
+  // 1) 记录刷新前已展开的节点 id（toggle 文本是 ▾）
+  const oldBody = root.querySelector('#deTreeBody')
+  const expandedIds = []
+  if (oldBody) {
+    oldBody.querySelectorAll('[data-toggle]').forEach((tg) => {
+      if ((tg.textContent || '').trim() === '▾') expandedIds.push(tg.dataset.toggle)
+    })
+  }
+  // 2) 清空缓存，重新加载根节点 + 之前展开的节点（并行；不同 parentId 写入不同 key 不冲突）
+  state.treeNodes = {}
+  await Promise.all([
+    loadTreeChildren(root, null),
+    ...expandedIds.map((id) => loadTreeChildren(root, id).catch(() => {})),
+  ])
+  // 3) 重新渲染（renderTree 只渲染第一级，子级靠下方恢复展开态）
+  renderTree(root)
+  // 4) 恢复展开态：用已加载的最新子级数据填充子容器
+  const newBody = root.querySelector('#deTreeBody')
+  if (!newBody) return
+  for (const id of expandedIds) {
+    const tg = newBody.querySelector(`[data-toggle="${CSS.escape(id)}"]`)
+    const childBox = newBody.querySelector(`[data-children-of="${CSS.escape(id)}"]`)
+    if (!tg || !childBox) continue       // 节点已被删除等场景
+    const children = state.treeNodes[String(id)] || []
+    if (!children.length) continue        // 子级被删光，保持收起
+    tg.textContent = '▾'
+    childBox.innerHTML = renderTreeNodes(children, state.meta.pk)
+    childBox.style.display = 'block'
+    wireTreeNodeClick(root, childBox)
+  }
+}
+
 /* ─────────────── 切换字典 ─────────────── */
 async function switchDict (root, dictCode) {
   state.dictCode = dictCode
@@ -1326,8 +1176,10 @@ async function switchDict (root, dictCode) {
   state.page = 1
   state.q = ''
   state.conds = []
-  state.currentParentId = null
-  state.selectedTreeNodeId = null
+  /* 默认"全部"模式：currentParentId=undefined → loadData searchReq 不传 parentId → 后端全量。
+     用户主动选"全部根节点"（__root__）则 currentParentId=null（IS NULL），选具体节点则 =<id>。 */
+  state.currentParentId = undefined
+  state.selectedTreeNodeId = '__all__'
   state.treeNodes = {}
   state.dirtyMap = {}
   state.newIds = new Set()
@@ -1387,7 +1239,11 @@ function initDictSelect (root) {
 
 /* ─────────────── 绑定页面事件 ─────────────── */
 function bindPage (root) {
-  root.querySelector('#btnReload')?.addEventListener('click', () => { state.page = 1; void reload(root) })
+  // 刷新：表格 + 树形字典的左侧结构都重载（树刷新会保留展开态）
+  root.querySelector('#btnReload')?.addEventListener('click', () => {
+    state.page = 1
+    void reload(root).then(() => refreshTree(root))
+  })
   root.querySelector('#btnAdd')?.addEventListener('click', () => addRow(root))
   root.querySelector('#btnDel')?.addEventListener('click', () => void deleteSelected(root))
   root.querySelector('#btnSave')?.addEventListener('click', () => void save(root))
@@ -1398,6 +1254,17 @@ function bindPage (root) {
   const search = () => {
     state.q = (root.querySelector('#deQ')?.value || '').trim()
     state.page = 1
+    /* 关键字搜索强制切到"全部"模式：保证跨层级命中都能看到，不被 parentId 过滤。
+       后端 /api/dct/data/search 接 q 后对 code/label 模糊匹配，parentId 不传时全量返回。
+       与"全部"虚拟节点（renderTree 中 data-node-id="__all__"）的语义对齐：
+       用户在树形字典下搜索时，无论当前选中哪个节点，搜索结果都应该是全量。 */
+    if (state.meta && state.meta.selfHierarchy) {
+      state.currentParentId = undefined   // 触发 loadData 不带 parentId 键 → 后端全量
+      state.selectedTreeNodeId = '__all__'
+      // 同步更新左侧树高亮（保持按钮 active 一致）
+      const treeBody = root.querySelector('#deTreeBody')
+      if (treeBody) highlightTreeNode(treeBody)
+    }
     void reload(root)
   }
   root.querySelector('#btnSearch')?.addEventListener('click', search)

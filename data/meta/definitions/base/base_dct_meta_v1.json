@@ -356,7 +356,8 @@
           },
           "width": "140px",
           "required": true,
-          "align": "left"
+          "align": "left",
+          "visible": false
         },
         {
           "dataType": "TINYINT",
@@ -379,7 +380,8 @@
           },
           "width": "90px",
           "required": true,
-          "align": "center"
+          "align": "center",
+          "visible": false
         },
         {
           "dataType": "TINYINT",
@@ -402,7 +404,8 @@
           },
           "width": "90px",
           "required": true,
-          "align": "center"
+          "align": "center",
+          "visible": false
         }
       ]
     },
@@ -536,7 +539,7 @@
             "zh_CN": "适用核算主体ID(scope_type=acct_entity时填写)"
           },
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -958,5 +961,5 @@
       ]
     }
   },
-  "updatedAt": "2026-07-27T08:37:52.631Z"
+  "updatedAt": "2026-07-28T08:29:35.345Z"
 }
