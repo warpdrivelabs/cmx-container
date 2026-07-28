@@ -80,7 +80,15 @@ impl BizError {
     pub fn from_db_error(raw: &str) -> Self {
         let code = crate::errcode::classify_db_error(raw);
         let detail = crate::errcode::brief_db_detail(raw);
-        let message = crate::errcode::render(code.message_template(), &[("detail", detail)]);
+        // NOT NULL 错误模板含 {caption} 占位（「{caption}」不能为空），用提取的列名填充，
+        // 避免前端看到未渲染的 「{caption}」字面量。其他模板用 {detail}。
+        let params: Vec<(&str, String)> = match code {
+            crate::errcode::CmxErrCode::NotNullDbViolation => {
+                vec![("caption", detail.clone()), ("detail", detail)]
+            }
+            _ => vec![("detail", detail)],
+        };
+        let message = crate::errcode::render(code.message_template(), &params);
         Self::DbConstraint { code, message }
     }
 

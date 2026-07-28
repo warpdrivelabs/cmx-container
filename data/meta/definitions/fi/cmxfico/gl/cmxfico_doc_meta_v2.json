@@ -200,7 +200,9 @@
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "idCol": "code",
+            "valueField": "code"
           },
           "refField": "id",
           "displayField": "code",
@@ -276,7 +278,9 @@
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "idCol": "code",
+            "valueField": "code"
           }
         },
         {
@@ -3750,7 +3754,7 @@
       }
     ]
   },
-  "updatedAt": "2026-07-23T07:47:00.324Z",
+  "updatedAt": "2026-07-28T06:21:28.702Z",
   "validationRules": [
     {
       "code": "voucher_local_balance",
