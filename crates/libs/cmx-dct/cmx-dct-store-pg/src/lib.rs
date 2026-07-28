@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 
 use cmx_api_types::Result;
 use cmx_core::model::cell::DataValue;
-use cmx_database_pg::{DatabaseManager, get_default_pg_db_manager};
+use cmx_database_pg::{DatabaseManager, Error as DbError, get_default_pg_db_manager};
 
 use cmx_dct_model::{
     DctQuery, DictColumn, DictView, SERVER_FILLED_COLS, SERVER_REPLACED_COLS, base_fieldset,
@@ -35,22 +35,60 @@ pub fn api_err_db(raw: &str) -> cmx_api_types::Error {
     cmx_biz::BizError::from_db_error(raw).into()
 }
 
+/// 从 `cmx_database_pg::Error` 抽出 **PostgreSQL 真实错误明细**（SQLSTATE 文案 + DETAIL + 约束名）。
+///
+/// 背景：tokio-postgres 的 `Error` 顶层 `Display` 恒为无信息的 `db error`——真正的
+/// message/detail/constraint 藏在 `as_db_error()` 里。若直接 `format!("{e}")` 会把
+/// 「唯一键冲突」这类可翻译错误塌缩成 `db error`，前端无从判断。
+///
+/// 把三段拼成一个完整串，交给 [`cmx_biz::BizError::from_db_error`] 归类成
+/// `CmxErrCode` + 优雅中文。拼接保证含 `unique constraint "..."` / `foreign key` 等稳定
+/// 子串，令 `classify_db_error` 命中；`brief_db_detail` 再从中抽约束名脱敏展示。
+/// 非 PG 错误（连接/池/事务）回退顶层 Display。
+///
+/// 与 `cmx-rpt-store-pg::pg_detail` 实现一致，保持 DCT/RPT 落库错误翻译口径统一。
+pub(crate) fn pg_detail(e: &DbError) -> String {
+    if let DbError::Postgres(pg) = e
+        && let Some(db) = pg.as_db_error()
+    {
+        let mut s = db.message().to_string();
+        if let Some(d) = db.detail() {
+            s.push(' ');
+            s.push_str(d);
+        }
+        if let Some(c) = db.constraint() {
+            s.push_str(&format!(" constraint \"{c}\""));
+        }
+        return s;
+    }
+    e.to_string()
+}
+
 /// 统一包装 save 路径（upsert/delete/save_apply）的 DB 执行错误：翻译为优雅错误（稳定码 +
 /// 中文）+ 结构化日志。
 ///
-/// - `error` 级：只留阶段（phase）+ dict_code + table + row_index + error message，
-///   便于日志侧反查；不打印 SQL 全文（避免日志膨胀/泄敏）。
+/// - `error` 级：只留阶段（phase）+ dict_code + table + row_index + 真实 PG 明细（pg_detail
+///   抽出的 message/detail/constraint），便于日志侧反查；不打印 SQL 全文（避免日志膨胀）。
 /// - `debug` 级：记录失败 SQL 全文，排查时按需开启。
 ///
-/// 仅用于**原本就走 api_err_db** 的 save 路径（语义不变，只是统一日志结构 + 去重）。
+/// 仅用于**原本就走 api_err_db** 的 save 路径（语义不变，只是统一日志结构 + 抽真实 PG 错误）。
 /// search/count/search_zmc 路径仍用 api_err（business 错误），不在本函数范围。
+///
+/// # Arguments
+///
+/// - `e`：cmx_database_pg 错误（必传具体类型，以便 `as_db_error()` 取 PG 明细）
+/// - `phase`：阶段标签（`upsert` / `insert` / `update` / `delete` / `select_parent_id` / `recompute_is_leaf` / `export` / `import_*`）
+/// - `view`：字典表视图
+/// - `row_index`：行索引（删除/插入单行用 `Some(i)`，批/不限用 `None`）
+/// - `sql`：执行的 SQL（仅 debug 级别打印）
 fn map_db_err(
-    e: impl std::fmt::Display,
+    e: DbError,
     phase: &str,
     view: &DictView,
     row_index: Option<usize>,
     sql: &str,
 ) -> cmx_api_types::Error {
+    let detail = pg_detail(&e);
     tracing::error!(
         target: "cmx_dct::db",
         phase = phase,
@@ -58,10 +96,11 @@ fn map_db_err(
         table = %view.table_name,
         row_index = ?row_index,
         error = %e,
+        pg_detail = %detail,
         sql = sql,
         "db exec failed"
     );
-    api_err_db(&e.to_string())
+    api_err_db(&detail)
 }
 
 // ============================================================================
@@ -911,17 +950,177 @@ fn validate_bucket(view: &DictView, bucket: &Value) -> Vec<cmx_biz::errcode::Vio
     violations
 }
 
-/// 在事务内执行 deleted 分支：按 pk 逐行删除。返回受影响行数。
+// ============================================================================
+// is_leaf 级联维护（分级字典）：仿 cmx-iam recompute_parent_is_leaf
+//
+// 分级字典（self_hierarchy=true + parent_field + is_leaf 列齐全）保存时需维护父子 is_leaf：
+//   - 新增子节点 / 节点移入新父 → 新父 is_leaf=0
+//   - 删除子节点 / 节点移出旧父 → 旧父若无其他子节点则 is_leaf=1
+// 与 cmx-iam 的差异：iam 在事务提交后用独立连接重算（规避删除可见性竞态）；
+// 此处 dct 在 save_apply 同事务内重算（dct 三段 apply 顺序 deleted→inserted→updated，
+// 重算在最后统一执行，此时所有增删改已落地，同事务内可见性一致，无竞态）。
+// ============================================================================
+
+/// 分级字典的 parent 列名。仅当 self_hierarchy=true + parent_field 非空 + is_leaf 是合法列时返回。
+/// 不满足任一条件（非分级字典或缺列）返回 None，调用方据此跳过所有 is_leaf 维护。
+fn hierarchy_parent_field(view: &DictView) -> Option<String> {
+    if !view.self_hierarchy {
+        return None;
+    }
+    let pf = view.parent_field.as_ref()?;
+    if !valid_col(view, pf) || !valid_col(view, "is_leaf") {
+        return None;
+    }
+    Some(pf.clone())
+}
+
+/// 取 JSON 值作为非空 id 字符串。null / 空串 / 空对象返回 None（表示无父或父置空）。
+fn non_empty_id_str(v: &Value) -> Option<String> {
+    match v {
+        Value::Null => None,
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+/// UPDATE 成功后，把 parent 变更涉及的旧父/新父 id 推进 touched_parents。
+/// old_parent 和 new_parent 都进集合——后续重算时：新父强制置 0、旧父按"是否还有子"决定。
+/// 同一 id 可能重复推进（如多行同移），重算 SQL 是幂等的，重复执行结果一致。
+fn collect_parent_change(
+    touched: &mut Vec<String>,
+    old_parent: Option<String>,
+    new_parent: Option<String>,
+) {
+    if let Some(p) = old_parent {
+        touched.push(p);
+    }
+    if let Some(p) = new_parent {
+        touched.push(p);
+    }
+}
+
+/// 在事务内查某行的 parent_id 值。返回 None 表示无父（null/空/行不存在）。
+async fn select_parent_id(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: &str,
+    view: &DictView,
+    parent_field: &str,
+    id: &Value,
+) -> Result<Option<String>> {
+    let sql = format!(
+        "SELECT \"{}\" AS pid FROM \"{}\" WHERE \"{}\" = $1",
+        parent_field, view.table_name, view.pk
+    );
+    let params = vec![to_dv_by_col(view, &view.pk, id)];
+    let ds = mm
+        .query_sql_with_datavalues(db_id, Some(txn_id), &sql, params, "pid")
+        .await
+        .map_err(|e| map_db_err(e, "select_parent_id", view, None, &sql))?;
+    let ds_val = serde_json::to_value(&ds).ok();
+    let pid = ds_val
+        .as_ref()
+        .and_then(|v| v.get("rows"))
+        .and_then(|r| r.as_array())
+        .and_then(|a| a.first())
+        .and_then(|r0| r0.get("pid"))
+        .and_then(non_empty_id_str);
+    Ok(pid)
+}
+
+/// 重算一组 parent_id 的 is_leaf（仿 cmx-iam recompute_parent_is_leaf）。
+/// 语义：被任何节点当作 parent 的，强制 is_leaf=0；否则 is_leaf=1（变回叶子）。
+///
+/// 用两条集合 SQL 替代逐行循环（dct 是批量保存场景，parent 数组可能较长）：
+///   1. WHERE pk IN ($parents) AND EXISTS (有子) → is_leaf=0
+///   2. WHERE pk IN ($parents) AND NOT EXISTS (无子) → is_leaf=1
+///
+/// 两条都基于 NOT EXISTS/EXISTS 子查询，幂等且无竞态。
+async fn recompute_parent_is_leaf(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: &str,
+    view: &DictView,
+    parent_field: &str,
+    parents: &[String],
+) -> Result<()> {
+    if parents.is_empty() {
+        return Ok(());
+    }
+    // 去重（同一父可能被多次推进）
+    let mut uniq: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for p in parents {
+        if seen.insert(p.clone()) {
+            uniq.push(p.clone());
+        }
+    }
+    // 构造占位符列表 $1,$2,...（每个 parent 一个参数位）
+    let placeholders: Vec<String> = (1..=uniq.len()).map(|i| format!("${i}")).collect();
+    let ph_list = placeholders.join(", ");
+    // PK 类型派发：cf_gl_account.id 是 BIGINT，client 传 snowflake 字符串 "1785..." 需
+    // 走 `to_dv_by_col` 按 view.columns[pk].dataType 转 DataValue::Int（→ PgInt 宽度自适应
+    // INT2/INT4/INT8），否则裸绑 `DataValue::String` 在 PG prepare 阶段就报
+    // "error serializing parameter 0"（OID 期望 bigint，实际收到 text）。
+    // PK 为 String/Text/UUID 类型时 to_dv_by_col 保持 DataValue::String（to_dv_by_col 对
+    // string 走 json_to_datavalue 默认路径），不破坏现有行为。
+    let params: Vec<DataValue> = uniq
+        .iter()
+        .map(|s| to_dv_by_col(view, &view.pk, &Value::String(s.clone())))
+        .collect();
+    // 1. 有子节点 → is_leaf=0
+    let sql_has_children = format!(
+        "UPDATE \"{tbl}\" SET \"is_leaf\" = 0 WHERE \"{pk}\" IN ({ph}) \
+         AND EXISTS (SELECT 1 FROM \"{tbl}\" c WHERE c.\"{pf}\" = \"{tbl}\".\"{pk}\")",
+        tbl = view.table_name,
+        pk = view.pk,
+        pf = parent_field,
+        ph = ph_list
+    );
+    mm.execute_sql_with_datavalues(db_id, Some(txn_id), &sql_has_children, params.clone())
+        .await
+        .map_err(|e| map_db_err(e, "recompute_is_leaf", view, None, &sql_has_children))?;
+    // 2. 无子节点 → is_leaf=1（变回叶子）
+    let sql_no_children = format!(
+        "UPDATE \"{tbl}\" SET \"is_leaf\" = 1 WHERE \"{pk}\" IN ({ph}) \
+         AND NOT EXISTS (SELECT 1 FROM \"{tbl}\" c WHERE c.\"{pf}\" = \"{tbl}\".\"{pk}\")",
+        tbl = view.table_name,
+        pk = view.pk,
+        pf = parent_field,
+        ph = ph_list
+    );
+    mm.execute_sql_with_datavalues(db_id, Some(txn_id), &sql_no_children, params)
+        .await
+        .map_err(|e| map_db_err(e, "recompute_is_leaf", view, None, &sql_no_children))?;
+    Ok(())
+}
+
+/// 在事务内执行 deleted 分支：按 pk 逐行删除。返回 (受影响行数, 被删行的旧 parent_id 集合)。
+///
+/// 分级字典（self_hierarchy + parent_field + is_leaf 列齐全）时，删之前先 SELECT 旧 parent_id，
+/// 供 save_apply 末尾重算父节点 is_leaf（删子后旧父可能变回叶子）。非分级字典返回空集合。
 async fn apply_deletes(
     mm: &DatabaseManager,
     db_id: &str,
     txn_id: &str,
     view: &DictView,
     bucket: &Value,
-) -> Result<u64> {
+) -> Result<(u64, Vec<String>)> {
     let mut affected = 0u64;
+    let mut touched_parents: Vec<String> = Vec::new();
+    let pf = hierarchy_parent_field(view); // 分级字典的 parent 列名；非分级返回 None
     if let Some(dels) = bucket.get("deleted").and_then(|v| v.as_array()) {
         for (i, id) in dels.iter().enumerate() {
+            // 分级字典：删之前先记下被删行的 parent（删完就查不到了），用于后续旧父重算。
+            // select_parent_id 内部已用 map_db_err 翻译 DB 错误为 cmx_api_types::Error，
+            // 此处直接 ? 冒泡，避免二次包装。
+            if let Some(dpf) = pf.as_deref()
+                && let Some(pid) = select_parent_id(mm, db_id, txn_id, view, dpf, id).await?
+            {
+                touched_parents.push(pid);
+            }
             let sql = cmx_dct_model::build_delete_sql(view);
             let params = vec![to_dv_by_col(view, &view.pk, id)];
             let n = mm
@@ -931,19 +1130,25 @@ async fn apply_deletes(
             affected += n;
         }
     }
-    Ok(affected)
+    Ok((affected, touched_parents))
 }
 
-/// 在事务内执行 inserted 分支：铺平 → 铸号（服务端生成列）→ upsert。返回 (受影响行数, idMap)。
+/// 在事务内执行 inserted 分支：铺平 → 铸号（服务端生成列）→ upsert。
+/// 返回 (受影响行数, idMap, 新增行挂载的 parent_id 集合)。
+///
+/// 分级字典时，apply_inserts 跑完后所有 inserted 行的 parent_id 已是真值（经 mint_ids_for_inserts
+/// 第二遍把临时 parent 重指向父行真号），可直接从 rows 收集，供 save_apply 末尾把新父 is_leaf 置 0。
 async fn apply_inserts(
     mm: &DatabaseManager,
     db_id: &str,
     txn_id: &str,
     view: &DictView,
     bucket: &Value,
-) -> Result<(u64, serde_json::Map<String, Value>)> {
+) -> Result<(u64, serde_json::Map<String, Value>, Vec<String>)> {
     let mut affected = 0u64;
     let mut id_map = serde_json::Map::new();
+    let mut touched_parents: Vec<String> = Vec::new();
+    let pf = hierarchy_parent_field(view);
     if let Some(ins) = bucket.get("inserted").and_then(|v| v.as_array()) {
         // 先铺平成可改写行对象 → 服务端生成列则铸号 + 回填 parent_id → 整行 upsert。
         let mut rows: Vec<serde_json::Map<String, Value>> =
@@ -960,13 +1165,25 @@ async fn apply_inserts(
                 affected += n;
             }
         }
+        // 分级字典：收集新增行挂载的 parent（铸号后已是真值），新父需 is_leaf=0。
+        if let Some(pf) = pf.as_deref() {
+            for o in &rows {
+                if let Some(pid) = o.get(pf).and_then(non_empty_id_str) {
+                    touched_parents.push(pid);
+                }
+            }
+        }
     }
-    Ok((affected, id_map))
+    Ok((affected, id_map, touched_parents))
 }
 
 /// 在事务内执行 updated 分支：带乐观锁基线的 UPDATE。
 ///
-/// 返回 (受影响行数, updatedAt 列表, 是否乐观锁冲突)。
+/// 返回 (受影响行数, updatedAt 列表, 是否乐观锁冲突, 受影响 parent_id 集合)。
+///
+/// 分级字典时，若某行修改了 parent_field 字段（节点移父），UPDATE 之前先 SELECT 旧 parent，
+/// UPDATE 之后收集新 parent；二者都进 touched_parents，供 save_apply 末尾重算 is_leaf
+/// （新父置 0、旧父无子则置 1）。
 ///
 /// **update_time 回查优化**：有 update_time 列时，用 `UPDATE ... RETURNING "update_time" AS ut`
 /// 一次往返拿回行数 + 新时间戳（消除原 execute + 回查 SELECT 的 N+1）；无 update_time 列时
@@ -978,9 +1195,11 @@ async fn apply_updates(
     txn_id: &str,
     view: &DictView,
     bucket: &Value,
-) -> Result<(u64, Vec<Value>, bool)> {
+) -> Result<(u64, Vec<Value>, bool, Vec<String>)> {
     let mut affected = 0u64;
     let mut updated_at: Vec<Value> = Vec::new();
+    let mut touched_parents: Vec<String> = Vec::new();
+    let pf = hierarchy_parent_field(view);
     if let Some(ups) = bucket.get("updated").and_then(|v| v.as_array()) {
         for (row_index, row) in ups.iter().enumerate() {
             let id = match row.get("id") {
@@ -997,6 +1216,7 @@ async fn apply_updates(
             let mut set_parts: Vec<String> = Vec::new();
             let mut params: Vec<DataValue> = Vec::new();
             let mut i = 0usize;
+            let mut new_parent: Option<String> = None; // 分级字典：本行新 parent 值（若有变更）
             for (k, v) in fields {
                 if !valid_col(view, k) || k == &view.pk || is_server_managed_col(k) {
                     continue;
@@ -1004,9 +1224,22 @@ async fn apply_updates(
                 i += 1;
                 set_parts.push(format!("\"{}\" = ${}", k, i));
                 params.push(to_dv_by_col(view, k, v));
+                // 分级字典：记录新 parent 值（UPDATE 之前先 SELECT 旧 parent）
+                if pf.as_deref() == Some(k.as_str()) {
+                    new_parent = non_empty_id_str(v);
+                }
             }
             if set_parts.is_empty() {
                 continue;
+            }
+            // 分级字典 + 本行改了 parent：UPDATE 之前 SELECT 旧 parent（之后被覆盖查不到）。
+            // 旧 parent 先暂存，等 UPDATE 确认成功后再推进 touched_parents（冲突时父未变，不重算）。
+            let mut old_parent_to_touch: Option<String> = None;
+            if new_parent.is_some()
+                && let Some(pf) = &pf
+            {
+                old_parent_to_touch =
+                    select_parent_id(mm, db_id, txn_id, view, pf, &id).await?;
             }
             // update_time 服务端刷新。
             if valid_col(view, "update_time") {
@@ -1058,7 +1291,7 @@ async fn apply_updates(
                         row_index = row_index, id = %id, baseline = %baseline_repr,
                         "optimistic_lock_conflict"
                     );
-                    return Ok((affected, updated_at, true));
+                    return Ok((affected, updated_at, true, touched_parents));
                 }
                 affected += rows_touched as u64;
                 // 从 RETURNING 结果取新 update_time（第 0 行的 ut 列）。
@@ -1075,6 +1308,10 @@ async fn apply_updates(
                         row_index = row_index, id = %id,
                         "update_time_extract_failed"
                     );
+                }
+                // UPDATE 成功后推进 parent 变更（含 RETURNING 分支）
+                if rows_touched > 0 {
+                    collect_parent_change(&mut touched_parents, old_parent_to_touch.take(), new_parent.take());
                 }
             } else {
                 // 退化路径：表无 update_time 列，走 execute（不加 RETURNING、不回查）。
@@ -1097,13 +1334,17 @@ async fn apply_updates(
                         row_index = row_index, id = %id, baseline = %baseline_repr,
                         "optimistic_lock_conflict"
                     );
-                    return Ok((affected, updated_at, true));
+                    return Ok((affected, updated_at, true, touched_parents));
                 }
                 affected += n;
+                // UPDATE 成功后推进 parent 变更（execute 退化分支）
+                if n > 0 {
+                    collect_parent_change(&mut touched_parents, old_parent_to_touch.take(), new_parent.take());
+                }
             }
         }
     }
-    Ok((affected, updated_at, false))
+    Ok((affected, updated_at, false, touched_parents))
 }
 
 /// 在事务内应用 changeset 的一个桶：deleted → inserted → updated。返回 (affected, updatedAt, conflict, idMap)。
@@ -1117,17 +1358,34 @@ async fn save_apply(
     view: &DictView,
     bucket: &Value,
 ) -> Result<(u64, Vec<Value>, bool, serde_json::Map<String, Value>)> {
-    // deleted：按 pk 删。
-    let mut affected = apply_deletes(mm, db_id, txn_id, view, bucket).await?;
+    // deleted：按 pk 删（分级字典同时收集被删行的旧 parent_id）。
+    let (del_affected, del_parents) = apply_deletes(mm, db_id, txn_id, view, bucket).await?;
+    let mut affected = del_affected;
 
-    // inserted：铸号 + upsert。
-    let (ins_affected, id_map) = apply_inserts(mm, db_id, txn_id, view, bucket).await?;
+    // inserted：铸号 + upsert（分级字典同时收集新增行挂载的 parent_id）。
+    let (ins_affected, id_map, ins_parents) =
+        apply_inserts(mm, db_id, txn_id, view, bucket).await?;
     affected += ins_affected;
 
     // updated：乐观锁 UPDATE + 回查 update_time（命中冲突提前返回）。
-    let (upd_affected, updated_at, conflict) =
+    // 分级字典 + 改 parent 时同时收集新/旧 parent_id。
+    let (upd_affected, updated_at, conflict, upd_parents) =
         apply_updates(mm, db_id, txn_id, view, bucket).await?;
     affected += upd_affected;
+
+    // 分级字典 is_leaf 级联维护：收集三段所有受影响 parent_id，统一重算。
+    // 仅 conflict=false（无乐观锁冲突）才重算——冲突时上层 save 会 rollback，无需重算。
+    if !conflict {
+        let pf = hierarchy_parent_field(view);
+        if let Some(pf) = pf {
+            let mut touched = del_parents;
+            touched.extend(ins_parents);
+            touched.extend(upd_parents);
+            if !touched.is_empty() {
+                recompute_parent_is_leaf(mm, db_id, txn_id, view, &pf, &touched).await?;
+            }
+        }
+    }
 
     Ok((affected, updated_at, conflict, id_map))
 }

@@ -21,8 +21,9 @@ use cmx_core::model::data::dataset::Schema;
 use cmx_database::DatabaseManager;
 
 use super::loader::DocLoader;
-use super::revision::DocRevision;
+use super::revision::{DocRevision, RevisionRecord};
 use cmx_biz::{BizError, Result};
+use cmx_doc_model::codec::{json_to_dv_loose, json_to_dv_typed};
 use cmx_doc_model::meta::{DocMetaView, LayerView};
 use cmx_doc_model::query::DocQuery;
 
@@ -529,20 +530,22 @@ impl DocSaver {
             // 事务内重装载（看得到未提交写）→ 整单终态 DataSet。
             let root_ds = DocLoader::load_txn(mm, db_id, meta, &dq, Some(txn_id)).await?;
             let actor_id = sctx.actor_id.to_string();
-            // record 内部用 ColumnarCodec 编列式快照存 JSONB（与装载同序列化器）。
+            // record 内部用 ColumnarCodec 编列式快照存 JSONB(与装载同序列化器)。
             DocRevision::record(
                 mm,
                 db_id,
                 txn_id,
-                &sctx.doc_file,
-                &root.table_name,
-                &root_id,
-                &op,
-                &root_ds,
-                Some(&actor_id),
-                Some(&sctx.actor_name),
-                None,
-                None,
+                &RevisionRecord {
+                    doc_file: &sctx.doc_file,
+                    root_table: &root.table_name,
+                    root_id: &root_id,
+                    op: &op,
+                    root_ds: &root_ds,
+                    actor_id: Some(&actor_id),
+                    actor_name: Some(&sctx.actor_name),
+                    reason: None,
+                    biz_status: None,
+                },
             )
             .await?;
         }
@@ -1404,113 +1407,24 @@ fn build_multi_update_sql(
     )
 }
 
-/// JSON 值 → DataValue（回存参数绑定）。
-fn json_to_dv(v: &Value) -> DataValue {
-    match v {
-        Value::Null => DataValue::Null,
-        Value::Bool(b) => DataValue::Bool(*b),
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                DataValue::Int(i)
-            } else {
-                DataValue::Float(n.as_f64().unwrap_or(0.0))
-            }
-        }
-        Value::String(s) => DataValue::String(s.clone()),
-        other => DataValue::Json(other.to_string()),
-    }
-}
-
-/// 按列的定义类型把 JSON 值转成匹配的 DataValue（解决 PG `bigint = text` 类型不匹配）。
+/// 按列的定义类型把 JSON 值转成匹配的 DataValue(薄包装:查 schema + 委托 codec)。
 ///
-/// 前端 changeset 里 id/数值常是 JSON 字符串（如 "1000000001"），而列可能是 BIGINT。
-/// 这里读 layer.schema 该列的 FieldType，把数字字符串强转为 Int/Float，避免绑定类型错。
+/// 前端 changeset 里 id/数值常是 JSON 字符串(如 "1000000001"),而列可能是 BIGINT。
+/// 这里读 layer.schema 该列的 FieldType,委托 [`cmx_doc_model::codec::json_to_dv_typed`]
+/// 做强转(避免 PG `bigint = text` 类型不匹配);类型缺失时走 [`json_to_dv_loose`] 兜底。
 fn dv_for_col(v: &Value, layer: &LayerView, col: &str) -> DataValue {
-    use cmx_core::model::cell::FieldType;
     let ft = layer
         .schema
         .get_index(col)
         .and_then(|i| layer.schema.fields.get(i))
         .map(|f| f.field_type.clone());
-
-    match (v, ft) {
-        // 目标是整数列：数字字符串/数字 → Int
-        (Value::String(s), Some(FieldType::Int)) => s
-            .trim()
-            .parse::<i64>()
-            .map(DataValue::Int)
-            .unwrap_or_else(|_| {
-                if s.is_empty() {
-                    DataValue::Null
-                } else {
-                    DataValue::String(s.clone())
-                }
-            }),
-        (Value::String(s), Some(FieldType::Float)) => s
-            .trim()
-            .parse::<f64>()
-            .map(DataValue::Float)
-            .unwrap_or_else(|_| {
-                if s.is_empty() {
-                    DataValue::Null
-                } else {
-                    DataValue::String(s.clone())
-                }
-            }),
-        // 目标是 Decimal/日期列的空字符串 → NULL
-        (Value::String(s), Some(FieldType::Decimal | FieldType::Date | FieldType::DateTime))
-            if s.trim().is_empty() =>
-        {
-            DataValue::Null
-        }
-        // 目标是 Decimal 列的非空数字字符串 → Decimal（避免 text 绑 numeric 报错）
-        (Value::String(s), Some(FieldType::Decimal)) => s
-            .trim()
-            .parse::<rust_decimal::Decimal>()
-            .map(DataValue::Decimal)
-            .unwrap_or_else(|_| DataValue::String(s.clone())),
-        // 目标是 Decimal 列的 JSON 数字 → Decimal
-        (Value::Number(n), Some(FieldType::Decimal)) => {
-            use std::str::FromStr;
-            rust_decimal::Decimal::from_str(&n.to_string())
-                .map(DataValue::Decimal)
-                .unwrap_or_else(|_| json_to_dv(v))
-        }
-        // 目标是日期时间列（TIMESTAMP/TIMESTAMPTZ→DateTime）的非空字符串 → DateTime。
-        // 兼容 RFC3339（"2026-07-07T09:00:00Z"）与无时区的 "2026-07-07T09:00:00" / "2026-07-07 09:00:00"（按 UTC）。
-        (Value::String(s), Some(FieldType::DateTime)) => parse_datetime(s.trim())
-            .map(DataValue::DateTime)
-            .unwrap_or_else(|| DataValue::String(s.clone())),
-        // 目标是 DATE 列的非空字符串 → Date
-        (Value::String(s), Some(FieldType::Date)) => s
-            .trim()
-            .parse::<chrono::NaiveDate>()
-            .map(DataValue::Date)
-            .unwrap_or_else(|_| DataValue::String(s.clone())),
-        // 其余走通用转换
-        _ => json_to_dv(v),
+    match ft {
+        Some(ft) => json_to_dv_typed(&ft, v),
+        None => json_to_dv_loose(v),
     }
 }
 
-/// 解析日期时间字符串为 UTC DateTime，兼容 RFC3339 与无时区两种常见格式。
-fn parse_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
-    use chrono::{DateTime, NaiveDateTime, Utc};
-    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-        return Some(dt.with_timezone(&Utc));
-    }
-    for fmt in [
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S%.f",
-    ] {
-        if let Ok(ndt) = NaiveDateTime::parse_from_str(s, fmt) {
-            return Some(DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc));
-        }
-    }
-    None
-}
-
-/// 从请求 body 提取 saveMode / changes（handler 用）。
+/// 从请求 body 提取 saveMode / changes(handler 用)。
 pub fn parse_save_body(body: &Value) -> (SaveMode, Value) {
     let mode = body
         .get("saveMode")
@@ -1527,9 +1441,6 @@ pub fn parse_save_body(body: &Value) -> (SaveMode, Value) {
     };
     (mode, changes)
 }
-
-#[allow(dead_code)]
-fn _map_unused(_: &Map<String, Value>) {}
 
 #[cfg(test)]
 mod tests {
@@ -1560,10 +1471,10 @@ mod tests {
 
     #[test]
     fn json_to_dv_types() {
-        assert!(matches!(json_to_dv(&json!(5)), DataValue::Int(5)));
-        assert!(matches!(json_to_dv(&json!("a")), DataValue::String(_)));
-        assert!(matches!(json_to_dv(&json!(null)), DataValue::Null));
-        assert!(matches!(json_to_dv(&json!(true)), DataValue::Bool(true)));
+        assert!(matches!(json_to_dv_loose(&json!(5)), DataValue::Int(5)));
+        assert!(matches!(json_to_dv_loose(&json!("a")), DataValue::String(_)));
+        assert!(matches!(json_to_dv_loose(&json!(null)), DataValue::Null));
+        assert!(matches!(json_to_dv_loose(&json!(true)), DataValue::Bool(true)));
     }
 
     #[test]

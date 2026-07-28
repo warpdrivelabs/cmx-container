@@ -26,6 +26,8 @@ use super::store::{self, DefRef};
 static DOC_FILE_CACHE: OnceLock<RwLock<HashMap<String, String>>> = OnceLock::new();
 /// DCT 定义文件解析结果缓存（键 `domain/app/module/dict` → file）。
 static DICT_FILE_CACHE: OnceLock<RwLock<HashMap<String, String>>> = OnceLock::new();
+/// BASE 定义文件解析结果缓存（键 `domain/<moduleCode>` → file）。
+static BASE_FILE_CACHE: OnceLock<RwLock<HashMap<String, String>>> = OnceLock::new();
 
 fn doc_file_cache() -> &'static RwLock<HashMap<String, String>> {
     DOC_FILE_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
@@ -33,6 +35,10 @@ fn doc_file_cache() -> &'static RwLock<HashMap<String, String>> {
 
 fn dict_file_cache() -> &'static RwLock<HashMap<String, String>> {
     DICT_FILE_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+fn base_file_cache() -> &'static RwLock<HashMap<String, String>> {
+    BASE_FILE_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
 fn not_found(msg: String) -> Error {
@@ -52,6 +58,17 @@ pub fn dict_matches(t: &Value, target: &str) -> bool {
 
 /// 判断一份 DOC 定义是否命中目标编码：`moduleMeta.moduleCode` 等于 `target`。
 pub fn doc_matches(doc: &Value, target: &str) -> bool {
+    doc.get("moduleMeta")
+        .and_then(|m| m.get("moduleCode"))
+        .and_then(|v| v.as_str())
+        == Some(target)
+}
+
+/// 判断一份 BASE 定义是否命中目标编码：`moduleMeta.moduleCode` 等于 `target`。
+///
+/// BASE 字段集模板（`base/*.json`）按 `moduleMeta.moduleCode` 定位（如 `base_dct_meta`），
+/// 与 DOC 的 moduleCode 反查同形——约定 moduleCode 即文件名 stem（去 `_v<N>.json` 后缀）。
+pub fn base_matches(doc: &Value, target: &str) -> bool {
     doc.get("moduleMeta")
         .and_then(|m| m.get("moduleCode"))
         .and_then(|v| v.as_str())
@@ -385,6 +402,116 @@ pub async fn resolve_dict_file(
             "未在 {domain}/{app}/{module} 下找到含字典 {dict} 的 DCT 定义文件"
         ))),
     }
+}
+
+/// 解析 BASE 定义文件：扫 `base/*.json`，按 `moduleMeta.moduleCode` 命中目标 stem（如 `base_dct_meta`）。
+///
+/// 与 DOC/DCT 的反查同形，差异只在存储布局：BASE 文件平铺在 `meta/definitions/base/` 下，
+/// 无 application/module 层级，定位段仅需 `domain=base` + `moduleCode`（约定 = 文件名 stem）。
+/// 版本选择策略与 DOC/DCT 一致：isDefault 优先 → version 最大 → file 名升序（跨副本确定性收敛）。
+///
+/// `code` 形如 `base_dct_meta`（无 `.json` 后缀），由前端 `_inferBaseId` 以 stem 形式发出。
+pub async fn resolve_base_file(domain: &str, code: &str) -> Result<String> {
+    let cache_key = format!("{domain}/{code}");
+    if let Some(f) = base_file_cache().read().await.get(&cache_key).cloned() {
+        return Ok(f);
+    }
+    // BASE 文件平铺在 base/ 下；list_definitions 对 base 域特例处理（直接扫 base/*.json）。
+    let items = store::list_definitions(Some("BASE"), Some(domain), None, None).await?;
+    // 提取 owned 摘要元组：(stem, file, is_default, version)
+    let entries: Vec<(String, String, bool, u64)> = items
+        .iter()
+        .filter_map(|it| {
+            let stem = it.get("stem").and_then(|v| v.as_str())?.to_string();
+            let file = it.get("file").and_then(|v| v.as_str())?.to_string();
+            let is_default = it
+                .get("isDefault")
+                .and_then(|x| x.as_bool())
+                .unwrap_or(false);
+            let version = it.get("version").and_then(|x| x.as_u64()).unwrap_or(0);
+            Some((stem, file, is_default, version))
+        })
+        .collect();
+    if entries.is_empty() {
+        return Err(not_found(format!(
+            "未在 {domain}/ 下找到 BASE 定义文件"
+        )));
+    }
+    // 按 stem 分组，每组选出代表（isDefault 优先，否则 version 最大）。
+    let mut groups: HashMap<String, Vec<(String, bool, u64)>> = HashMap::new();
+    for (stem, file, is_default, version) in &entries {
+        groups
+            .entry(stem.clone())
+            .or_default()
+            .push((file.clone(), *is_default, *version));
+    }
+    // C1：脏状态检测——同 stem 多 isDefault=true。
+    warn_stem_multi_default("BASE", domain, "", "", &entries);
+    let pick = |arr: &[(String, bool, u64)]| -> Option<String> {
+        let any_default = arr.iter().any(|(_, d, _)| *d);
+        arr.iter()
+            .filter(|(_, d, _)| if any_default { *d } else { true })
+            .max_by_key(|(_, _, v)| *v)
+            .map(|(f, _, _)| f.clone())
+    };
+    // 收集候选文件（每组代表优先），按 (isDefault, version, file) 确定性排序。
+    let mut candidates: Vec<String> = Vec::new();
+    for arr in groups.values() {
+        if let Some(f) = pick(arr) {
+            candidates.push(f);
+        }
+    }
+    sort_candidates_by_default(&mut candidates, &entries);
+    // 代表都没命中时，回退扫描该 stem 组其余版本（防 isDefault 版本恰好 moduleCode 不符）。
+    let mut fallback: Vec<String> = Vec::new();
+    for (_, file, _, _) in &entries {
+        if !candidates.contains(file) {
+            fallback.push(file.clone());
+        }
+    }
+    sort_candidates_by_default(&mut fallback, &entries);
+    // 逐候选验证 moduleCode，收集所有命中（按 isDefault/version 选最优）。
+    let mut hits: Vec<(String, bool, u64)> = Vec::new();
+    let entry_meta = |file: &str| -> (bool, u64) {
+        entries
+            .iter()
+            .find(|(_, f, _, _)| f == file)
+            .map(|(_, _, d, v)| (*d, *v))
+            .unwrap_or((false, 0))
+    };
+    for f in candidates.iter().chain(fallback.iter()) {
+        let bref = DefRef {
+            domain: Some(domain.to_string()),
+            file: Some(f.clone()),
+            ..Default::default()
+        };
+        let doc = match store::get_definition(&bref).await {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        if base_matches(&doc, code) {
+            let (is_default, version) = entry_meta(f);
+            hits.push((f.clone(), is_default, version));
+        }
+    }
+    // C2：跨 stem 同 moduleCode 重复定义——按确定性顺序选第一份，其余 warn。
+    if hits.len() > 1 {
+        let files: Vec<&str> = hits.iter().map(|(f, _, _)| f.as_str()).collect();
+        warn!(
+            "[BASE] 跨 stem 同 moduleCode 重复定义: domain={domain}, \
+             moduleCode={code}, files={files:?} —— 选用 pick 收敛结果，建议清理重复定义"
+        );
+    }
+    if let Some(resolved) = pick(&hits) {
+        base_file_cache()
+            .write()
+            .await
+            .insert(cache_key, resolved.clone());
+        return Ok(resolved);
+    }
+    Err(not_found(format!(
+        "未在 {domain}/ 下找到 moduleCode={code} 的 BASE 定义文件"
+    )))
 }
 
 #[cfg(test)]

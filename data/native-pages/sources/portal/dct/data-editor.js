@@ -54,6 +54,22 @@ function isBusinessKey (col, meta) {
   return false
 }
 
+/** 必填列判定（列头标识与保存校验共用，与 buildColumnModel 一致）：
+ *  元数据 edit.required / 顶层 required 优先；其次 nullable=false 推断；业务键强制必填。 */
+function isRequiredCol (c, meta) {
+  if (isBusinessKey(c, meta)) return true
+  const metaEdit = c.edit && typeof c.edit === 'object' ? c.edit : null
+  if (metaEdit && metaEdit.required === true) return true
+  if (c.required === true) return true
+  if (c.nullable === false) return true
+  return false
+}
+
+/** 必填校验用的空值判定：null/undefined/空串/纯空白 视为空。 */
+function isEmptyValue (v) {
+  return v == null || (typeof v === 'string' && v.trim() === '')
+}
+
 function showInTable (col, meta) {
   if (DERIVED_HIERARCHY.has(col.name)) return false
   // 元数据声明 visible:false → 列表隐藏（如 base 定义 id 列 visible:false）。
@@ -358,6 +374,7 @@ function styleHtml () {
 .de-tree-node:hover{background:color-mix(in srgb,var(--neo-cyan) 10%,var(--sapList_Background,#fff))}
 .de-tree-node.active{background:color-mix(in srgb,var(--neo-cyan) 18%,var(--sapList_Background,#fff));font-weight:600;color:var(--neo-cyan)}
 .de-tree-toggle{cursor:pointer;user-select:none;width:14px;display:inline-block;color:var(--sapContent_LabelColor,#6a6d70);font-size:11px}
+.de-tree-leaf{width:14px;display:inline-block;color:var(--neo-mint,#10b981);font-size:8px;text-align:center;line-height:14px;opacity:.7}
 .de-tree-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .de-tree-meta{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70)}
 .de-tree-root{font-size:13px;padding:5px 8px;cursor:pointer;border-radius:4px;color:var(--sapContent_LabelColor,#6a6d70)}
@@ -590,8 +607,8 @@ function buildColumnModel (meta) {
           }
           if (em.parentField) colOpts.editSettings.parentCol = em.parentField
         }
-        // 必填：元数据 edit.required / 顶层 required 优先；其次 nullable=false 推断（向后兼容）
-        if (colOpts.edit.required === true || c.required === true || c.nullable === false) {
+        // 必填：统一用 isRequiredCol（与列头标识、保存校验共用判定）
+        if (isRequiredCol(c, meta)) {
           colOpts.edit.required = true
         }
         // 业务键（字符串主键 / codeField）：新增时可填，保存后只读。
@@ -661,6 +678,7 @@ async function applyRowsToGrid (root, rows) {
     const cm = buildColumnModel(state.meta)
     if (cm) newGrid.setColumnModel(cm)
     // 行内编辑：editable 总开关 + 单击触发；关闭合计行（字典维护不需要汇总）
+    // showRequiredMark: 必填列头显示红色 * 标识（编辑页开启，只读页默认关闭）
     newGrid.setOptions && newGrid.setOptions({
       selectionMode: 'multi',
       fillHeight: true,
@@ -668,6 +686,7 @@ async function applyRowsToGrid (root, rows) {
       editable: true,
       editTrigger: 'click',
       showTotals: false,
+      showRequiredMark: true,
     })
     wireGridEvents(newGrid, root)
     state._lastDictCode = state.dictCode
@@ -691,7 +710,8 @@ async function applyRowsToGrid (root, rows) {
   // 引用字典列回显：让 code/id 自动显示为字典名称（country_code → 国家名）
   if (typeof grid.enableDictEcho === 'function') {
     try {
-      await grid.enableDictEcho({ coord: state.def, dbId: state.def.dbId }, undefined)
+      //fixme 0727 性能问题，注释字典回显
+      // await grid.enableDictEcho({ coord: state.def, dbId: state.def.dbId }, undefined)
     } catch (_) { /* 回显失败不阻断 */ }
   }
   try { grid.refreshLayout && grid.refreshLayout() } catch (_) {}
@@ -887,6 +907,33 @@ async function save (root) {
 
     const dirty = inserted.length + updated.length + deleted.length
     if (!dirty) { cmxNotify('info', '无变更可保存'); setMsg(root, ''); return }
+
+    // 保存前必填校验：检查 inserted（全字段）+ updated（仅 fields 里出现的字段）。
+    // 后端只认 nullable，不认 edit.required（如 nullable=true 但 required=true 的列后端不兜底），
+    // 故前端必须自校验。判定与列头标识、buildColumnModel 共用 isRequiredCol。
+    const requiredCols = (meta.columns || [])
+      .filter((c) => showInTable(c, meta) && isEditable(c, meta) && isRequiredCol(c, meta))
+    const violations = []
+    for (const ins of inserted) {
+      for (const c of requiredCols) {
+        if (isEmptyValue(ins.fields[c.name])) {
+          violations.push({ id: ins.id, field: c.name, message: `${colCaption(c)} 为必填项` })
+        }
+      }
+    }
+    for (const upd of updated) {
+      // 仅校验 fields 里出现的必填字段（用户没改的必填字段即使历史为空也不拦，避免"我没改这行却报错"）
+      for (const c of requiredCols) {
+        if (c.name in upd.fields && isEmptyValue(upd.fields[c.name])) {
+          violations.push({ id: upd.id, field: c.name, message: `${colCaption(c)} 为必填项` })
+        }
+      }
+    }
+    if (violations.length) {
+      presentViolations(violations)
+      setMsg(root, `保存失败：${violations.length} 处必填项为空`, 'err')
+      return
+    }
 
     const payload = {
       saveMode: 'merge',
@@ -1152,6 +1199,15 @@ function nodeLabel (row) {
   return lbl || code || row[meta.pk] || ''
 }
 
+/** 判断节点是否叶子（无下级）。分级字典的 is_leaf 字段（TINYINT，1=叶子/0=有子）。
+ *  兼容整数 1 / 布尔 true / 字符串 '1' 三种形态（参照 cmx-dct-source.js normalizeDictRow 的判定）。
+ *  注意：cmx-dct 后端不维护父子 is_leaf 联动（新增子节点不会把父改 0），is_leaf 只作"已知叶子"提示——
+ *  判 true 时省去展开箭头与下级请求；判 false（含缺失）时仍渲染箭头，点开后若返回空也能正常呈现。 */
+function isLeafNode (row) {
+  const v = row && row.is_leaf
+  return v === 1 || v === true || v === '1'
+}
+
 function renderTree (root) {
   const body = root.querySelector('#deTreeBody')
   if (!body) return
@@ -1169,10 +1225,23 @@ function renderTree (root) {
     state.currentParentId = null
     state.selectedTreeNodeId = null
     state.page = 1
-    renderTree(root)
+    // 仅更新高亮，不重建树（保留展开态）
+    highlightTreeNode(body)
     await reload(root)
   })
   wireTreeNodeClick(root, body)
+}
+
+/** 局部更新树节点选中高亮，不重建 DOM（保留展开/收起状态）。
+ *  点击节点本身或根节点时调用——这类操作只改选中态 + 右侧数据，树结构应保持原样。 */
+function highlightTreeNode (body) {
+  const sel = state.selectedTreeNodeId
+  const isRoot = state.currentParentId == null
+  body.querySelectorAll('.de-tree-node[data-node-id]').forEach((el) => {
+    el.classList.toggle('active', !isRoot && String(el.dataset.nodeId) === String(sel))
+  })
+  const rootEl = body.querySelector('.de-tree-root[data-node-id="__root__"]')
+  if (rootEl) rootEl.classList.toggle('active', isRoot)
 }
 
 function renderTreeNodes (nodes, pk) {
@@ -1183,6 +1252,16 @@ function renderTreeNodes (nodes, pk) {
     const isActive = String(state.selectedTreeNodeId) === String(id)
     const code = state.meta.codeField ? n[state.meta.codeField] : ''
     const meta = code !== '' ? ` <span class="de-tree-meta">${escHtml(String(code))}</span>` : ''
+    // 叶子节点（is_leaf=1）：不渲染展开箭头与子容器，省去无意义的下级请求。
+    // 用 de-tree-leaf 占位 span 保持与非叶节点箭头同宽（14px），对齐美观。
+    if (isLeafNode(n)) {
+      return `<div>
+        <div class="de-tree-node ${isActive ? 'active' : ''}" data-node-id="${escAttr(String(id))}">
+          <span class="de-tree-leaf">●</span>
+          <span class="de-tree-label">${escHtml(label)}${meta}</span>
+        </div>
+      </div>`
+    }
     return `<div>
       <div class="de-tree-node ${isActive ? 'active' : ''}" data-node-id="${escAttr(String(id))}">
         <span class="de-tree-toggle" data-toggle="${escAttr(String(id))}">▸</span>
@@ -1201,7 +1280,10 @@ function wireTreeNodeClick (root, body) {
       state.selectedTreeNodeId = id
       state.currentParentId = id
       state.page = 1
-      renderTree(root)
+      // 仅更新高亮，不重建树——避免点击节点导致已展开的子树收起（renderTree 只渲染第一级）。
+      // 展开态由 .de-tree-toggle 的 click handler 独立管理，不应受节点选中影响。
+      const treeBody = root.querySelector('#deTreeBody')
+      if (treeBody) highlightTreeNode(treeBody)
       await reload(root)
     })
   })
@@ -1218,10 +1300,18 @@ function wireTreeNodeClick (root, body) {
         return
       }
       tg.textContent = '▾'
+      // 已加载过子级 → 直接展开（避免重复请求）
       if (!state.treeNodes[String(id)]) {
         try { await loadTreeChildren(root, id) } catch (e) { /* 忽略 */ }
       }
       const children = state.treeNodes[String(id)] || []
+      // 兜底：若下级实际为空（数据 is_leaf 不准或子节点被删光），恢复箭头并标记为叶，
+      // 避免留下一个空的展开容器和误导性的 ▾ 图标。
+      if (!children.length) {
+        tg.textContent = '▸'
+        childBox.style.display = 'none'
+        return
+      }
       childBox.innerHTML = renderTreeNodes(children, state.meta.pk)
       childBox.style.display = 'block'
       wireTreeNodeClick(root, childBox)

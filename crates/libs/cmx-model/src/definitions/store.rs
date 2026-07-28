@@ -701,16 +701,12 @@ fn set_doc_default_flag(doc: &mut serde_json::Value, value: bool) -> bool {
 ///
 /// # Arguments
 ///
-/// * `r` - 目标定义文件引用（base 域不支持版本管理，会返回错误）。
+/// * `r` - 目标定义文件引用。
 ///
 /// # Returns
 ///
 /// 返回 `{ ok, default, changed }`，changed 为实际改动了 isDefault 的文件名列表。
 pub async fn set_default_version(r: &DefRef) -> PortalResult<serde_json::Value> {
-    // base 公共模板无版本管理，直接拒绝
-    if r.domain.as_deref().unwrap_or("").trim() == "base" {
-        return Err(PortalError::bad_request("base 公共模板无版本管理"));
-    }
     let rel = resolve_rel(r)?;
     let target_file = rel.last().cloned().unwrap_or_default();
     let dir = abs_path(&rel[..rel.len() - 1]);

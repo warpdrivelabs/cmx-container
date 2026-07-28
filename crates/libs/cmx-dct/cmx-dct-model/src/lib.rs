@@ -499,6 +499,11 @@ pub fn is_server_managed_col(name: &str) -> bool {
 
 /// 服务端会 backfill 的列——校验 NOT NULL 时跳过（row 未提供时服务端强填），但**用户提供了值仍校验**。
 /// 与 build_upsert_sql 的 backfill 表一致。
+///
+/// **不含** `effective_from`：元数据 `dictionaryEffectiveFields` 明确标 `required: true`，
+/// 是业务必填字段而非服务端兜底。若放本表，校验层会跳过 NOT NULL 检查，客户端显式传 null 时
+/// `build_upsert_sql_dv` 会按 null 走参数绑定而非 backfill，触发数据库 NOT NULL 违反。修复方案
+/// 见 [cmx-dct-store-pg#validate_bucket] → `validate_insert_row` 的语义：必填字段必须由客户端提供。
 pub const SERVER_FILLED_COLS: &[&str] = &[
     "create_by",
     "update_by",
@@ -507,7 +512,6 @@ pub const SERVER_FILLED_COLS: &[&str] = &[
     "is_system",
     "is_leaf",
     "level_no",
-    "effective_from",
     "full_path",
     "delete_flag",
 ];
@@ -552,6 +556,10 @@ pub fn build_upsert_sql_dv(
     }
     // 服务端强填 NOT NULL 无默认值的常见列（客户端未给时）。用 SQL 字面量，不占参数位。
     let provided: std::collections::HashSet<&str> = cols.iter().map(|c| c.as_str()).collect();
+    // 服务端 backfill 列（与 build_batch_insert_sql / SERVER_FILLED_COLS 一致）
+    //
+    // **不含** `effective_from`：元数据 `required: true` 必填，必须由客户端显式提供。
+    // 若列入 backfill，客户端传 null 会走参数绑定而非 CURRENT_DATE 兜底，触发数据库 NOT NULL 违反。
     let backfill: &[(&str, &str, bool)] = &[
         ("create_time", "now()", false),
         ("update_time", "now()", true),
@@ -560,7 +568,6 @@ pub fn build_upsert_sql_dv(
         ("is_system", "0", false),
         ("is_leaf", "1", false),
         ("level_no", "1", false),
-        ("effective_from", "CURRENT_DATE", false),
     ];
     for (name, lit, on_update) in backfill {
         if valid_col(view, name) && !provided.contains(name) {

@@ -1,5 +1,7 @@
 {
   "version": 1,
+  "versionName": "",
+  "isDefault": true,
   "scenario": "account",
   "domain": "fi",
   "app": "cmxfico",
@@ -9,12 +11,6 @@
   "description": "科目辅助核算：anchor=[account]，按科目/科目类目细分辅助核算维度",
   "status": "draft",
   "tags": [],
-  "docRef": {
-    "domain": "fi",
-    "module": "gl",
-    "file": "gl_md_doc_meta_v1.json",
-    "title": "总账"
-  },
   "dimensions": {
     "fiscal_period": {
       "name": "会计期间",
@@ -599,7 +595,8 @@
       "caption": "现金",
       "detail": {
         "table": "voucher_detail",
-        "use": "*"
+        "use": "*",
+        "fields": []
       }
     },
     {
@@ -936,7 +933,8 @@
               "amount"
             ]
           }
-        ]
+        ],
+        "fields": []
       }
     },
     {
@@ -987,7 +985,11 @@
       "panel": "voucher_entry"
     }
   ],
-  "updatedAt": "2026-06-30T08:59:27.994Z",
-  "application": "cmxfico",
-  "isDefault": true
+  "updatedAt": "2026-07-23T02:39:37.865Z",
+  "docRef": {
+    "domain": "fi",
+    "module": "gl",
+    "file": "gl_md_doc_meta_v1.json",
+    "title": "总账"
+  }
 }

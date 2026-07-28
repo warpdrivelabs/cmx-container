@@ -18,6 +18,8 @@ cmx-core = { workspace = true }
 cmx-database = { workspace = true }
 # 内部依赖 - 数据库（tokio-postgres 并行 DB 层：ZmcDataSet 零拷贝新链路）
 cmx-database-pg = { workspace = true }
+# 内部依赖 - 零拷贝行源（ZmcDataSet<R>/ZmcChildGroup<R>/ZmcRowSource 泛型抽象）
+cmx-rowsource = { workspace = true }
 # 内部依赖 - 工具（雪花 id：版本快照主键）
 cmx-utils = { workspace = true }
 # 内部依赖 - 业务错误 + 落库前列级校验（validation/errcode，DOC/DCT 共享）
@@ -25,8 +27,8 @@ cmx-biz = { workspace = true }
 
 # 数值精度（Decimal 列绑定）
 rust_decimal = { workspace = true }
-# keyset 游标编解码（base64）
-base64 = { workspace = true }
+# 高并发无锁缓存（cache.rs DocMetaView 进程内缓存）
+dashmap = { workspace = true }
 # 序列化框架
 serde = { workspace = true }
 # JSON（请求体/结果集交换）
