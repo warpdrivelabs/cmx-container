@@ -31,39 +31,12 @@ const AUDIT_FIELDS = new Set(['create_by', 'create_time', 'update_by', 'update_t
 const SYSTEM_FLAG_FIELDS = new Set(['is_system'])
 const DERIVED_HIERARCHY = new Set(['full_path', 'level_no', 'is_leaf'])
 
-/** 判断字段是否为主键（兼容 isPrimaryKey:1/true 与 meta.pk 两种标记）。
- *  元数据字段可能用 isPrimaryKey（0/1 或 boolean）显式标记，也可能仅由 meta.pk 声明。 */
-function isPrimaryKeyField (col, meta) {
-  if (Number(col.isPrimaryKey) === 1 || col.isPrimaryKey === true) return true
-  return !!meta.pk && col.name === meta.pk
-}
-
-/** 业务键（新增可填、保存后只读）：
- *  ① 字符串物理主键（isPrimaryKey:1 且 dataType 为 VARCHAR/CHAR/TEXT）；
- *  ② 字典业务编码字段（meta.codeField 指向且 dataType 为 VARCHAR/CHAR/TEXT）。
- *  codeField 虽非物理主键，但作为业务编码（通常唯一、有外键引用），修改会破坏一致性，
- *  故与字符串主键同等对待。整数物理主键（id，后端铸号）非业务键，前端不可编辑。 */
-function isBusinessKey (col, meta) {
-  const t = String(col.dataType || '').toUpperCase()
-  const isString = t.includes('CHAR') || t.includes('TEXT') || t === 'STRING'
-  if (!isString) return false
-  // 字符串物理主键（isPrimaryKey 标记 或 meta.pk 声明）
-  if (isPrimaryKeyField(col, meta)) return true
-  // 字典业务编码字段（codeField）
-  if (!!meta.codeField && col.name === meta.codeField) return true
-  return false
-}
-
-/** 必填列判定（列头标识与保存校验共用，与 buildColumnModel 一致）：
- *  元数据 edit.required / 顶层 required 优先；其次 nullable=false 推断；业务键强制必填。 */
-function isRequiredCol (c, meta) {
-  if (isBusinessKey(c, meta)) return true
-  const metaEdit = c.edit && typeof c.edit === 'object' ? c.edit : null
-  if (metaEdit && metaEdit.required === true) return true
-  if (c.required === true) return true
-  if (c.nullable === false) return true
-  return false
-}
+/* 主键/业务键/必填判定已下移到 cmx-data-comp（init-page-models.js），通过 cmx() 引用统一实现。
+   消除本地副本与组件库的重复——组件库修改判定规则时，data-editor.js 自动受益。
+   函数签名不变（col, meta），所有调用点（isEditable/addRow/save）无需改动。 */
+const isPrimaryKeyField = (col, meta) => cmx().isPrimaryKeyField(col, meta)
+const isBusinessKey = (col, meta) => cmx().isBusinessKey(col, meta)
+const isRequiredCol = (col, meta) => cmx().isRequiredCol(col, meta)
 
 /** 必填校验用的空值判定：null/undefined/空串/纯空白 视为空。 */
 function isEmptyValue (v) {
