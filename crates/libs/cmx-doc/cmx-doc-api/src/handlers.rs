@@ -161,6 +161,11 @@ fn msgpack_response(columnar: &[u8]) -> axum::response::Response {
 /// GET 便捷 + POST 富查询共用的装载入口。
 /// - GET：URL query（简单等值/limit/depth）；
 /// - POST：body = 完整 [`DocQuery`] JSON（每层 filter/orderBy/分页/游标）。
+///
+/// 叠加规则：POST 富查询时，URL 上的便捷参数（depth/limit）作为**兜底默认值**——
+/// body 显式给了的字段以 body 为准，body 没给的就回退到 URL query。
+/// 这样前端既可以用 GET `?depth=1` 控制"只装根层"，也可以在 POST 富查询（分页/游标）
+/// 场景下用同一个 URL 参数达到同样效果，不会被 body 静默吞掉。
 async fn doc_load_entry(
     driver: Driver,
     exit: Exit,
@@ -178,7 +183,14 @@ async fn doc_load_entry(
     )
     .await?;
     let dq = match body {
-        Some(b) if !b.is_null() => DocQuery::from_json(&b)?,
+        Some(b) if !b.is_null() => {
+            let mut dq = DocQuery::from_json(&b)?;
+            // body 未显式指定 depth 时，回退到 URL query 的 ?depth=
+            if dq.depth.is_none() && q.depth.is_some() {
+                dq.depth = q.depth;
+            }
+            dq
+        }
         _ => simple_doc_query(&meta, &q),
     };
     run_doc_load(driver, exit, &meta, &db_id, &dq).await

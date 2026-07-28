@@ -839,9 +839,11 @@ pub async fn definitions_list(
 /// `GET /api/definitions/config?domain=&application=&module=&file=&id=` —— 读单个定义。
 ///
 /// 定位段取 `file` 优先、`id` 兜底（与 DefRef::file_value 一致）：
-/// - 以 `.json` 结尾（含 base 字段集、显式文件名）→ 直接按文件路径读。
-/// - 非 `.json`（业务编码：DOC 的 moduleCode / DCT 的 dictCode）→ 按 kind 反查默认/最新版本文件：
-///   DOC 调 resolve_doc_file；DCT 调 resolve_dict_file 并过滤 dictionaryTables 只返回命中单表。
+/// - 以 `.json` 结尾（显式文件名）→ 直接按文件路径读。
+/// - 非 `.json`（业务编码）→ 按 kind 反查默认/最新版本文件：
+///   BASE 调 resolve_base_file（按 moduleCode，仅需 domain=base）；
+///   DOC 调 resolve_doc_file（按 moduleMeta.moduleCode，需 domain/app/module 坐标）；
+///   DCT 调 resolve_dict_file（按 dictCode，需坐标）并过滤 dictionaryTables 只返回命中单表。
 pub async fn definitions_get(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -857,12 +859,36 @@ pub async fn definitions_get(
             cmx_portal::definitions::store::get_definition(&q.to_ref()).await?,
         )));
     }
-    // 业务编码定位：必须有 kind 与 domain/application/module 坐标
+    // 业务编码定位：按 kind 分流
+    // - BASE：仅需 domain=base + id=<moduleCode>（如 base_dct_meta），无需 application/module。
+    // - DOC/DCT：需 kind/domain/application/module 四段齐全。
     let code = id_val.as_deref().unwrap_or("");
     let domain = q.domain.as_deref().unwrap_or("");
     let app = q.application.as_deref().unwrap_or("");
     let module = q.module.as_deref().unwrap_or("");
     let kind = q.kind.as_deref().unwrap_or("");
+    if kind == "BASE" {
+        if domain.is_empty() {
+            return Err(cmx_api_types::Error::BadRequest(
+                "BASE 业务编码定位需要 domain（约定为 base）".into(),
+            ));
+        }
+        if code.is_empty() {
+            return Err(cmx_api_types::Error::BadRequest(
+                "BASE 业务编码定位需要 id（= moduleCode，如 base_dct_meta）".into(),
+            ));
+        }
+        let file = cmx_portal::definitions::resolve::resolve_base_file(domain, code).await?;
+        let mut doc = cmx_portal::definitions::store::get_definition(
+            &cmx_portal::definitions::store::DefRef {
+                domain: Some(domain.to_string()),
+                file: Some(file),
+                ..Default::default()
+            },
+        )
+        .await?;
+        return Ok(Json(ApiResp::ok(doc.take())));
+    }
     if domain.is_empty() || app.is_empty() || module.is_empty() {
         return Err(cmx_api_types::Error::BadRequest(
             "业务编码定位需要 kind/domain/application/module 坐标".into(),
@@ -906,7 +932,7 @@ pub async fn definitions_get(
         }
         other => {
             return Err(cmx_api_types::Error::BadRequest(format!(
-                "业务编码定位仅支持 kind=DOC/DCT，收到 {other:?}"
+                "业务编码定位仅支持 kind=BASE/DOC/DCT，收到 {other:?}"
             )));
         }
     };
