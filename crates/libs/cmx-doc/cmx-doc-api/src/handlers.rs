@@ -317,7 +317,9 @@ pub struct DocChildrenReq {
     pub domain: String,
     pub application: String,
     pub module: String,
-    pub file: String,
+    /// 单据定义文件名；缺失/空时由后端按坐标自动解析默认 DOC 文件（与装载接口一致）。
+    #[serde(default)]
+    pub file: Option<String>,
     /// 要下钻装载的层 id。
     pub layer: String,
     /// 上层选中的父 id 列表（该层 childKey 匹配）。
@@ -360,7 +362,7 @@ pub async fn doc_children(
         &req.domain,
         &req.application,
         &req.module,
-        Some(req.file.as_str()),
+        req.file.as_deref(),
         None,
     )
     .await?;
@@ -670,7 +672,9 @@ pub struct DocSaveQuery {
     pub domain: String,
     pub application: String,
     pub module: String,
-    pub file: String,
+    /// 单据定义文件名；缺失/空时由后端按坐标自动解析默认 DOC 文件（与装载接口一致）。
+    #[serde(default)]
+    pub file: Option<String>,
 }
 
 /// `POST /api/doc/save` —— 回存单据数据（merge/replace 双模式）。
@@ -687,17 +691,23 @@ pub async fn doc_save(
         target: "cmx_doc::api",
         handler = "doc_save",
         doc.module = %q.module,
-        doc.file = %q.file,
+        doc.file = ?q.file,
         "handler invoked"
     );
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
+    // file 兜底：query 未带 file（前端不传时）→ 按 moduleCode/doc 自动解析默认 DOC 文件，
+    // 与装载接口 doc_load_entry 的「file 缺省自动解析」语义一致。
+    let file = match &q.file {
+        Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.clone(),
+        _ => resolve_doc_file(&q.domain, &q.application, &q.module, None).await?,
+    };
     let meta = resolve_doc_meta(
         &q.domain,
         &q.application,
         &q.module,
-        Some(q.file.as_str()),
+        Some(file.as_str()),
         None,
     )
     .await?;
@@ -716,7 +726,7 @@ pub async fn doc_save(
         &meta,
         mode,
         &changes,
-        &save_ctx(&ctx, &q.file, None),
+        &save_ctx(&ctx, &file, None),
     )
     .await
     {
@@ -802,18 +812,16 @@ pub async fn doc_save_batch(
     let mut ctxs: Vec<cmx_doc_store_pg::SaveCtx> = Vec::with_capacity(docs.len());
     for (i, d) in docs.iter().enumerate() {
         let get = |k: &str| d.get(k).and_then(|v| v.as_str()).unwrap_or("");
-        let (domain, app, module, file) = (
-            get("domain"),
-            get("application"),
-            get("module"),
-            get("file"),
-        );
-        if file.is_empty() {
-            return Err(
-                cmx_biz::BizError::business(format!("第 {} 单缺少 file 坐标", i + 1)).into(),
-            );
-        }
-        let meta = resolve_doc_meta(domain, app, module, Some(file), None).await?;
+        let (domain, app, module) = (get("domain"), get("application"), get("module"));
+        let raw_file = get("file");
+        // file 兜底：每单 file 缺失/空/脏值时按各自坐标自动解析默认 DOC 文件
+        // （与单单路径 /doc/save 的「file 缺省自动解析」契约一致）。
+        let file = if !raw_file.is_empty() && raw_file != "undefined" && raw_file != "null" {
+            raw_file.to_string()
+        } else {
+            resolve_doc_file(domain, app, module, None).await?
+        };
+        let meta = resolve_doc_meta(domain, app, module, Some(file.as_str()), None).await?;
         let (mode, changes) = saver::parse_save_body(d);
         // 后端二次校验（同单单路径）：有 error 违规即整批拒（atomic）/该单在 save 阶段无从表达，故这里统一先拒。
         if !meta.validation_rules.is_empty()
@@ -825,7 +833,7 @@ pub async fn doc_save_batch(
                 "validation": vr,
             }))));
         }
-        ctxs.push(save_ctx(&ctx, file, None));
+        ctxs.push(save_ctx(&ctx, &file, None));
         metas.push(meta);
         parsed.push((mode, changes));
     }
@@ -960,8 +968,14 @@ pub async fn doc_restore(
         .ok_or_else(|| cmx_biz::BizError::business("restore 缺少 rootId"))?;
     let rev = body.get("rev").and_then(|v| v.as_i64()).map(|n| n as i32);
 
+    // file 兜底：query 未带 file → 自动解析默认 DOC 文件（与 doc_save 一致）。
+    let file = match &q.file {
+        Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.clone(),
+        _ => resolve_doc_file(&q.domain, &q.application, &q.module, None).await?,
+    };
+
     // 取历史版快照（列式包）
-    let snapshot = DocRevision::get_snapshot(mm, &db_id, &q.file, root_id, rev).await?;
+    let snapshot = DocRevision::get_snapshot(mm, &db_id, &file, root_id, rev).await?;
     if snapshot.is_null() {
         return Err(cmx_biz::BizError::not_found("指定版本不存在").into());
     }
@@ -971,7 +985,7 @@ pub async fn doc_restore(
         &q.domain,
         &q.application,
         &q.module,
-        Some(q.file.as_str()),
+        Some(file.as_str()),
         None,
     )
     .await?;
@@ -984,7 +998,7 @@ pub async fn doc_restore(
         &meta,
         cmx_doc_store_pg::SaveMode::Replace,
         &replace_input,
-        &save_ctx(&ctx, &q.file, Some("restore")),
+        &save_ctx(&ctx, &file, Some("restore")),
     )
     .await?;
 
