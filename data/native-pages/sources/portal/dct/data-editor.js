@@ -98,164 +98,8 @@ function colCaption (col) {
   return col.caption || col.name
 }
 
-function defaultWidthFor (col) {
-  const t = String(col.dataType || '').toUpperCase()
-  if (t === 'DATETIME') return '160px'
-  if (t === 'DATE') return '130px'
-  if (t === 'TEXT') return '240px'
-  if (t === 'TINYINT') return '90px'
-  if (t === 'INT' || t === 'BIGINT') return '110px'
-  return '150px'
-}
-
-/** 把 DCT 元数据的 edit.mode 映射到 cmx-revo-grid 列的规范 edit.mode（EDIT_MODES 值域）。
- *
- * 规范值域见 cmx-field-uicontrol.js 的 EDIT_MODES：
- *   cmx-text-input / cmx-textarea-input / cmx-richtext-input / cmx-number-input /
- *   cmx-date-input / cmx-datetime-input / checkbox / select / ref / combo /
- *   ignite-combo / cmx-dict-selct / image / video / readonly / none
- *
- * 其中：
- *   - `ref` 是合法 edit.mode，但**无注册编辑器**（adapter 认但 runtime 退化），
- *     本页把 ref + refDict 转成 `cmx-dict-selct`（字典选择弹窗，有完整编辑器实现）。
- *   - `cmx-dict-selct` 是字典选择的规范存储值（历史拼写），runtime kind 映射到 dict-select。
- *
- * 元数据 column 自带的 edit.mode 可能是规范值，也可能是简写（input/text/number/date/datetime），
- * 这里统一收敛到规范值。返回 { mode, ...附加配置 }。 */
-// 元数据简写 → 规范值的映射（非 EDIT_MODES 的简写收敛）
-const META_MODE_TO_SPEC = {
-  input: 'cmx-text-input',
-  text: 'cmx-text-input',
-  textarea: 'cmx-textarea-input',
-  number: 'cmx-number-input',
-  date: 'cmx-date-input',
-  datetime: 'cmx-datetime-input',
-}
-// EDIT_MODES 规范值集合（用于判断 metaMode 是否已是规范值）
-const SPEC_MODES = new Set([
-  'cmx-text-input', 'cmx-textarea-input', 'cmx-richtext-input', 'cmx-number-input',
-  'cmx-date-input', 'cmx-datetime-input', 'checkbox', 'select', 'ref', 'combo',
-  'ignite-combo', 'cmx-dict-selct', 'image', 'video', 'readonly', 'none',
-])
-
-function editModeFor (col, meta) {
-  const name = col.name
-  const t = String(col.dataType || '').toUpperCase()
-  const metaEdit = col.edit && typeof col.edit === 'object' ? col.edit : null
-  const metaMode = metaEdit ? String(metaEdit.mode || '') : ''
-  const isParent = meta.selfHierarchy && name === meta.parentField
-
-  // 1) ref / cmx-dict-selct / refDict 列 / 树形父节点列 → cmx-dict-selct 字典选择弹窗
-  //    统一从 col.refDict/refField/displayField 构造完整参数（dictCode/idField/labelField），
-  //    无论元数据写的是 'ref'、'cmx-dict-selct' 还是仅给了 refDict，都走同一构造路径。
-  if (metaMode === 'ref' || metaMode === 'cmx-dict-selct' || (col.refDict && !metaMode) || isParent) {
-    const dictCode = col.refDict || (isParent ? meta.dictCode : '')
-    if (dictCode) {
-      return {
-        mode: 'cmx-dict-selct',
-        dictCode,
-        idField: col.refField || (isParent ? meta.pk : 'code'),
-        labelField: col.displayField || (isParent ? meta.labelField : 'name'),
-        parentField: isParent ? meta.parentField : undefined,
-        hierarchical: !!isParent,
-      }
-    }
-  }
-
-  // 2) 元数据已是 EDIT_MODES 规范值 → 直接用（checkbox/select/combo/readonly/none/cmx-*-input 等）
-  if (metaMode && SPEC_MODES.has(metaMode)) {
-    const out = { mode: metaMode }
-    if (metaMode === 'select') {
-      out.options = (metaEdit && Array.isArray(metaEdit.options)) ? metaEdit.options
-        : (name === 'status' ? [{ value: 1, label: '启用' }, { value: 0, label: '停用' }] : [])
-    }
-    return out
-  }
-
-  // 3) 元数据简写（input/text/number/date/datetime 等）→ 规范值
-  const lower = metaMode.toLowerCase()
-  if (META_MODE_TO_SPEC[lower]) {
-    return { mode: META_MODE_TO_SPEC[lower] }
-  }
-
-  // 4) 兜底：按 dataType 推断（元数据未给 edit.mode 或未识别）
-  if (t === 'DATE') return { mode: 'cmx-date-input' }
-  if (t === 'DATETIME') return { mode: 'cmx-datetime-input' }
-  // TINYINT 默认当布尔勾选（0/1）；字典里 TINYINT 基本是 status/is_default 等标志位。
-  // 若为小整数语义，元数据应显式 edit.mode='cmx-number-input' 覆盖（上方步骤 1-3 优先）。
-  if (t === 'TINYINT') return { mode: 'checkbox' }
-  if (t === 'INT' || t === 'BIGINT' || t === 'DECIMAL') return { mode: 'cmx-number-input' }
-  return { mode: 'cmx-text-input' }
-}
-
-/** 把字段的 enumValues（数组或逗号串）映射成 select 的 options。
- *  规范（field-edit-display-modes §四 constraint）：enumValues 映射成 edit.options + 强制 select。
- *  该映射在 FLC 引擎（flexible-combination-engine.js）内自动做；data-editor 直接构造 CmxColumn，
- *  故在此复刻同样逻辑。支持两种形态：
- *    - 数组：['open','closed'] 或 [{value,label}]
- *    - 逗号串：'open,closed'
- *  返回 null 表示无可用枚举（调用方据此决定是否强制 select）。 */
-function enumOptionsFromField (col) {
-  const ev = col.enumValues
-  if (ev == null) return null
-  let arr = null
-  if (Array.isArray(ev)) arr = ev
-  else if (typeof ev === 'string' && ev.trim()) arr = ev.split(',').map((s) => s.trim()).filter(Boolean)
-  if (!arr || !arr.length) return null
-  return arr.map((v) => {
-    if (v && typeof v === 'object') return { value: v.value, label: v.label != null ? v.label : v.value }
-    return { value: v, label: String(v) }
-  })
-}
-
-/** 后端 with_props=true 下发的扁平字段属性白名单（field-edit-display-modes §四 所列规范键）。
- *  这些键直接挂 CmxColumn 顶层：构造器的"完整继承"机制（cmx-column.js:118-122）会自动收纳，
- *  toDescriptor 会输出 width/visible/frozen；其余键供编辑器/适配层按需读取。 */
-const FLAT_PROP_KEYS = [
-  'width', 'frozen', 'visible', 'align', 'intDigits', 'decimalDigits',
-  'maxlength', 'min', 'max', 'placeholder', 'defaultValue', 'agg',
-  'label', 'i18n', 'searchable', 'filterable', 'sensitive',
-]
-function flatPropsFor (col) {
-  const out = {}
-  for (const k of FLAT_PROP_KEYS) {
-    if (col[k] != null) out[k] = col[k]
-  }
-  return out
-}
-
-/** 把 DCT 元数据的 display 配置映射到 cmx-revo-grid 列的 display 对象。
- *
- *  display.mode 规范取值（以 cmx-field-schema.js DISPLAY 段录入选项为准）：
- *    '' / 'text' / 'number' / 'badge' / 'link' / 'icon'
- *  - 'number' 是合法模式：联动显示 format/decimalDigits/thousandSeparator/zeroAsBlank/negativeColor
- *  - 'text' 原样字符串；'badge'/'link'/'icon' 各有专属属性（badgeMap/icon/link）
- *  - 元数据可能给非规范值（如 date/checkbox），这些由 dataType 自动派生，丢弃
- *
- *  数值类属性（schema 用 visibleWhen=displayModeIn(['','number']) 联动）：
- *    format / decimalDigits / thousandSeparator / zeroAsBlank / negativeColor
- *  全部透传给列 display。negativeColor 是 boolean（false 关闭负数红字，adapter 默认开）。 */
-const SPEC_DISPLAY_MODES = new Set(['', 'text', 'number', 'badge', 'link', 'icon'])
-function displayFor (col) {
-  const d = col.display && typeof col.display === 'object' ? col.display : null
-  if (!d) return undefined
-  const out = {}
-  // mode：只透传 schema 规范值（含 ''/text/number/badge/link/icon），非规范值（date/checkbox 等）丢弃
-  const m = d.mode == null ? '' : String(d.mode).toLowerCase()
-  if (SPEC_DISPLAY_MODES.has(m)) out.mode = m
-  if (d.align) out.align = d.align
-  if (d.format) out.format = d.format
-  if (d.decimalDigits != null) out.decimalDigits = d.decimalDigits
-  if (d.thousandSeparator != null) out.thousandSeparator = d.thousandSeparator
-  if (d.zeroAsBlank != null) out.zeroAsBlank = d.zeroAsBlank
-  if (d.negativeColor != null) out.negativeColor = d.negativeColor
-  if (d.emptyText != null) out.emptyText = d.emptyText
-  if (d.badgeMap) out.badgeMap = d.badgeMap
-  if (d.icon) out.icon = d.icon
-  if (d.link) out.link = d.link
-  if (d.cellStyle) out.cellStyle = d.cellStyle
-  return Object.keys(out).length ? out : undefined
-}
+/* 列模型构建已下移到 cmx-data-comp 的 metaTableFieldsToColumns（init-page-models.js）。
+   以下仅保留页面级逻辑所需的字段角色判定函数（save/addRow 使用）。 */
 
 /* ─────────────── 模块级 state（每次 content 入口重置） ─────────────── */
 const state = {
@@ -547,108 +391,33 @@ async function loadMeta (def, dictCode) {
   return apiGet(`/api/dct/meta?${qs(def, { dict: dictCode, with_props: 'true' })}`, def.dbId)
 }
 
-/* ─────────────── 列模型（含 edit.mode 行内编辑配置） ─────────────── */
+/* ─────────────── 列模型（委托 cmx-data-comp metaTableFieldsToColumns 增强路径） ─────────────── */
 function buildColumnModel (meta) {
   const C = cmx()
-  if (!C.CmxColumnModel || !C.CmxColumn) return null
-  const members = (meta.columns || [])
-    .filter((c) => showInTable(c, meta))
-    .map((c) => {
-      const editable = isEditable(c, meta)
-      // 元数据 edit 基底：原样保留全部子属性（intDigits/decimalDigits/min/max/maxlength/
-      // pattern/placeholder/readonly/requiredWhen/editableWhen/visibleWhen/formatPattern/minDate/
-      // maxDate/inputType 等，见 EDITOR_PROPERTY_SCHEMA）。editModeFor 推断的 mode/options 仅覆盖
-      // 对应键，不破坏其余录入控件专属属性。
-      const metaEdit = (c.edit && typeof c.edit === 'object') ? { ...c.edit } : {}
-      // 扁平属性（后端 with_props=true 下发）：width/frozen/visible/align/intDigits/decimalDigits/
-      // maxlength/min/max/placeholder/defaultValue/agg/label/i18n/... 直接挂顶层。
-      const flat = flatPropsFor(c)
-      const colOpts = {
-        id: c.name,
-        caption: colCaption(c),
-        dataType: c.dataType,
-        ...flat,
-      }
-      // 列宽：元数据优先（规范 width），缺失才回退按类型推断的默认值
-      colOpts.width = flat.width || defaultWidthFor(c)
-      // 应用元数据的 display 配置（align/decimalDigits/format/thousandSeparator/zeroAsBlank/
-      // negativeColor/badgeMap/link/icon 等）。displayFor 只透传规范值。
-      const disp = displayFor(c)
-      if (disp) colOpts.display = disp
-      // 引用字典列：挂 refDict/displayField/refField 供 grid 回显（code → name）
-      if (c.refDict) {
-        colOpts.refDict = c.refDict
-        colOpts.refField = c.refField || 'code'
-        colOpts.displayField = c.displayField || 'name'
-      }
-
-      if (editable) {
-        const em = editModeFor(c, meta)
-        // edit 以元数据为基底，叠加推断的 mode/trigger/options；pattern 从扁平键补入 edit
-        // （cmx-text-input 编辑器从 field.pattern ?? edit.pattern 读正则做即时校验，
-        //  cmx-builtin-field-types.js 的 _fieldFromColData 透传）。
-        colOpts.edit = { ...metaEdit, mode: em.mode, trigger: 'click' }
-        if (em.options) colOpts.edit.options = em.options
-        if (!colOpts.edit.pattern && c.pattern) colOpts.edit.pattern = c.pattern
-        // enumValues → select：无 refDict 且元数据未显式指定 edit.mode 时，强制 select + options
-        // （复刻 FLC 引擎 flexible-combination-engine.js:467-473 的映射）。
-        if (!c.refDict && !metaEdit.mode) {
-          const opts = enumOptionsFromField(c)
-          if (opts) {
-            colOpts.edit.mode = 'select'
-            colOpts.edit.options = opts
-          }
-        }
-        // 字典选择列（cmx-dict-selct）需要 editSettings 传字典坐标（cmx-dict-select 弹窗用）。
-        // 以元数据 editSettings（设计器配的 helpLayout/displayMode/dictTitle/showClear/mruMax 等）
-        // 为基底，再覆盖运行时必需的 dictCode/idCol/labelCol/hierarchical/coord/parentCol。
-        if (em.mode === 'cmx-dict-selct') {
-          const metaEs = (c.editSettings && typeof c.editSettings === 'object') ? { ...c.editSettings } : {}
-          colOpts.editSettings = {
-            ...metaEs,
-            dictCode: em.dictCode,
-            idCol: em.idField,
-            labelCol: em.labelField,
-            hierarchical: !!em.hierarchical,
-            // 字典坐标：cmx-dict-select 拼 /api/dct/data/search URL 的必需来源
-            // （运行时 host 无坐标，组件唯一取数来源是 editSettings.coord）
-            coord: {
-              domain: meta.domain || (state.def && state.def.domain) || '',
-              application: meta.application || (state.def && state.def.application) || '',
-              module: meta.module || (state.def && state.def.module) || '',
-              ...(state.def && state.def.dbId ? { dbId: state.def.dbId } : {}),
-            },
-          }
-          if (em.parentField) colOpts.editSettings.parentCol = em.parentField
-        }
-        // 必填：统一用 isRequiredCol（与列头标识、保存校验共用判定）
-        if (isRequiredCol(c, meta)) {
-          colOpts.edit.required = true
-        }
-        // 业务键（字符串主键 / codeField）：新增时可填，保存后只读。
-        // 关键：必须用可编辑的 mode（cmx-text-input）+ readonlyWhen 行级条件来达成"新增可填/存量只读"。
-        // 若沿用元数据的 edit.mode='readonly'，整列会被 cmx-column-adapter 标成 col.readonly=true，
-        // revo-grid 在 focus 阶段直接跳过编辑，beforeedit 不派发，readonlyWhen 无从求值 → 新增也填不了。
-        // readonlyWhen 用 grid 内部 id 字段的 't' 前缀判断新增态（addRow 生成 tempId='t...'）。
-        if (isBusinessKey(c, meta)) {
-          colOpts.edit.mode = 'cmx-text-input'
-          colOpts.edit.readonlyWhen = `NOT(STARTSWITH(id, 't'))`
-          colOpts.edit.required = true
-        }
-      } else {
-        // 不可编辑列：保留元数据的 edit.mode（如 checkbox 显示复选框样式），否则 readonly。
-        // 仍透传元数据 edit 的其余子属性（如 pattern 供展示态校验信息）。
-        const metaMode = metaEdit.mode ? String(metaEdit.mode).toLowerCase() : ''
-        colOpts.edit = (metaMode === 'checkbox') ? { ...metaEdit, mode: 'checkbox' } : { ...metaEdit, mode: 'readonly' }
-      }
-      // checkbox 列内容居中（✓ / 空心框），呼应 cmx-checkbox-field-type 的 cellTemplate
-      if (colOpts.edit && colOpts.edit.mode === 'checkbox') {
-        colOpts.display = colOpts.display || {}
-        colOpts.display.align = 'center'
-      }
-      return new C.CmxColumn(colOpts)
-    })
-  return new C.CmxColumnModel({ members })
+  if (!C.CmxColumnModel || !C.metaTableFieldsToColumns) return null
+  const cols = C.metaTableFieldsToColumns(meta.columns || [], {
+    kind: 'DCT',
+    pk: meta.pk,
+    codeField: meta.codeField,
+    selfHierarchy: meta.selfHierarchy,
+    parentField: meta.parentField,
+    dictCode: meta.dictCode || state.dictCode,
+    labelField: meta.labelField,
+    domain: meta.domain || (state.def && state.def.domain) || '',
+    application: meta.application || (state.def && state.def.application) || '',
+    module: meta.module || (state.def && state.def.module) || '',
+  }, {
+    respectOrder: false,
+    coord: {
+      domain: (state.def && state.def.domain) || '',
+      application: (state.def && state.def.application) || '',
+      module: (state.def && state.def.module) || '',
+      ...(state.def && state.def.dbId ? { dbId: state.def.dbId } : {}),
+    },
+  })
+  const cm = new C.CmxColumnModel({ datasetId: 'dict' })
+  cm.setMembers(cols)
+  return cm
 }
 
 /* ─────────────── 数据装载 ─────────────── */
