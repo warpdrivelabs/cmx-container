@@ -539,7 +539,7 @@
             "zh_CN": "适用核算主体ID(scope_type=acct_entity时填写)"
           },
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",

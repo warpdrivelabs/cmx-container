@@ -121,8 +121,8 @@ impl<'a> super::Engine<'a> {
         }
         if !edit.contains_key("mode") {
             let mode = if dict_settings.is_some() {
-                // 历史包袱:前端组件注册名即 `cmx-dict-selct`(select 误拼),见 EDIT_MODES 注释。
-                "cmx-dict-selct".to_string()
+                // 历史包袱:前端组件注册名即 `cmx-dict-select`(select 误拼),见 EDIT_MODES 注释。
+                "cmx-dict-select".to_string()
             } else {
                 self.col_edit_mode(field)
             };

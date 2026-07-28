@@ -43,9 +43,7 @@ const EDIT_MODES: &[&str] = &[
     "ref",
     "combo",
     "ignite-combo",
-    // NOTE: 历史包袱——前端 Web Components 组件名就叫 `cmx-dict-selct`(select 误拼为 selct),
-    // 已固化在 cmx-data-comp 的 customElements.define 注册名里,改名需同步前端,暂保留。
-    "cmx-dict-selct",
+    "cmx-dict-select",
     "checkbox",
     "image",
     "video",

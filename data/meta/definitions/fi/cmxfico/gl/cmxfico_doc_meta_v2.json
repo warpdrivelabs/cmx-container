@@ -157,7 +157,7 @@
           "displayField": "name",
           "physicalField": "MANDT",
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -192,7 +192,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "editSettings": {
             "dictCode": "cf_comp_unit",
@@ -227,7 +227,7 @@
           },
           "fieldLength": 2,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -261,7 +261,7 @@
           },
           "fieldLength": 7,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -676,7 +676,7 @@
           "displayField": "name",
           "physicalField": "MANDT",
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -713,7 +713,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -794,7 +794,7 @@
           },
           "fieldLength": 5,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -828,7 +828,7 @@
           },
           "fieldLength": 5,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1006,7 +1006,7 @@
           },
           "fieldLength": 2,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1236,7 +1236,7 @@
           },
           "refDict": "doc_type",
           "edit": {
-            "mode": "cmx-dict-selct",
+            "mode": "cmx-dict-select",
             "required": true
           },
           "display": {
@@ -1270,7 +1270,7 @@
           },
           "refDict": "comp_unit",
           "edit": {
-            "mode": "cmx-dict-selct",
+            "mode": "cmx-dict-select",
             "required": true
           },
           "display": {
@@ -1341,7 +1341,7 @@
           "displayField": "name",
           "physicalField": "MANDT",
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1378,7 +1378,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1415,7 +1415,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1450,7 +1450,7 @@
           },
           "fieldLength": 2,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1485,7 +1485,7 @@
           },
           "fieldLength": 1,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1520,7 +1520,7 @@
           },
           "fieldLength": 2,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1555,7 +1555,7 @@
           },
           "fieldLength": 1,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1822,7 +1822,7 @@
           "displayField": "name",
           "physicalField": "MANDT",
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1862,7 +1862,7 @@
             "mode": "text"
           },
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "width": "100px",
           "required": false,
@@ -1892,7 +1892,7 @@
             "zh_CN": "分类账"
           },
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1929,7 +1929,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -1966,7 +1966,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2003,7 +2003,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2040,7 +2040,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct",
+            "mode": "cmx-dict-select",
             "parent": "parent_id"
           },
           "display": {
@@ -2079,7 +2079,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2116,7 +2116,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2153,7 +2153,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2190,7 +2190,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2227,7 +2227,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2264,7 +2264,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2301,7 +2301,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2338,7 +2338,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2373,7 +2373,7 @@
             "zh_CN": "付款条件"
           },
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2408,7 +2408,7 @@
             "zh_CN": "付款方式"
           },
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
@@ -2445,7 +2445,7 @@
           "intDigits": 20,
           "decimalDigits": 0,
           "edit": {
-            "mode": "cmx-dict-selct"
+            "mode": "cmx-dict-select"
           },
           "display": {
             "mode": "text",
