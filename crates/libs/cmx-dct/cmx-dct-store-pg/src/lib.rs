@@ -1060,7 +1060,16 @@ async fn recompute_parent_is_leaf(
     // 构造占位符列表 $1,$2,...（每个 parent 一个参数位）
     let placeholders: Vec<String> = (1..=uniq.len()).map(|i| format!("${i}")).collect();
     let ph_list = placeholders.join(", ");
-    let params: Vec<DataValue> = uniq.iter().map(|s| DataValue::String(s.clone())).collect();
+    // PK 类型派发：cf_gl_account.id 是 BIGINT，client 传 snowflake 字符串 "1785..." 需
+    // 走 `to_dv_by_col` 按 view.columns[pk].dataType 转 DataValue::Int（→ PgInt 宽度自适应
+    // INT2/INT4/INT8），否则裸绑 `DataValue::String` 在 PG prepare 阶段就报
+    // "error serializing parameter 0"（OID 期望 bigint，实际收到 text）。
+    // PK 为 String/Text/UUID 类型时 to_dv_by_col 保持 DataValue::String（to_dv_by_col 对
+    // string 走 json_to_datavalue 默认路径），不破坏现有行为。
+    let params: Vec<DataValue> = uniq
+        .iter()
+        .map(|s| to_dv_by_col(view, &view.pk, &Value::String(s.clone())))
+        .collect();
     // 1. 有子节点 → is_leaf=0
     let sql_has_children = format!(
         "UPDATE \"{tbl}\" SET \"is_leaf\" = 0 WHERE \"{pk}\" IN ({ph}) \
