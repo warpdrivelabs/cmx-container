@@ -838,20 +838,48 @@ async function deleteSelected (root) {
   }
   const ok = await cmxConfirm(`确认删除选中的 ${idSet.size} 项？`, '删除确认')
   if (!ok) return
+  // 区分新增行（未入库，仅本地移除）与已入库行（调接口删除）
+  const realIds = []
   for (const id of idSet) {
-    // 新增行直接从 newIds 移除
     if (state.newIds.has(id)) {
       state.newIds.delete(id)
     } else {
-      state.deletedIds.push(id)
-      // 移除 dirtyMap 中对应记录
-      delete state.dirtyMap[id]
+      realIds.push(id)
+      delete state.dirtyMap[id]  // 清理该行的未保存修改
     }
   }
-  // grid 内删除（视觉即时反馈）
+  // grid 内即时移除（视觉反馈）
   if (grid.removeRows) grid.removeRows(ids)
-  setMsg(root, '已暂存删除，点击「保存」提交', 'ok')
-  renderPageInfo(root)
+  // 仅删除未入库的新增行：无需调接口
+  if (!realIds.length) {
+    cmxNotify('ok', `已移除 ${ids.length} 项未保存的新增行`)
+    setMsg(root, `已移除 ${ids.length} 项`, 'ok')
+    renderPageInfo(root)
+    return
+  }
+  const def = state.def
+  if (!def) { cmxNotify('error', '缺少字典坐标，无法删除'); return }
+  // 直接调用接口删除（即时生效，不再暂存等"保存"按钮）
+  setMsg(root, '删除中…')
+  try {
+    const payload = {
+      saveMode: 'merge',
+      changes: { [meta.tableName]: { inserted: [], updated: [], deleted: realIds } },
+    }
+    const r = await apiPost(`/api/dct/save?${qs(def, { dict: state.dictCode })}`, payload, def.dbId)
+    const aff = (r && r.affected) || 0
+    cmxNotify('ok', `已删除 ${realIds.length} 项（影响 ${aff} 行）`)
+    setMsg(root, `已删除 ${realIds.length} 项`, 'ok')
+    await reload(root)
+    // 树形字典：删除节点后左侧结构也要刷新（保持展开态）
+    await refreshTree(root)
+  } catch (e) {
+    cmxNotify('error', `删除失败：${e.message}`)
+    setMsg(root, `删除失败：${e.message}`, 'err')
+    // 失败重载恢复：grid.removeRows 已移除显示，需从服务端拉回
+    await reload(root)
+    await refreshTree(root)
+  }
 }
 
 /* ─────────────── commitGridEdits：收拢未提交的行内编辑（仿 dictflat-content.html） ─────────────── */
@@ -954,6 +982,8 @@ async function save (root) {
       state.deletedIds = []
       state.baselineMap = {}
       await reload(root)
+      // 新增/删除/修改入库后，树形字典的左侧结构也要刷新（保持展开态）
+      await refreshTree(root)
     } catch (e) {
       if (e.status === 409) {
         cmxNotify('error', '字典项已被他人修改，已自动刷新到最新版本')
@@ -961,6 +991,7 @@ async function save (root) {
         state.newIds = new Set()
         state.deletedIds = []
         await reload(root)
+        await refreshTree(root)
       } else if (e.status === 422 && e.body && e.body.data && Array.isArray(e.body.data.violations)) {
         presentViolations(e.body.data.violations)
         setMsg(root, `保存失败：${e.message}`, 'err')
@@ -1173,6 +1204,8 @@ async function doImport (root, file, mode) {
     )
     setMsg(root, `导入完成：${s.affected || 0} 行`, 'ok')
     await reload(root)  // 刷新表格显示
+    // 树形字典：导入可能新增/改了节点，左侧结构同步刷新（保持展开态）
+    await refreshTree(root)
   } catch (e) {
     setMsg(root, `导入失败：${e.message}`, 'err')
     cmxNotify('error', `导入失败：${e.message}`)
@@ -1319,6 +1352,44 @@ function wireTreeNodeClick (root, body) {
   })
 }
 
+/* ─────────────── 刷新左侧树（数据变更后保持展开态） ───────────────
+ * 删除 / 新增入库 / 导入 / 手动刷新时调用：清空 treeNodes 缓存重新拉取，
+ * 并恢复刷新前已展开的节点（▾ 态），避免每次变更后整棵树收起、用户体验割裂。
+ * 仅对树形字典（selfHierarchy）生效；平级字典是空操作（reload 已覆盖表格）。 */
+async function refreshTree (root) {
+  if (!state.meta || !state.meta.selfHierarchy) return
+  // 1) 记录刷新前已展开的节点 id（toggle 文本是 ▾）
+  const oldBody = root.querySelector('#deTreeBody')
+  const expandedIds = []
+  if (oldBody) {
+    oldBody.querySelectorAll('[data-toggle]').forEach((tg) => {
+      if ((tg.textContent || '').trim() === '▾') expandedIds.push(tg.dataset.toggle)
+    })
+  }
+  // 2) 清空缓存，重新加载根节点 + 之前展开的节点（并行；不同 parentId 写入不同 key 不冲突）
+  state.treeNodes = {}
+  await Promise.all([
+    loadTreeChildren(root, null),
+    ...expandedIds.map((id) => loadTreeChildren(root, id).catch(() => {})),
+  ])
+  // 3) 重新渲染（renderTree 只渲染第一级，子级靠下方恢复展开态）
+  renderTree(root)
+  // 4) 恢复展开态：用已加载的最新子级数据填充子容器
+  const newBody = root.querySelector('#deTreeBody')
+  if (!newBody) return
+  for (const id of expandedIds) {
+    const tg = newBody.querySelector(`[data-toggle="${CSS.escape(id)}"]`)
+    const childBox = newBody.querySelector(`[data-children-of="${CSS.escape(id)}"]`)
+    if (!tg || !childBox) continue       // 节点已被删除等场景
+    const children = state.treeNodes[String(id)] || []
+    if (!children.length) continue        // 子级被删光，保持收起
+    tg.textContent = '▾'
+    childBox.innerHTML = renderTreeNodes(children, state.meta.pk)
+    childBox.style.display = 'block'
+    wireTreeNodeClick(root, childBox)
+  }
+}
+
 /* ─────────────── 切换字典 ─────────────── */
 async function switchDict (root, dictCode) {
   state.dictCode = dictCode
@@ -1387,7 +1458,11 @@ function initDictSelect (root) {
 
 /* ─────────────── 绑定页面事件 ─────────────── */
 function bindPage (root) {
-  root.querySelector('#btnReload')?.addEventListener('click', () => { state.page = 1; void reload(root) })
+  // 刷新：表格 + 树形字典的左侧结构都重载（树刷新会保留展开态）
+  root.querySelector('#btnReload')?.addEventListener('click', () => {
+    state.page = 1
+    void reload(root).then(() => refreshTree(root))
+  })
   root.querySelector('#btnAdd')?.addEventListener('click', () => addRow(root))
   root.querySelector('#btnDel')?.addEventListener('click', () => void deleteSelected(root))
   root.querySelector('#btnSave')?.addEventListener('click', () => void save(root))
