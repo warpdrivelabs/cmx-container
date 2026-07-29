@@ -97,6 +97,8 @@ function toolbarSection () {
         <ui5-button icon="add" design="Default">新增</ui5-button>
         <ui5-button icon="delete" design="Default" data-act="delete">删除</ui5-button>
         <ui5-button icon="refresh" design="Transparent">刷新</ui5-button>
+        <ui5-button icon="detail-view" design="Transparent" data-act="dock-right">侧边详情(右)</ui5-button>
+        <ui5-button icon="detail-view" design="Transparent" data-act="dock-left">侧边详情(左)</ui5-button>
         <ui5-button icon="save" design="Emphasized" slot="actions" data-act="save">保存</ui5-button>
         <ui5-button icon="export" design="Transparent" slot="actions">导出</ui5-button>
       </cmx-toolbar>
@@ -118,6 +120,29 @@ function filterBarSection () {
         <ui5-date-picker data-cond="to" placeholder="结束日期"></ui5-date-picker>
       </cmx-filter-bar>
       <div class="sc-note" data-fb-log>事件日志：尚未触发搜索/清空</div>
+    </section>`
+}
+
+/** kpi-card 演示区：card 变体（多色调）+ inline 变体（财务 acct-kpi 风格） */
+function kpiSection () {
+  return `
+    <section class="sc-sec">
+      <div class="sc-sec-h">cmx-kpi-card · variant=card（圆角块卡片）</div>
+      <div class="sc-row" style="gap:10px;">
+        <cmx-kpi-card label="资产" value="1,234,567.89" unit="元" tone="info"></cmx-kpi-card>
+        <cmx-kpi-card label="负债" value="456,789.00" unit="元" tone="warning"></cmx-kpi-card>
+        <cmx-kpi-card label="净利润" value="89,432.10" unit="元" tone="success" trend="up" delta="+12.3%"></cmx-kpi-card>
+        <cmx-kpi-card label="流失客户" value="23" tone="danger" trend="down" delta="-8.1%"></cmx-kpi-card>
+      </div>
+      <div class="sc-sec-h" style="margin-top:10px;">cmx-kpi-card · variant=inline（行内 label:value，acct-kpi 风格，可点击）</div>
+      <div class="sc-row" style="gap:14px;">
+        <cmx-kpi-card variant="inline" label="现金流入" value="56,789.00" tone="cash-in" clickable data-kpi="in"></cmx-kpi-card>
+        <span style="color:var(--sapContent_LabelColor,#6a6d70);">→</span>
+        <cmx-kpi-card variant="inline" label="现金流出" value="34,210.50" tone="cash-out" clickable data-kpi="out"></cmx-kpi-card>
+        <cmx-kpi-card variant="inline" label="营业收入" value="123,456.00" tone="revenue" clickable></cmx-kpi-card>
+        <cmx-kpi-card variant="inline" label="营业成本" value="78,901.00" tone="expense" clickable></cmx-kpi-card>
+      </div>
+      <div class="sc-note" data-kpi-log>事件日志：点击上方 inline 卡片触发 cmx-kpi-click</div>
     </section>`
 }
 
@@ -163,10 +188,11 @@ function viewHtml () {
   return `<div class="sc">
     <ui5-bar design="Header">
       <ui5-label slot="startContent" style="font-weight:800;font-size:15px;">展示组件库演示</ui5-label>
-      <ui5-label slot="endContent" style="font-size:12px;color:var(--sapContent_LabelColor,#6a6d70);">6 组件 + cmxConfirm · neo 主题</ui5-label>
+      <ui5-label slot="endContent" style="font-size:12px;color:var(--sapContent_LabelColor,#6a6d70);">7 组件 + cmxConfirm + dock 抽屉 · neo 主题</ui5-label>
     </ui5-bar>
 
     ${toolbarSection()}
+    ${kpiSection()}
     ${filterBarSection()}
     ${statusTagSection()}
     ${panelSection()}
@@ -174,8 +200,7 @@ function viewHtml () {
     ${emptyStateSection()}
 
     <div class="sc-note" style="padding-top:8px;border-top:1px solid var(--sapGroup_ContentBorderColor,#d9d9d9);">
-      提示：点击命令栏「删除/保存」、筛选条「搜索/清空」、面板标题栏（折叠/展开）可交互。
-      删除/保存会弹出 cmxConfirm 确认对话框。
+      提示：命令栏「删除/保存」弹 cmxConfirm；「侧边详情」弹 dock 抽屉对话框；inline KPI 卡可点击；筛选条「搜索/清空」、面板标题栏（折叠/展开）均可交互。
     </div>
   </div>`
 }
@@ -204,6 +229,50 @@ function bind (root) {
     })
     fb.addEventListener('cmx-filter-reset', () => {
       log.textContent = `事件日志：[${stamp()}] 已清空筛选条件`
+    })
+  }
+
+  // dock 抽屉演示：点「侧边详情」用 cmx-floating-dialog 的 dock 模式弹出
+  const openDock = (side) => {
+    const Cmx = C.CmxFloatingDialog
+    if (!Cmx) return
+    const dlg = document.createElement('cmx-floating-dialog')
+    dlg.configure({
+      title: side === 'right' ? '详情（右侧抽屉）' : '详情（左侧抽屉）',
+      icon: 'detail-view',
+      showConfirm: false,
+      cancelText: '关闭',
+      dock: side,
+      dialogWidth: '440px',
+    })
+    // 抽屉内容：一张描述清单
+    const body = document.createElement('div')
+    body.style.cssText = 'padding:16px;'
+    body.innerHTML = `
+      <cmx-desc-list border tone="cyan">
+        <cmx-desc-item label="单据编号">SO-2026-0729-001</cmx-desc-item>
+        <cmx-desc-item label="客户">示例客户科技有限公司</cmx-desc-item>
+        <cmx-desc-item label="金额">¥12,345.67</cmx-desc-item>
+        <cmx-desc-item label="状态">已审核</cmx-desc-item>
+        <cmx-desc-item label="制单人">张三</cmx-desc-item>
+        <cmx-desc-item label="制单日期">2026-07-29</cmx-desc-item>
+      </cmx-desc-list>
+      <p style="margin:12px 0 0;font-size:12px;color:var(--sapContent_LabelColor,#6a6d70);">这是 cmx-floating-dialog 的 dock 抽屉模式：贴${side === 'right' ? '右' : '左'}滑入、撑满高度、点遮罩或 Esc 关闭。</p>`
+    dlg.setContent(body)
+    document.body.appendChild(dlg)
+    dlg.openModal()
+  }
+  $('[data-act="dock-right"]')?.addEventListener('click', () => openDock('right'))
+  $('[data-act="dock-left"]')?.addEventListener('click', () => openDock('left'))
+
+  // inline KPI 卡点击日志
+  const kpiLog = $('[data-kpi-log]')
+  if (kpiLog) {
+    const stamp = () => new Date().toLocaleTimeString()
+    root.querySelectorAll('cmx-kpi-card[clickable]').forEach((card) => {
+      card.addEventListener('cmx-kpi-click', (e) => {
+        kpiLog.textContent = `事件日志：[${stamp()}] 点击 ${e.detail.label} = ${e.detail.value}`
+      })
     })
   }
 }
