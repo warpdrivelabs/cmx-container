@@ -378,11 +378,10 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 
 ## 十六、代码质量工具
 
-> 来源技能：`clippy-fix` + `rust-arch-review` + `.claude/CLAUDE.md`（rtk 定义）。
+> 来源技能：`clippy-fix` + `rust-arch-review`。
 
 - `cargo clippy` **排除**三类告警：`too_many_arguments` / `unused_variables` / `unused_functions`；其余按 auto-fix → 简单 → 中等 → 重构四阶段处理，流程调 `clippy-fix`。
 - 架构审查**五维度**（Crate 划分 / Trait 解耦 / 依赖管理 / 错误处理 / 异步模式）调 `rust-arch-review`，输出 `.trae/documents/rust-arch-review-YYYY-MM-DD.md`。
-- 长输出命令用 `rtk` 包装（定义于 `.claude/CLAUDE.md`，节省 60–90% token）：`rtk cargo clippy` / `rtk cargo test`。
 
 ---
 

@@ -171,13 +171,13 @@ description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 
 
 | 场景 | 调用的技能 | 备注 |
 |------|----------|------|
-| 注释规范细节 | [rust-comment-convention](../../rust-comment-convention/SKILL.md) | 本技能只做覆盖率检查，不另起标准 |
-| Handler / Service 生成 | [axum-handler-generator](../../axum-handler-generator/SKILL.md) | 审查时发现"应使用此技能生成"型反模式 |
-| Entity / Filter / BMC 设计 | [modql](../../modql/SKILL.md) | 审查时发现"未按 modql 规范 derive"型反模式 |
-| SQL 编写 | [cmx-sql-execution](../../cmx-sql-execution/SKILL.md) | 审查时发现"应使用 DataValue 而非 json"型反模式 |
-| WASM 插件 | [wasm-plugin-developer](../../wasm-plugin-developer/SKILL.md) | 审查插件工程时联动 |
-| 表结构 DDL | [pg-table-generator](../../pg-table-generator/SKILL.md) | 审查 DDL 合规时联动 |
-| Clippy 警告 | [clippy-fix](../../clippy-fix/SKILL.md) | 本技能不覆盖 lint 警告，clippy-fix 负责 |
+| 注释规范细节 | [rust-comment-convention](../rust-comment-convention/SKILL.md) | 本技能只做覆盖率检查，不另起标准 |
+| Handler / Service 生成 | [axum-handler-generator](../axum-handler-generator/SKILL.md) | 审查时发现"应使用此技能生成"型反模式 |
+| Entity / Filter / BMC 设计 | [modql](../modql/SKILL.md) | 审查时发现"未按 modql 规范 derive"型反模式 |
+| SQL 编写 | [cmx-sql-execution](../cmx-sql-execution/SKILL.md) | 审查时发现"应使用 DataValue 而非 json"型反模式 |
+| WASM 插件 | [wasm-plugin-developer](../wasm-plugin-developer/SKILL.md) | 审查插件工程时联动 |
+| 表结构 DDL | [pg-table-generator](../pg-table-generator/SKILL.md) | 审查 DDL 合规时联动 |
+| Clippy 警告 | [clippy-fix](../clippy-fix/SKILL.md) | 本技能不覆盖 lint 警告，clippy-fix 负责 |
 
 ---
 
