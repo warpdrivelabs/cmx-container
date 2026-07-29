@@ -526,9 +526,9 @@ function propertyHtml () {
     </div>
     <div class="rpt-prop-sec">
       <b>当前版本</b>
-      <div class="rpt-chip">${esc(versionLabel(current.code || version))}</div>
-      <div class="rpt-chip">${esc(current.version_status || 'draft')}</div>
-      ${Number(current.is_current || 0) === 1 ? '<div class="rpt-chip strong">当前生效</div>' : ''}
+      <cmx-status-tag tone="info" variant="subtle" size="sm">${esc(versionLabel(current.code || version))}</cmx-status-tag>
+      <cmx-status-tag tone="neutral" variant="subtle" size="sm">${esc(current.version_status || 'draft')}</cmx-status-tag>
+      ${Number(current.is_current || 0) === 1 ? '<cmx-status-tag tone="success" variant="solid" size="sm">当前生效</cmx-status-tag>' : ''}
       <p>${esc(current.change_summary || current.remark || '暂无版本说明')}</p>
     </div>
     <div class="rpt-prop-sec">

@@ -1243,7 +1243,7 @@ function metaRegionBody (st) {
   const draft = st.regionDraft || { name: '', type: 'data', range: '', isRepeatable: false, dataSource: '' }
   const listHtml = regions.length
     ? regions.map((r) => `<div class="rd-litem" data-region-code="${esc(r.code)}">
-        <span class="rd-litem-main"><b>${esc(r.name || r.code)}${r.isDefault ? '<span class="rd-badge default">默认</span>' : ''}${(r.isRepeatable || Number(r.is_repeatable) === 1) ? '<span class="rd-badge float">浮动</span>' : ''}</b><small>${esc(r.code)}${r.startCell ? ` · ${esc(r.startCell)}:${esc(r.endCell || r.startCell)}` : ''} · ${esc(r.type || 'data')}${(r.isRepeatable || Number(r.is_repeatable) === 1) ? ` · 源:${esc(r.dataSource || r.data_source || '未设')}` : ''}</small></span>
+        <span class="rd-litem-main"><b>${esc(r.name || r.code)}${r.isDefault ? '<cmx-status-tag tone="info" variant="subtle" size="sm">默认</cmx-status-tag>' : ''}${(r.isRepeatable || Number(r.is_repeatable) === 1) ? '<cmx-status-tag tone="warning" variant="subtle" size="sm">浮动</cmx-status-tag>' : ''}</b><small>${esc(r.code)}${r.startCell ? ` · ${esc(r.startCell)}:${esc(r.endCell || r.startCell)}` : ''} · ${esc(r.type || 'data')}${(r.isRepeatable || Number(r.is_repeatable) === 1) ? ` · 源:${esc(r.dataSource || r.data_source || '未设')}` : ''}</small></span>
         ${r.isDefault ? '' : `<span class="rd-litem-act">${(r.isRepeatable || Number(r.is_repeatable) === 1) ? `<button type="button" data-region-preview="${esc(r.code)}" title="预览展开"><ui5-icon name="show"></ui5-icon></button>` : ''}<button type="button" class="danger" data-region-del="${esc(r.code)}" title="删除区域"><ui5-icon name="delete"></ui5-icon></button></span>`}
       </div>`).join('')
     : '<cmx-empty-state icon="grid" title="尚无显式区域" description="未定义区域时，本 Sheet 有数据的单元格归入默认区域 __default__。" size="sm"></cmx-empty-state>'
@@ -1297,7 +1297,7 @@ function metaVersionBody (st) {
   const cur = st.props.version || detail.selectedVersion || ''
   const listHtml = versions.length
     ? versions.map((v) => `<div class="rd-litem ${v.code === cur ? 'active' : ''}">
-        <span class="rd-litem-main"><b>${esc(v.name || v.code)}${Number(v.is_current) === 1 ? '<span class="rd-badge default">当前</span>' : ''}</b><small>${esc(v.code)} · ${esc(v.version_status || 'draft')}${v.change_summary ? ` · ${esc(v.change_summary)}` : ''}</small></span>
+        <span class="rd-litem-main"><b>${esc(v.name || v.code)}${Number(v.is_current) === 1 ? '<cmx-status-tag tone="success" variant="subtle" size="sm">当前</cmx-status-tag>' : ''}</b><small>${esc(v.code)} · ${esc(v.version_status || 'draft')}${v.change_summary ? ` · ${esc(v.change_summary)}` : ''}</small></span>
       </div>`).join('')
     : '<cmx-empty-state icon="flag" title="默认版本" description="未创建显式版本。" size="sm"></cmx-empty-state>'
   return `<div class="rd-prop-grid">
