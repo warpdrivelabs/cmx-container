@@ -4886,7 +4886,11 @@ async function rcOpenDialog (reportCode, root) {
       }, loadList)
     }
     if (delId) {
-      if (!confirm('确认删除该绑定？')) return
+      const C = (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
+      const ok = typeof C.cmxConfirm === 'function'
+        ? await C.cmxConfirm({ message: '确认删除该绑定？', intent: 'danger', confirmText: '删除' })
+        : confirm('确认删除该绑定？')
+      if (!ok) return
       try {
         await apiJson(`/api/report-source-bindings/id/${encodeURIComponent(delId)}`, { method: 'DELETE' })
         await loadList()
