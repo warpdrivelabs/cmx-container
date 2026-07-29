@@ -1906,31 +1906,6 @@
           "type": "workspace-node-editor",
           "permissionId": null,
           "icon": "tabler-outline/sitemap"
-        },
-        {
-          "id": "report-display-components-showcase",
-          "name": "display-components-showcase",
-          "caption": "展示组件库演示",
-          "type": "workspace-node",
-          "permissionId": null,
-          "icon": "tabler-outline/layout-grid",
-          "workspace": {
-            "content": {
-              "caption": "展示组件库演示",
-              "icon": "tabler-outline/layout-grid",
-              "views": [
-                {
-                  "id": "display-showcase-content",
-                  "tabLabel": "展示组件",
-                  "icon": "tabler-outline/layout-grid",
-                  "type": "native_pages",
-                  "native_page": "portal.display.showcase",
-                  "view": "content",
-                  "props": {}
-                }
-              ]
-            }
-          }
         }
       ]
     },
