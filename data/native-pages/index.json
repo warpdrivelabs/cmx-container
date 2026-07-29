@@ -217,6 +217,13 @@
       "details": "元数据驱动：根据 dictCode 加载 DictView，支持平级/树形字典的查询/搜索/分页/新增/编辑/删除，changeset 显式保存。审计列只读显示，派生层级列隐藏。",
       "sourceType": "js",
       "relPath": "portal/dct/data-editor.js"
+    },
+    {
+      "id": "portal.display.showcase",
+      "name": "展示组件库演示",
+      "details": "展示组件库演示 · native_pages · 静态演示 6 个展示类组件（cmx-panel/cmx-toolbar/cmx-status-tag/cmx-empty-state/cmx-desc-list/cmx-filter-bar）+ cmxConfirm 确认对话框，neo 主题；纯前端模拟数据，无后端依赖。",
+      "sourceType": "js",
+      "relPath": "portal/display/showcase.js"
     }
   ]
 }
