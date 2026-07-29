@@ -100,7 +100,8 @@
           },
           "width": "90px",
           "required": true,
-          "align": "right"
+          "align": "right",
+          "defaultValue": "0"
         },
         {
           "dataType": "TINYINT",
@@ -961,5 +962,5 @@
       ]
     }
   },
-  "updatedAt": "2026-07-28T08:29:35.345Z"
+  "updatedAt": "2026-07-29T00:41:39.669Z"
 }
