@@ -115,7 +115,7 @@
             "zh_CN": "启用状态(1启用0停用)"
           },
           "edit": {
-            "mode": "checkbox",
+            "mode": "select",
             "required": true
           },
           "display": {
@@ -124,7 +124,17 @@
           },
           "width": "90px",
           "required": true,
-          "align": "center"
+          "align": "center",
+          "enumValues": [
+            {
+              "value": "1",
+              "label": "启用"
+            },
+            {
+              "value": "0",
+              "label": "停用"
+            }
+          ]
         }
       ]
     },
@@ -209,7 +219,7 @@
             "zh_CN": "启用状态(1启用0停用)"
           },
           "edit": {
-            "mode": "checkbox",
+            "mode": "select",
             "required": true
           },
           "display": {
@@ -218,7 +228,17 @@
           },
           "width": "90px",
           "required": true,
-          "align": "center"
+          "align": "center",
+          "enumValues": [
+            {
+              "value": "1",
+              "label": "启用"
+            },
+            {
+              "value": "0",
+              "label": "停用"
+            }
+          ]
         }
       ]
     },
@@ -962,5 +982,5 @@
       ]
     }
   },
-  "updatedAt": "2026-07-29T00:41:39.669Z"
+  "updatedAt": "2026-07-29T01:37:32.025Z"
 }
