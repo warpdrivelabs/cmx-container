@@ -497,11 +497,32 @@ impl ResultConverter {
                 .map(DataValue::Json)
                 .unwrap_or(DataValue::Null)
         } else if type_name.contains("date") && !type_name.contains("time") {
-            // 处理纯日期类型 - 作为字符串获取后解析
+            // 处理纯日期类型。
+            //
+            // 优先直接 decode `chrono::NaiveDate`(sqlx 已开启 `chrono` feature),
+            // 与 cmx-database-pg 的 `col!(chrono::NaiveDate, DataValue::Date)`
+            // 行为一致;避免 PostgreSQL `datestyle` 非 ISO 时,DATE 转 Text 输出
+            // 形如 `01-15-2024` / `15.01.2024`,被下面 `%Y-%m-%d` 解析失败而
+            // 静默变成 Null。
+            if let Ok(d) = row.try_get::<chrono::NaiveDate, _>(index) {
+                return DataValue::Date(d);
+            }
+            // 兜底:个别驱动/异常路径仍可能以 String 返回。
             if let Ok(s) = row.try_get::<String, _>(index)
                 && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
             {
                 return DataValue::Date(date);
+            }
+            // 解析失败但有原始值 → 打 warn,避免与真 Null 混淆,便于定位
+            // datestyle / 列类型不匹配等根因。
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                tracing::warn!(
+                    target: "cmx::database::executor",
+                    column_index = index,
+                    column_raw = %s,
+                    column_type = %type_name,
+                    "DATE 列解析失败,返回 Null"
+                );
             }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
@@ -600,11 +621,32 @@ impl ResultConverter {
                 .map(DataValue::Json)
                 .unwrap_or(DataValue::Null)
         } else if type_name.contains("date") && !type_name.contains("time") {
-            // 处理纯日期类型 - 作为字符串获取后解析
+            // 处理纯日期类型。
+            //
+            // 优先直接 decode `chrono::NaiveDate`(sqlx 已开启 `chrono` feature),
+            // 与 cmx-database-pg 的 `col!(chrono::NaiveDate, DataValue::Date)`
+            // 行为一致;避免 PostgreSQL `datestyle` 非 ISO 时,DATE 转 Text 输出
+            // 形如 `01-15-2024` / `15.01.2024`,被下面 `%Y-%m-%d` 解析失败而
+            // 静默变成 Null。
+            if let Ok(d) = row.try_get::<chrono::NaiveDate, _>(index) {
+                return DataValue::Date(d);
+            }
+            // 兜底:个别驱动/异常路径仍可能以 String 返回。
             if let Ok(s) = row.try_get::<String, _>(index)
                 && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
             {
                 return DataValue::Date(date);
+            }
+            // 解析失败但有原始值 → 打 warn,避免与真 Null 混淆,便于定位
+            // datestyle / 列类型不匹配等根因。
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                tracing::warn!(
+                    target: "cmx::database::executor",
+                    column_index = index,
+                    column_raw = %s,
+                    column_type = %type_name,
+                    "DATE 列解析失败,返回 Null"
+                );
             }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
@@ -696,11 +738,32 @@ impl ResultConverter {
                 .map(DataValue::Json)
                 .unwrap_or(DataValue::Null)
         } else if type_name.contains("date") && !type_name.contains("time") {
-            // 处理纯日期类型 - 作为字符串获取后解析
+            // 处理纯日期类型。
+            //
+            // 优先直接 decode `chrono::NaiveDate`(sqlx 已开启 `chrono` feature),
+            // 与 cmx-database-pg 的 `col!(chrono::NaiveDate, DataValue::Date)`
+            // 行为一致;避免 PostgreSQL `datestyle` 非 ISO 时,DATE 转 Text 输出
+            // 形如 `01-15-2024` / `15.01.2024`,被下面 `%Y-%m-%d` 解析失败而
+            // 静默变成 Null。
+            if let Ok(d) = row.try_get::<chrono::NaiveDate, _>(index) {
+                return DataValue::Date(d);
+            }
+            // 兜底:个别驱动/异常路径仍可能以 String 返回。
             if let Ok(s) = row.try_get::<String, _>(index)
                 && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
             {
                 return DataValue::Date(date);
+            }
+            // 解析失败但有原始值 → 打 warn,避免与真 Null 混淆,便于定位
+            // datestyle / 列类型不匹配等根因。
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                tracing::warn!(
+                    target: "cmx::database::executor",
+                    column_index = index,
+                    column_raw = %s,
+                    column_type = %type_name,
+                    "DATE 列解析失败,返回 Null"
+                );
             }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
@@ -773,6 +836,8 @@ impl ResultConverter {
             FieldType::Decimal
         } else if type_name_lower.contains("timestamp") || type_name_lower.contains("datetime") {
             FieldType::DateTime
+        } else if type_name_lower.contains("date")  {
+            FieldType::Date
         } else if type_name_lower.contains("bool") {
             FieldType::Bool
         } else if type_name_lower.contains("uuid") {
