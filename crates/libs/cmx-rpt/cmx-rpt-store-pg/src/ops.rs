@@ -27,6 +27,10 @@ const STRUCTURAL_OPS: &[&str] = &[
     "addRegion", "delRegion", "addSheet", "renameSheet",
 ];
 
+/// 结构操作中「插/删行列」子集：平移 cr_cell_element_map 的 cell_ref（有存储副作用）。
+/// 其余结构操作（addRegion/addSheet 等）仅 log-only，由客户端重放 + 快照物化收敛。
+const ROWCOL_STRUCTURAL_OPS: &[&str] = &["insertRow", "deleteRow", "insertCol", "deleteCol"];
+
 /// 写投影的操作类型：直接落 cr_cell_element_map（计算态消费的公式/绑定）。
 const PROJECTION_OPS: &[&str] = &[
     "setCellFormula", "setCheckFormula", "bindElement", "unbindElement",
@@ -234,6 +238,9 @@ async fn apply_ops_in_txn(
         // ── 应用到投影（公式/绑定类；其余 log-only 由客户端重放 + 快照物化收敛） ──
         if PROJECTION_OPS.contains(&op_type.as_str()) {
             apply_projection_op(txn_id, code, version, &op_type, op, &payload).await?;
+        } else if ROWCOL_STRUCTURAL_OPS.contains(&op_type.as_str()) {
+            // 插/删行列：平移 cr_cell_element_map 的 cell_ref（被删条目坍缩删除）
+            apply_structural_op(txn_id, code, version, &op_type, op).await?;
         }
 
         // ── append 日志 ──
@@ -297,6 +304,148 @@ fn cell_ref_anchor(cell: &str) -> (i64, i64) {
     }
     let row: i64 = cell[i..].parse().unwrap_or(0);
     (row, col)
+}
+
+/// A1 → (row0, col0) 0 基索引；非法返回 None。
+fn parse_a1(cell: &str) -> Option<(i64, i64)> {
+    let bytes = cell.as_bytes();
+    let mut i = 0;
+    let mut col: i64 = 0;
+    while i < bytes.len() && bytes[i].is_ascii_alphabetic() {
+        col = col * 26 + ((bytes[i].to_ascii_uppercase() - b'A') as i64 + 1);
+        i += 1;
+    }
+    if i == 0 {
+        return None;
+    }
+    let row: i64 = cell[i..].parse().ok()?;
+    if row < 1 {
+        return None;
+    }
+    Some((row - 1, col - 1))
+}
+
+/// 0 基列索引 → A1 列字母。
+fn col_to_letters(col0: i64) -> String {
+    let mut n = col0 + 1;
+    let mut s = String::new();
+    while n > 0 {
+        let r = ((n - 1) % 26) as u8;
+        s.insert(0, (b'A' + r) as char);
+        n = (n - 1) / 26;
+    }
+    if s.is_empty() {
+        s.push('A');
+    }
+    s
+}
+
+/// 单个 0 基索引在插入/删除后的新值；被删区间内返回 None（映射坍缩）。
+/// 与前端 designer.js `structShiftIndex` 及引擎 refTransform 同语义。
+fn struct_shift_index(pos: i64, index: i64, count: i64, is_insert: bool) -> Option<i64> {
+    if is_insert {
+        return Some(if pos >= index { pos + count } else { pos });
+    }
+    // delete
+    if pos >= index && pos < index + count {
+        return None;
+    }
+    if pos >= index + count {
+        return Some(pos - count);
+    }
+    Some(pos)
+}
+
+/// A1 地址按结构编辑移位；被删返回 None。axis='row' 移行、否则移列。
+fn shift_cell_ref(cell: &str, axis_is_row: bool, index: i64, count: i64, is_insert: bool) -> Option<String> {
+    let (row0, col0) = parse_a1(cell)?;
+    if axis_is_row {
+        let nr = struct_shift_index(row0, index, count, is_insert)?;
+        Some(format!("{}{}", col_to_letters(col0), nr + 1))
+    } else {
+        let nc = struct_shift_index(col0, index, count, is_insert)?;
+        Some(format!("{}{}", col_to_letters(nc), row0 + 1))
+    }
+}
+
+/// 结构操作（插/删行列）→ 平移 cr_cell_element_map 的 cell_ref/row_id/col_id，
+/// 被删行列上的条目删除（映射坍缩）。target={sheet, at}，payload={count}。
+///
+/// 只碰 cr_cell_element_map（设计态取数/校验公式、元素绑定投影）；cr_report_row/col 的
+/// row_no/col_no 及 SSJSON 版式由客户端下次 save_layout 全量重建收敛（对齐「log 同步语义层 +
+/// 快照物化版式」约定），故本函数不碰它们。cr_cell_data 是运行态(org+period)数据，另属。
+async fn apply_structural_op(
+    txn_id: &str,
+    code: &str,
+    version: &str,
+    op_type: &str,
+    op: &Value,
+) -> Result<()> {
+    let t = op.get("target").cloned().unwrap_or(Value::Null);
+    let sheet = jstr(&t, "sheet")
+        .or_else(|| {
+            // 串形态 `row:{sheet}:{at}`
+            jstr(op, "target").and_then(|s| s.split(':').nth(1).map(|x| x.to_string()))
+        })
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Sheet1".to_string());
+    let at = jint(&t, "at")
+        .or_else(|| jstr(op, "target").and_then(|s| s.split(':').nth(2).and_then(|x| x.parse().ok())))
+        .ok_or_else(|| api_err(&format!("{op_type} 缺少目标索引 at")))?;
+    let payload = op.get("payload").cloned().unwrap_or(Value::Null);
+    let count = jint(&payload, "count").unwrap_or(1).max(1);
+    let axis_is_row = op_type.contains("Row");
+    let is_insert = op_type.starts_with("insert");
+
+    // 读该 sheet 所有映射条目（含 cell_ref）
+    let rows = query_rows_txn(
+        txn_id,
+        r#"SELECT id, cell_ref FROM cr_cell_element_map
+           WHERE report_code=$1 AND version_code=$2 AND sheet_code=$3"#,
+        dv![code, version, sheet.clone()],
+        "rpt_struct_map_scan",
+    )
+    .await?;
+
+    for r in &rows {
+        let id = match jint(r, "id") {
+            Some(v) => v,
+            None => continue,
+        };
+        let cell = match jstr(r, "cell_ref") {
+            Some(c) => c,
+            None => continue,
+        };
+        match shift_cell_ref(&cell, axis_is_row, at, count, is_insert) {
+            None => {
+                // 落被删区间 → 删除该映射条目
+                exec_dv(
+                    txn_id,
+                    "DELETE FROM cr_cell_element_map WHERE id=$1",
+                    vec![DataValue::Int(id)],
+                )
+                .await?;
+            }
+            Some(new_ref) if new_ref != cell => {
+                let (arow, acol) = cell_ref_anchor(&new_ref);
+                exec_dv(
+                    txn_id,
+                    r#"UPDATE cr_cell_element_map
+                       SET cell_ref=$1, row_id=$2, col_id=$3, update_time=CURRENT_TIMESTAMP
+                       WHERE id=$4"#,
+                    vec![
+                        DataValue::String(new_ref),
+                        DataValue::Int(arow),
+                        DataValue::Int(acol),
+                        DataValue::Int(id),
+                    ],
+                )
+                .await?;
+            }
+            Some(_) => { /* 未移动（在插删点之前）→ 不动 */ }
+        }
+    }
+    Ok(())
 }
 
 /// 公式/绑定类操作 → cr_cell_element_map 增量 UPSERT（按 sheet|region|cell_ref 业务键，
@@ -451,4 +600,75 @@ pub async fn list_ops(code: &str, version: &str, since: i64, limit: i64) -> Resu
         "reportCode": code, "version": version,
         "curSeq": cur_seq, "since": since, "count": ops.len(), "ops": ops,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_a1_roundtrip() {
+        assert_eq!(parse_a1("A1"), Some((0, 0)));
+        assert_eq!(parse_a1("C5"), Some((4, 2)));
+        assert_eq!(parse_a1("AA10"), Some((9, 26)));
+        assert_eq!(parse_a1("bad"), None);
+        assert_eq!(parse_a1("5"), None);
+    }
+
+    #[test]
+    fn col_letters_roundtrip() {
+        assert_eq!(col_to_letters(0), "A");
+        assert_eq!(col_to_letters(2), "C");
+        assert_eq!(col_to_letters(26), "AA");
+        assert_eq!(col_to_letters(27), "AB");
+    }
+
+    #[test]
+    fn shift_index_insert() {
+        // 插入点前不动，插入点及之后 +count
+        assert_eq!(struct_shift_index(1, 2, 1, true), Some(1));
+        assert_eq!(struct_shift_index(2, 2, 1, true), Some(3));
+        assert_eq!(struct_shift_index(4, 2, 2, true), Some(6));
+    }
+
+    #[test]
+    fn shift_index_delete() {
+        // 区间内坍缩 None；之后 -count；之前不动
+        assert_eq!(struct_shift_index(1, 2, 1, false), Some(1));
+        assert_eq!(struct_shift_index(2, 2, 1, false), None); // 落被删行
+        assert_eq!(struct_shift_index(4, 2, 1, false), Some(3));
+        assert_eq!(struct_shift_index(3, 2, 2, false), None); // [2,4) 内
+        assert_eq!(struct_shift_index(4, 2, 2, false), Some(2));
+    }
+
+    #[test]
+    fn shift_cell_ref_row() {
+        // C5 上方(index=2)插1行 → C6
+        assert_eq!(shift_cell_ref("C5", true, 2, 1, true).as_deref(), Some("C6"));
+        // C5 下方(index=10)插 → 不动
+        assert_eq!(shift_cell_ref("C5", true, 10, 1, true).as_deref(), Some("C5"));
+        // 删第3行(index=2) → C5→C4
+        assert_eq!(shift_cell_ref("C5", true, 2, 1, false).as_deref(), Some("C4"));
+        // 删含 C5 的行(index=4) → 坍缩
+        assert_eq!(shift_cell_ref("C5", true, 4, 1, false), None);
+    }
+
+    #[test]
+    fn shift_cell_ref_col() {
+        // C5 左侧(index=1)插1列 → D5
+        assert_eq!(shift_cell_ref("C5", false, 1, 1, true).as_deref(), Some("D5"));
+        // 删列 C(index=2) → 坍缩
+        assert_eq!(shift_cell_ref("C5", false, 2, 1, false), None);
+        // 删列 B(index=1) → C5→B5
+        assert_eq!(shift_cell_ref("C5", false, 1, 1, false).as_deref(), Some("B5"));
+        // 多字母列 AA10 在 index=0 插1列 → AB10
+        assert_eq!(shift_cell_ref("AA10", false, 0, 1, true).as_deref(), Some("AB10"));
+    }
+
+    #[test]
+    fn cell_ref_anchor_matches_new_ref() {
+        // 移位后 row_id/col_id 锚点须与新 cell_ref 一致（1 基）
+        let (r, c) = cell_ref_anchor("D6");
+        assert_eq!((r, c), (6, 4));
+    }
 }

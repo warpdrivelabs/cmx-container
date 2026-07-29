@@ -1347,6 +1347,91 @@ function cellKey (st, addr, sheetCode) {
   return `${sc}!${String(addr || '').toUpperCase()}`
 }
 
+// ══════════════════════════════════════════════════════════════════
+// 结构编辑（插/删行列）→ 报表语义层地址移位
+// ------------------------------------------------------------------
+// 引擎（cmx-megasheet）插删行列后派发 cmx-structural-changed；原生单元格公式由引擎自身移位，
+// 但 st.cellMap（取数/校验公式、元素绑定，按 `sheet!A1` 地址为键）和 st.regions（startCell/endCell
+// 地址、floatTemplateRow 行索引）是纯前端语义层，引擎不碰——必须在此对称移位，否则映射与移动后的
+// 格子脱钩、badge 画在老位置、保存 join 老键落空丢映射。与引擎 refTransform.shiftIndex 同语义。
+// ══════════════════════════════════════════════════════════════════
+
+/** 单个 0-based 索引在插入/删除后的新值；被删区间内返回 -1（映射坍缩）。 */
+function structShiftIndex (pos, index, count, op) {
+  if (op === 'insert') return pos >= index ? pos + count : pos
+  // delete
+  if (pos >= index && pos < index + count) return -1
+  if (pos >= index + count) return pos - count
+  return pos
+}
+
+/** A1 地址串按结构编辑移位；被删返回 null。axis 决定移 row 还是 col。 */
+function structShiftAddr (addr, axis, index, count, op) {
+  const p = parseA1(addr)
+  if (!p) return null
+  if (axis === 'row') {
+    const r = structShiftIndex(p.row, index, count, op)
+    if (r < 0) return null
+    return `${indexToCol(p.col)}${r + 1}`
+  }
+  const c = structShiftIndex(p.col, index, count, op)
+  if (c < 0) return null
+  return `${indexToCol(c)}${p.row + 1}`
+}
+
+/**
+ * 对称移位 st.cellMap + st.regions。detail = 引擎 cmx-structural-changed 的 detail
+ * `{axis,op,index,count,sheet,seq,phase}`（op 已由引擎按 phase 取反：undo 一个 insert → op=delete）。
+ * 只移属于 detail.sheet 的键（cellMap 键前缀 `sheet!`；regions 按 sheetCode 过滤）。
+ * delete（含 insert 的 undo=delete）时把落在被删区间的 cellMap 条目快照进 st.__structUndo，
+ * 供后续 insert 的 undo（=恢复内容）回填。
+ */
+function applyStructuralShift (st, detail) {
+  if (!detail || !st) return
+  const { axis, op, index, count, sheet, seq, phase } = detail
+  const sc = String(sheet || '')
+  const prefix = `${sc}!`
+
+  // —— cellMap 重整（先收集再重建，避免遍历中改键）——
+  const removed = {} // 被删条目快照（key=完整 sheet!addr），供 undo 回填
+  const nextMap = {}
+  for (const k of Object.keys(st.cellMap || {})) {
+    if (k.indexOf(prefix) !== 0) { nextMap[k] = st.cellMap[k]; continue } // 别的 sheet 原样
+    const addr = k.slice(prefix.length)
+    const na = structShiftAddr(addr, axis, index, count, op)
+    if (na === null) { removed[k] = st.cellMap[k]; continue } // 落被删区间 → 坍缩
+    nextMap[`${prefix}${na}`] = st.cellMap[k]
+  }
+
+  // —— 撤销辅助：delete 记快照；对应的 undo（=insert 回位）恢复内容 ——
+  st.__structUndo = st.__structUndo || []
+  if (op === 'delete') {
+    st.__structUndo.push({ seq, removed })
+  } else if (op === 'insert' && phase === 'undo') {
+    // 回退一次 delete：找最近一条快照，把被删条目按「回移后的新址」写回
+    const snap = st.__structUndo.pop()
+    if (snap) {
+      for (const k of Object.keys(snap.removed)) {
+        const addr = k.slice(prefix.length)
+        const na = structShiftAddr(addr, axis, index, count, op) // op=insert → 回移
+        if (na !== null) nextMap[`${prefix}${na}`] = snap.removed[k]
+      }
+    }
+  }
+  st.cellMap = nextMap
+
+  // —— regions：startCell/endCell 地址移位；行插删移 floatTemplateRow ——
+  for (const rg of (st.regions || [])) {
+    if (String(rg.sheetCode || '') !== sc) continue
+    if (rg.startCell) { const s = structShiftAddr(rg.startCell, axis, index, count, op); rg.startCell = s === null ? '' : s }
+    if (rg.endCell) { const e = structShiftAddr(rg.endCell, axis, index, count, op); rg.endCell = e === null ? '' : e }
+    if (axis === 'row' && rg.floatTemplateRow != null && rg.floatTemplateRow !== '') {
+      const nr = structShiftIndex(Number(rg.floatTemplateRow), index, count, op)
+      rg.floatTemplateRow = nr < 0 ? null : nr
+    }
+  }
+}
+
 const CELL_TABS = [
   { key: 'cell', label: '单元格', icon: 'grid' },
   { key: 'element', label: '元素', icon: 'database' },
@@ -2708,6 +2793,28 @@ function enqueueOp (st, type, target, payload) {
   st.opFlushTimer = setTimeout(() => { flushOps(st).catch(() => {}) }, 800)
 }
 
+/**
+ * 入队一个结构操作（插/删行列）。与 enqueueOp 不同：**绝不合并**——每次插删都是独立事实，
+ * 用单调序号做唯一 __key（连续在同一位置插两次也各记一条）。type=insertRow/deleteRow/insertCol/
+ * deleteCol，target={sheet,at}，payload={count}。后端 canonical_target 产出 `row:{sheet}:{at}`。
+ */
+function enqueueStructuralOp (st, detail) {
+  if (st.__loading) return
+  st.opClientSerial = (st.opClientSerial || 0) + 1
+  const type = (detail.axis === 'row')
+    ? (detail.op === 'insert' ? 'insertRow' : 'deleteRow')
+    : (detail.op === 'insert' ? 'insertCol' : 'deleteCol')
+  st.opQueue.push({
+    __key: `struct#${st.opClientSerial}`, // 唯一、不合并
+    type,
+    target: { sheet: detail.sheet || '', at: detail.index },
+    payload: { count: detail.count },
+    clientOpId: `${designerSid(st)}-${Date.now().toString(36)}-${st.opClientSerial}`,
+  })
+  clearTimeout(st.opFlushTimer)
+  st.opFlushTimer = setTimeout(() => { flushOps(st).catch(() => {}) }, 800)
+}
+
 /** 批量提交队列中的操作；冲突/拒绝结果回传处理。 */
 async function flushOps (st) {
   if (!st.opQueue.length) return
@@ -2749,9 +2856,23 @@ async function pollOps (st) {
   } catch (_) { /* 轮询失败静默，下轮再试 */ }
 }
 
-/** 重放一条远端操作到本地状态（公式/绑定类）。返回是否有可见变化。 */
+/** 重放一条远端操作到本地状态（公式/绑定类 + 结构类）。返回是否有可见变化。 */
 function replayOp (st, op) {
   const t = op.target || ''
+  // —— 结构 op（插/删行列）：远端协同者的行列变更 → 本地 cellMap/regions 同步移位 ——
+  if (op.type === 'insertRow' || op.type === 'deleteRow' || op.type === 'insertCol' || op.type === 'deleteCol') {
+    const sheet = (typeof t === 'string')
+      ? (t.split(':')[1] || '')                 // 规范串形态 `row:{sheet}:{at}`
+      : (t.sheet || '')
+    const at = (typeof t === 'string')
+      ? Number(t.split(':')[2])
+      : Number(t.at)
+    if (!Number.isFinite(at)) return false
+    const axis = op.type.indexOf('Row') >= 0 ? 'row' : 'col'
+    const opKind = op.type.indexOf('insert') === 0 ? 'insert' : 'delete'
+    applyStructuralShift(st, { axis, op: opKind, index: at, count: Number(op.payload?.count) || 1, sheet, phase: 'do' })
+    return true
+  }
   const sheetName = typeof t === 'string' ? (t.split('!')[0] || '') : (t.sheet || '')
   const cell = typeof t === 'string' ? (t.split('!')[1] || '') : (t.cell || '')
   if (!cell) return false
@@ -4550,6 +4671,18 @@ function initSpreadComponent (root, st) {
     updateToolbarControls(root, st)
     refreshInstance(st, (view) => view === 'propertyCell')
     if (!st.__loading) markDirty(st, true) // 用户改单元格 → 未保存
+  })
+  // 插/删行列 → 引擎派发 cmx-structural-changed；对称移位报表语义层（cellMap/regions），
+  // 否则取数/校验公式、元素绑定与移动后的格子脱钩。装载/重放期忽略（引擎重建版式不应触发语义移位）。
+  sheet.addEventListener('cmx-structural-changed', (e) => {
+    const detail = e.detail
+    if (!detail || st.__loading) return
+    applyStructuralShift(st, detail)
+    renderBadges(st)                                   // badge 从 cellMap 键重算，移位后即跟随
+    refreshInstance(st, (view) => view === 'propertyCell' || view === 'propertyMeta')
+    if (detail.phase === 'do') markDirty(st, true)     // undo/redo 由引擎撤销栈驱动，不额外置脏
+    // 协同 B 档：正向 do 才入队结构 op（后端 apply_structural_op 消费；undo/redo 靠 seq 对齐，不重复发）
+    if (detail.phase === 'do') enqueueStructuralOp(st, detail)
   })
   sheet.addEventListener('cmx-sheet-changed', (e) => {
     syncActiveSheetName(sheet, st)
