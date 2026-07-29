@@ -887,7 +887,6 @@ function applyRowGrouping (ws, instances) {
   try {
     const wb = ws.getParent ? ws.getParent() : null
     if (!ws.rowOutlines || !ws.rowOutlines.group) return
-    try { if (wb && wb.options) wb.options.showRowOutline = true } catch (_) {}
 
     // physRow → instance；按 parentRow 建父→子映射（子=直接下级）。
     const byPhys = {}
@@ -906,7 +905,7 @@ function applyRowGrouping (ws, instances) {
       return out
     }
 
-    // 每个「有子行的父」→ 一个分组 [start0, count]；跨度=其全部后代的 min..max 物理行。
+    // 每个「有子行的父」→ 一个分组 [start0, count]；跨度 = 父行(小计/合计,即 summary) + 其全部后代明细。
     // 按父行的层级深度排序：level 大（深）的先分组，保证内层先于外层（正确嵌套）。
     const parents = Object.keys(directChildren)
       .map(Number)
@@ -917,7 +916,9 @@ function applyRowGrouping (ws, instances) {
     parents.forEach((p) => {
       const desc = descendants(p)
       if (!desc.length) return
-      const min = Math.min(...desc); const max = Math.max(...desc)
+      // ★ 组范围必须**含父行 p 本身**（summaryBelow=false 时组首行=summary，按钮画在此行）。
+      //   只取后代 min..max 会把明细首行当 summary → 按钮错位一行（华北小计的按钮画到北京D明细上）。
+      const min = Math.min(p, ...desc); const max = Math.max(p, ...desc)
       segs.push([min - 1, max - min + 1]) // [start0, count]（0-based）
     })
     if (!segs.length) return
@@ -925,14 +926,21 @@ function applyRowGrouping (ws, instances) {
     if (wb && wb.suspendPaint) wb.suspendPaint()
     try {
       // 折叠按钮放在组的「上方」（我们的小计/合计 summary 行在明细之前）。
-      // SpreadJS OutlineDirection：默认 1=summary 在下方；0=summary 在上方。
+      // 内核方向：SpreadJS 用 rowOutlines.direction(0)；cmx-megasheet 用 sheet.summaryBelow=false
+      //（汇总在首行，折叠隐藏其后明细）。两者都试，命中即生效。
       try { ws.rowOutlines.direction && ws.rowOutlines.direction(0) } catch (_) {}
+      try { ws.summaryBelow = false } catch (_) {}
       segs.forEach(([start0, count]) => {
         if (count > 0 && start0 >= 0) { try { ws.rowOutlines.group(start0, count) } catch (_) {} }
       })
     } finally {
       if (wb && wb.resumePaint) wb.resumePaint()
     }
+    // ★ 置 showRowOutline **在 group 之后**——它经 spread-compat 活代理触发 element.refreshOutlines()，
+    //   而后者按 rowOutlines.maxLevel() 算大纲带宽度；分组前触发则带宽=0 不画（换 cmx-megasheet 后的顺序坑）。
+    try { if (wb && wb.options) wb.options.showRowOutline = true } catch (_) {}
+    // 兜底：直呼 element.refreshOutlines()（spread-compat 的 ws._el 是宿主 element；SpreadJS 内核无此属性，跳过）。
+    try { if (ws._el && typeof ws._el.refreshOutlines === 'function') ws._el.refreshOutlines() } catch (_) {}
   } catch (_) { /* 大纲失败不阻断渲染 */ }
 }
 
@@ -944,7 +952,6 @@ function applyColGrouping (ws, colIdxs) {
   try {
     const wb = ws.getParent ? ws.getParent() : null
     if (!ws.columnOutlines || !ws.columnOutlines.group || !colIdxs || !colIdxs.length) return
-    try { if (wb && wb.options) wb.options.showColumnOutline = true } catch (_) {}
     // 连续段分组（浮动列一般连续，如 C..H）。
     const sorted = colIdxs.slice().sort((a, b) => a - b)
     const segs = []
@@ -959,14 +966,19 @@ function applyColGrouping (ws, colIdxs) {
     if (!segs.length) return
     if (wb && wb.suspendPaint) wb.suspendPaint()
     try {
-      // 折叠按钮放列组「左侧」（第一列，即 summary 在前）。
+      // 折叠按钮放列组「左侧」（summary 在前）。SpreadJS 用 columnOutlines.direction(0)；
+      // cmx-megasheet 用 sheet.summaryRight=false（汇总在首列）。两者都试。
       try { ws.columnOutlines.direction && ws.columnOutlines.direction(0) } catch (_) {}
+      try { ws.summaryRight = false } catch (_) {}
       segs.forEach(([start, count]) => {
         if (count > 0 && start >= 0) { try { ws.columnOutlines.group(start, count) } catch (_) {} }
       })
     } finally {
       if (wb && wb.resumePaint) wb.resumePaint()
     }
+    // ★ group 之后再置 showColumnOutline（触发 refreshOutlines 按 maxLevel 算带宽），同行大纲顺序坑。
+    try { if (wb && wb.options) wb.options.showColumnOutline = true } catch (_) {}
+    try { if (ws._el && typeof ws._el.refreshOutlines === 'function') ws._el.refreshOutlines() } catch (_) {}
   } catch (_) { /* 列大纲失败不阻断渲染 */ }
 }
 
