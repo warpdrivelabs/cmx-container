@@ -7,6 +7,9 @@ registry = "sparse+https://mirrors.aliyun.com/crates.io-index/"
 [registries.nora]
 #index = "sparse+http://192.168.1.14:4000/cargo/index/"
 index = "sparse+http://192.168.157.46:4000/cargo/index/"
+token="nra_0044652ed3bf4eec82556ea613c6b618"
+#cargo login --registry nora
+
 
 [http]
 check-revoke = false
