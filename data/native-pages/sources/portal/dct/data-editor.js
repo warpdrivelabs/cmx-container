@@ -445,7 +445,7 @@ async function applyRowsToGrid (root, rows) {
       fillHeight: true,
       showRowIndex: true,
       editable: true,
-       editTrigger: 'click',
+       // editTrigger: 'click',
       showTotals: false,
       showRequiredMark: true,
     })

@@ -20,7 +20,7 @@ INSERT INTO cmx_domain (id, code, name, title, icon, description, status, archiv
 VALUES ('sc',     'sc',     '生产资源管理',   '生产资源管理',             'machine',        '',                                       1, 0, 5);
 -- 补录：applications/modules 引用 domain=portal 但 registry domains 缺失
 INSERT INTO cmx_domain (id, code, name, title, icon, description, status, archived, sort_order)
-VALUES ('portal', 'portal', '门户',           'Portal',                  'home',           '门户平台域。',                            1, 0, 0);
+VALUES ('portal', 'portal', '门户',           'Portal',                  'home',           '门户平台域。',                            0, 0, 0);
 
 -- =============================================
 -- 2. 应用数据
