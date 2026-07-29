@@ -291,11 +291,11 @@ function cmxNotify (kind, msg) {
   void dlg.openModal().then(() => {}).catch(() => {})
 }
 
-/** 确认对话框（基于 cmx-floating-dialog 命令式 API）。 */
+/** 确认对话框（基于 cmxConfirm 命令式 API）。 */
 async function cmxConfirm (message, title) {
   const C = cmx()
   if (C && typeof C.cmxConfirm === 'function') {
-    try { return !!(await C.cmxConfirm(message, title || '请确认')) } catch (_) {}
+    try { return !!(await C.cmxConfirm({ message, title: title || '请确认' })) } catch (_) {}
   }
   const dlg = document.createElement('cmx-floating-dialog')
   if (typeof dlg.configure !== 'function') return false
@@ -445,7 +445,7 @@ async function applyRowsToGrid (root, rows) {
       fillHeight: true,
       showRowIndex: true,
       editable: true,
-      // editTrigger: 'click',
+       editTrigger: 'click',
       showTotals: false,
       showRequiredMark: true,
     })
