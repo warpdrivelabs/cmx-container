@@ -473,7 +473,7 @@ impl PgResultConverter {
             Type::FLOAT4 | Type::FLOAT8 => FieldType::Float,
             Type::NUMERIC | Type::MONEY => FieldType::Decimal,
             Type::TIMESTAMP | Type::TIMESTAMPTZ => FieldType::DateTime,
-            Type::DATE => FieldType::DateTime,
+            Type::DATE => FieldType::Date,
             Type::BOOL => FieldType::Bool,
             Type::UUID => FieldType::Uuid,
             Type::BYTEA => FieldType::Binary,
