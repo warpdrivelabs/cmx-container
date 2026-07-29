@@ -484,7 +484,7 @@ function renderTreeNodes (node, depth) {
       </div>
       <div class="help-children" style="${open ? '' : 'display:none'}">${open ? renderTreeNodes(child, depth + 1) : ''}</div>
     </div>`
-  }).join('') || '<div class="help-empty"><ui5-icon name="search"></ui5-icon><span>未找到匹配的帮助主题</span></div>'
+  }).join('') || '<cmx-empty-state icon="search" title="未找到匹配的帮助主题" size="sm"></cmx-empty-state>'
 }
 
 function treeHtml () {
@@ -519,13 +519,13 @@ function contentHtml () {
   if (state.docLoading && !doc) {
     return `<div class="help-wrap help-neo" data-help-region="content">
       <div class="help-neo-banner"><div class="help-neo-banner-main">${navToolbarHtml()}<ui5-icon class="help-neo-banner-icon" name="synchronize"></ui5-icon><div><div class="help-neo-banner-title">加载内容...</div></div></div></div>
-      <div class="help-empty"><ui5-icon name="synchronize"></ui5-icon><span>加载内容...</span></div>
+      <cmx-empty-state icon="synchronize" title="加载内容..." size="sm"></cmx-empty-state>
     </div>`
   }
   if (!doc) {
     return `<div class="help-wrap help-neo" data-help-region="content">
       <div class="help-neo-banner"><div class="help-neo-banner-main">${navToolbarHtml()}<ui5-icon class="help-neo-banner-icon" name="sys-help"></ui5-icon><div><div class="help-neo-banner-title">帮助</div></div></div></div>
-      <div class="help-empty help-empty-lg"><ui5-icon name="sys-help"></ui5-icon><span>从左侧帮助目录选择一项查看详细内容</span>${state.message ? `<small>${esc(state.message)}</small>` : ''}</div>
+      <cmx-empty-state icon="sys-help" title="从左侧帮助目录选择一项查看详细内容"${state.message ? ` description="${esc(state.message)}"` : ''} size="sm"></cmx-empty-state>
     </div>`
   }
   const crumb = `${esc(damLabel('domain', doc))} / ${esc(damLabel('app', doc))} / ${esc(damLabel('module', doc))}${doc.path ? ` / ${esc(doc.path)}` : ''}`
@@ -562,10 +562,10 @@ function propertyHtml () {
       <span class="help-neo-chip">${examples.length ? 'LIVE' : 'IDLE'}</span>
     </div>`
   if (!doc) {
-    return `<div class="help-wrap help-property-wrap help-neo" data-help-region="property">${head}<div class="help-empty"><ui5-icon name="example"></ui5-icon><span>选择主题后查看样例</span></div></div>`
+    return `<div class="help-wrap help-property-wrap help-neo" data-help-region="property">${head}<cmx-empty-state icon="example" title="选择主题后查看样例" size="sm"></cmx-empty-state></div>`
   }
   if (!examples.length) {
-    return `<div class="help-wrap help-property-wrap help-neo" data-help-region="property">${head}<div class="help-empty"><ui5-icon name="example"></ui5-icon><span>此功能暂无示例</span></div></div>`
+    return `<div class="help-wrap help-property-wrap help-neo" data-help-region="property">${head}<cmx-empty-state icon="example" title="此功能暂无示例" size="sm"></cmx-empty-state></div>`
   }
   const body = examples.map((ex, i) => {
     const e = ex && typeof ex === 'object' ? ex : { code: String(ex) }

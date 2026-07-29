@@ -728,9 +728,9 @@ function explorerDataHtml (st) {
   if (st.elementsLoading) {
     body = '<div class="rd-loading"><ui5-icon name="synchronize"></ui5-icon>正在从 fico-db 装载数据元素...</div>'
   } else if (st.elementError) {
-    body = `<div class="rd-empty">数据元素加载失败：${esc(st.elementError)}</div>`
+    body = `<cmx-empty-state icon="message-error" title="数据元素加载失败" description="${esc(st.elementError)}" size="sm"></cmx-empty-state>`
   } else if (!st.elementCategories.length) {
-    body = '<div class="rd-empty">暂无数据元素类别。</div>'
+    body = '<cmx-empty-state icon="inbox" title="暂无数据元素类别" size="sm"></cmx-empty-state>'
   } else {
     const sections = st.elementCategories.map((c) => {
       const code = String(c.code || '')
@@ -754,7 +754,7 @@ function explorerDataHtml (st) {
             <span class="rd-el-grip"><ui5-icon name="vertical-grip"></ui5-icon></span>
           </div>`
         }).join('')
-        : '<div class="rd-empty" style="margin:8px">该类别下还没有定义数据元素。</div>'
+        : '<cmx-empty-state icon="folder" title="该类别下还没有定义数据元素" size="sm"></cmx-empty-state>'
       return `<section class="rd-cat ${closed ? 'closed' : ''}" style="--cat-color:${esc(color)}">
         <button class="rd-cat-h" type="button" data-cat-toggle="${esc(code)}">
           <ui5-icon name="${closed ? 'navigation-right-arrow' : 'navigation-down-arrow'}"></ui5-icon>
@@ -764,7 +764,7 @@ function explorerDataHtml (st) {
         <div class="rd-cat-body">${itemHtml}</div>
       </section>`
     }).filter(Boolean)
-    body = sections.length ? sections.join('') : '<div class="rd-empty">没有找到匹配的数据元素。</div>'
+    body = sections.length ? sections.join('') : '<cmx-empty-state icon="search" title="没有找到匹配的数据元素" size="sm"></cmx-empty-state>'
   }
   return `<section class="rd">
     ${headHtml(st, '数据元素', 'database', `<button class="rd-ibtn ${st.elementsLoading ? 'spin' : ''}" type="button" data-el-refresh title="刷新数据元素"><ui5-icon name="refresh"></ui5-icon></button>`)}
@@ -1180,7 +1180,7 @@ function propertyMetaHtml (st) {
   const refreshAct = `<button class="rd-ibtn ${st.detailLoading ? 'spin' : ''}" type="button" data-meta-refresh title="刷新报表详情"><ui5-icon name="refresh"></ui5-icon></button>`
   return `<section class="rd">${headHtml(st, '报表属性', 'detail-view', refreshAct)}
     <div class="rd-tabs">${tabs}</div>
-    <div class="rd-body">${st.detailError ? `<div class="rd-empty">加载失败：${esc(st.detailError)}</div>` : ''}${body}</div></section>`
+    <div class="rd-body">${st.detailError ? `<cmx-empty-state icon="message-error" title="加载失败" description="${esc(st.detailError)}" size="sm"></cmx-empty-state>` : ''}${body}</div></section>`
 }
 
 /** 报表 tab：主档信息（来自 /reports/{code}），只读展示。 */
@@ -1246,7 +1246,7 @@ function metaRegionBody (st) {
         <span class="rd-litem-main"><b>${esc(r.name || r.code)}${r.isDefault ? '<span class="rd-badge default">默认</span>' : ''}${(r.isRepeatable || Number(r.is_repeatable) === 1) ? '<span class="rd-badge float">浮动</span>' : ''}</b><small>${esc(r.code)}${r.startCell ? ` · ${esc(r.startCell)}:${esc(r.endCell || r.startCell)}` : ''} · ${esc(r.type || 'data')}${(r.isRepeatable || Number(r.is_repeatable) === 1) ? ` · 源:${esc(r.dataSource || r.data_source || '未设')}` : ''}</small></span>
         ${r.isDefault ? '' : `<span class="rd-litem-act">${(r.isRepeatable || Number(r.is_repeatable) === 1) ? `<button type="button" data-region-preview="${esc(r.code)}" title="预览展开"><ui5-icon name="show"></ui5-icon></button>` : ''}<button type="button" class="danger" data-region-del="${esc(r.code)}" title="删除区域"><ui5-icon name="delete"></ui5-icon></button></span>`}
       </div>`).join('')
-    : '<div class="rd-mini-empty">尚无显式区域。未定义区域时，本 Sheet 有数据的单元格归入默认区域 __default__。</div>'
+    : '<cmx-empty-state icon="grid" title="尚无显式区域" description="未定义区域时，本 Sheet 有数据的单元格归入默认区域 __default__。" size="sm"></cmx-empty-state>'
   return `<div class="rd-prop-grid">
     <section class="rd-sec"><b>区域列表 · ${esc(sheetCode)}</b>
       <div class="rd-list">${listHtml}</div>
@@ -1299,7 +1299,7 @@ function metaVersionBody (st) {
     ? versions.map((v) => `<div class="rd-litem ${v.code === cur ? 'active' : ''}">
         <span class="rd-litem-main"><b>${esc(v.name || v.code)}${Number(v.is_current) === 1 ? '<span class="rd-badge default">当前</span>' : ''}</b><small>${esc(v.code)} · ${esc(v.version_status || 'draft')}${v.change_summary ? ` · ${esc(v.change_summary)}` : ''}</small></span>
       </div>`).join('')
-    : '<div class="rd-mini-empty">默认版本（未创建显式版本）。</div>'
+    : '<cmx-empty-state icon="flag" title="默认版本" description="未创建显式版本。" size="sm"></cmx-empty-state>'
   return `<div class="rd-prop-grid">
     <section class="rd-sec"><b>版本序列</b><div class="rd-list">${listHtml}</div></section>
     <section class="rd-sec"><b>设计资产（当前版本）</b>
@@ -1474,7 +1474,7 @@ function cellBasicBody (st, snap) {
     <section class="rd-sec"><b>数据元素绑定</b>
       ${cm.elementCode
         ? `<div class="rd-chips"><span class="rd-chip on"><ui5-icon name="database"></ui5-icon>${esc(cm.elementCode)}</span></div>`
-        : '<div class="rd-mini-empty">未绑定数据元素。切到「元素」页可绑定。</div>'}
+        : '<cmx-empty-state icon="chain-link" title="未绑定数据元素" description="切到「元素」页可绑定。" size="sm"></cmx-empty-state>'}
     </section>
   </div>`
 }
@@ -1490,14 +1490,14 @@ function cellElementBody (st, snap) {
         <label>取数来源</label><input readonly value="${esc(cm.dataSource || '-')}">
       </div>
       <div class="rd-actions"><button class="rd-sbtn danger" type="button" data-cell-unbind><ui5-icon name="decline"></ui5-icon>解除绑定</button></div>`
-    : '<div class="rd-mini-empty">当前单元格未绑定数据元素。</div>'
+    : '<cmx-empty-state icon="chain-link" title="当前单元格未绑定数据元素" size="sm"></cmx-empty-state>'
   const picker = el
     ? `<div class="rd-fields">
         <label>待绑定</label><input readonly value="${esc(el.name || el.code)} (${esc(el.code)})">
         <label>数据类型</label><input readonly value="${esc(el.data_type || '-')}">
       </div>
       <div class="rd-actions"><button class="rd-sbtn primary" type="button" data-cell-bind="${esc(el.code)}"><ui5-icon name="chain-link"></ui5-icon>绑定到 ${esc(snap.addr)}</button></div>`
-    : '<div class="rd-mini-empty">先在左侧「数据元素」中选择一个元素，再回到此处绑定。</div>'
+    : '<cmx-empty-state icon="chain-link" title="先在左侧「数据元素」中选择一个元素" description="再回到此处绑定。" size="sm"></cmx-empty-state>'
   return `<div class="rd-prop-grid">
     <section class="rd-sec"><b>当前绑定</b>${bound}</section>
     <section class="rd-sec"><b>绑定新元素</b>${picker}</section>
@@ -1556,7 +1556,7 @@ const FX_CAT_LABEL = { fetch: '取数', ref: '引用', agg: '汇总', logic: '�
 /** 第一步：按分类列函数。 */
 function wizardPickHtml (st) {
   if (!st.functionsLoaded) return '<div class="rd-loading"><ui5-icon name="synchronize"></ui5-icon>正在加载函数目录…</div>'
-  if (!st.functions.length) return '<div class="rd-empty">函数目录为空或加载失败。</div>'
+  if (!st.functions.length) return '<cmx-empty-state icon="message-warning" title="函数目录为空或加载失败" size="sm"></cmx-empty-state>'
   const groups = {}
   for (const f of st.functions) { (groups[f.category] = groups[f.category] || []).push(f) }
   const order = ['fetch', 'ref', 'agg', 'logic', 'math']
@@ -1667,8 +1667,8 @@ function propertyElementHtml (st) {
     const hint = st.elementsLoading
       ? '<div class="rd-loading"><ui5-icon name="synchronize"></ui5-icon>正在加载数据元素...</div>'
       : (st.elements.length
-        ? '<div class="rd-empty">请在左侧数据元素中选择一个元素。</div>'
-        : '<div class="rd-empty">尚未加载数据元素，点击右上角刷新。</div>')
+        ? '<cmx-empty-state icon="detail-view" title="请在左侧数据元素中选择一个元素" size="sm"></cmx-empty-state>'
+        : '<cmx-empty-state icon="synchronize" title="尚未加载数据元素" description="点击右上角刷新。" size="sm"></cmx-empty-state>')
     return `<section class="rd">${headHtml(st, '元素属性', 'database', refreshAct)}<div class="rd-body">${hint}</div></section>`
   }
   const cat = elementCategory(st, it)
@@ -3647,11 +3647,11 @@ function fxPaletteHtml (st) {
   if (tab === 'builtin') {
     rows = FX_BUILTIN_CATALOG
       .filter(([name, cat, help, eg]) => !q || name.toLowerCase().includes(q) || String(help).toLowerCase().includes(q) || String(eg).toLowerCase().includes(q) || String(FX_BUILTIN_CATS[cat] || '').includes(q))
-      .map(([name, cat, help, eg]) => fnRow('builtin', name, help, eg)).join('') || '<div class="rd-fxp-empty">无匹配</div>'
+      .map(([name, cat, help, eg]) => fnRow('builtin', name, help, eg)).join('') || '<cmx-empty-state icon="search" title="无匹配" size="sm"></cmx-empty-state>'
   } else {
     rows = FX_FETCH.map((name) => hit(name) || { name, help: '', example: '' })
       .filter((m) => !q || m.name.toLowerCase().includes(q) || String(m.help || '').toLowerCase().includes(q) || String(m.example || '').toLowerCase().includes(q))
-      .map((m) => fnRow('fetch', m.name, m.help, m.example)).join('') || '<div class="rd-fxp-empty">无匹配</div>'
+      .map((m) => fnRow('fetch', m.name, m.help, m.example)).join('') || '<cmx-empty-state icon="search" title="无匹配" size="sm"></cmx-empty-state>'
   }
   const ph = tab === 'builtin' ? '搜索内置函数…' : '搜索取数函数…'
   return `<div class="rd-fxp-pal">

@@ -97,7 +97,7 @@ function viewHtml (center, items) {
   const unread = items.filter((x) => !x.read).length
   const body = items.length
     ? items.map(itemHtml).join('')
-    : `<div class="nc-empty"><ui5-icon name="${meta.icon}"></ui5-icon><span>暂无通知</span></div>`
+    : `<cmx-empty-state icon="${meta.icon}" title="暂无通知" size="sm"></cmx-empty-state>`
   return `<div class="nc" data-center="${esc(center)}">
     <div class="nc-head">
       <ui5-icon name="${meta.icon}"></ui5-icon>
@@ -163,7 +163,7 @@ async function mount (ctx) {
     if (n < 20) requestAnimationFrame(() => wait(n + 1))
   }
   requestAnimationFrame(() => wait())
-  return `<style>${styleCss()}</style><div class="nc"><div class="nc-empty"><span>加载中…</span></div></div>`
+  return `<style>${styleCss()}</style><div class="nc"><cmx-empty-state icon="synchronize" title="加载中…" size="sm"></cmx-empty-state></div>`
 }
 
 export default {

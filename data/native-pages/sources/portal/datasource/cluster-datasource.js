@@ -284,8 +284,8 @@ function explorerHtml () {
         <div class="cds-split-top">
           <div class="cds-section-label">数据库列表<span class="cds-hint">${scopeHint}</span></div>
           <div class="cds-list-region" data-ds-list-host>
-            ${state.dsLoading ? '<div class="cds-empty">加载中…</div>'
-              : (state.datasources.length ? '<cmx-ignite-list data-cmx-layout="card" data-cmx-density="compact" id="cds-list"></cmx-ignite-list>' : `<div class="cds-empty"><ui5-icon name="database"></ui5-icon>${emptyHint}</div>`)}
+            ${state.dsLoading ? '<cmx-empty-state icon="synchronize" title="加载中…" size="sm"></cmx-empty-state>'
+              : (state.datasources.length ? '<cmx-ignite-list data-cmx-layout="card" data-cmx-density="compact" id="cds-list"></cmx-ignite-list>' : `<cmx-empty-state icon="database" title="${emptyHint}" size="sm"></cmx-empty-state>`)}
           </div>
         </div>
         <div class="cds-splitter" data-cds-splitter title="拖动调整上下高度"><span class="cds-splitter-grip"></span></div>
@@ -323,7 +323,7 @@ function contentHtml (tab) {
 function overviewHtml () {
   const ds = state.datasources.find((d) => d.id === state.selectedDsId) || null
   if (!ds) {
-    return `<div class="cds-neo cds-wrap"><div class="cds-ov-empty"><ui5-icon name="database"></ui5-icon><div>请在左侧「数据源」列表中选择一个数据库</div></div></div>`
+    return `<div class="cds-neo cds-wrap"><cmx-empty-state icon="database" title="请在左侧「数据源」列表中选择一个数据库" size="sm"></cmx-empty-state></div>`
   }
   return `
     <div class="cds-neo cds-wrap">
@@ -335,7 +335,7 @@ function overviewHtml () {
 
 /** 数据库摘要（原概览上部内容）：标题区 + 连接健康 + 指标卡片 + 概览占位。 */
 function dbSummaryHtml (ds) {
-  if (!ds) return `<div class="cds-empty"><ui5-icon name="database"></ui5-icon>选择数据库查看概览</div>`
+  if (!ds) return `<cmx-empty-state icon="database" title="选择数据库查看概览" size="sm"></cmx-empty-state>`
   const meta = dbTypeMeta(ds.db_type)
   const statusOn = ds.status !== 0
   const isDefault = ds.default_flag === 1
@@ -875,8 +875,8 @@ function buildPanelHtml (ds) {
   }
 
   // ── 运维总览：场景徽标 + 模块矩阵 ──
-  if (b.loading) return `<section class="cds-ov-card cds-bd">${head}${tabBar}${targetBar}<div class="cds-bd-empty"><ui5-icon name="pending"></ui5-icon>模型态加载中…</div></section>`
-  if (b.error) return `<section class="cds-ov-card cds-bd">${head}${tabBar}${targetBar}<div class="cds-bd-empty err"><ui5-icon name="message-warning"></ui5-icon>${esc(b.error)}</div></section>`
+  if (b.loading) return `<section class="cds-ov-card cds-bd">${head}${tabBar}${targetBar}<cmx-empty-state icon="pending" title="模型态加载中…" size="sm"></cmx-empty-state></section>`
+  if (b.error) return `<section class="cds-ov-card cds-bd">${head}${tabBar}${targetBar}<cmx-empty-state icon="message-warning" title="${esc(b.error)}" size="sm"></cmx-empty-state></section>`
 
   const counts = b.dbState?.scenario_counts || {}
   const badge = (sc, extra) => {
@@ -919,7 +919,7 @@ function buildPanelHtml (ds) {
           <div class="mc-mtbl">${tblText}</div>
         </div>`
         }).join('')}
-      </div>` : `<div class="cds-bd-empty"><ui5-icon name="database"></ui5-icon>当前数据库尚未创建符合筛选条件的模块</div>`)}
+      </div>` : `<cmx-empty-state icon="database" title="当前数据库尚未创建符合筛选条件的模块" size="sm"></cmx-empty-state>`)}
     </div>`
 
   const modules = mcFilteredModules()
@@ -945,7 +945,7 @@ function buildPanelHtml (ds) {
           <div class="mc-mtbl">${m.table_count}</div>
         </div>`
         }).join('')}
-      </div>` : `<div class="cds-bd-empty"><ui5-icon name="status-positive"></ui5-icon>当前筛选下没有待创建、安装或升级的模块</div>`)}
+      </div>` : `<cmx-empty-state icon="status-positive" title="当前筛选下没有待创建、安装或升级的模块" size="sm"></cmx-empty-state>`)}
     </div>`
 
   const picked = mcPickedCells()
@@ -1098,7 +1098,7 @@ function mcResultDetailHtml (r, summary = '查看详情') {
           : ''
         // 列+索引+注释全无变更时才显示「一致性校验通过」。
         const noChangeHtml = (!added.length && !modified.length && !addedIdx.length && !droppedIdx.length && !cmt && !colCmts.length)
-          ? `<div class="mc-change-empty">未发现需执行的列级变更；已完成一致性校验。${unchanged.length ? ` ${unchanged.length} 列一致` : ''}</div>`
+          ? `<cmx-empty-state icon="status-positive" title="未发现需执行的列级变更" description="已完成一致性校验。${unchanged.length ? ` ${unchanged.length} 列一致` : ''}" size="sm"></cmx-empty-state>`
           : ''
         return `<div class="mc-change-table">
           <div class="mc-change-table-h">
@@ -1341,7 +1341,7 @@ function mcPlanHtml () {
             : ''
           // 列+索引+注释全无变更时才显示「一致性校验通过」。
           const noChangeHtml = (!added.length && !modified.length && !addedIdx.length && !droppedIdx.length && !cmt && !colCmts.length)
-            ? `<div class="mc-change-empty">未发现需执行的列级变更；已完成一致性校验。${unchanged.length ? ` ${unchanged.length} 列一致` : ''}</div>`
+            ? `<cmx-empty-state icon="status-positive" title="未发现需执行的列级变更" description="已完成一致性校验。${unchanged.length ? ` ${unchanged.length} 列一致` : ''}" size="sm"></cmx-empty-state>`
             : ''
           return `<div class="mc-change-table">
             <div class="mc-change-table-h">
@@ -1851,7 +1851,7 @@ function rerenderMatrix (root) {
         <div class="mc-mtbl">${m.table_count}</div>
       </div>`
       }).join('')}
-    </div>` : `<div class="cds-bd-empty"><ui5-icon name="course-book"></ui5-icon>当前筛选下无模块</div>`
+    </div>` : `<cmx-empty-state icon="course-book" title="当前筛选下无模块" size="sm"></cmx-empty-state>`
   const el = fresh.content.firstElementChild
   if (el) host.replaceWith(el)
 }

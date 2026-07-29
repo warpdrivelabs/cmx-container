@@ -482,10 +482,10 @@ function explorerPeriodSelect (st) {
 
 function orgDetailHtml (st) {
   const o = st.org
-  if (st.explorerLoading && !o) return '<div class="ra-empty" style="margin:10px">正在加载组织详情...</div>'
+  if (st.explorerLoading && !o) return '<cmx-empty-state icon="synchronize" title="正在加载组织详情..." size="sm"></cmx-empty-state>'
   if (!o) {
     return `<div class="ra-org-head"><ui5-icon name="tree"></ui5-icon><span>组织机构</span></div>
-      <div class="ra-empty" style="margin:10px">未找到组织 ${esc(st.props.orgCode || '')} 的详情</div>`
+      <cmx-empty-state icon="message-error" title="未找到组织 ${esc(st.props.orgCode || '')} 的详情" size="sm"></cmx-empty-state>`
   }
   return `<div class="ra-org-head"><ui5-icon name="${orgIcon(o.org_type)}"></ui5-icon><span>组织机构</span></div>
     <div class="ra-org-hero">
@@ -656,7 +656,7 @@ function floatPanelHtml (st) {
         <td>${Number(it.isManual) === 1 ? '<span class="ra-fp-tag manual">手工</span>' : '<span class="ra-fp-tag seed">取数</span>'}</td>
         <td><button class="ra-fp-del" data-fp-del="${esc(String(it.id || ''))}" data-fp-i="${i}" title="删除"><ui5-icon name="delete"></ui5-icon></button></td>
       </tr>`).join('')
-    : '<tr><td colspan="5" class="ra-fp-empty">尚无浮动明细。点「从取数初始化」拉取，或「新增一行」手工录入。</td></tr>'
+    : '<tr><td colspan="5" class="ra-fp-empty"><cmx-empty-state icon="table-row" title="尚无浮动明细" description="点「从取数初始化」拉取，或「新增一行」手工录入。" size="sm"></cmx-empty-state></td></tr>'
   return `<div class="ra-sec ra-fp">
     <b><ui5-icon name="multiselect-all"></ui5-icon> 浮动明细维护 ${rows.length ? `<span class="ra-fp-count">${rows.length}</span>` : ''}</b>
     <p class="ra-fp-hint">按 <b>${esc(st.props.orgCode || '?')}</b> + <b>${esc(st.curPeriod || st.props.periodCode || '?')}</b> 维护浮动行；改动保存后「取数」刷新画布。</p>

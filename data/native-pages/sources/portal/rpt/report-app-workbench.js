@@ -486,7 +486,7 @@ function viewHtml (view) {
 // ============================================================================
 
 function loadingBlock () {
-  return `<div class="rpt-empty"><ui5-icon name="busy"></ui5-icon><span>加载中...</span></div>`
+  return `<cmx-empty-state icon="busy" title="加载中..." size="sm"></cmx-empty-state>`
 }
 
 function periodSelectHtml () {
@@ -511,7 +511,7 @@ function orgIcon (t) {
 }
 
 function renderOrgNodes (nodes, depth) {
-  if (!nodes.length && depth === 0) return `<div class="rpt-empty"><ui5-icon name="tree"></ui5-icon><span>暂无合并组织</span></div>`
+  if (!nodes.length && depth === 0) return `<cmx-empty-state icon="tree" title="暂无合并组织" size="sm"></cmx-empty-state>`
   return nodes.map((n) => {
     const pad = 8 + depth * 14
     const hasKids = n.children.length > 0
@@ -554,7 +554,7 @@ function categoryDropdownHtml () {
     return `<button class="rpt-cat-item ${active ? 'active' : ''}" data-cat="${esc(c.code)}" style="--cat-color:${esc(categoryColor(c.code))}">
       <ui5-icon name="${esc(c.icon)}"></ui5-icon><span>${esc(c.name)}</span><b>${c.count}</b>
     </button>`
-  }).join('') || '<div class="rpt-cat-empty">暂无报表类别</div>'
+  }).join('') || '<cmx-empty-state icon="folder" title="暂无报表类别" size="sm"></cmx-empty-state>'
   return `<div class="rpt-cat-dd ${state.categoryOpen ? 'open' : ''}" data-cat-dd>
     <button class="rpt-cat-trigger" data-cat-toggle style="--cat-color:${esc(categoryColor(state.selectedCategory))}">
       <ui5-icon name="${esc(cur?.icon || 'folder')}"></ui5-icon>
@@ -613,18 +613,14 @@ function contentHtml () {
     <div class="rpt-main">
       ${periodTabsHtml()}
       <div class="rpt-list">
-        ${state.loading ? `<div class="rpt-empty large"><ui5-icon name="busy"></ui5-icon><b>加载报表主档...</b></div>` : (list.length ? list.map(reportCardHtml).join('') : emptyReportsHtml())}
+        ${state.loading ? `<cmx-empty-state icon="busy" title="加载报表主档..." size="sm"></cmx-empty-state>` : (list.length ? list.map(reportCardHtml).join('') : emptyReportsHtml())}
       </div>
     </div>
   </section>`
 }
 
 function emptyReportsHtml () {
-  return `<div class="rpt-empty large">
-    <ui5-icon name="document"></ui5-icon>
-    <b>当前类别与期间下暂无报表</b>
-    <span>切换类别或期间 tab，或到报表设计工作台新增报表。</span>
-  </div>`
+  return `<cmx-empty-state icon="document" title="当前类别与期间下暂无报表" description="切换类别或期间 tab，或到报表设计工作台新增报表。" size="sm"></cmx-empty-state>`
 }
 
 function reportCardHtml (r) {
@@ -665,7 +661,7 @@ function reportCardHtml (r) {
 function propertyHtml () {
   const r = selectedReport()
   if (!r) {
-    return `<section class="rpt rpt-prop"><div class="rpt-empty"><ui5-icon name="detail-view"></ui5-icon><span>请选择一张报表</span></div></section>`
+    return `<section class="rpt rpt-prop"><cmx-empty-state icon="detail-view" title="请选择一张报表" size="sm"></cmx-empty-state></section>`
   }
   const version = reportVersion(r)
   const detail = selectedDetail()
@@ -711,7 +707,7 @@ function propertyHtml () {
 function propertyOrgHtml () {
   const o = selectedOrgRow()
   if (!o) {
-    return `<section class="rpt rpt-prop"><div class="rpt-empty"><ui5-icon name="tree"></ui5-icon><span>请在左侧选择组织节点</span></div></section>`
+    return `<section class="rpt rpt-prop"><cmx-empty-state icon="tree" title="请在左侧选择组织节点" size="sm"></cmx-empty-state></section>`
   }
   return `<section class="rpt rpt-prop">
     <div class="rpt-prop-hero">

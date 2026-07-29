@@ -7,7 +7,7 @@ const state = {
   drafts: { domain: null, application: null, module: null },
   loading: null,
   filter: { domain: '', application: '' },
-  resources: { moduleKey: '', loading: false, html: '<div class="dam-empty">选择模块后查看资源清单</div>' },
+  resources: { moduleKey: '', loading: false, html: '<cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state>' },
   split: { explorerY: 62, contentX: 48, appY: 62, moduleY: 62 },
   scrollTop: { domain: 0, application: 0, module: 0 },
   hosts: new Set(),
@@ -426,7 +426,10 @@ async function deleteItem (kind, key) {
   if (!key) return
   const item = findItem(kind, key)
   if (!item) return
-  const ok = window.confirm(`确认删除 ${titleOf(kind, item)}？`)
+  const C = (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
+  const ok = typeof C.cmxConfirm === 'function'
+    ? await C.cmxConfirm({ message: `确认删除 ${titleOf(kind, item)}？`, intent: 'danger', confirmText: '删除' })
+    : window.confirm(`确认删除 ${titleOf(kind, item)}？`)
   if (!ok) return
   const dbId = kind === 'domain'
     ? dbDomainId(item)
@@ -461,13 +464,13 @@ async function deleteItem (kind, key) {
 
 function renderResourcesInto (root) {
   const el = root.querySelector('[data-resources]')
-  if (el) el.innerHTML = state.resources.html || '<div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div>'
+  if (el) el.innerHTML = state.resources.html || '<cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state>'
 }
 
 async function loadResources (root, force = false) {
   const item = state.selectedKeys.module ? findItem('module', state.selectedKeys.module) : null
   if (!item) {
-    state.resources = { moduleKey: '', loading: false, html: '<div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div>' }
+    state.resources = { moduleKey: '', loading: false, html: '<cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state>' }
     renderResourcesInto(root)
     return
   }
@@ -480,7 +483,7 @@ async function loadResources (root, force = false) {
     renderResourcesInto(root)
     return
   }
-  state.resources = { moduleKey, loading: true, html: '<div class="dam-empty"><ui5-icon name="synchronize"></ui5-icon><span>加载资源清单...</span></div>' }
+  state.resources = { moduleKey, loading: true, html: '<cmx-empty-state icon="synchronize" title="加载资源清单..." size="sm"></cmx-empty-state>' }
   renderResourcesInto(root)
   const types = [
     { key: 'menus', label: '菜单' },
@@ -528,7 +531,7 @@ function renderList (kind, title, items, options = {}) {
           <span class="dam-list-text"><strong>${esc(item.name || item.title || item.id)}</strong><span>${esc(key)}</span></span>
           <button class="dam-list-delete" type="button" title="删除" aria-label="删除 ${esc(item.name || item.title || item.id)}" data-delete-kind="${kind}" data-delete-key="${esc(key)}"><ui5-icon name="delete"></ui5-icon></button>
         </div>`
-      }).join('') || '<div class="dam-empty"><ui5-icon name="inbox"></ui5-icon><span>暂无数据</span></div>'}
+      }).join('') || '<cmx-empty-state icon="inbox" title="暂无数据" size="sm"></cmx-empty-state>'}
     </div>
   </section>`
 }
@@ -691,9 +694,9 @@ function editorHtml (kind, title) {
 function damStatsHtml () {
   const all = rawLists()
   return `<div class="dam-neo-kpi-row">
-    <div class="dam-neo-kpi" data-hue="domain"><span class="dam-neo-kpi-val">${all.domains.length}</span><span class="dam-neo-kpi-lbl">Domain</span></div>
-    <div class="dam-neo-kpi" data-hue="app"><span class="dam-neo-kpi-val">${all.applications.length}</span><span class="dam-neo-kpi-lbl">Application</span></div>
-    <div class="dam-neo-kpi" data-hue="module"><span class="dam-neo-kpi-val">${all.modules.length}</span><span class="dam-neo-kpi-lbl">Module</span></div>
+    <cmx-kpi-card label="Domain" value="${all.domains.length}" tone="info"></cmx-kpi-card>
+    <cmx-kpi-card label="Application" value="${all.applications.length}" tone="success"></cmx-kpi-card>
+    <cmx-kpi-card label="Module" value="${all.modules.length}" tone="warning"></cmx-kpi-card>
   </div>`
 }
 
@@ -748,8 +751,8 @@ function propertyHtml () {
     </div>
     ${mod ? `<section class="dam-property-resources dam-neo-panel">
       <div class="dam-neo-head" data-hue="module"><span class="dam-neo-head-main"><ui5-icon class="dam-neo-head-icon" name="activity-items"></ui5-icon><span>资源态势</span></span><span class="dam-neo-badge">mount</span></div>
-      <div class="dam-resources" data-resources><div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div></div>
-    </section>` : `<div class="dam-resources" data-resources><div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div></div>`}
+      <div class="dam-resources" data-resources><cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state></div>
+    </section>` : `<div class="dam-resources" data-resources><cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state></div>`}
   </div>`
 }
 
@@ -796,7 +799,7 @@ function bindPage (root, mode = 'manager') {
     const moduleKey = state.selectedKeys.module || ''
     if (moduleKey && state.resources.moduleKey !== moduleKey && !state.resources.loading) {
       loadResources(root).catch((err) => {
-        state.resources = { moduleKey, loading: false, html: `<div class="dam-empty">${esc(err.message || String(err))}</div>` }
+        state.resources = { moduleKey, loading: false, html: `<cmx-empty-state icon="message-error" title="${esc(err.message || String(err))}" size="sm"></cmx-empty-state>` }
         renderResourcesInto(root)
       })
     }
