@@ -40,7 +40,7 @@ mod db_state;
 mod init;
 mod deploy;
 
-// ── 公共 API 再导出（cmx-api 通过 `cmx_model_center::xxx` 调用）────────
+// ── 公共 API 再导出（cmx-api 通过 `cmx_model_deploy::xxx` 调用）────────
 pub use db_state::db_state;
 pub use deploy::{deploy, deploy_plan_stream, deploy_stream};
 pub use init::{init_db, init_db_stream, init_plan_stream, InitEvent};
@@ -100,7 +100,7 @@ mod tests {
 
     fn load(p: &str) -> Value {
         let root =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data/meta/definitions");
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../data/meta/definitions");
         serde_json::from_str(&std::fs::read_to_string(root.join(p)).unwrap()).unwrap()
     }
 

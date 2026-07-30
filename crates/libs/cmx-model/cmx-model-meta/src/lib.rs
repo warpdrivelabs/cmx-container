@@ -1,4 +1,4 @@
-//! cmx-model —— 模型中心。
+//! cmx-model-meta —— 模型中心元数据层。
 //!
 //! 承接「meta 相关」元数据建模服务（迁移自 CMXPortalManager 的 Node 后端），即模型中心的
 //! 五项元数据建模能力（BASE-DCT / BASE-DOC / DCT / DOC / FC）：

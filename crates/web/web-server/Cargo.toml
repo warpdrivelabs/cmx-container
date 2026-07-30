@@ -27,6 +27,8 @@ cmx-job-core = { workspace = true }
 cmx-job-store-pg = { workspace = true }
 # 内部依赖 - 异步任务中心 HTTP 层（JobModule 路由 + SSE，在此合并进主路由，避免 cmx-api⇄cmx-job 环）
 cmx-job-api = { workspace = true }
+# 内部依赖 - 模型中心 HTTP 层（ModelModule 路由，在此合并进主路由，避免 cmx-api⇄cmx-model 环）
+cmx-model-api = { workspace = true }
 # 内部依赖 - 审计日志
 cmx-audit = { workspace = true }
 # 内部依赖 - 认证模块

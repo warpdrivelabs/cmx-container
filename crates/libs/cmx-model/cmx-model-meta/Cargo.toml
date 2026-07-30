@@ -1,5 +1,5 @@
 [package]
-name = "cmx-model"
+name = "cmx-model-meta"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

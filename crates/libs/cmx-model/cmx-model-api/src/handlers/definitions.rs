@@ -1,12 +1,12 @@
-//! 定义中心（DCT/DOC/BASE）handler。
+//! 定义中心（DCT/DOC/BASE）handler（cmx-model-api 层）。
 
 use axum::Json;
 use axum::extract::{Query, State};
 use serde::Deserialize;
 
-use crate::app_state::CmxAppState;
-use crate::middleware::CmxSvrContext;
-use crate::{ApiResp, Result};
+use cmx_api::CmxAppState;
+use cmx_api::middleware::CmxSvrContext;
+use cmx_api::{ApiResp, Result};
 
 /// definitions 查询（list / config / delete 用）。
 #[derive(Debug, Deserialize)]
@@ -28,8 +28,8 @@ pub struct DefQuery {
 }
 
 impl DefQuery {
-    fn to_ref(&self) -> cmx_portal::definitions::store::DefRef {
-        cmx_portal::definitions::store::DefRef {
+    fn to_ref(&self) -> cmx_model_meta::definitions::store::DefRef {
+        cmx_model_meta::definitions::store::DefRef {
             domain: self.domain.clone(),
             application: self.application.clone(),
             app: None,
@@ -49,7 +49,7 @@ pub async fn definitions_list(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DefQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let items = cmx_portal::definitions::store::list_definitions(
+    let items = cmx_model_meta::definitions::store::list_definitions(
         q.kind.as_deref(),
         q.domain.as_deref(),
         q.application.as_deref(),
@@ -79,7 +79,7 @@ pub async fn definitions_get(
         .unwrap_or(true);
     if is_filename {
         return Ok(Json(ApiResp::ok(
-            cmx_portal::definitions::store::get_definition(&q.to_ref()).await?,
+            cmx_model_meta::definitions::store::get_definition(&q.to_ref()).await?,
         )));
     }
     // 业务编码定位：按 kind 分流
@@ -101,9 +101,9 @@ pub async fn definitions_get(
                 "BASE 业务编码定位需要 id（= moduleCode，如 base_dct_meta）".into(),
             ));
         }
-        let file = cmx_portal::definitions::resolve::resolve_base_file(domain, code).await?;
-        let mut doc = cmx_portal::definitions::store::get_definition(
-            &cmx_portal::definitions::store::DefRef {
+        let file = cmx_model_meta::definitions::resolve::resolve_base_file(domain, code).await?;
+        let mut doc = cmx_model_meta::definitions::store::get_definition(
+            &cmx_model_meta::definitions::store::DefRef {
                 domain: Some(domain.to_string()),
                 file: Some(file),
                 ..Default::default()
@@ -120,10 +120,10 @@ pub async fn definitions_get(
     let mut doc = match kind {
         "DOC" => {
             let file =
-                cmx_portal::definitions::resolve::resolve_doc_file(domain, app, module, Some(code))
+                cmx_model_meta::definitions::resolve::resolve_doc_file(domain, app, module, Some(code))
                     .await?;
-            cmx_portal::definitions::store::get_definition(
-                &cmx_portal::definitions::store::DefRef {
+            cmx_model_meta::definitions::store::get_definition(
+                &cmx_model_meta::definitions::store::DefRef {
                     domain: Some(domain.to_string()),
                     application: Some(app.to_string()),
                     module: Some(module.to_string()),
@@ -135,10 +135,10 @@ pub async fn definitions_get(
         }
         "DCT" => {
             let file =
-                cmx_portal::definitions::resolve::resolve_dict_file(domain, app, module, code)
+                cmx_model_meta::definitions::resolve::resolve_dict_file(domain, app, module, code)
                     .await?;
-            let mut d = cmx_portal::definitions::store::get_definition(
-                &cmx_portal::definitions::store::DefRef {
+            let mut d = cmx_model_meta::definitions::store::get_definition(
+                &cmx_model_meta::definitions::store::DefRef {
                     domain: Some(domain.to_string()),
                     application: Some(app.to_string()),
                     module: Some(module.to_string()),
@@ -149,7 +149,7 @@ pub async fn definitions_get(
             .await?;
             // 单表化：只保留命中的那张字典表（dictCode/tableName 任一匹配），保留 moduleMeta 头与 baseDctMetaRef
             if let Some(tables) = d.get_mut("dictionaryTables").and_then(|v| v.as_array_mut()) {
-                tables.retain(|t| cmx_portal::definitions::resolve::dict_matches(t, code));
+                tables.retain(|t| cmx_model_meta::definitions::resolve::dict_matches(t, code));
             }
             d
         }
@@ -169,7 +169,7 @@ pub async fn definitions_save(
     Query(q): Query<DefQuery>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let saved = cmx_portal::definitions::store::save_definition(&q.to_ref(), &body).await?;
+    let saved = cmx_model_meta::definitions::store::save_definition(&q.to_ref(), &body).await?;
     Ok(Json(ApiResp::ok(
         serde_json::json!({ "ok": true, "saved": saved }),
     )))
@@ -223,7 +223,7 @@ pub async fn definitions_batch(
         let module = obj.get("module").and_then(|v| v.as_str()).unwrap_or("");
         let file = match kind {
             "DOC" => {
-                cmx_portal::definitions::resolve::resolve_doc_file(
+                cmx_model_meta::definitions::resolve::resolve_doc_file(
                     domain,
                     app,
                     module,
@@ -232,7 +232,7 @@ pub async fn definitions_batch(
                 .await?
             }
             "DCT" => {
-                let f = cmx_portal::definitions::resolve::resolve_dict_file(
+                let f = cmx_model_meta::definitions::resolve::resolve_dict_file(
                     domain, app, module, id_val,
                 )
                 .await?;
@@ -252,7 +252,7 @@ pub async fn definitions_batch(
     }
     let mut new_body = body.clone();
     new_body["refs"] = serde_json::Value::Array(rewritten);
-    let mut result = cmx_portal::definitions::store::get_definitions_batch(&new_body).await?;
+    let mut result = cmx_model_meta::definitions::store::get_definitions_batch(&new_body).await?;
     // DCT 单表过滤：对记录的 DCT item 只保留命中 dictCode 的那张表
     if !dct_filters.is_empty()
         && let Some(items) = result.get_mut("items").and_then(|v| v.as_array_mut())
@@ -265,7 +265,7 @@ pub async fn definitions_batch(
                     .and_then(|d| d.get_mut("dictionaryTables"))
                     .and_then(|v| v.as_array_mut())
             {
-                tables.retain(|t| cmx_portal::definitions::resolve::dict_matches(t, code));
+                tables.retain(|t| cmx_model_meta::definitions::resolve::dict_matches(t, code));
             }
         }
     }
@@ -279,7 +279,7 @@ pub async fn definitions_delete(
     Query(q): Query<DefQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::definitions::store::delete_definition(&q.to_ref()).await?,
+        cmx_model_meta::definitions::store::delete_definition(&q.to_ref()).await?,
     )))
 }
 
@@ -290,6 +290,6 @@ pub async fn definitions_set_default(
     Query(q): Query<DefQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::definitions::store::set_default_version(&q.to_ref()).await?,
+        cmx_model_meta::definitions::store::set_default_version(&q.to_ref()).await?,
     )))
 }

@@ -42,7 +42,7 @@ async fn resolve_doc(q: &DctQuery) -> Result<(Value, Value, String)> {
     let file = match &q.file {
         Some(f) if !f.is_empty() => f.clone(),
         _ => {
-            cmx_model::definitions::resolve::resolve_dict_file(
+            cmx_model_meta::definitions::resolve::resolve_dict_file(
                 &q.domain,
                 &q.application,
                 &q.module,
@@ -51,7 +51,7 @@ async fn resolve_doc(q: &DctQuery) -> Result<(Value, Value, String)> {
             .await?
         }
     };
-    let doc_ref = cmx_model::definitions::store::DefRef {
+    let doc_ref = cmx_model_meta::definitions::store::DefRef {
         domain: Some(q.domain.clone()),
         application: Some(q.application.clone()),
         app: Some(q.application.clone()),
@@ -60,7 +60,7 @@ async fn resolve_doc(q: &DctQuery) -> Result<(Value, Value, String)> {
         id: None,
         kind: None,
     };
-    let doc = cmx_model::definitions::store::get_definition(&doc_ref).await?;
+    let doc = cmx_model_meta::definitions::store::get_definition(&doc_ref).await?;
     let base = load_base(&doc).await;
     Ok((doc, base, file))
 }
@@ -360,7 +360,7 @@ pub async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
         .ok_or_else(|| api_err("定义缺少 dictionaryTables"))?;
     let t = tables
         .iter()
-        .find(|t| cmx_model::definitions::resolve::dict_matches(t, &q.dict))
+        .find(|t| cmx_model_meta::definitions::resolve::dict_matches(t, &q.dict))
         .ok_or_else(|| api_err(&format!("未找到字典 {}", q.dict)))?;
     let dm = t.get("dictMeta").cloned().unwrap_or_else(|| json!({}));
     let table_name = dm
@@ -472,7 +472,7 @@ async fn load_base(doc: &Value) -> Value {
         Some(f) => f,
         None => return json!({}),
     };
-    let base_ref = cmx_model::definitions::store::DefRef {
+    let base_ref = cmx_model_meta::definitions::store::DefRef {
         domain: Some("base".into()),
         application: None,
         app: None,
@@ -481,7 +481,7 @@ async fn load_base(doc: &Value) -> Value {
         id: None,
         kind: None,
     };
-    cmx_model::definitions::store::get_definition(&base_ref)
+    cmx_model_meta::definitions::store::get_definition(&base_ref)
         .await
         .unwrap_or_else(|_| json!({}))
 }

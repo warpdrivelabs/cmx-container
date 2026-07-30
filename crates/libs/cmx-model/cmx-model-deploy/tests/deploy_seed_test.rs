@@ -6,7 +6,7 @@
 
 use cmx_core::model::cell::{ColumnDefine, FieldType};
 use cmx_core::model::meta::table::{IndexDefine, IndexKind, TableDefine};
-use cmx_model_center::deploy_seed_menu::infer_conflict_columns;
+use cmx_model_deploy::deploy_seed_menu::infer_conflict_columns;
 
 /// 构造最小可用的 ColumnDefine。
 fn mk_col(name: &str) -> ColumnDefine {

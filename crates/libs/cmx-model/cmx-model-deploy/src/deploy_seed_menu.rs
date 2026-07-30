@@ -15,7 +15,7 @@ use cmx_core::model::cell::{IndexKind, TableDefine};
 use cmx_core::model::meta::plugin::SeedDataConfig;
 use cmx_database::get_default_db_manager;
 use cmx_metadata::seed::PgSeedDataExecutor;
-use cmx_model::definitions::store::list_definitions;
+use cmx_model_meta::definitions::store::list_definitions;
 use cmx_utils::snowflake_id_str;
 use serde_json::{json, Value};
 use tokio::sync::mpsc::UnboundedSender;
@@ -181,7 +181,7 @@ pub async fn deploy_seed_with_events(
     // 4. 构造 SeedDataConfig（冲突列从 TableDefine 推断）
     // base_path 走 data_root 解析（portal.data_root → CMX_PORTAL_DATA_ROOT → ./data），
     // 与 cmx-model::definitions::store 保持一致，避免硬编码相对路径在非默认 cwd 失效。
-    let base_path = cmx_model::config::data_path(["meta", "definitions"]);
+    let base_path = cmx_model_meta::config::data_path(["meta", "definitions"]);
     let seed_configs: Vec<SeedDataConfig> = seed_files
         .iter()
         .map(|f| {
