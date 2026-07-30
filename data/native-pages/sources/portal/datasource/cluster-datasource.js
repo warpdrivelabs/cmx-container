@@ -557,9 +557,11 @@ function mcVersionOptionsHtml (m, kind) {
   const versions = Array.isArray(m.cells?.[kind]?.versions) ? m.cells[kind].versions : []
   if (!versions.length) return ''
   const selected = mcCellSelectedVersion(m, kind)
-  return `<select class="mc-ver-select" data-mc-version="${esc(mcCellKey(m.key, kind))}" title="选择定义版本">
-    ${versions.map((v) => `<option value="${esc(v.version)}" data-file="${esc(v.file || '')}" ${selected && String(selected.version) === String(v.version) && String(selected.file || '') === String(v.file || '') ? 'selected' : ''}>v${esc(v.version)}${v.is_default ? ' 默认' : ''}</option>`).join('')}
-  </select>`
+  // ui5-select：与顶部 DAM 下拉保持一致（UI5 主题/暗色适配），替代原生 <select>。
+  //   事件用 'change'，detail.selectedOption 携带 .value 与 dataset.file。
+  return `<ui5-select class="mc-ver-select" data-mc-version="${esc(mcCellKey(m.key, kind))}" title="选择定义版本">
+    ${versions.map((v) => `<ui5-option value="${esc(v.version)}" data-file="${esc(v.file || '')}" ${selected && String(selected.version) === String(v.version) && String(selected.file || '') === String(v.file || '') ? 'selected' : ''}>v${esc(v.version)}${v.is_default ? ' 默认' : ''}</ui5-option>`).join('')}
+  </ui5-select>`
 }
 
 /**
@@ -1815,10 +1817,16 @@ function bindOverview (root) {
     const el = e.target
     if (!(el instanceof Element)) return
     if (el.hasAttribute('data-mc-search')) { b.query = el.value; rerender() }
+  })
+  // 版本选择器为 ui5-select：触发 'change'，detail.selectedOption 带 .value 与 dataset.file。
+  root.addEventListener('change', (e) => {
+    const el = e.target
+    if (!(el instanceof Element)) return
     if (el.hasAttribute('data-mc-version')) {
       const key = el.getAttribute('data-mc-version')
-      const version = el.value || ''
-      const file = el.selectedOptions?.[0]?.dataset?.file || ''
+      const opt = e.detail?.selectedOption
+      const version = opt?.value ?? el.value ?? ''
+      const file = opt?.getAttribute?.('data-file') || opt?.dataset?.file || ''
       b.versionPick[key] = { version, file }
       b.picked[key] = true
       rerender()
@@ -2352,7 +2360,8 @@ function styleHtml () {
     .mc-available-head{padding:8px 12px;font-size:11px;font-weight:700;color:var(--sapContent_LabelColor,#6a6d70);background:#fbfcfe;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#f0f0f0)}
     .mc-available-row{padding:10px 12px;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#f2f2f2)}
     .mc-available-row:last-child{border-bottom:0}
-    .mc-available-row:hover{background:#fafcff}
+    /* 行不施加 hover 背景色（格内含 ui5-select 等交互控件，背景闪烁会干扰）。 */
+    .mc-available-row:hover{background:transparent}
     .mc-available-mod{min-width:0}
     .mc-available-spacer{}
     .mc-mmod-t{font-size:13px;font-weight:600;color:var(--sapTextColor,#1d2d3e);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2370,6 +2379,10 @@ function styleHtml () {
     .mc-cell-body{min-width:0;display:flex;flex-direction:column;gap:3px;line-height:1.3}
     .mc-cell-ver{font-size:11px;font-weight:600;color:var(--sapTextColor,#32363a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .mc-ver-select{margin-top:2px;width:100%;height:24px;border:1px solid var(--sapField_BorderColor,#8993a3);border-radius:6px;background:#fff;color:var(--sapTextColor,#32363a);font:inherit;font-size:11px;box-sizing:border-box}
+    /* ui5-select 版本选择器：去掉原生边框/底色，宽度上限为容器一半（外层 host + 内层 ::part 同步约束）。 */
+    ui5-select.mc-ver-select{height:28px;width:50%;max-width:50%;border:0;padding:0;background:transparent}
+    ui5-select.mc-ver-select::part(root),
+    ui5-select.mc-ver-select::part(select){width:100%;min-width:0}
     /* 勾选圆点：放在标题行末尾（场景标签右侧），不再绝对定位 */
     .mc-cell-ck{flex:0 0 auto;width:16px;height:16px;border:1.5px solid var(--sapContent_LabelColor,#8993a3);border-radius:5px;display:flex;align-items:center;justify-content:center;opacity:.4;transition:opacity .1s}
     .mc-cell-ck ui5-icon{width:.65rem;height:.65rem;opacity:0}
@@ -2424,8 +2437,7 @@ function styleHtml () {
       border-color:color-mix(in srgb,var(--cds-mc-blue) 35%,var(--cds-mc-border));
       background:linear-gradient(120deg,var(--cds-mc-blue-bg),var(--cds-mc-surface));
     }
-    .cds-neo .cds-bd-search,
-    .cds-neo .mc-ver-select{
+    .cds-neo .cds-bd-search{
       background:var(--cds-mc-field);
       color:var(--sapField_TextColor,var(--sapTextColor,#32363a));
       border-color:var(--sapField_BorderColor,var(--cds-mc-border));
@@ -2554,8 +2566,8 @@ function styleHtml () {
     .cds-neo .mc-review .mc-phase-plan::before{background:var(--cds-mc-blue-bg);color:var(--cds-mc-blue)}
     .cds-neo .mc-review .mc-phase-execute::before{background:var(--cds-mc-green-bg);color:var(--cds-mc-green)}
     .cds-neo .mc-cell{border-color:color-mix(in srgb,currentColor 22%,transparent)}
-    .cds-neo .mc-cell.pickable:hover{filter:none;background:color-mix(in srgb,currentColor 16%,var(--cds-mc-surface))}
-    .cds-neo .mc-ver-select{background:color-mix(in srgb,var(--cds-mc-field) 86%,currentColor 14%)}
+    /* 可创建/安装/升级格：hover 仅保留边框/阴影，不加背景色（避免与格内 ui5-select 背景冲突）。 */
+    .cds-neo .mc-cell.pickable:hover{filter:none;background:transparent}
   </style>`
 }
 
