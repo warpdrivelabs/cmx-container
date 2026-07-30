@@ -1317,6 +1317,39 @@
       "name": "字典数据维护(HTML)",
       "page": "dct-data-editor-html",
       "relPath": "fi/cmxfico/gl/dct-data-editor-html.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.meta-model-service-test",
+      "name": "元数据模型服务测试",
+      "details": "功能测试：CmxDCTMeta/CmxDOCMeta 通过 /api/definitions/config 加载 GL account 字典元数据和业务单据元数据，并展开共享字段集",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "meta-model-service-test",
+      "relPath": "fi/cmxfico/gl/meta-model-service-test.html",
+      "latestHtmlFile": "meta-model-service-test.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.voucher-list",
+      "name": "会计凭证·单据列表（Sqlx 二进制）",
+      "details": "凭证批 cv_batch 单据列表（列表页）：顶部多条件查询表单（关键字模糊/批状态/过账日期范围/公司代码/账本/期间，POST 富查询 layers.filter）+ 分页 + 行内查看跳转详情；装载走 /api/doc/data/sqlx-zmc-msgpack（sqlx 二进制），基于 fico-db / cmxfico",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "voucher-list",
+      "relPath": "fi/cmxfico/gl/voucher-list.html",
+      "latestHtmlFile": "voucher-list.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.voucher-detail",
+      "name": "会计凭证·单据详情（Sqlx 二进制）",
+      "details": "凭证四层主从详情页：按列表传入的 cv_batch.id 装载（initialContext→workspace.context，initPage 手动 loadDoc filter=id:）并展开 cv_batch→cv_header→cv_acc_line→cv_aux_line；不传 id 为新增态；装载走 /api/doc/data/sqlx-zmc-msgpack（sqlx 二进制），基于 fico-db / cmxfico",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "voucher-detail",
+      "relPath": "fi/cmxfico/gl/voucher-detail.html",
+      "latestHtmlFile": "voucher-detail.html"
     }
   ]
 }

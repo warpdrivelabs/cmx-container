@@ -481,6 +481,30 @@
       "latestHtmlFile": "voucher-doc-sqlxbin.html"
     },
     {
+      "id": "fi.cmxfico.gl.voucher-list",
+      "name": "会计凭证·单据列表（Sqlx 二进制）",
+      "details": "凭证批 cv_batch 单据列表（列表页）：顶部多条件查询表单（关键字模糊/批状态/过账日期范围/公司代码/账本/期间，POST 富查询 layers.filter）+ 分页 + 行内查看跳转详情；装载走 /api/doc/data/sqlx-zmc-msgpack（sqlx 二进制），基于 fico-db / cmxfico",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "voucher-list",
+      "doc": null,
+      "relPath": "fi/cmxfico/gl/voucher-list.html",
+      "latestHtmlFile": "voucher-list.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.voucher-detail",
+      "name": "会计凭证·单据详情（Sqlx 二进制）",
+      "details": "凭证四层主从详情页：按列表传入的 cv_batch.id 装载（initialContext→workspace.context，initPage 手动 loadDoc filter=id:）并展开 cv_batch→cv_header→cv_acc_line→cv_aux_line；不传 id 为新增态；装载走 /api/doc/data/sqlx-zmc-msgpack（sqlx 二进制），基于 fico-db / cmxfico",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "voucher-detail",
+      "doc": null,
+      "relPath": "fi/cmxfico/gl/voucher-detail.html",
+      "latestHtmlFile": "voucher-detail.html"
+    },
+    {
       "id": "fi.cmxfico.gl.doc-service-test",
       "name": "业务单据加载服务·全能力自检（html_pages）",
       "details": "诊断页：逐项调用后端全部能力（/meta、5 装载端点、POST 富查询、子层下推、keyset 游标、/children 懒下钻、tokio-zmc-stream 真流式），展示 PASS/FAIL 清单",
@@ -882,6 +906,7 @@
       "app": "cmxfico",
       "module": "gl",
       "page": "voucher-flex",
+      "doc": null,
       "relPath": "fi/cmxfico/gl/voucher-flex.html",
       "latestHtmlFile": "voucher-flex.html"
     },

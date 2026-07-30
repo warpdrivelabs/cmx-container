@@ -6,10 +6,10 @@
 //! - [`compile_all_definitions_for_module`]: 聚合编译某模块所有 DCT/DOC/RPT 定义
 //! - [`infer_conflict_columns`]: 从 TableDefine 推断 UPSERT 冲突列
 
-use crate::compile_definition;
-use crate::{
-    insert_history_executing, table_exists, update_history_success, upsert_module_kind, InitEvent,
-};
+use crate::compile::compile_definition;
+use crate::deploy::{fail_history, insert_history_executing, update_history_success, upsert_module_kind, LedgerCtx, ModuleId};
+use crate::init::{ev, InitEvent};
+use crate::ledger::table_exists;
 use cmx_api_types::{Error, Result};
 use cmx_core::model::cell::{IndexKind, TableDefine};
 use cmx_core::model::meta::plugin::SeedDataConfig;
@@ -36,13 +36,13 @@ use cmx_traits::resource::MenuDefinitionImporter;
 ///
 /// 返回的列名列表会直接作为 PostgreSQL `INSERT ... ON CONFLICT (...)` 的目标列。
 pub fn infer_conflict_columns(def: &TableDefine) -> Vec<String> {
-    // 1. 优先：单列唯一索引
+    // 1. 优先：单列唯一索引（业务编码字段最常见的去重约束）
     for idx in &def.indexes {
         if matches!(idx.kind, IndexKind::Unique) && idx.columns.len() == 1 {
             return idx.columns.clone();
         }
     }
-    // 2. 次：复合唯一索引
+    // 2. 次：复合唯一索引（联合唯一，如 (client_id, coa_code)）
     for idx in &def.indexes {
         if matches!(idx.kind, IndexKind::Unique) && !idx.columns.is_empty() {
             return idx.columns.clone();
@@ -88,19 +88,17 @@ pub async fn compile_all_definitions_for_module(
 }
 
 // ════════════════════════════════════════════════════════════════════════
-//  SEED / MENU 部署主流程（Task 6）
+//  SEED / MENU 部署主流程
 //
-//  复用 lib.rs 的 3 个辅助函数（Task 5 抽取，Task 6 已修正签名）：
-//  - insert_history_executing（已加 action 参数）
-//  - update_history_success（已加 seed_rows 参数）
-//  - upsert_module_kind（已加 def_checksum 参数）
-//  以及 lib.rs 的私有辅助：table_exists / fail_history / ev。
+//  复用 deploy.rs 的 3 个台账辅助函数：
+//  - insert_history_executing / update_history_success / upsert_module_kind
+//  以及 crate 级辅助：table_exists / fail_history / ev。
 // ════════════════════════════════════════════════════════════════════════
 
 /// SSE 事件推送的简写：`tx=None` 时静默。
 fn send(tx: Option<&UnboundedSender<InitEvent>>, kind: &str, data: Value) {
     if let Some(tx) = tx {
-        let _ = tx.send(crate::ev(kind, data));
+        let _ = tx.send(ev(kind, data));
     }
 }
 
@@ -132,18 +130,12 @@ pub async fn deploy_seed_with_events(
 
     // 1. 写历史锚点 executing（事务外，txn_id=None；action='seed'，def_ref='seed/'）
     insert_history_executing(
-        db_id,
-        None,
+        LedgerCtx { db_id, txn_id: None, operator_id, operator_name },
+        ModuleId { domain, app, module, kind: "SEED" },
         &hist_id,
         &batch_id,
-        domain,
-        app,
-        module,
-        "SEED",
         "seed",
         "seed/",
-        operator_id,
-        operator_name,
     )
     .await?;
 
@@ -158,8 +150,7 @@ pub async fn deploy_seed_with_events(
     if seed_files.is_empty() {
         // 无种子文件 → 标记 success（seed_rows=0），不算错误
         let _ = update_history_success(
-            db_id,
-            None,
+            LedgerCtx { db_id, txn_id: None, operator_id, operator_name },
             &hist_id,
             None,
             0,
@@ -217,7 +208,7 @@ pub async fn deploy_seed_with_events(
         if !table_exists(db_id, &cfg.table_name).await? {
             let err_msg = format!("表 {} 不存在，请先部署 DCT 元定义", cfg.table_name);
             send(tx, "error", json!({ "message": err_msg }));
-            let _ = crate::fail_history(
+            let _ = fail_history(
                 &hist_id,
                 db_id,
                 &err_msg,
@@ -255,18 +246,12 @@ pub async fn deploy_seed_with_events(
         .max()
         .unwrap_or("");
     upsert_module_kind(
-        db_id,
-        Some(&txn_id),
-        domain,
-        app,
-        module,
-        "SEED",
+        LedgerCtx { db_id, txn_id: Some(&txn_id), operator_id, operator_name },
+        ModuleId { domain, app, module, kind: "SEED" },
         module_version,
         seed_files.len() as i64,
         "seed/",
         Some(&module_checksum),
-        operator_id,
-        operator_name,
     )
     .await?;
 
@@ -283,8 +268,7 @@ pub async fn deploy_seed_with_events(
         "checksum": module_checksum,
     });
     let _ = update_history_success(
-        db_id,
-        None,
+        LedgerCtx { db_id, txn_id: None, operator_id, operator_name },
         &hist_id,
         None,
         seed_files.len() as i64,
@@ -337,18 +321,12 @@ pub async fn deploy_menu_with_events(
 
     // 1. 写历史锚点（目标库，事务外，action='menu'，def_ref='menu-pages/'）
     insert_history_executing(
-        db_id,
-        None,
+        LedgerCtx { db_id, txn_id: None, operator_id, operator_name },
+        ModuleId { domain, app, module, kind: "MENU" },
         &hist_id,
         &batch_id,
-        domain,
-        app,
-        module,
-        "MENU",
         "menu",
         "menu-pages/",
-        operator_id,
-        operator_name,
     )
     .await?;
 
@@ -362,8 +340,7 @@ pub async fn deploy_menu_with_events(
     let menu_files = scan_menu_files(domain, app, module);
     if menu_files.is_empty() {
         let _ = update_history_success(
-            db_id,
-            None,
+            LedgerCtx { db_id, txn_id: None, operator_id, operator_name },
             &hist_id,
             None,
             0,
@@ -416,7 +393,7 @@ pub async fn deploy_menu_with_events(
         Err(e) => {
             // importer 失败 = 整个事务已回滚（含 DELETE），菜单数据保持原样
             let err_msg = format!("菜单同步失败: {e:?}");
-            let _ = crate::fail_history(
+            let _ = fail_history(
                 &hist_id,
                 db_id,
                 &err_msg,
@@ -436,18 +413,12 @@ pub async fn deploy_menu_with_events(
         .max()
         .unwrap_or("");
     upsert_module_kind(
-        db_id,
-        None,
-        domain,
-        app,
-        module,
-        "MENU",
+        LedgerCtx { db_id, txn_id: None, operator_id, operator_name },
+        ModuleId { domain, app, module, kind: "MENU" },
         menu_version,
         menu_files.len() as i64,
         "menu-pages/",
         Some(&menu_checksum),
-        operator_id,
-        operator_name,
     )
     .await?;
 
@@ -459,8 +430,7 @@ pub async fn deploy_menu_with_events(
         "checksum": menu_checksum,
     });
     let _ = update_history_success(
-        db_id,
-        None,
+        LedgerCtx { db_id, txn_id: None, operator_id, operator_name },
         &hist_id,
         None,
         menu_files.len() as i64,

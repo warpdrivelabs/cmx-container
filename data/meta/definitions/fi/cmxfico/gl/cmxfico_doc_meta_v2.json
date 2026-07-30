@@ -143,41 +143,6 @@
       "tableAlias": "凭证批",
       "fields": [
         {
-          "dataType": "VARCHAR",
-          "nullable": true,
-          "dimType": "attribute",
-          "id": "client_code",
-          "name": "client_code",
-          "caption": {
-            "zh_CN": "客户端"
-          },
-          "fieldLength": 3,
-          "refDict": "client",
-          "refField": "code",
-          "displayField": "name",
-          "physicalField": "MANDT",
-          "edit": {
-            "mode": "cmx-dict-select"
-          },
-          "display": {
-            "mode": "text",
-            "align": "left"
-          },
-          "width": "140px",
-          "required": false,
-          "align": "left",
-          "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择客户端",
-            "showClear": true,
-            "coord": {
-              "domain": "fi",
-              "application": "cmxfico",
-              "module": "gl"
-            }
-          }
-        },
-        {
           "dataType": "BIGINT",
           "nullable": true,
           "dimType": "dimension",
@@ -201,11 +166,11 @@
               "application": "cmxfico",
               "module": "gl"
             },
-            "idCol": "code",
+            "idCol": "id",
             "valueField": "code"
           },
           "refField": "id",
-          "displayField": "code",
+          "displayField": "name",
           "display": {
             "mode": "text",
             "decimalDigits": 0
@@ -625,6 +590,41 @@
           "width": "140px",
           "required": false,
           "align": "right"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "client_code",
+          "name": "client_code",
+          "caption": {
+            "zh_CN": "客户端"
+          },
+          "fieldLength": 3,
+          "refDict": "client",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "MANDT",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择客户端",
+            "showClear": true,
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
+          }
         }
       ],
       "remark": "参考 Oracle GL_JE_BATCHES 并补齐 SAP 组织隔离口径:客户端、公司代码、分类账、期间、来源、状态、控制总额 + 6 币种合计(由凭证头上卷)。",
@@ -650,8 +650,8 @@
       },
       "fieldSetOrder": [
         "documentLevelFields",
-        "own",
         "documentIdentityFields",
+        "own",
         "documentLifecycleFields",
         "documentTechnicalFields"
       ]
@@ -3754,7 +3754,7 @@
       }
     ]
   },
-  "updatedAt": "2026-07-28T06:21:28.702Z",
+  "updatedAt": "2026-07-30T05:47:55.375Z",
   "validationRules": [
     {
       "code": "voucher_local_balance",

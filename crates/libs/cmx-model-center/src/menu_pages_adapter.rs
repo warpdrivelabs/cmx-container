@@ -7,7 +7,7 @@
 //! - icon 直传
 //! - definition JSONB 组装 caption/workspace/dialogspace/expanded/type/name
 //!   （与 .agents/skills/menu-generator/gen_menu_migration.mjs 逻辑一致，
-//!    前端读 definition.caption/definition.dialogspace 等字段渲染菜单）
+//!   前端读 definition.caption/definition.dialogspace 等字段渲染菜单）
 //! - expanded/dirty 是前端运行时态，但 expanded 仍入 definition（与迁移脚本一致）
 //! - children 递归 flatten，parent_code 由父节点 code 注入
 //! - sort_order 按数组下标（每个父节点下从 0 重新计数）
@@ -41,13 +41,17 @@ pub fn parse_menu_pages_file(
 /// 全部缺失时返回 None。
 fn build_definition(v: &serde_json::Value) -> Option<serde_json::Value> {
     let mut def = serde_json::Map::new();
+    // 与前端菜单渲染约定的 6 个 key 集合：caption 标题 / workspace 工作区标识 /
+    // dialogspace 对话框标识 / expanded 是否展开 / type 菜单类型 / name 前端短名
     for key in &["caption", "workspace", "dialogspace", "expanded", "type", "name"] {
-        if let Some(val) = v.get(*key) {
-            if !val.is_null() {
-                def.insert((*key).to_string(), val.clone());
-            }
+        // 只收集非 null 的字段（与迁移脚本行为对齐——null 表示"无配置"而非"空串"）
+        if let Some(val) = v.get(*key)
+            && !val.is_null()
+        {
+            def.insert((*key).to_string(), val.clone());
         }
     }
+    // 6 个 key 全缺失时返回 None（让 MenuDefinition.definition = None，区分"有但全空"和"无 definition"）
     if def.is_empty() {
         None
     } else {
