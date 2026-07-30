@@ -201,11 +201,11 @@
               "application": "cmxfico",
               "module": "gl"
             },
-            "idCol": "code",
+            "idCol": "id",
             "valueField": "code"
           },
           "refField": "id",
-          "displayField": "code",
+          "displayField": "name",
           "display": {
             "mode": "text",
             "decimalDigits": 0
@@ -3754,7 +3754,7 @@
       }
     ]
   },
-  "updatedAt": "2026-07-28T06:21:28.702Z",
+  "updatedAt": "2026-07-30T02:33:18.370Z",
   "validationRules": [
     {
       "code": "voucher_local_balance",
