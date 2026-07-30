@@ -682,7 +682,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 在 `sqlx` 中，你需要使用以下格式来指定 Schema：
 
 ```text
-postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx?options=-c%20search_path%3Dmyschema
+postgres://dbuser_dba:9lWsRQY4i4VToPpkHcCRFzki@192.168.1.14:5432/cmx?options=-c%20search_path%3Dmyschema
 ```
 
 ### 💡 参数拆解说明

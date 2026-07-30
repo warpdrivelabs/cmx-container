@@ -7,7 +7,7 @@ const state = {
   drafts: { domain: null, application: null, module: null },
   loading: null,
   filter: { domain: '', application: '' },
-  resources: { moduleKey: '', loading: false, html: '<div class="dam-empty">选择模块后查看资源清单</div>' },
+  resources: { moduleKey: '', loading: false, html: '<cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state>' },
   split: { explorerY: 62, contentX: 48, appY: 62, moduleY: 62 },
   scrollTop: { domain: 0, application: 0, module: 0 },
   hosts: new Set(),
@@ -426,7 +426,10 @@ async function deleteItem (kind, key) {
   if (!key) return
   const item = findItem(kind, key)
   if (!item) return
-  const ok = window.confirm(`确认删除 ${titleOf(kind, item)}？`)
+  const C = (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
+  const ok = typeof C.cmxConfirm === 'function'
+    ? await C.cmxConfirm({ message: `确认删除 ${titleOf(kind, item)}？`, intent: 'danger', confirmText: '删除' })
+    : window.confirm(`确认删除 ${titleOf(kind, item)}？`)
   if (!ok) return
   const dbId = kind === 'domain'
     ? dbDomainId(item)
@@ -461,13 +464,13 @@ async function deleteItem (kind, key) {
 
 function renderResourcesInto (root) {
   const el = root.querySelector('[data-resources]')
-  if (el) el.innerHTML = state.resources.html || '<div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div>'
+  if (el) el.innerHTML = state.resources.html || '<cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state>'
 }
 
 async function loadResources (root, force = false) {
   const item = state.selectedKeys.module ? findItem('module', state.selectedKeys.module) : null
   if (!item) {
-    state.resources = { moduleKey: '', loading: false, html: '<div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div>' }
+    state.resources = { moduleKey: '', loading: false, html: '<cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state>' }
     renderResourcesInto(root)
     return
   }
@@ -480,7 +483,7 @@ async function loadResources (root, force = false) {
     renderResourcesInto(root)
     return
   }
-  state.resources = { moduleKey, loading: true, html: '<div class="dam-empty"><ui5-icon name="synchronize"></ui5-icon><span>加载资源清单...</span></div>' }
+  state.resources = { moduleKey, loading: true, html: '<cmx-empty-state icon="synchronize" title="加载资源清单..." size="sm"></cmx-empty-state>' }
   renderResourcesInto(root)
   const types = [
     { key: 'menus', label: '菜单' },
@@ -528,7 +531,7 @@ function renderList (kind, title, items, options = {}) {
           <span class="dam-list-text"><strong>${esc(item.name || item.title || item.id)}</strong><span>${esc(key)}</span></span>
           <button class="dam-list-delete" type="button" title="删除" aria-label="删除 ${esc(item.name || item.title || item.id)}" data-delete-kind="${kind}" data-delete-key="${esc(key)}"><ui5-icon name="delete"></ui5-icon></button>
         </div>`
-      }).join('') || '<div class="dam-empty"><ui5-icon name="inbox"></ui5-icon><span>暂无数据</span></div>'}
+      }).join('') || '<cmx-empty-state icon="inbox" title="暂无数据" size="sm"></cmx-empty-state>'}
     </div>
   </section>`
 }
@@ -578,8 +581,9 @@ function fieldHtml (kind, cfg, d) {
   const tone = cfg.tone ? ` data-tone="${esc(cfg.tone)}"` : ''
   const lock = readonly ? '<span class="dam-field-lock">LOCKED</span>' : ''
   const common = `data-field="${esc(field)}" data-field-kind="${esc(kind)}" ${readonly ? 'readonly' : ''} placeholder="${esc(cfg.placeholder || '')}"`
+  // select 走 ui5-select（option 弹层跟随 UI5 主题换肤）；readonly 用 disabled，不带 placeholder（ui5-option 恒有值）。
   const control = cfg.type === 'select'
-    ? `<select ${common}>${(cfg.options || []).map((o) => `<option value="${esc(o.value)}"${String(value) === String(o.value) ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`
+    ? `<ui5-select data-field="${esc(field)}" data-field-kind="${esc(kind)}" ${readonly ? 'disabled' : ''}>${(cfg.options || []).map((o) => `<ui5-option value="${esc(o.value)}"${String(value) === String(o.value) ? ' selected' : ''}>${esc(o.label)}</ui5-option>`).join('')}</ui5-select>`
     : cfg.type === 'textarea'
       ? `<textarea ${common}>${esc(value)}</textarea>`
       : cfg.type === 'number'
@@ -748,8 +752,8 @@ function propertyHtml () {
     </div>
     ${mod ? `<section class="dam-property-resources dam-neo-panel">
       <div class="dam-neo-head" data-hue="module"><span class="dam-neo-head-main"><ui5-icon class="dam-neo-head-icon" name="activity-items"></ui5-icon><span>资源态势</span></span><span class="dam-neo-badge">mount</span></div>
-      <div class="dam-resources" data-resources><div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div></div>
-    </section>` : `<div class="dam-resources" data-resources><div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div></div>`}
+      <div class="dam-resources" data-resources><cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state></div>
+    </section>` : `<div class="dam-resources" data-resources><cmx-empty-state icon="detail-view" title="选择模块后查看资源清单" size="sm"></cmx-empty-state></div>`}
   </div>`
 }
 
@@ -796,7 +800,7 @@ function bindPage (root, mode = 'manager') {
     const moduleKey = state.selectedKeys.module || ''
     if (moduleKey && state.resources.moduleKey !== moduleKey && !state.resources.loading) {
       loadResources(root).catch((err) => {
-        state.resources = { moduleKey, loading: false, html: `<div class="dam-empty">${esc(err.message || String(err))}</div>` }
+        state.resources = { moduleKey, loading: false, html: `<cmx-empty-state icon="message-error" title="${esc(err.message || String(err))}" size="sm"></cmx-empty-state>` }
         renderResourcesInto(root)
       })
     }
@@ -969,6 +973,7 @@ function styleHtml () {
     .dam-smart-field input[readonly]{color:var(--sapContent_LabelColor,#6a6d70);cursor:not-allowed}
     .dam-smart-field textarea{min-height:48px;resize:vertical;font-weight:500}
     .dam-smart-field select{appearance:none;-webkit-appearance:none;-moz-appearance:none;padding:0 14px 0 0;background-image:linear-gradient(45deg,transparent 50%,var(--sapContent_LabelColor,#6a6d70) 50%),linear-gradient(135deg,var(--sapContent_LabelColor,#6a6d70) 50%,transparent 50%);background-position:calc(100% - 8px) 50%,calc(100% - 4px) 50%;background-size:4px 4px;background-repeat:no-repeat;cursor:pointer}
+    .dam-smart-field ui5-select{width:100%}
     .dam-smart-field input::placeholder,.dam-smart-field textarea::placeholder{color:var(--sapField_PlaceholderTextColor,var(--sapContent_LabelColor,#6a6d70))}
     .dam-alias-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
     .dam-alias-row span{font-size:10px;font-weight:700;color:var(--neo-violet);background:color-mix(in srgb,var(--neo-violet) 10%,transparent);border:1px solid color-mix(in srgb,var(--neo-violet) 25%,transparent);border-radius:999px;padding:1px 7px}

@@ -287,7 +287,7 @@ export default {
                   <td><input data-field-index="${i}" data-field-inline="fieldLength" data-value-type="number" type="number" value="${esc(f.fieldLength ?? '')}"></td>
                   <td><input data-field-index="${i}" data-field-inline="nullable" data-value-type="boolean" type="checkbox" ${f.nullable === false ? '' : 'checked'}></td>
                   <td><select data-field-index="${i}" data-field-inline="edit.mode">${optionHtml(EDIT_MODES, f.edit?.mode)}</select></td>
-                </tr>`).join('') || '<tr><td colspan="7" class="np-empty">当前字段集暂无字段</td></tr>'}
+                </tr>`).join('') || '<tr><td colspan="7" class="np-empty"><cmx-empty-state icon="table-row" title="当前字段集暂无字段" size="sm"></cmx-empty-state></td></tr>'}
               </tbody></table>
             </div>
           </div>
@@ -311,7 +311,7 @@ export default {
       return mount(ctx, `<div class="np-wrap"><div class="np-list">
         ${files}
         <div class="np-panel-head" style="border:0;padding:8px 0 0"><span>字段集</span></div>
-        ${sets || '<div class="np-empty">暂无字段集</div>'}
+        ${sets || '<cmx-empty-state icon="folder" title="暂无字段集" size="sm"></cmx-empty-state>'}
       </div></div>`, (root) => {
         root.querySelectorAll('[data-file]').forEach((btn) => btn.addEventListener('click', () => selectFile(btn.getAttribute('data-file'))))
         root.querySelectorAll('[data-fs]').forEach((btn) => btn.addEventListener('click', () => selectFieldSet(btn.getAttribute('data-fs'))))

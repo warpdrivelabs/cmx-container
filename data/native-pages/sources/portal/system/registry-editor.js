@@ -475,7 +475,7 @@ function renderValues() {
   }
   const hit = getNode(state.path)
   if (!hit) {
-    box.innerHTML = '<div class="reg-empty">项不存在（可能已被删除）</div>'
+    box.innerHTML = '<cmx-empty-state icon="message-information" title="项不存在（可能已被删除）" size="sm"></cmx-empty-state>'
     return
   }
   const rows = valueEntries(hit.node).map((v) => {
@@ -491,7 +491,7 @@ function renderValues() {
   box.innerHTML = `
     <table class="reg-vtable">
       <thead><tr><th style="width:30%">名称</th><th style="width:16%">类型</th><th>数据</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="3" class="reg-empty">（空）</td></tr>'}</tbody>
+      <tbody>${rows || '<tr><td colspan="3" class="reg-empty"><cmx-empty-state icon="message-information" title="（空）" size="sm"></cmx-empty-state></td></tr>'}</tbody>
     </table>`
 }
 
@@ -510,7 +510,7 @@ function renderSearchResults(box) {
   }).join('')
   box.innerHTML = `
     <div class="reg-search-head">搜索 “${esc(state.search)}” · ${results.length}${results.length >= 100 ? '+' : ''} 条结果（双击跳转）</div>
-    <table class="reg-vtable"><tbody>${rows || '<tr><td class="reg-empty">无匹配结果</td></tr>'}</tbody></table>`
+    <table class="reg-vtable"><tbody>${rows || '<tr><td class="reg-empty"><cmx-empty-state icon="search" title="无匹配结果" size="sm"></cmx-empty-state></td></tr>'}</tbody></table>`
 }
 
 // ─── 渲染：状态栏 ────────────────────────────────────────────────────────

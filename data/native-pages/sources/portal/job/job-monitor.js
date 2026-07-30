@@ -830,10 +830,10 @@ function monitorHtml (mode) {
   // 按 mode 取各自选中槽（活跃=state.selectedId/detail/items/logs；历史=state.histSel）。
   const d = isHist ? state.histSel.detail : state.detail
   const selId = isHist ? state.histSel.selectedId : state.selectedId
-  if (!d || !selId) return `<div class="empty">${isHist ? '点击左侧历史作业查看详情' : '点击左侧作业查看实时监控'}</div>`
+  if (!d || !selId) return `<cmx-empty-state icon="detail-view" title="${isHist ? '点击左侧历史作业查看详情' : '点击左侧作业查看实时监控'}" size="sm"></cmx-empty-state>`
   // 活跃视图：选中作业被当前过滤排除时，不显示旧详情。
   if (!isHist && !visibleJobs().some((j) => String(j.id) === selId)) {
-    return `<div class="empty">当前过滤下无选中作业</div>`
+    return `<cmx-empty-state icon="filter" title="当前过滤下无选中作业" size="sm"></cmx-empty-state>`
   }
   const p = d.progress || {}
   const pct = percentOf(p)
@@ -852,10 +852,10 @@ function monitorHtml (mode) {
         const m = ITEM_META[it.state] || ITEM_META.queued
         return `<div class="it ${m.cls}"><span class="ic">${m.icon}</span><span class="k">${esc(it.label || it.key)}</span><span class="d">${esc(it.detail || '')}</span></div>`
       }).join('')
-    : `<div class="empty">暂无明细</div>`
+    : `<cmx-empty-state icon="list" title="暂无明细" size="sm"></cmx-empty-state>`
   const logsHtml = (!isHist && state.logs.length)
     ? state.logs.map((l) => `<div class="lg ${esc(l.level)}">[${esc(l.level)}] ${esc(l.text)}</div>`).join('')
-    : `<div class="empty">暂无日志</div>`
+    : `<cmx-empty-state icon="message-information" title="暂无日志" size="sm"></cmx-empty-state>`
   const eta = p.etaMs ? ` · 预计剩余 ${Math.ceil(p.etaMs / 1000)}s` : ''
   const ctrl = isHist
     ? `<div class="arch-note">📁 该作业已归档（历史只读）。归档于 ${esc(fmtTime(d.archivedAt))}</div>`
@@ -1014,7 +1014,7 @@ function contentHtml (mode) {
     autoSelectFirst('history') // 历史列表非空且未选 → 默认选第一个
     const rows = state.history.length
       ? state.history.map(historyRowHtml).join('')
-      : `<div class="empty">${state.historyLoading ? '加载中…' : '暂无历史作业（归档后转入此处）'}</div>`
+      : `<cmx-empty-state icon="history" title="${state.historyLoading ? '加载中…' : '暂无历史作业（归档后转入此处）'}" size="sm"></cmx-empty-state>`
     head = `历史作业 · 已归档 (${state.historyTotal || 0} 条)`
     listHtml = rows
     headExtra = historyPagerHtml() // 靠右对齐放在标题行
@@ -1023,7 +1023,7 @@ function contentHtml (mode) {
     const vis = visibleJobs()
     const rows = vis.length
       ? vis.map(jobRowHtml).join('')
-      : `<div class="empty">${state.listLoading ? '加载中…' : '无匹配作业'}</div>`
+      : `<cmx-empty-state icon="search" title="${state.listLoading ? '加载中…' : '无匹配作业'}" size="sm"></cmx-empty-state>`
     head = `活跃作业 · 实时 (${vis.length}/${state.jobs.length})`
     listHtml = rows
   }
@@ -1071,7 +1071,7 @@ function queueAutoSelect (mode, fn) {
 function propertyHtml () {
   // 属性区无 mode：优先展示活跃选中，回落历史选中。
   const d = state.detail || state.histSel.detail
-  if (!d) return `<div class="jc"><div class="empty">未选中作业</div></div>`
+  if (!d) return `<div class="jc"><cmx-empty-state icon="detail-view" title="未选中作业" size="sm"></cmx-empty-state></div>`
   const p = d.progress || {}
   const origin = d.origin || {}
   const originText = origin.kind === 'frontend'

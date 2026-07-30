@@ -187,10 +187,12 @@ function filteredDefs () {
 function explorerHtml () {
   const defs = filteredDefs()
   const body = state.loading
-    ? `<div class="flow-empty"><ui5-icon name="busy"></ui5-icon><span>加载流程定义...</span></div>`
+    ? `<cmx-empty-state icon="busy" title="加载流程定义..." size="sm"></cmx-empty-state>`
     : (defs.length
         ? defs.map(defItemHtml).join('')
-        : `<div class="flow-empty"><ui5-icon name="tree"></ui5-icon><span>${state.definitions.length ? '当前 DAM 过滤下无匹配定义' : '暂无流程定义<br>点下方新建'}</span></div>`)
+        : (state.definitions.length
+            ? `<cmx-empty-state icon="tree" title="当前 DAM 过滤下无匹配定义" size="sm"></cmx-empty-state>`
+            : `<cmx-empty-state icon="tree" title="暂无流程定义" description="点下方新建" size="sm"></cmx-empty-state>`))
   return `<section class="flow flow-explorer">
     <div class="flow-head compact">
       <div><b>流程定义</b><span>cmx-flow / definitions</span></div>
@@ -343,7 +345,7 @@ function propertyHtml () {
             (!state.defDam.application || (m.application || m.app) === state.defDam.application)), state.defDam.module)}
         <div class="flow-hint">随「保存草稿」落库；explorer 顶部按此三段过滤定义列表。</div>
         <div class="flow-sec">元素属性</div>
-        <div class="flow-empty"><ui5-icon name="detail-view"></ui5-icon><span>点击画布上的节点<br>在此配置属性</span></div>
+        <cmx-empty-state icon="detail-view" title="点击画布上的节点" description="在此配置属性" size="sm"></cmx-empty-state>
       </div>
     </section>`
   }
@@ -686,7 +688,11 @@ async function activateVersion (version) {
 async function deleteVersion (version) {
   const key = state.versionDialog?.key || state.selectedKey
   if (!key) return
-  if (!window.confirm('确认删除版本 v' + version + '？该操作不可恢复。')) return
+  const C = (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
+  const ok = typeof C.cmxConfirm === 'function'
+    ? await C.cmxConfirm({ message: '确认删除版本 v' + version + '？该操作不可恢复。', intent: 'danger', confirmText: '删除' })
+    : window.confirm('确认删除版本 v' + version + '？该操作不可恢复。')
+  if (!ok) return
   try {
     await apiJson('/api/flow/definitions/' + enc(key) + '/versions/' + version, { method: 'DELETE' })
     state.versionError = ''

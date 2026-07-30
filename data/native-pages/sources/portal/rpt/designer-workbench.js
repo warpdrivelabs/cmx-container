@@ -413,8 +413,8 @@ function viewHtml (view) {
 
 function explorerHtml () {
   const body = state.loading
-    ? `<div class="rpt-empty"><ui5-icon name="busy"></ui5-icon><span>加载报表类别...</span></div>`
-    : (state.categories.length ? state.categories.map(categoryItemHtml).join('') : `<div class="rpt-empty"><ui5-icon name="folder"></ui5-icon><span>fico-db 中暂无报表类别</span></div>`)
+    ? `<cmx-empty-state icon="busy" title="加载报表类别..." size="sm"></cmx-empty-state>`
+    : (state.categories.length ? state.categories.map(categoryItemHtml).join('') : `<cmx-empty-state icon="folder" title="fico-db 中暂无报表类别" size="sm"></cmx-empty-state>`)
   return `<section class="rpt rpt-explorer">
     <div class="rpt-head compact">
       <div><b>报表类别</b><span>fico-db / cr_report_category</span></div>
@@ -459,18 +459,14 @@ function contentHtml () {
     <div class="rpt-main">
       <div class="rpt-periods">${tabs}</div>
       <div class="rpt-list">
-        ${state.loading ? `<div class="rpt-empty large"><ui5-icon name="busy"></ui5-icon><b>加载报表主档...</b></div>` : (list.length ? list.map(reportCardHtml).join('') : emptyReportsHtml())}
+        ${state.loading ? `<cmx-empty-state icon="busy" title="加载报表主档..." size="sm"></cmx-empty-state>` : (list.length ? list.map(reportCardHtml).join('') : emptyReportsHtml())}
       </div>
     </div>
   </section>`
 }
 
 function emptyReportsHtml () {
-  return `<div class="rpt-empty large">
-    <ui5-icon name="document"></ui5-icon>
-    <b>当前类别与期间下暂无报表</b>
-    <span>点击右上角新增报表，数据会直接写入 fico-db。</span>
-  </div>`
+  return `<cmx-empty-state icon="document" title="当前类别与期间下暂无报表" description="点击右上角新增报表，数据会直接写入 fico-db。" size="sm"></cmx-empty-state>`
 }
 
 function reportCardHtml (r) {
@@ -505,7 +501,7 @@ function reportCardHtml (r) {
 function propertyHtml () {
   const r = selectedReport()
   if (!r) {
-    return `<section class="rpt rpt-prop"><div class="rpt-empty"><ui5-icon name="detail-view"></ui5-icon><span>请选择一张报表</span></div></section>`
+    return `<section class="rpt rpt-prop"><cmx-empty-state icon="detail-view" title="请选择一张报表" size="sm"></cmx-empty-state></section>`
   }
   const version = reportVersion(r)
   const detail = selectedDetail()
@@ -530,9 +526,9 @@ function propertyHtml () {
     </div>
     <div class="rpt-prop-sec">
       <b>当前版本</b>
-      <div class="rpt-chip">${esc(versionLabel(current.code || version))}</div>
-      <div class="rpt-chip">${esc(current.version_status || 'draft')}</div>
-      ${Number(current.is_current || 0) === 1 ? '<div class="rpt-chip strong">当前生效</div>' : ''}
+      <cmx-status-tag tone="info" variant="subtle" size="sm">${esc(versionLabel(current.code || version))}</cmx-status-tag>
+      <cmx-status-tag tone="neutral" variant="subtle" size="sm">${esc(current.version_status || 'draft')}</cmx-status-tag>
+      ${Number(current.is_current || 0) === 1 ? '<cmx-status-tag tone="success" variant="solid" size="sm">当前生效</cmx-status-tag>' : ''}
       <p>${esc(current.change_summary || current.remark || '暂无版本说明')}</p>
     </div>
     <div class="rpt-prop-sec">
@@ -647,7 +643,7 @@ function versionDialogHtml () {
         <div><b class="rpt-version-code">${esc(v.code)}</b><span>${esc(v.name || v.version_status || '')}</span><em>${esc(v.change_summary || '暂无说明')}</em></div>
         <button class="rpt-btn slim ${Number(v.is_current || 0) === 1 ? 'is-default' : ''}" data-set-default="${esc(v.code)}">${Number(v.is_current || 0) === 1 ? '默认版本' : '设为默认'}</button>
       </div>`).join('')
-    : `<div class="rpt-version-manage-empty"><ui5-icon name="flag"></ui5-icon><b>默认版本</b><span>该报表尚未创建显式版本，系统按默认版本展示。</span></div>`
+    : `<div class="rpt-version-manage-empty"><cmx-empty-state icon="flag" title="默认版本" description="该报表尚未创建显式版本，系统按默认版本展示。" size="sm"></cmx-empty-state></div>`
   return `<div class="rpt-dialog-mask" data-dialog-mask>
     <section class="rpt-dialog version">
       <div class="rpt-dialog-head">
@@ -880,7 +876,12 @@ async function setDefaultVersion (version) {
 
 async function deleteReport (code) {
   const r = state.reports.find((x) => x.code === code)
-  if (!r || !window.confirm(`确认删除报表 ${r.name}（${r.code}）及其版本、Sheet、区域、行列和格式定义？`)) return
+  if (!r) return
+  const C = (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
+  const ok = typeof C.cmxConfirm === 'function'
+    ? await C.cmxConfirm({ message: `确认删除报表 ${r.name}（${r.code}）及其版本、Sheet、区域、行列和格式定义？`, intent: 'danger', confirmText: '删除' })
+    : window.confirm(`确认删除报表 ${r.name}（${r.code}）及其版本、Sheet、区域、行列和格式定义？`)
+  if (!ok) return
   try {
     await apiJson(`/api/report-design/reports/${enc(code)}`, { method: 'DELETE' })
     delete state.selectedVersion[code]

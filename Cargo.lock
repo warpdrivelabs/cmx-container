@@ -4565,7 +4565,7 @@ dependencies = [
 
 [[package]]
 name = "modql"
-version = "0.5.0"
+version = "0.1.12"
 dependencies = [
  "modql-macros",
  "sea-query",
@@ -4577,7 +4577,7 @@ dependencies = [
 
 [[package]]
 name = "modql-macros"
-version = "0.5.0"
+version = "0.1.12"
 dependencies = [
  "proc-macro2",
  "quote",
