@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use serde_json::{Value, json};
-use tracing::debug;
+use tracing::{debug, error};
 
 use cmx_core::dv;
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
@@ -83,7 +83,20 @@ pub(crate) async fn query_rows(sql: &str, params: Vec<DataValue>, label: &str) -
     let ds = mm
         .query_sql_with_datavalues(RPT_DB_ID, None, sql, params, label)
         .await
-        .map_err(|e| api_err(&format!("报表设计数据查询失败: {e}")))?;
+        .map_err(|e| {
+            // 日志侧：结构化记录完整 PG 明细（SQL / label / SQLSTATE 文案 / DETAIL / 约束名），
+            // 解决 tokio-postgres 顶层 Display 恒为无信息 "db error" 导致的排障盲区。
+            // 响应侧：走 `db_err` 翻译为稳定中文（对齐 DOC saver / `execute` 约定，不暴露 PG 原文）。
+            error!(
+                target: "rpt::store::query",
+                rpt_db_id = RPT_DB_ID,
+                query_label = label,
+                query_sql = sql,
+                pg_detail = %pg_detail(&e),
+                "报表设计数据查询失败"
+            );
+            db_err(e)
+        })?;
     let v = serde_json::to_value(&ds).map_err(|e| api_err(&format!("查询结果序列化失败: {e}")))?;
     Ok(v.get("rows")
         .and_then(|r| r.as_array())
