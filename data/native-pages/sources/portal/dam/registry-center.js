@@ -695,9 +695,9 @@ function editorHtml (kind, title) {
 function damStatsHtml () {
   const all = rawLists()
   return `<div class="dam-neo-kpi-row">
-    <cmx-kpi-card label="Domain" value="${all.domains.length}" tone="info"></cmx-kpi-card>
-    <cmx-kpi-card label="Application" value="${all.applications.length}" tone="success"></cmx-kpi-card>
-    <cmx-kpi-card label="Module" value="${all.modules.length}" tone="warning"></cmx-kpi-card>
+    <div class="dam-neo-kpi" data-hue="domain"><span class="dam-neo-kpi-val">${all.domains.length}</span><span class="dam-neo-kpi-lbl">Domain</span></div>
+    <div class="dam-neo-kpi" data-hue="app"><span class="dam-neo-kpi-val">${all.applications.length}</span><span class="dam-neo-kpi-lbl">Application</span></div>
+    <div class="dam-neo-kpi" data-hue="module"><span class="dam-neo-kpi-val">${all.modules.length}</span><span class="dam-neo-kpi-lbl">Module</span></div>
   </div>`
 }
 
