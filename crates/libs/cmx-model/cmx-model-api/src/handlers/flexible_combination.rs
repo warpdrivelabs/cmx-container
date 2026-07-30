@@ -1,12 +1,12 @@
-//! 弹性组合 handler。
+//! 弹性组合 handler（cmx-model-api 层）。
 
 use axum::Json;
 use axum::extract::{Query, State};
 use serde::Deserialize;
 
-use crate::app_state::CmxAppState;
-use crate::middleware::CmxSvrContext;
-use crate::{ApiResp, Result};
+use cmx_api::CmxAppState;
+use cmx_api::middleware::CmxSvrContext;
+use cmx_api::{ApiResp, Result};
 
 /// flexible-combination DAM + scenario query（list 只用 domain/app/module；其余用全四段 + 任意锚点键）。
 #[derive(Debug, Deserialize)]
@@ -25,8 +25,8 @@ pub struct FcQuery {
 }
 
 impl FcQuery {
-    fn to_ref(&self) -> cmx_portal::flexible_combination::store::FcRef {
-        cmx_portal::flexible_combination::store::FcRef {
+    fn to_ref(&self) -> cmx_model_meta::flexible_combination::store::FcRef {
+        cmx_model_meta::flexible_combination::store::FcRef {
             domain: self.domain.clone(),
             app: self.app.clone(),
             module: self.module.clone(),
@@ -48,7 +48,7 @@ pub async fn fc_list(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let items = cmx_portal::flexible_combination::store::list_flexible_combinations(
+    let items = cmx_model_meta::flexible_combination::store::list_flexible_combinations(
         q.domain.as_deref(),
         q.app.as_deref(),
         q.module.as_deref(),
@@ -64,7 +64,7 @@ pub async fn fc_get_config(
     Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::flexible_combination::store::get_flexible_combination(&q.to_ref()).await?,
+        cmx_model_meta::flexible_combination::store::get_flexible_combination(&q.to_ref()).await?,
     )))
 }
 
@@ -77,7 +77,7 @@ pub async fn fc_save_config(
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     // 校验：无效 422（与 Node 一致用 fail code 422）
     let diagnostics =
-        cmx_portal::flexible_combination::validator::validate_flexible_combination(&body);
+        cmx_model_meta::flexible_combination::validator::validate_flexible_combination(&body);
     if !diagnostics
         .get("valid")
         .and_then(|v| v.as_bool())
@@ -90,7 +90,7 @@ pub async fn fc_save_config(
         )));
     }
     let saved =
-        cmx_portal::flexible_combination::store::save_flexible_combination(&q.to_ref(), &body)
+        cmx_model_meta::flexible_combination::store::save_flexible_combination(&q.to_ref(), &body)
             .await?;
     Ok(Json(ApiResp::ok(
         serde_json::json!({ "ok": true, "saved": saved }),
@@ -104,7 +104,7 @@ pub async fn fc_delete_config(
     Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::flexible_combination::store::delete_flexible_combination(&q.to_ref()).await?,
+        cmx_model_meta::flexible_combination::store::delete_flexible_combination(&q.to_ref()).await?,
     )))
 }
 
@@ -115,7 +115,7 @@ pub async fn fc_set_default(
     Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::flexible_combination::store::set_default_version(&q.to_ref()).await?,
+        cmx_model_meta::flexible_combination::store::set_default_version(&q.to_ref()).await?,
     )))
 }
 
@@ -126,7 +126,7 @@ pub async fn fc_resolve(
     Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::flexible_combination::api::resolve(&q.to_ref(), &q.anchor_map()).await?,
+        cmx_model_meta::flexible_combination::api::resolve(&q.to_ref(), &q.anchor_map()).await?,
     )))
 }
 
@@ -137,7 +137,7 @@ pub async fn fc_rule(
     Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::flexible_combination::api::rule(&q.to_ref(), &q.anchor_map()).await?,
+        cmx_model_meta::flexible_combination::api::rule(&q.to_ref(), &q.anchor_map()).await?,
     )))
 }
 
@@ -148,7 +148,7 @@ pub async fn fc_validate(
     Query(q): Query<FcQuery>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let diagnostics = cmx_portal::flexible_combination::api::validate(&body, &q.to_ref()).await?;
+    let diagnostics = cmx_model_meta::flexible_combination::api::validate(&body, &q.to_ref()).await?;
     let valid = diagnostics
         .get("valid")
         .and_then(|v| v.as_bool())
@@ -172,6 +172,6 @@ pub async fn fc_preview(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::flexible_combination::api::preview(&body, &q.to_ref()).await?,
+        cmx_model_meta::flexible_combination::api::preview(&body, &q.to_ref()).await?,
     )))
 }

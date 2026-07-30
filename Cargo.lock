@@ -878,7 +878,6 @@ dependencies = [
  "cmx-debug",
  "cmx-iam",
  "cmx-metadata",
- "cmx-model-center",
  "cmx-plugin",
  "cmx-portal",
  "cmx-rpc",
@@ -1215,7 +1214,7 @@ dependencies = [
  "cmx-core",
  "cmx-database-pg",
  "cmx-dct-model",
- "cmx-model",
+ "cmx-model-meta",
  "csv",
  "futures",
  "serde",
@@ -1252,7 +1251,7 @@ dependencies = [
  "cmx-database-pg",
  "cmx-doc-model",
  "cmx-doc-store-pg",
- "cmx-model",
+ "cmx-model-meta",
  "futures",
  "rmp",
  "serde",
@@ -1538,21 +1537,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmx-model"
+name = "cmx-model-api"
 version = "0.1.12"
 dependencies = [
- "chrono",
+ "axum",
+ "cmx-api",
  "cmx-api-types",
- "cmx-portal-base",
- "regex",
+ "cmx-core",
+ "cmx-model-deploy",
+ "cmx-model-meta",
+ "futures",
  "serde",
  "serde_json",
  "tokio",
- "tracing",
 ]
 
 [[package]]
-name = "cmx-model-center"
+name = "cmx-model-deploy"
 version = "0.1.12"
 dependencies = [
  "anyhow",
@@ -1562,13 +1563,27 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "cmx-metadata",
- "cmx-model",
+ "cmx-model-meta",
  "cmx-traits",
  "cmx-utils",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-model-meta"
+version = "0.1.12"
+dependencies = [
+ "chrono",
+ "cmx-api-types",
+ "cmx-portal-base",
+ "regex",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]
@@ -1654,7 +1669,7 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "cmx-form",
- "cmx-model",
+ "cmx-model-meta",
  "cmx-portal-base",
  "cmx-utils",
  "futures-util",
@@ -8811,6 +8826,7 @@ dependencies = [
  "cmx-job-api",
  "cmx-job-core",
  "cmx-job-store-pg",
+ "cmx-model-api",
  "cmx-plugin",
  "cmx-registry-config",
  "cmx-rpc",

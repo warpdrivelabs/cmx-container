@@ -8,22 +8,22 @@
 //!
 //! 运行方式（实施补全后）：
 //! ```bash
-//! cargo test -p cmx-model-center --test deploy_seed_integration_test -- --ignored
+//! cargo test -p cmx-model-deploy --test deploy_seed_integration_test -- --ignored
 //! ```
 //!
 //! 期望覆盖的端到端校验（实施清单）：
 //!   - 启动 Postgres 容器
 //!   - `register_datasource` 注册业务库到 `cmx-database`
-//!   - 通过 `cmx-model-center` init 建台账 5 张系统表
+//!   - 通过 `cmx-model-deploy` init 建台账 5 张系统表
 //!   - 部署一个测试 DCT（如 `base_dct` + 含 `cf_test` 表的 DCT）
 //!   - 把测试种子 JSON 放到 `data/meta/definitions/test/test/test/seed/cf_test.json`
-//!   - 调用 [`cmx_model_center::deploy_seed_menu::deploy_seed_with_events`]
+//!   - 调用 [`cmx_model_deploy::deploy_seed_menu::deploy_seed_with_events`]
 //!   - 校验 `cf_test` 表行数 + `cmx_model_module_kind.def_checksum` + 历史锚点状态
 //!
 //! 主流程被测入口（仅供实施时参考）：
-//!   - [`cmx_model_center::deploy_seed_menu::compile_all_definitions_for_module`]
-//!   - [`cmx_model_center::seed_scanner::scan_seed_files`]
-//!   - [`cmx_model_center::deploy_seed_menu::deploy_seed_with_events`]
+//!   - [`cmx_model_deploy::deploy_seed_menu::compile_all_definitions_for_module`]
+//!   - [`cmx_model_deploy::seed_scanner::scan_seed_files`]
+//!   - [`cmx_model_deploy::deploy_seed_menu::deploy_seed_with_events`]
 
 #![cfg(test)]
 

@@ -4,7 +4,7 @@
 //! - 扫描结果包含原始内容，调用方可直接拿去执行/适配，无需重复读盘
 //! - checksum 用 SHA256；模块级聚合 hash 按文件路径排序后拼接计算（顺序无关）
 
-use cmx_model::config::data_path;
+use cmx_model_meta::config::data_path;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;

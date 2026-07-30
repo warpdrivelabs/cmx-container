@@ -1,4 +1,4 @@
-use cmx_model_center::menu_pages_adapter::parse_menu_pages_file;
+use cmx_model_deploy::menu_pages_adapter::parse_menu_pages_file;
 use serde_json::json;
 
 #[test]

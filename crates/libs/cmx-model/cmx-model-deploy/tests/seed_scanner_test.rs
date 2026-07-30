@@ -1,4 +1,4 @@
-use cmx_model_center::seed_scanner::{aggregate_sha256, scan_menu_files_in_dir, scan_seed_files_in_dir, ScannedFile};
+use cmx_model_deploy::seed_scanner::{aggregate_sha256, scan_menu_files_in_dir, scan_seed_files_in_dir, ScannedFile};
 use std::fs;
 use tempfile::tempdir;
 

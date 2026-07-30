@@ -1,12 +1,12 @@
-//! 模型中心 handler（数据库初始化 + 模块部署，真实落库）。
+//! 模型中心 handler（数据库初始化 + 模块部署，真实落库）（cmx-model-api 层）。
 
 use axum::Json;
 use axum::extract::{Query, State};
 use serde::Deserialize;
 
-use crate::app_state::CmxAppState;
-use crate::middleware::CmxSvrContext;
-use crate::{ApiResp, Result};
+use cmx_api::CmxAppState;
+use cmx_api::middleware::CmxSvrContext;
+use cmx_api::{ApiResp, Result};
 
 /// 从认证上下文取 (user_id, user_name)；缺省用占位，避免未登录环境（如本地）阻塞演示。
 fn model_operator(c: &cmx_core::model::service::context::SVRContext) -> (String, String) {
@@ -40,7 +40,7 @@ pub async fn model_db_state(
     Query(q): Query<ModelQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        super::model_center::db_state(&q.db_id).await?,
+        cmx_model_deploy::db_state(&q.db_id).await?,
     )))
 }
 
@@ -56,7 +56,7 @@ pub async fn model_init(
         .ok_or_else(|| cmx_api_types::Error::bad_request("缺少 db_id"))?;
     let (uid, uname) = model_operator(&c);
     Ok(Json(ApiResp::ok(
-        super::model_center::init_db(db_id, &uid, &uname).await?,
+        cmx_model_deploy::init_db(db_id, &uid, &uname).await?,
     )))
 }
 
@@ -81,7 +81,7 @@ pub async fn model_deploy(
     }
     let (uid, uname) = model_operator(&c);
     Ok(Json(ApiResp::ok(
-        super::model_center::deploy(db_id, &items, &uid, &uname).await?,
+        cmx_model_deploy::deploy(db_id, &items, &uid, &uname).await?,
     )))
 }
 
@@ -113,7 +113,7 @@ pub async fn model_deploy_plan_stream(
 
     tokio::spawn(async move {
         let (etx, mut erx) =
-            tokio::sync::mpsc::unbounded_channel::<super::model_center::InitEvent>();
+            tokio::sync::mpsc::unbounded_channel::<cmx_model_deploy::InitEvent>();
         let sse_tx = tx.clone();
         let forward = tokio::spawn(async move {
             while let Some(e) = erx.recv().await {
@@ -126,7 +126,7 @@ pub async fn model_deploy_plan_stream(
                 }
             }
         });
-        super::model_center::deploy_plan_stream(&db_id, &items, &etx).await;
+        cmx_model_deploy::deploy_plan_stream(&db_id, &items, &etx).await;
         drop(etx);
         let _ = forward.await;
         let _ = tx.send(Ok(Event::default().event("end").data("{}")));
@@ -170,7 +170,7 @@ pub async fn model_deploy_stream(
 
     tokio::spawn(async move {
         let (etx, mut erx) =
-            tokio::sync::mpsc::unbounded_channel::<super::model_center::InitEvent>();
+            tokio::sync::mpsc::unbounded_channel::<cmx_model_deploy::InitEvent>();
         let sse_tx = tx.clone();
         let forward = tokio::spawn(async move {
             while let Some(e) = erx.recv().await {
@@ -183,7 +183,7 @@ pub async fn model_deploy_stream(
                 }
             }
         });
-        super::model_center::deploy_stream(&db_id, &items, &uid, &uname, &etx).await;
+        cmx_model_deploy::deploy_stream(&db_id, &items, &uid, &uname, &etx).await;
         drop(etx);
         let _ = forward.await;
         let _ = tx.send(Ok(Event::default().event("end").data("{}")));
@@ -218,7 +218,7 @@ pub async fn model_init_plan_stream(
 
     tokio::spawn(async move {
         let (etx, mut erx) =
-            tokio::sync::mpsc::unbounded_channel::<super::model_center::InitEvent>();
+            tokio::sync::mpsc::unbounded_channel::<cmx_model_deploy::InitEvent>();
         let sse_tx = tx.clone();
         let forward = tokio::spawn(async move {
             while let Some(e) = erx.recv().await {
@@ -231,7 +231,7 @@ pub async fn model_init_plan_stream(
                 }
             }
         });
-        super::model_center::init_plan_stream(&db_id, &etx).await;
+        cmx_model_deploy::init_plan_stream(&db_id, &etx).await;
         drop(etx);
         let _ = forward.await;
         let _ = tx.send(Ok(Event::default().event("end").data("{}")));
@@ -268,7 +268,7 @@ pub async fn model_init_stream(
     // 后台跑初始化，把领域事件转成 SSE Event（named event + json data）推给客户端。
     tokio::spawn(async move {
         let (etx, mut erx) =
-            tokio::sync::mpsc::unbounded_channel::<super::model_center::InitEvent>();
+            tokio::sync::mpsc::unbounded_channel::<cmx_model_deploy::InitEvent>();
         // 转发 task：领域事件 → SSE。
         let sse_tx = tx.clone();
         let forward = tokio::spawn(async move {
@@ -282,7 +282,7 @@ pub async fn model_init_stream(
                 }
             }
         });
-        super::model_center::init_db_stream(&db_id, &uid, &uname, &etx).await;
+        cmx_model_deploy::init_db_stream(&db_id, &uid, &uname, &etx).await;
         drop(etx); // 关闭领域通道 → forward 结束
         let _ = forward.await;
         // 补一个终止事件，前端据此关闭流。

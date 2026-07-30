@@ -549,14 +549,14 @@ fn gate_state_meta_upgrade(db_id: &str, meta_version: i32, schema: &LedgerSchema
 
 /// 收集所有"DB-backed" kind（DCT/DOC）的定义项。返回按 kind 分组的 Vec<Value>。
 ///
-/// 走 `cmx_model::definitions::store::list_definitions`（内存缓存 + 磁盘读），按 kind
+/// 走 `cmx_model_meta::definitions::store::list_definitions`（内存缓存 + 磁盘读），按 kind
 /// 分别拉取定义清单。新增 DB 类资源时只需：
 /// 1) `Kind` enum 加变体
 /// 2) `Kind::db_backed()` 注册
 async fn collect_db_definitions() -> Result<std::collections::HashMap<Kind, Vec<Value>>> {
     let mut out = std::collections::HashMap::new();
     for &kind in Kind::db_backed() {
-        let items = cmx_model::definitions::store::list_definitions(
+        let items = cmx_model_meta::definitions::store::list_definitions(
             Some(kind.as_str()),
             None,
             None,

@@ -609,12 +609,12 @@ pub(crate) fn compile_rpt(_doc: &Value, base: &Value) -> Vec<TableDefine> {
 
 /// 读某定义文件全文（domain/application/module/file）。
 ///
-/// 走 `cmx_model::definitions::store::get_definition`：先在内存缓存查，未命中再走文件系统
+/// 走 `cmx_model_meta::definitions::store::get_definition`：先在内存缓存查，未命中再走文件系统
 /// （`data/meta/definitions/<domain>/<app>/<module>/<file>`），最终反序列化为 `Value`。
 ///
 /// 错误以 `Error::BadRequest` 抛出（含 file 名便于排查）。
 async fn read_def(domain: &str, app: &str, module: &str, file: &str) -> Result<Value> {
-    let r = cmx_model::definitions::store::DefRef {
+    let r = cmx_model_meta::definitions::store::DefRef {
         domain: Some(domain.to_string()),
         application: Some(app.to_string()),
         // app 别名（与 application 同义；store 同时支持两种 key）
@@ -625,7 +625,7 @@ async fn read_def(domain: &str, app: &str, module: &str, file: &str) -> Result<V
         id: None,
         kind: None,
     };
-    cmx_model::definitions::store::get_definition(&r)
+    cmx_model_meta::definitions::store::get_definition(&r)
         .await
         .map_err(|e| Error::BadRequest(format!("读取定义失败 {file}: {e}")))
 }
@@ -635,7 +635,7 @@ async fn read_def(domain: &str, app: &str, module: &str, file: &str) -> Result<V
 /// base 是与业务域并列的"基础字段集"域，所有 DCT/DOC/RPT 定义都引用它来获得通用列
 /// （如 code/name/status/审计字段等）。路径恒为 `data/meta/definitions/base/<file>`。
 async fn read_base(file: &str) -> Result<Value> {
-    let r = cmx_model::definitions::store::DefRef {
+    let r = cmx_model_meta::definitions::store::DefRef {
         domain: Some("base".to_string()),
         application: None,
         app: None,
@@ -644,7 +644,7 @@ async fn read_base(file: &str) -> Result<Value> {
         id: None,
         kind: None,
     };
-    cmx_model::definitions::store::get_definition(&r)
+    cmx_model_meta::definitions::store::get_definition(&r)
         .await
         .map_err(db_err("读取 base 字段集失败"))
 }

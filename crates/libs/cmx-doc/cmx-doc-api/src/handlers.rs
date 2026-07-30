@@ -1068,9 +1068,9 @@ fn flatten_columnar(pkg: &Value, out: &mut serde_json::Map<String, Value>) {
 }
 
 // DOC 定义文件解析（resolve_doc_file / doc_matches）+ 文件解析缓存已抽到
-// cmx-model::definitions::resolve（DOC/DCT 共享，供 cmx-api 的业务编码定位复用，避免
+// cmx-model-meta::definitions::resolve（DOC/DCT 共享，供 cmx-api 的业务编码定位复用，避免
 // cmx-api ⇄ cmx-doc 环）。此处经 use 别名转发，保持本文件内旧调用点不变。
-use cmx_model::definitions::resolve::resolve_doc_file;
+use cmx_model_meta::definitions::resolve::resolve_doc_file;
 
 /// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
 ///
@@ -1093,7 +1093,7 @@ async fn resolve_doc_meta(
     }
 
     // 读主定义
-    let doc_ref = cmx_model::definitions::store::DefRef {
+    let doc_ref = cmx_model_meta::definitions::store::DefRef {
         domain: Some(domain.to_string()),
         application: Some(app.to_string()),
         app: Some(app.to_string()),
@@ -1102,7 +1102,7 @@ async fn resolve_doc_meta(
         id: None,
         kind: None,
     };
-    let doc = cmx_model::definitions::store::get_definition(&doc_ref).await?;
+    let doc = cmx_model_meta::definitions::store::get_definition(&doc_ref).await?;
 
     // 读 base 字段集（从 baseDocMetaRef.file 推断；无则空）
     let base = load_base(&doc).await;
@@ -1121,7 +1121,7 @@ async fn load_base(doc: &Value) -> Value {
     let Some(base_file) = base_file else {
         return Value::Null;
     };
-    let base_ref = cmx_model::definitions::store::DefRef {
+    let base_ref = cmx_model_meta::definitions::store::DefRef {
         domain: Some("base".to_string()),
         application: None,
         app: None,
@@ -1130,7 +1130,7 @@ async fn load_base(doc: &Value) -> Value {
         id: None,
         kind: None,
     };
-    cmx_model::definitions::store::get_definition(&base_ref)
+    cmx_model_meta::definitions::store::get_definition(&base_ref)
         .await
         .unwrap_or(Value::Null)
 }
