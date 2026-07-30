@@ -152,14 +152,33 @@ pub fn build_batch_insert_sql(
         ("level_no", "1", false),
     ];
 
-    // 第一行决定 backfill 列是否纳入（与单行 upsert 一致：列在 view 中且首行未提供时）
+    // 列来源决策（避免 SQL 列重复 + Null 兜底）：
+    //
+    // `user_cols` = view 所有列（含 server_managed）。批量导入场景尊重用户提供的值
+    // （迁移保留历史时间戳）；用户未提供（Null）时按 backfill 表用 SQL 字面量兜底。
+    //
+    // 因此：
+    //   - `user_cols` 已覆盖所有 view 列 → 独立的 `backfill_cols` 追加仅对 view 中
+    //     不存在但 backfill 表有的列生效（实际不会有，保留作未来扩展兜底）
+    //   - 每行处理 `user_cols` 时，Null + 在 backfill 表中 → 用字面量（如 now()）
+    //   - ON CONFLICT 的 `on_update=true` 列（如 update_time）从 user_cols 的
+    //     `EXCLUDED.x` 中排除，改由 `= now()` 单独处理（避免 SET 同列两次）
     let first = &rows[0];
     let provided: std::collections::HashSet<&str> =
         first.keys().map(|s| s.as_str()).collect();
     let backfill_cols: Vec<(&str, &str, bool)> = backfill
         .iter()
-        .filter(|(name, _, _)| valid_col(view, name) && !provided.contains(name))
+        .filter(|(name, _, _)| {
+            valid_col(view, name) && !provided.contains(name) && !user_cols.contains(name)
+        })
         .copied()
+        .collect();
+
+    // on_update=true 的列：Upsert 模式下 ON CONFLICT 子句用字面量单独 SET
+    let on_update_cols: Vec<&str> = backfill
+        .iter()
+        .filter(|(_, _, on_upd)| *on_upd)
+        .map(|(name, _, _)| *name)
         .collect();
 
     // full_path 缺失时用 code 值兜底
@@ -182,14 +201,23 @@ pub fn build_batch_insert_sql(
     let mut i = 0usize;
     for row in rows {
         let mut ph: Vec<String> = Vec::with_capacity(col_names.len());
-        // 用户列：每行绑参数
+        // 用户列：每行逐列决定参数绑定 or backfill 字面量
         for c in &user_cols {
+            let v = row.get(*c).cloned().unwrap_or(Value::Null);
+            // Null + 在 backfill 表中 → 用 SQL 字面量（不占参数位）
+            if v.is_null()
+                && let Some((_, lit, _)) =
+                    backfill.iter().find(|(name, _, _)| name == c)
+                {
+                    ph.push(lit.to_string());
+                    continue;
+                }
+            // 正常参数绑定
             i += 1;
             ph.push(format!("${}", i));
-            let v = row.get(*c).cloned().unwrap_or(Value::Null);
             params.push(to_dv_by_col(view, c, &v));
         }
-        // backfill 列用 SQL 字面量（不占参数位）
+        // backfill 列用 SQL 字面量（user_cols 之外的列，通常为空）
         for (_, lit, _) in &backfill_cols {
             ph.push(lit.to_string());
         }
@@ -206,16 +234,26 @@ pub fn build_batch_insert_sql(
     // ON CONFLICT 子句按 mode 分支
     let conflict_clause = match mode {
         BatchConflictMode::Upsert => {
+            // user_cols 的 EXCLUDED.x：排除 pk 和 on_update_cols（后者由字面量单独 SET）
             let mut updates: Vec<String> = user_cols
                 .iter()
-                .filter(|c| **c != view.pk)
+                .filter(|c| **c != view.pk && !on_update_cols.contains(c))
                 .map(|c| format!("\"{}\" = EXCLUDED.\"{}\"", c, c))
                 .collect();
-            // backfill 中 on_update=true 的列也参与 update（update_time = now()）
-            for (name, lit, on_update) in &backfill_cols {
-                if *on_update {
-                    updates.push(format!("\"{}\" = {}", name, lit));
+            // backfill_cols（user_cols 之外）的 EXCLUDED.x
+            for (name, _, _) in &backfill_cols {
+                if name != &view.pk {
+                    updates.push(format!("\"{}\" = EXCLUDED.\"{}\"", name, name));
                 }
+            }
+            // on_update=true 的列总是 = now()（Upsert 刷新更新时间）
+            for name in &on_update_cols {
+                if valid_col(view, name)
+                    && let Some((_, lit, _)) =
+                        backfill.iter().find(|(n, _, _)| n == name)
+                    {
+                        updates.push(format!("\"{}\" = {}", name, lit));
+                    }
             }
             if updates.is_empty() {
                 format!("ON CONFLICT (\"{}\") DO NOTHING", view.pk)
@@ -466,5 +504,100 @@ mod tests {
             DataValue::String(s) => assert_eq!(s, "abc"),
             other => panic!("expected String, got {:?}", other),
         }
+    }
+
+    /// 回归测试：CSV 无引号空字段 → Null → backfill 兜底 + ON CONFLICT 不双写。
+    ///
+    /// 场景：cf_client 含 create_time/update_time（NOT NULL，server_managed）。
+    /// 用户 CSV：create_time 有值，update_time 空字段（Null）。
+    /// 期望：
+    ///   1. SQL 中 update_time 列只出现一次（不能 "update_time" 出现两次）
+    ///   2. update_time 走 now() 字面量（Null 兜底）
+    ///   3. create_time 走参数绑定（用户提供了值）
+    ///   4. ON CONFLICT 子句 update_time 只 SET 一次（= now()，不出现 EXCLUDED."update_time"）
+    #[test]
+    fn csv_null_field_falls_back_and_no_duplicate_col() {
+        let mut view = mock_view("cf_client", "code");
+        view.columns.push(crate::DictColumn {
+            name: "create_time".to_string(),
+            caption: "创建时间".to_string(),
+            data_type: "TIMESTAMP".to_string(),
+            is_pk: false,
+            nullable: false,
+            dim_type: String::new(),
+            ref_dict: String::new(),
+            display_field: String::new(),
+            ref_field: String::new(),
+            physical_field: String::new(),
+            edit: None,
+            edit_settings: None,
+            display: None,
+            extra: None,
+        });
+        view.columns.push(crate::DictColumn {
+            name: "update_time".to_string(),
+            caption: "更新时间".to_string(),
+            data_type: "TIMESTAMP".to_string(),
+            is_pk: false,
+            nullable: false,
+            dim_type: String::new(),
+            ref_dict: String::new(),
+            display_field: String::new(),
+            ref_field: String::new(),
+            physical_field: String::new(),
+            edit: None,
+            edit_settings: None,
+            display: None,
+            extra: None,
+        });
+        // 模拟 CSV 解析结果：create_time 有值，update_time 是无引号空字段 → 不在 row 中
+        let mut row = serde_json::Map::new();
+        row.insert("code".to_string(), Value::String("CMX".to_string()));
+        row.insert(
+            "create_time".to_string(),
+            Value::String("2026-01-01T00:00:00+00:00".to_string()),
+        );
+        // 注意：不插入 update_time（CSV 空字段 → Null → 跳过 key）
+
+        let (sql, params) =
+            build_batch_insert_sql(&view, std::slice::from_ref(&row), BatchConflictMode::Upsert)
+                .unwrap();
+
+        // 拆分 INSERT 列表 / VALUES / ON CONFLICT 三段分别校验
+        let on_conflict_pos = sql.find("ON CONFLICT").unwrap();
+        let insert_part = &sql[..on_conflict_pos];
+        let on_conflict_part = &sql[on_conflict_pos..];
+
+        // 1. INSERT 列表中 update_time 只出现 1 次（不能重复列）
+        let insert_ut = insert_part.matches("\"update_time\"").count();
+        assert_eq!(
+            insert_ut, 1,
+            "INSERT 列表中 update_time 应只 1 次, 实际 {insert_ut}: {sql}"
+        );
+
+        // 2. VALUES 中 update_time 走 now() 字面量（Null 兜底）
+        assert!(
+            insert_part.contains("now()"),
+            "update_time 为 Null 时应走 now() 字面量, 实际: {sql}"
+        );
+
+        // 3. create_time 走参数绑定（用户提供了值）
+        // 参数：id + code + name + create_time = 4 个（update_time 走字面量不占参数位）
+        assert_eq!(
+            params.len(),
+            4,
+            "应 4 个参数（id+code+name+create_time），update_time 走字面量"
+        );
+
+        // 4. ON CONFLICT 子句中 update_time 只出现 1 次（= now()，不出现 EXCLUDED）
+        let on_conflict_ut = on_conflict_part.matches("\"update_time\"").count();
+        assert_eq!(
+            on_conflict_ut, 1,
+            "ON CONFLICT 中 update_time 只应 1 次（= now()）, 实际: {sql}"
+        );
+        assert!(
+            !on_conflict_part.contains("EXCLUDED.\"update_time\""),
+            "ON CONFLICT 不应有 EXCLUDED.update_time（应 = now()）, 实际: {sql}"
+        );
     }
 }
