@@ -10,7 +10,7 @@
 //! `dict/entries/<domain>/<app>/<module>/<dictId>.json`（schema 带 DAM 时）。
 
 pub mod api;
-pub mod multi;
+// pub mod multi; // 废弃：唯一调用者 dict_multi_search handler 已注释，暂无前端使用
 pub mod repo;
 pub mod schema;
 pub mod tree;
