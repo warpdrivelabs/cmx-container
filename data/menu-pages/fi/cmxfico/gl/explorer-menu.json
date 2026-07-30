@@ -1923,6 +1923,28 @@
           }
         },
         {
+          "id": "fi-cmxfico-voucher-list",
+          "name": "voucher-list",
+          "caption": "会计凭证·单据列表(Sqlx)",
+          "type": "workspace-node",
+          "icon": "tabler-outline/receipt",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "会计凭证单据列表（Sqlx 二进制 · 列表跳详情）",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "凭证列表",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.voucher-list"
+                }
+              ]
+            }
+          }
+        },
+        {
           "id": "fi-cmxfico-voucher-native-bin",
           "name": "voucher-native-bin",
           "caption": "会计凭证④(native·tokio二进制)",
