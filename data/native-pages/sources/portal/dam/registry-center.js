@@ -581,8 +581,9 @@ function fieldHtml (kind, cfg, d) {
   const tone = cfg.tone ? ` data-tone="${esc(cfg.tone)}"` : ''
   const lock = readonly ? '<span class="dam-field-lock">LOCKED</span>' : ''
   const common = `data-field="${esc(field)}" data-field-kind="${esc(kind)}" ${readonly ? 'readonly' : ''} placeholder="${esc(cfg.placeholder || '')}"`
+  // select 走 ui5-select（option 弹层跟随 UI5 主题换肤）；readonly 用 disabled，不带 placeholder（ui5-option 恒有值）。
   const control = cfg.type === 'select'
-    ? `<select ${common}>${(cfg.options || []).map((o) => `<option value="${esc(o.value)}"${String(value) === String(o.value) ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`
+    ? `<ui5-select data-field="${esc(field)}" data-field-kind="${esc(kind)}" ${readonly ? 'disabled' : ''}>${(cfg.options || []).map((o) => `<ui5-option value="${esc(o.value)}"${String(value) === String(o.value) ? ' selected' : ''}>${esc(o.label)}</ui5-option>`).join('')}</ui5-select>`
     : cfg.type === 'textarea'
       ? `<textarea ${common}>${esc(value)}</textarea>`
       : cfg.type === 'number'
@@ -972,6 +973,7 @@ function styleHtml () {
     .dam-smart-field input[readonly]{color:var(--sapContent_LabelColor,#6a6d70);cursor:not-allowed}
     .dam-smart-field textarea{min-height:48px;resize:vertical;font-weight:500}
     .dam-smart-field select{appearance:none;-webkit-appearance:none;-moz-appearance:none;padding:0 14px 0 0;background-image:linear-gradient(45deg,transparent 50%,var(--sapContent_LabelColor,#6a6d70) 50%),linear-gradient(135deg,var(--sapContent_LabelColor,#6a6d70) 50%,transparent 50%);background-position:calc(100% - 8px) 50%,calc(100% - 4px) 50%;background-size:4px 4px;background-repeat:no-repeat;cursor:pointer}
+    .dam-smart-field ui5-select{width:100%}
     .dam-smart-field input::placeholder,.dam-smart-field textarea::placeholder{color:var(--sapField_PlaceholderTextColor,var(--sapContent_LabelColor,#6a6d70))}
     .dam-alias-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
     .dam-alias-row span{font-size:10px;font-weight:700;color:var(--neo-violet);background:color-mix(in srgb,var(--neo-violet) 10%,transparent);border:1px solid color-mix(in srgb,var(--neo-violet) 25%,transparent);border-radius:999px;padding:1px 7px}
