@@ -24,6 +24,7 @@
 - [注册中心 Metadata 配置](#注册中心-metadata-配置)
 - [认证配置](#认证配置)
 - [IAM 权限管理配置](#iam-权限管理配置)
+- [门户配置](#门户配置)
 - [配置优先级](#配置优先级)
 - [配置文件位置](#配置文件位置)
 
@@ -1715,6 +1716,65 @@ IAM 路由权限映射配置（可选）。配置 API 路由到权限码的映�
 每个条目为键值对：
 - **键**: API 路由路径前缀
 - **值**: 所需权限码（格式 `resource:action`，如 `user:read`、`role:write`、`system:all`）
+
+---
+
+## 门户配置
+
+### `[portal]`
+
+门户数据根目录、前端托管路径、页面加载缓存配置。
+
+#### `data_root`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `./data`
+- **说明**: 门户数据根目录（相对进程工作目录）。存放 `menu-pages` / `html-pages` / `native-pages` / `dict` / `meta` 等 JSON 资源。支持环境变量 `CMX_PORTAL_DATA_ROOT` 覆盖；缺省回退 `./data`。
+- **示例**: `./data`
+
+#### `web_portal_dist`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `""`（空，不托管）
+- **说明**: 同源托管的前端生产构建产物目录（`npm run build` 产物）。留空表示不托管（开发期走 vite dev server）。配置后访问 `http://<host>:<port>/portal/`。
+- **示例**: `../CMXPortalManager/dist`
+
+#### `web_html_dist`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `""`（空，不托管）
+- **说明**: HTML 设计器生产构建产物目录。留空表示不托管。配置后访问 `http://<host>:<port>/html/`。
+- **示例**: `../CMXHTMLDesigner/dist`
+
+#### `page_cache_enabled`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `false`
+- **说明**: 门户页面 moka L1 缓存总开关。**仅控制「进程内文件内容缓存」（省磁盘 I/O）**，不影响 HTTP 协议层缓存（ETag/304、batch diff 由 rev 实时算，始终生效）。
+  - `false`：`cached_read_*` 直穿读盘、不回填 moka；`invalidate_*` 空操作。
+  - `true`：启用 moka L1，索引文件 + 源文件按 TTL/容量缓存。
+  - 运行时热读（每次调用查配置），改配置后新请求即时生效，无需重启。
+- **示例**: `false`
+
+#### `page_cache_ttl_secs`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `30`
+- **说明**: moka L1 缓存条目存活时长（单位：秒）。用 `time_to_live`（非 `time_to_idle`），避免热 key 内存膨胀。**改后需重启生效**——moka 实例在首个页面请求时构建一次，重建会丢缓存。
+- **示例**: `30`
+
+#### `page_cache_max_entries`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `4096`
+- **说明**: moka L1 缓存最大条目数。索引文件数十个 + 热点源文件，超出由 moka LRU 淘汰。**改后需重启生效**。
+- **示例**: `4096`
 
 ---
 

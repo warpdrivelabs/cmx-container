@@ -347,6 +347,8 @@ hex = "0.4"
 sha1 = "0.10"
 # MD5 哈希
 md5 = "0.7"
+# 非加密内容哈希（页面 rev = xxhash64 截断 16 hex，作 ETag 与缓存校验锚点）
+xxhash-rust = { version = "0.8", features = ["xxh64"] }
 # TOML 解析
 toml = "0.8"
 # 图像处理

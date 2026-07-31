@@ -6,10 +6,14 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::cache::{cached_read_json, cached_read_text, content_rev, invalidate_paths};
 use crate::config::data_path;
 use crate::error::{PortalError, PortalResult};
-use crate::fsutil::{read_json_opt, read_text_opt, write_json_atomic, write_text_atomic};
+use crate::fsutil::{write_json_atomic, write_text_atomic};
 use crate::util::{is_safe_id, is_safe_segment, write_lock};
+
+/// 批量读取单次最大页面数（与 html.rs 对齐）。
+const MAX_BATCH: usize = 64;
 
 /// 保存入参。
 #[derive(Debug, Clone, Deserialize)]
@@ -49,6 +53,9 @@ pub struct NativePageFull {
     /// 源文件相对路径。
     #[serde(rename = "relPath")]
     pub rel_path: String,
+    /// 内容版本锚点（xxhash64 → 16 hex），作 ETag 与缓存校验。
+    #[serde(default)]
+    pub rev: String,
     /// 源码文本。
     pub source: String,
 }
@@ -136,7 +143,7 @@ fn validate_rel_path(rel: &str) -> PortalResult<String> {
 
 /// 读取索引的 pages 数组（缺失返回空）。
 async fn load_index() -> PortalResult<Vec<serde_json::Value>> {
-    match read_json_opt(&index_path()).await? {
+    match cached_read_json(&index_path()).await? {
         Some(doc) => Ok(doc
             .get("pages")
             .and_then(|p| p.as_array())
@@ -158,7 +165,9 @@ async fn save_index(pages: &[serde_json::Value]) -> PortalResult<()> {
 
 /// 从索引行读取完整页面（含源码）。
 ///
-/// 校验 relPath/sourceType 后读取源文件，组装 [`NativePageFull`]。
+/// 校验 relPath/sourceType 后读取源文件，组装 [`NativePageFull`]。`rev`：
+/// - 索引行已有 → 透传；
+/// - 索引行缺失（存量未回填）→ 基于已读 source 现算，并触发索引回填（见 [`backfill_native_rev`]）。
 async fn full_page_from_row(row: &serde_json::Value) -> PortalResult<NativePageFull> {
     let rel_raw = row.get("relPath").and_then(|v| v.as_str()).unwrap_or("");
     let rel = validate_rel_path(rel_raw)?;
@@ -169,15 +178,18 @@ async fn full_page_from_row(row: &serde_json::Value) -> PortalResult<NativePageF
             .filter(|s| !s.is_empty())
             .unwrap_or(&source_type_from_rel(&rel)),
     )?;
-    let source = read_text_opt(&source_abs(&rel))
+    let source = cached_read_text(&source_abs(&rel))
         .await?
         .ok_or_else(|| PortalError::not_found("native page 源文件不存在"))?;
+    let id = row
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    // rev 实时算：基于已读 source 内容（方案2：不读索引行 rev，天然一致）。
+    let rev = content_rev(source.as_bytes());
     Ok(NativePageFull {
-        id: row
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
+        id,
         name: row
             .get("name")
             .and_then(|v| v.as_str())
@@ -190,6 +202,7 @@ async fn full_page_from_row(row: &serde_json::Value) -> PortalResult<NativePageF
             .to_string(),
         source_type,
         rel_path: rel_raw.to_string(),
+        rev,
         source,
     })
 }
@@ -244,15 +257,20 @@ pub async fn get_native_page_by_id(id: &str) -> PortalResult<NativePageFull> {
     full_page_from_row(row).await
 }
 
-/// 批量按 id 取完整原生页面，返回 `{ pages, errors }`。
+/// 批量按 id 取原生页面，支持 `clientRevs` 差异同步，返回 `{ pages, revs, errors }`。
+///
+/// # 差异同步协议（同 html batch，详见方案 2.3）
+///
+/// 请求体可选 `clientRevs: { id → rev }`：缺省全量返回 body；存在则仅 rev 不等的 page 返回 body。
+/// `revs` 始终返回全量 `{ id → rev }` 清单。
 ///
 /// # Arguments
 ///
-/// * `body` - 请求体，支持 `{ ids: string[] }` 或顶层数组。
+/// * `body` - 请求体，支持 `{ ids, clientRevs? }` 或顶层 ids 数组。
 ///
 /// # Returns
 ///
-/// 返回 `{ pages, errors }`，单条失败不阻断，记入 errors。
+/// 返回 `{ pages, revs, errors }`，单条失败不阻断，记入 errors。
 pub async fn get_native_pages_by_ids(body: &serde_json::Value) -> PortalResult<serde_json::Value> {
     // 支持 { ids: [...] } 或 [...]
     let ids: Vec<String> = if let Some(arr) = body.as_array() {
@@ -268,16 +286,34 @@ pub async fn get_native_pages_by_ids(body: &serde_json::Value) -> PortalResult<s
             "请求体须为 { ids: string[] } 或 string[]",
         ));
     };
+    // 解析可选 clientRevs：{ id → rev }
+    let client_revs: std::collections::HashMap<String, String> = body
+        .get("clientRevs")
+        .and_then(|v| v.as_object())
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect()
+        })
+        .unwrap_or_default();
+    // diff 模式：前端传了 clientRevs 即按差异同步。与 moka 缓存无关（rev 现算）。
+    let diff_mode = !client_revs.is_empty();
     // 去重 + 去空
     let mut seen = std::collections::HashSet::new();
     let cleaned: Vec<String> = ids
         .into_iter()
         .filter(|s| !s.is_empty() && seen.insert(s.clone()))
         .collect();
+    if cleaned.len() > MAX_BATCH {
+        return Err(PortalError::bad_request(format!(
+            "单次最多 {MAX_BATCH} 个 native page ID"
+        )));
+    }
 
     let pages_index = load_index().await?;
     let mut pages = Vec::new();
     let mut errors = Vec::new();
+    let mut revs = serde_json::Map::new();
     // 逐个解析：id 非法/不存在/源码缺失分别记入 errors
     for raw_id in cleaned {
         match validate_id(&raw_id) {
@@ -286,7 +322,16 @@ pub async fn get_native_pages_by_ids(body: &serde_json::Value) -> PortalResult<s
                 .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(id.as_str()))
             {
                 Some(row) => match full_page_from_row(row).await {
-                    Ok(full) => pages.push(serde_json::to_value(full)?),
+                    Ok(full) => {
+                        // 方案2：rev 由 full_page_from_row 读源文件现算（不读索引行 rev）。
+                        revs.insert(id.clone(), json!(full.rev));
+                        // 差异模式：clientRevs 命中则省略 body，仅出现在 revs 清单。
+                        let hit = diff_mode
+                            && client_revs.get(&id).map(|c| c == &full.rev).unwrap_or(false);
+                        if !hit {
+                            pages.push(serde_json::to_value(full)?);
+                        }
+                    }
                     Err(e) => errors.push(json!({ "id": id, "error": e.to_string() })),
                 },
                 None => errors.push(json!({ "id": id, "error": "native page 不存在" })),
@@ -294,7 +339,7 @@ pub async fn get_native_pages_by_ids(body: &serde_json::Value) -> PortalResult<s
             Err(e) => errors.push(json!({ "id": raw_id, "error": e.to_string() })),
         }
     }
-    Ok(json!({ "pages": pages, "errors": errors }))
+    Ok(json!({ "pages": pages, "revs": revs, "errors": errors }))
 }
 
 /// 保存原生页面（写源文件 + 索引 upsert）。
@@ -334,6 +379,13 @@ pub async fn save_native_page(input: NativePageInput) -> PortalResult<serde_json
     let source = input
         .source
         .ok_or_else(|| PortalError::bad_request("source 必须为字符串"))?;
+
+    // 全局写锁串行化
+    let _guard = write_lock().lock().await;
+    // 写源文件
+    let src_path = source_abs(&rel_path);
+    write_text_atomic(&src_path, &source).await?;
+    // 注：rev 不再写入索引行（方案2：读路径实时算 hash，索引保持纯净）。
     let row = json!({
         "id": id,
         "name": input.name.unwrap_or_default(),
@@ -342,10 +394,6 @@ pub async fn save_native_page(input: NativePageInput) -> PortalResult<serde_json
         "relPath": rel_path,
     });
 
-    // 全局写锁串行化
-    let _guard = write_lock().lock().await;
-    // 写源文件
-    write_text_atomic(&source_abs(&rel_path), &source).await?;
     // 索引 upsert：存在则合并，否则追加
     let mut pages = load_index().await?;
     if let Some(existing) = pages
@@ -362,5 +410,8 @@ pub async fn save_native_page(input: NativePageInput) -> PortalResult<serde_json
         pages.push(row.clone());
     }
     save_index(&pages).await?;
+    // 失效本进程 L1 缓存：源文件（内容变了）+ 索引文件。rev 实时算不存索引，跨节点靠源文件内容天然一致。
+    invalidate_paths(&[src_path.as_path(), index_path().as_path()]).await;
     Ok(row)
 }
+
