@@ -1432,6 +1432,8 @@ dependencies = [
  "cmx-portal-base",
  "serde",
  "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -1687,10 +1689,12 @@ version = "0.1.12"
 dependencies = [
  "cmx-api-types",
  "cmx-utils",
+ "moka",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+ "xxhash-rust",
 ]
 
 [[package]]

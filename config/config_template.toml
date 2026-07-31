@@ -659,3 +659,29 @@ failure_mode = "FailClose"
 # service_name = "internal-service"
 # scopes = "read,write"
 # description = "内部服务 API Key"
+
+# ============================================
+# 门户配置
+# ============================================
+[portal]
+# 门户数据根目录（相对进程工作目录）。存放 menu-pages / html-pages / native-pages / dict / meta 等 JSON 资源。
+# 也可用环境变量 CMX_PORTAL_DATA_ROOT 覆盖；缺省回退 ./data。
+data_root = "./data"
+# 同源托管的前端生产构建产物目录（npm run build 产物）。留空 = 不托管（开发期走 vite dev server）。
+web_portal_dist = ""
+# HTML 设计器生产构建产物目录。留空 = 不托管。
+web_html_dist = ""
+
+## 门户页面 moka L1 缓存总开关（默认值 false，可选）。仅控制「进程内文件内容缓存」（省磁盘 I/O）。
+## false：cached_read_* 直穿读盘、不回填 moka；invalidate_* 空操作。
+## true：启用 moka L1，索引文件 + 源文件按 TTL/容量缓存。运行时热读，改后新请求即时生效。
+## 注：ETag/304 与 batch diff 是 HTTP 协议层缓存（rev 实时算），不受此开关影响，始终生效。
+# page_cache_enabled = false
+
+## moka L1 缓存条目存活时长（默认值 30，单位秒，可选）。用 time_to_live（非 time_to_idle）避免热 key 内存膨胀。
+## 改后需重启生效（moka 实例在首个页面请求时构建一次，重建会丢缓存）。
+# page_cache_ttl_secs = 30
+
+## moka L1 缓存最大条目数（默认值 4096，可选）。索引文件数十个 + 热点源文件，超出由 moka LRU 淘汰。
+## 改后需重启生效。
+# page_cache_max_entries = 4096

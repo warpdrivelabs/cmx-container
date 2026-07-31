@@ -9,9 +9,10 @@
 
 use serde_json::json;
 
+use crate::cache::{cached_read_json, cached_read_text, content_rev, invalidate_paths};
 use crate::config::data_path;
 use crate::error::{PortalError, PortalResult};
-use crate::fsutil::{read_json_opt, read_text_opt, write_json_atomic, write_text_atomic};
+use crate::fsutil::{write_json_atomic, write_text_atomic};
 use crate::util::{is_safe_id, is_safe_segment, write_lock};
 
 /// 旧式无命名空间页面归入的虚拟域。
@@ -139,7 +140,7 @@ fn source_abs(rel: &str) -> std::path::PathBuf {
 
 /// 读取 v1 列表的 pages 数组。
 async fn load_list() -> PortalResult<Vec<serde_json::Value>> {
-    Ok(read_json_opt(&list_path())
+    Ok(cached_read_json(&list_path())
         .await?
         .and_then(|d| d.get("pages").and_then(|p| p.as_array()).cloned())
         .unwrap_or_default())
@@ -151,7 +152,7 @@ async fn persist_list(pages: &[serde_json::Value]) -> PortalResult<()> {
 
 /// 读取分片的 pages 数组。
 async fn load_shard(domain: &str) -> PortalResult<Vec<serde_json::Value>> {
-    Ok(read_json_opt(&shard_path(domain))
+    Ok(cached_read_json(&shard_path(domain))
         .await?
         .and_then(|d| d.get("pages").and_then(|p| p.as_array()).cloned())
         .unwrap_or_default())
@@ -168,7 +169,7 @@ async fn persist_shard(domain: &str, pages: &[serde_json::Value]) -> PortalResul
 
 /// 读取顶层域清单。
 async fn load_top_domains() -> PortalResult<Vec<String>> {
-    Ok(read_json_opt(&top_index_path())
+    Ok(cached_read_json(&top_index_path())
         .await?
         .and_then(|d| d.get("domains").and_then(|x| x.as_array()).cloned())
         .map(|arr| {
@@ -263,9 +264,11 @@ async fn find_row_anywhere(id: &str) -> PortalResult<Option<serde_json::Value>> 
 /// 由 row 读取完整页面（含 html，带 v2→v1 回退）。
 ///
 /// v2 relPath 源文件缺失时回退到 v1 latestHtmlFile 扁平文件。
+/// `rev` 实时由已读 html 算出（xxhash64 → 16 hex），作 ETag / 前端缓存校验锚点。
+/// 方案2：不依赖索引行存储的 rev，读时现算，天然与源文件一致。
 async fn read_full_from_row(row: &serde_json::Value) -> PortalResult<serde_json::Value> {
     let abs = resolve_html_abs(row)?;
-    let mut html = read_text_opt(&abs).await?;
+    let mut html = cached_read_text(&abs).await?;
     // v2 relPath 失败时回退到 v1 latestHtmlFile
     if html.is_none()
         && row.get("relPath").is_some()
@@ -278,10 +281,12 @@ async fn read_full_from_row(row: &serde_json::Value) -> PortalResult<serde_json:
             .file_name()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
-        html = read_text_opt(&source_abs(&base)).await?;
+        html = cached_read_text(&source_abs(&base)).await?;
     }
     let html = html.ok_or_else(|| PortalError::not_found("HTML 源码文件缺失或损坏"))?;
     let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    // rev 实时算：基于已读 html 内容（不读索引行 rev，天然一致）。
+    let rev = content_rev(html.as_bytes());
     Ok(json!({
         "id": id,
         "name": row.get("name").and_then(|v| v.as_str()).unwrap_or(""),
@@ -291,6 +296,7 @@ async fn read_full_from_row(row: &serde_json::Value) -> PortalResult<serde_json:
         "module": row.get("module"),
         "doc": row.get("doc"),
         "relPath": row.get("relPath"),
+        "rev": rev,
         "latestHtmlFile": row.get("latestHtmlFile").and_then(|v| v.as_str()).map(|s| s.to_string())
             .unwrap_or_else(|| format!("{id}.html")),
         "html": html,
@@ -467,8 +473,10 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
     // 全局写锁串行化
     let _guard = write_lock().lock().await;
     // 写源文件
-    write_text_atomic(&source_abs(&rel_path), &html).await?;
+    let src_path = source_abs(&rel_path);
+    write_text_atomic(&src_path, &html).await?;
 
+    // 注：rev 不再写入索引行（方案2：读路径实时算 hash，索引保持纯净）。
     let row = json!({
         "id": id, "name": name, "details": details,
         "domain": domain, "app": app, "module": module, "page": ns.page,
@@ -488,8 +496,12 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
     persist_shard(&domain, &shard).await?;
     // 维护顶层域清单
     let mut domains = load_top_domains().await?;
+    let mut top_dirty = false;
     if !domains.iter().any(|d| d == &domain) {
         domains.push(domain.clone());
+        top_dirty = true;
+    }
+    if top_dirty {
         persist_top_domains(&domains).await?;
     }
 
@@ -508,6 +520,17 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
         list.push(row.clone());
     }
     persist_list(&list).await?;
+
+    // 失效本进程 L1 缓存：源文件（内容变了）+ 变更的索引文件。
+    // rev 实时算，不存索引，故跨节点靠源文件内容天然一致；moka 各自 TTL 收敛。
+    let list_p = list_path();
+    let shard_p = shard_path(&domain);
+    let top_p = top_index_path();
+    let mut to_invalidate: Vec<&std::path::Path> = vec![src_path.as_path(), list_p.as_path(), shard_p.as_path()];
+    if top_dirty {
+        to_invalidate.push(top_p.as_path());
+    }
+    invalidate_paths(&to_invalidate).await;
 
     Ok(row)
 }
@@ -530,15 +553,22 @@ pub async fn get_html_page_by_id(id: &str) -> PortalResult<serde_json::Value> {
     read_full_from_row(&row).await
 }
 
-/// 批量按 id 取完整页面（domain 分桶 + 分片缓存），返回 `{ pages, errors }`。
+/// 批量按 id 取页面，支持 `clientRevs` 差异同步，返回 `{ pages, revs, errors }`。
+///
+/// # 差异同步协议（详见方案 2.3）
+///
+/// 请求体可选 `clientRevs: { id → rev }`：
+/// - 缺省 / 空 → 全量返回所有 page 的 body（向后兼容老前端）。
+/// - 存在 → 仅当 `clientRevs[id] !== 索引行 rev` 时才读源文件返回 body；命中（相等）则省略 body。
+/// `revs` 始终返回全量 `{ id → rev }` 清单，供前端刷新本地 rev 表。
 ///
 /// # Arguments
 ///
-/// * `body` - 请求体，支持 `{ ids: string[] }` 或顶层数组。
+/// * `body` - 请求体，支持 `{ ids, clientRevs? }` 或顶层 ids 数组。
 ///
 /// # Returns
 ///
-/// 返回 `{ pages, errors }`；单条失败不阻断，记入 errors。
+/// 返回 `{ pages, revs, errors }`；单条失败不阻断，记入 errors。
 pub async fn get_html_pages_by_ids(body: &serde_json::Value) -> PortalResult<serde_json::Value> {
     // 解析 ids：支持 { ids: [...] } 或顶层数组
     let ids: Vec<String> = if let Some(arr) = body.as_array() {
@@ -554,6 +584,19 @@ pub async fn get_html_pages_by_ids(body: &serde_json::Value) -> PortalResult<ser
             "请求体须为 { ids: string[] } 或 JSON 字符串数组",
         ));
     };
+    // 解析可选 clientRevs：{ id → rev }（rev 为字符串）
+    let client_revs: std::collections::HashMap<String, String> = body
+        .get("clientRevs")
+        .and_then(|v| v.as_object())
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect()
+        })
+        .unwrap_or_default();
+    // diff 模式：前端传了 clientRevs 即按差异同步（命中省 body 带宽）。
+    // 与 moka 进程内缓存无关——rev 读源文件现算，故不查 page_cache_enabled 开关。
+    let diff_mode = !client_revs.is_empty();
     // 去重 + 去空
     let mut seen = std::collections::HashSet::new();
     let cleaned: Vec<String> = ids
@@ -586,6 +629,7 @@ pub async fn get_html_pages_by_ids(body: &serde_json::Value) -> PortalResult<ser
         std::collections::HashMap::new();
     let mut legacy_list: Option<Vec<serde_json::Value>> = None;
     let mut pages: Vec<serde_json::Value> = Vec::new();
+    let mut revs = serde_json::Map::new();
 
     // 逐域逐 id 查找并读取
     for (domain, id_list) in by_domain {
@@ -611,16 +655,36 @@ pub async fn get_html_pages_by_ids(body: &serde_json::Value) -> PortalResult<ser
             }
             match row {
                 Some(r) => match read_full_from_row(&r).await {
-                    Ok(full) => pages.push(full),
-                    Err(e) => errors.push(json!({ "id": id, "error": e.to_string() })),
+                    Ok(full) => {
+                        // 方案2：rev 由 read_full_from_row 读源文件现算（不读索引行 rev）。
+                        let actual_rev = full
+                            .get("rev")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        revs.insert(id.clone(), json!(actual_rev));
+                        // 差异模式：clientRevs 命中（rev 相等）则省略 body，仅出现在 revs 清单。
+                        // 注：方案2下命中也要读源文件算 hash（无法避免），但省了 body 网络传输。
+                        let hit = diff_mode
+                            && client_revs.get(&id).map(|c| c == &actual_rev).unwrap_or(false);
+                        if !hit {
+                            pages.push(full);
+                        }
+                    }
+                    Err(e) => {
+                        errors.push(json!({ "id": id, "error": e.to_string() }))
+                    }
                 },
                 None => errors.push(json!({ "id": id, "error": "页面不存在" })),
             }
         }
     }
 
-    Ok(json!({ "pages": pages, "errors": errors }))
+    Ok(json!({ "pages": pages, "revs": revs, "errors": errors }))
 }
+
+// 注：索引重建（rebuild-index）接口已移除。方案改为读路径实时计算 rev（天然一致），
+// 不再依赖索引行存储的 rev，故手动/AI 改源文件后无需重建索引——下次读取即感知变化。
 
 #[cfg(test)]
 mod tests {
@@ -651,4 +715,5 @@ mod tests {
         assert!(parse_page_namespace("a..b").is_err());
         assert!(parse_page_namespace(".a").is_err());
     }
+
 }

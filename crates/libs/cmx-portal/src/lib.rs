@@ -32,7 +32,7 @@
 
 // 基础设施从 base 再导出：保持 crate::config / crate::PortalError / cmx_portal::data_root 等旧路径。
 pub use cmx_portal_base::{
-    PortalError, PortalResult, config, data_root, error, fsutil, now_millis, util,
+    PortalError, PortalResult, cache, config, data_root, error, fsutil, now_millis, util,
 };
 
 // 拆出的子中心再导出：保持 cmx_portal::pages / ::definitions / ::flexible_combination / ::dict
