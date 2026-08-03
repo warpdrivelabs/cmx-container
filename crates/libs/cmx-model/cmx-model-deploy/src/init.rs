@@ -11,7 +11,7 @@ use cmx_api_types::Result;
 
 use crate::db_err;
 use crate::ledger::{
-    ensure_ledger_schema, ledger_schema_status, read_meta, INIT_DDL,
+    ensure_ledger_schema, ledger_schema_status, read_meta, LEDGER_INIT_DDL,
 };
 use crate::{ENGINE_VERSION, LEDGER_TABLES, META_VERSION};
 
@@ -20,8 +20,8 @@ use crate::{ENGINE_VERSION, LEDGER_TABLES, META_VERSION};
 /// # 流程
 ///
 /// 1. 检测 reinit（已初始化时升级，否则新建）
-/// 2. 跑 `INIT_DDL` 逐条建系统表（DDL 自动提交，txn_id=None）
-/// 3. 调 `ensure_ledger_schema` 补齐 schema + 迁移旧横向列
+/// 2. 跑 `LEDGER_INIT_DDL` 逐条建系统表（DDL 自动提交，txn_id=None）
+/// 3. 调 `ensure_ledger_schema` 应用台账升级补丁（当前为空，见 `LEDGER_UPGRADE_DDL`）
 /// 4. 开启事务 → `write_meta_and_history` 写 meta + 历史 → 提交
 /// 5. 调 `db_state` 返回最新状态（前端可立即刷新工作台）
 pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Result<Value> {
@@ -29,7 +29,7 @@ pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Res
     // reinit = 已存在 cmx_model_meta 行（首次初始化时为 false）
     let reinit = read_meta(db_id).await?.is_some();
     // 1) 建系统表（DDL 自动提交，txn_id=None）
-    for ddl in INIT_DDL {
+    for ddl in LEDGER_INIT_DDL {
         mm.execute_sql(db_id, None, ddl)
             .await
             .map_err(db_err("建台账系统表失败"))?;
@@ -123,6 +123,21 @@ pub(crate) fn ev(kind: &str, data: Value) -> InitEvent {
     }
 }
 
+/// 从单条 DDL 粗提对象名，用于进度展示。
+///
+/// 支持 `CREATE [UNIQUE] TABLE/INDEX IF NOT EXISTS <名称>`
+/// 与 `COMMENT ON TABLE/COLUMN <名称>` 两类语句；其余返回空串。
+fn ddl_display_object(ddl: &str) -> String {
+    let words: Vec<&str> = ddl.split_whitespace().collect();
+    if let Some(pos) = words.iter().position(|w| w.eq_ignore_ascii_case("EXISTS")) {
+        return words.get(pos + 1).copied().unwrap_or("").to_string();
+    }
+    if words.first().is_some_and(|w| w.eq_ignore_ascii_case("COMMENT")) {
+        return words.get(3).copied().unwrap_or("").to_string();
+    }
+    String::new()
+}
+
 /// 流式生成初始化/系统表升级计划：只读探测，不执行 DDL、不写台账。
 pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSender<InitEvent>) {
     let send = |e: InitEvent| {
@@ -159,11 +174,7 @@ pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSend
         }
     };
     let reinit = meta.is_some();
-    let meta_version = meta
-        .as_ref()
-        .and_then(|m| m.get("meta_version"))
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0);
+    let meta_version = meta.as_ref().map(|m| m.meta_version).unwrap_or(0);
     let schema = match ledger_schema_status(db_id).await {
         Ok(v) => v,
         Err(e) => {
@@ -178,7 +189,7 @@ pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSend
         "step",
         json!({
             "message": if reinit {
-                if meta_version < META_VERSION as i64 || schema.needs_upgrade {
+                if meta_version < META_VERSION || schema.needs_upgrade {
                     "检测到旧版基础管理结构：将生成可审核升级计划"
                 } else {
                     "该库已初始化：计划执行基础管理加性校验，不删除任何数据"
@@ -193,18 +204,13 @@ pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSend
         }),
     ));
 
-    let total = INIT_DDL.len();
+    let total = LEDGER_INIT_DDL.len();
     send(ev(
         "step",
-        json!({ "message": format!("计划检查/执行 {total} 条幂等 DDL（CREATE IF NOT EXISTS / INDEX IF NOT EXISTS）"), "total": total }),
+        json!({ "message": format!("计划检查/执行 {total} 条幂等 DDL（CREATE/INDEX IF NOT EXISTS + COMMENT）"), "total": total }),
     ));
-    for (i, ddl) in INIT_DDL.iter().enumerate() {
-        let obj = ddl
-            .split_whitespace()
-            .skip_while(|w| !w.eq_ignore_ascii_case("EXISTS"))
-            .nth(1)
-            .unwrap_or("")
-            .to_string();
+    for (i, ddl) in LEDGER_INIT_DDL.iter().enumerate() {
+        let obj = ddl_display_object(ddl);
         send(ev(
             "progress",
             json!({
@@ -218,18 +224,11 @@ pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSend
     if reinit {
         send(ev(
             "step",
-            json!({ "message": "升级影响说明：本次为加性升级，只创建缺失台账/索引、补齐缺失列并迁移当前态；不会删除业务表、不会删除台账数据、不会删除旧列。" }),
+            json!({ "message": "升级影响说明：本次为幂等校验，只创建缺失的台账表/索引并刷新注释；不会删除业务表、不会删除台账数据、不会删除任何列。" }),
         ));
         send(ev(
             "progress",
-            json!({
-                "message": "将把 DCT/DOC/RPT/SEED 等类型版本状态迁移到 cmx_model_module_kind；以后新增类型只新增 kind 行，不再修改 cmx_model_module 结构。",
-                "legacy_columns": schema.legacy_kind_columns,
-            }),
-        ));
-        send(ev(
-            "progress",
-            json!({ "message": "升级完成前将锁定模块创建/安装/升级，避免用旧台账结构写入新类型状态。" }),
+            json!({ "message": "升级完成前将锁定模块创建/安装/升级，避免新旧台账结构混写。" }),
         ));
     }
     send(ev(
@@ -256,17 +255,6 @@ pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSend
             "note": "按行保存 DCT/DOC/RPT/SEED/... 的版本与状态，新增类型不再改主表",
         }),
     ];
-    if reinit && !schema.legacy_kind_columns.is_empty() {
-        results.push(json!({
-            "module": "旧台账数据迁移",
-            "kind": "SYS",
-            "status": "planned",
-            "version": META_VERSION,
-            "tables": 1,
-            "table_names": ["cmx_model_module", "cmx_model_module_kind"],
-            "note": format!("从旧列迁移当前态：{}", schema.legacy_kind_columns.join(", ")),
-        }));
-    }
     results.push(json!({
         "module": "版本标记",
         "kind": "SYS",
@@ -285,9 +273,9 @@ pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSend
             "ddl_count": total,
             "results": results,
             "impacts": [
-                "仅执行加性 DDL：CREATE TABLE IF NOT EXISTS、CREATE INDEX IF NOT EXISTS、ADD COLUMN IF NOT EXISTS。",
-                "不删除业务表、不删除台账数据、不删除旧横向列；旧列只作为迁移来源保留。",
-                "升级完成后模块类型状态写入 cmx_model_module_kind，新增模块类型不再需要改 cmx_model_module 表结构。",
+                "仅执行幂等 DDL：CREATE TABLE IF NOT EXISTS、CREATE INDEX IF NOT EXISTS、COMMENT ON（覆盖更新注释）。",
+                "不删除业务表、不删除台账数据、不删除任何列。",
+                "模块类型状态按行存于 cmx_model_module_kind，新增模块类型不需要改 cmx_model_module 表结构。",
                 "升级未完成前，模块创建/安装/升级会被阻止，以避免新旧台账混写。",
             ],
             "db_id": db_id,
@@ -340,20 +328,15 @@ pub async fn init_db_stream(
         ));
     }
 
-    // 1) 逐条建系统表（DDL 自动提交，每条发进度）。CREATE TABLE IF NOT EXISTS 天然加性、可重复。
-    let total = INIT_DDL.len();
+    // 1) 逐条建系统表（DDL 自动提交，每条发进度）。CREATE ... IF NOT EXISTS 天然幂等、可重复。
+    let total = LEDGER_INIT_DDL.len();
     send(ev(
         "step",
         json!({ "message": format!("{}台账系统表（{total} 条 DDL）", if reinit { "校验" } else { "创建" }), "total": total }),
     ));
-    for (i, ddl) in INIT_DDL.iter().enumerate() {
+    for (i, ddl) in LEDGER_INIT_DDL.iter().enumerate() {
         // 从 DDL 里粗提对象名用于展示
-        let obj = ddl
-            .split_whitespace()
-            .skip_while(|w| !w.eq_ignore_ascii_case("EXISTS"))
-            .nth(1)
-            .unwrap_or("")
-            .to_string();
+        let obj = ddl_display_object(ddl);
         match mm.execute_sql(db_id, None, ddl).await {
             Ok(_) => send(ev(
                 "progress",
@@ -373,7 +356,7 @@ pub async fn init_db_stream(
     }
     send(ev(
         "step",
-        json!({ "message": "补齐/升级基础管理结构，并迁移旧版模块类型当前态 …" }),
+        json!({ "message": "校验基础管理结构（应用台账升级补丁）…" }),
     ));
     if let Err(e) = ensure_ledger_schema(db_id).await {
         send(ev(
@@ -384,7 +367,7 @@ pub async fn init_db_stream(
     }
     send(ev(
         "progress",
-        json!({ "message": "基础管理结构已补齐；旧横向类型列如存在，已迁移到 cmx_model_module_kind" }),
+        json!({ "message": "基础管理结构校验完成" }),
     ));
 
     // 2) 写/更新 meta + 记历史（事务）。UPSERT：首次插入，重复初始化则更新 last_upgraded_at（不动 initialized_*）。

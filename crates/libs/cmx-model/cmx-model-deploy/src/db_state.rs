@@ -227,11 +227,7 @@ pub(crate) fn compute_seed_menu_cell(
 pub async fn db_state(db_id: &str) -> Result<Value> {
     let meta = ledger::read_meta(db_id).await?;
     let initialized = meta.is_some();
-    let meta_version = meta
-        .as_ref()
-        .and_then(|m| m.get("meta_version"))
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0) as i32;
+    let meta_version = meta.as_ref().map(|m| m.meta_version).unwrap_or(0);
     if !initialized {
         return Ok(gate_state_uninitialized(db_id));
     }
@@ -521,9 +517,9 @@ fn gate_state_uninitialized(db_id: &str) -> Value {
     })
 }
 
-/// 库门闸：需升级时早返回（meta_version 不匹配 或 schema 缺失列）。
+/// 库门闸：需升级时早返回（meta_version 不匹配 或 台账对象缺失）。
 ///
-/// 携带 `upgrade_reasons` / `legacy_kind_columns` / `missing_tables` 给前端展示"为什么需要升级"。
+/// 携带 `upgrade_reasons` / `missing_tables` 给前端展示"为什么需要升级"。
 /// 同样不返回 `installed_modules` / `modules`（升级未完成前禁止业务操作）。
 fn gate_state_meta_upgrade(db_id: &str, meta_version: i32, schema: &LedgerSchemaStatus) -> Value {
     json!({
@@ -535,7 +531,6 @@ fn gate_state_meta_upgrade(db_id: &str, meta_version: i32, schema: &LedgerSchema
         "page_mode": "meta_upgrade",
         "upgrade_required": true,
         "upgrade_reasons": schema.reasons,
-        "legacy_kind_columns": schema.legacy_kind_columns,
         "missing_tables": schema.missing_tables,
         "scenario_counts": Counts::default().to_json(),
         "installed_modules": [],
