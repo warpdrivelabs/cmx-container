@@ -565,7 +565,7 @@ function mcVersionOptionsHtml (m, kind) {
 }
 
 /**
- * 模块矩阵单元格 HTML（buildPanelHtml 与 rerenderMatrix 共用）。
+ * 模块矩阵单元格 HTML（buildPanelHtml 与 mcAvailablePanelHtml 共用）。
  * @param {object} m  模块对象
  * @param {object} k  MC_KINDS 元素 { id, label, icon }
  * @param {object} [opts]
@@ -890,65 +890,9 @@ function buildPanelHtml (ds) {
     ${badge('create')}${badge('upgrade')}${badge('current')}${badge('retry')}${badge('drift')}
   </div>`
 
-  const installed = (b.dbState?.installed_modules || []).filter(mcModuleMatchesFilter)
-  const installedCollapsed = mcCollapsed('installed')
-  const availableCollapsed = mcCollapsed('available')
-  const installedPanel = `
-    <div class="mc-panel mc-panel-installed">
-      <div class="mc-panel-h"><span><ui5-icon name="status-positive"></ui5-icon>当前数据库已创建模块</span><span class="mc-panel-actions"><b>${installed.length}</b>${mcCollapseButton('installed', '当前数据库已创建模块')}</span></div>
-      ${installedCollapsed ? '' : (installed.length ? `<div class="mc-installed">
-        <div class="mc-installed-head"><span>模块</span><span>版本与明细</span><span>创建 / 更新</span><span>表数</span></div>
-        ${installed.map((m) => {
-          // 表数 = DCT 字典表数 + DOC 单据表数（SEED/MENU 不计入物理表数）
-          const cellTables = (kind) => Number(m.cells?.[kind]?.table_count) || 0
-          const totalTables = cellTables('DCT') + cellTables('DOC')
-          const tblText = totalTables || m.table_count || '-'
-          // 已安装面板只展示"真正装过"的 kind：status 非 none 且 applied 有值（含版本号/日期）。
-          // 未装的 kind 不在此面板出现——它们会以下方「可创建 / 安装 / 升级」面板按 scenario=create 列出。
-          const installedKinds = MC_KINDS.filter((k) => {
-            const c = m.cells?.[k.id]
-            if (!c) return false
-            const applied = c.applied ?? c.version
-            return c.status && c.status !== 'none' && applied != null && applied !== ''
-          })
-          const kindsHtml = installedKinds.length
-            ? installedKinds.map((k) => mcKindDetailHtml(m.cells?.[k.id], k.id, m.key)).join('')
-            : `<div class="mc-kind-detail mc-kind-empty">该模块无已安装的资源</div>`
-          return `<div class="mc-installed-row">
-          <div class="mc-installed-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div><div class="mc-mmod-s">${esc(m.deployed_name || m.deployed_by || '')}</div></div>
-          <div class="mc-installed-kinds">${kindsHtml}</div>
-          <div class="mc-installed-time"><span>${mcShortDate(m.created_at || m.first_deployed_at || m.create_time)}</span><span>${mcShortDate(m.updated_at || m.current_deployed_at || m.update_time)}</span></div>
-          <div class="mc-mtbl">${tblText}</div>
-        </div>`
-        }).join('')}
-      </div>` : `<cmx-empty-state icon="database" title="当前数据库尚未创建符合筛选条件的模块" size="sm"></cmx-empty-state>`)}
-    </div>`
-
-  const modules = mcFilteredModules()
-  const actionable = modules.filter((m) => MC_KINDS.some((k) => {
-    const sc = m.cells[k.id].scenario
-    return sc === 'create' || sc === 'upgrade' || sc === 'retry' || sc === 'drift'
-  }))
-  const availablePanel = `
-    <div class="mc-panel">
-      <div class="mc-panel-h"><span><ui5-icon name="add-activity"></ui5-icon>当前选择下可创建 / 安装 / 升级模块</span><span class="mc-panel-actions"><b>${actionable.length}</b>${mcCollapseButton('available', '当前选择下可创建 / 安装 / 升级模块')}</span></div>
-      ${availableCollapsed ? '' : (actionable.length ? `<div class="mc-available">
-        <div class="mc-available-head"><span>模块</span><span>可创建 / 安装 / 升级的资源（点击勾选）</span><span></span><span>表数</span></div>
-        ${actionable.map((m) => {
-          // 只渲染有动作的 kind 格（create/upgrade/retry/drift），none/current 不显示
-          const activeKinds = MC_KINDS.filter((k) => {
-            const sc = m.cells[k.id]?.scenario
-            return sc === 'create' || sc === 'upgrade' || sc === 'retry' || sc === 'drift'
-          })
-          return `<div class="mc-available-row">
-          <div class="mc-available-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div></div>
-          <div class="mc-available-kinds">${activeKinds.map((k) => mcCellHtml(m, k, { withVersionSelector: true })).join('')}</div>
-          <div class="mc-available-spacer"></div>
-          <div class="mc-mtbl">${m.table_count}</div>
-        </div>`
-        }).join('')}
-      </div>` : `<cmx-empty-state icon="status-positive" title="当前筛选下没有待创建、安装或升级的模块" size="sm"></cmx-empty-state>`)}
-    </div>`
+  // 两个受搜索词影响的面板抽成共享构建函数（搜索时局部重渲见 mcRerenderQueryRegions）
+  const installedPanel = mcInstalledPanelHtml()
+  const availablePanel = mcAvailablePanelHtml()
 
   const picked = mcPickedCells()
   const nCreate = picked.filter((p) => p.cell.scenario === 'create').length
@@ -1813,10 +1757,25 @@ function bindOverview (root) {
     if (t.hasAttribute('data-mc-clear')) { b.picked = {}; b.forceRecreate = {}; b.versionPick = {}; b.plan = null; b.review = null; rerender(); return }
     if (t.hasAttribute('data-mc-run')) { void runMcPlan(); return }
   })
+  // 搜索输入：只局部重渲受查询影响的两个面板，不整片替换 .cds-bd —— 保住输入框焦点；
+  // 中文输入法组词期间（compositionstart→compositionend）跳过重渲，避免拼音被打断。
+  let composing = false
+  root.addEventListener('compositionstart', (e) => {
+    if (e.target instanceof Element && e.target.hasAttribute('data-mc-search')) composing = true
+  })
+  root.addEventListener('compositionend', (e) => {
+    if (!(e.target instanceof Element) || !e.target.hasAttribute('data-mc-search')) return
+    composing = false
+    b.query = e.target.value
+    mcRerenderQueryRegions(root)
+  })
   root.addEventListener('input', (e) => {
     const el = e.target
     if (!(el instanceof Element)) return
-    if (el.hasAttribute('data-mc-search')) { b.query = el.value; rerender() }
+    if (el.hasAttribute('data-mc-search')) {
+      b.query = el.value
+      if (!composing) mcRerenderQueryRegions(root)
+    }
   })
   // 版本选择器为 ui5-select：触发 'change'，detail.selectedOption 带 .value 与 dataset.file。
   root.addEventListener('change', (e) => {
@@ -1834,34 +1793,90 @@ function bindOverview (root) {
   })
 }
 
-/** 只重画可创建/安装/升级模块区（搜索时保输入焦点）。 */
-function rerenderMatrix (root) {
-  const host = root.querySelector('.mc-available, .cds-bd-empty')
-  if (!host || !host.closest('.cds-bd')) return
+/** 「已创建模块」面板 HTML（buildPanelHtml 与搜索局部重渲共用）。 */
+function mcInstalledPanelHtml () {
+  const b = state.build
+  const installed = (b.dbState?.installed_modules || []).filter(mcModuleMatchesFilter)
+  const collapsed = mcCollapsed('installed')
+  return `
+    <div class="mc-panel mc-panel-installed">
+      <div class="mc-panel-h"><span><ui5-icon name="status-positive"></ui5-icon>当前数据库已创建模块</span><span class="mc-panel-actions"><b>${installed.length}</b>${mcCollapseButton('installed', '当前数据库已创建模块')}</span></div>
+      ${collapsed ? '' : (installed.length ? `<div class="mc-installed">
+        <div class="mc-installed-head"><span>模块</span><span>版本与明细</span><span>创建 / 更新</span><span>表数</span></div>
+        ${installed.map((m) => {
+          // 表数 = DCT 字典表数 + DOC 单据表数（SEED/MENU 不计入物理表数）
+          const cellTables = (kind) => Number(m.cells?.[kind]?.table_count) || 0
+          const totalTables = cellTables('DCT') + cellTables('DOC')
+          const tblText = totalTables || m.table_count || '-'
+          // 已安装面板只展示"真正装过"的 kind：status 非 none 且 applied 有值（含版本号/日期）。
+          // 未装的 kind 不在此面板出现——它们会以下方「可创建 / 安装 / 升级」面板按 scenario=create 列出。
+          const installedKinds = MC_KINDS.filter((k) => {
+            const c = m.cells?.[k.id]
+            if (!c) return false
+            const applied = c.applied ?? c.version
+            return c.status && c.status !== 'none' && applied != null && applied !== ''
+          })
+          const kindsHtml = installedKinds.length
+            ? installedKinds.map((k) => mcKindDetailHtml(m.cells?.[k.id], k.id, m.key)).join('')
+            : `<div class="mc-kind-detail mc-kind-empty">该模块无已安装的资源</div>`
+          return `<div class="mc-installed-row">
+          <div class="mc-installed-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div><div class="mc-mmod-s">${esc(m.deployed_name || m.deployed_by || '')}</div></div>
+          <div class="mc-installed-kinds">${kindsHtml}</div>
+          <div class="mc-installed-time"><span>${mcShortDate(m.created_at || m.first_deployed_at || m.create_time)}</span><span>${mcShortDate(m.updated_at || m.current_deployed_at || m.update_time)}</span></div>
+          <div class="mc-mtbl">${tblText}</div>
+        </div>`
+        }).join('')}
+      </div>` : `<cmx-empty-state icon="database" title="当前数据库尚未创建符合筛选条件的模块" size="sm"></cmx-empty-state>`)}
+    </div>`
+}
+
+/** 「可创建 / 安装 / 升级模块」面板 HTML（buildPanelHtml 与搜索局部重渲共用）。 */
+function mcAvailablePanelHtml () {
   const modules = mcFilteredModules()
   const actionable = modules.filter((m) => MC_KINDS.some((k) => {
     const sc = m.cells[k.id].scenario
     return sc === 'create' || sc === 'upgrade' || sc === 'retry' || sc === 'drift'
   }))
-  const fresh = document.createElement('template')
-  fresh.innerHTML = actionable.length ? `
-    <div class="mc-available">
-      <div class="mc-available-head"><span>模块</span><span>可创建 / 安装 / 升级的资源（点击勾选）</span><span></span><span>表数</span></div>
-      ${actionable.map((m) => {
-        const activeKinds = MC_KINDS.filter((k) => {
-          const sc = m.cells[k.id]?.scenario
-          return sc === 'create' || sc === 'upgrade' || sc === 'retry' || sc === 'drift'
-        })
-        return `<div class="mc-available-row">
-        <div class="mc-available-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div></div>
-        <div class="mc-available-kinds">${activeKinds.map((k) => mcCellHtml(m, k, { withVersionSelector: true })).join('')}</div>
-        <div class="mc-available-spacer"></div>
-        <div class="mc-mtbl">${m.table_count}</div>
-      </div>`
-      }).join('')}
-    </div>` : `<cmx-empty-state icon="course-book" title="当前筛选下无模块" size="sm"></cmx-empty-state>`
-  const el = fresh.content.firstElementChild
-  if (el) host.replaceWith(el)
+  const collapsed = mcCollapsed('available')
+  return `
+    <div class="mc-panel mc-panel-available">
+      <div class="mc-panel-h"><span><ui5-icon name="add-activity"></ui5-icon>当前选择下可创建 / 安装 / 升级模块</span><span class="mc-panel-actions"><b>${actionable.length}</b>${mcCollapseButton('available', '当前选择下可创建 / 安装 / 升级模块')}</span></div>
+      ${collapsed ? '' : (actionable.length ? `<div class="mc-available">
+        <div class="mc-available-head"><span>模块</span><span>可创建 / 安装 / 升级的资源（点击勾选）</span><span></span><span>表数</span></div>
+        ${actionable.map((m) => {
+          // 只渲染有动作的 kind 格（create/upgrade/retry/drift），none/current 不显示
+          const activeKinds = MC_KINDS.filter((k) => {
+            const sc = m.cells[k.id]?.scenario
+            return sc === 'create' || sc === 'upgrade' || sc === 'retry' || sc === 'drift'
+          })
+          return `<div class="mc-available-row">
+          <div class="mc-available-mod"><div class="mc-mmod-t">${esc(m.module_name)}</div><div class="mc-mmod-s">${esc(m.domain)}/${esc(m.app)}/${esc(m.module)}</div></div>
+          <div class="mc-available-kinds">${activeKinds.map((k) => mcCellHtml(m, k, { withVersionSelector: true })).join('')}</div>
+          <div class="mc-available-spacer"></div>
+          <div class="mc-mtbl">${m.table_count}</div>
+        </div>`
+        }).join('')}
+      </div>` : `<cmx-empty-state icon="status-positive" title="当前筛选下没有待创建、安装或升级的模块" size="sm"></cmx-empty-state>`)}
+    </div>`
+}
+
+/** 搜索局部重渲：只替换受搜索词影响的两个面板，不触碰工具条输入框（保焦点与输入法组词）。 */
+function mcRerenderQueryRegions (root) {
+  const bd = root.querySelector('.cds-bd')
+  if (!bd) return
+  const tmp = document.createElement('template')
+  const installedEl = bd.querySelector('.mc-panel-installed')
+  if (installedEl) {
+    tmp.innerHTML = mcInstalledPanelHtml()
+    const fresh = tmp.content.firstElementChild
+    if (fresh) installedEl.replaceWith(fresh)
+  }
+  const availableEl = bd.querySelector('.mc-panel-available')
+  if (availableEl) {
+    tmp.innerHTML = mcAvailablePanelHtml()
+    const fresh = tmp.content.firstElementChild
+    if (fresh) availableEl.replaceWith(fresh)
+  }
 }
 
 function bindExplorer (root) {
