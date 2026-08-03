@@ -24,6 +24,11 @@ cmx-rowsource = { workspace = true }
 cmx-utils = { workspace = true }
 # 内部依赖 - 业务错误 + 落库前列级校验（validation/errcode，DOC/DCT 共享）
 cmx-biz = { workspace = true }
+# 内部依赖 - 后端主从协调器（本 crate impl 其 HierService，把 DOC 接为可换后端服务）
+cmx-master-slave = { workspace = true }
+# 内部依赖 - 模型中心（definitions::store 读定义 JSON + resolve_doc_file 定位，解析 DocMetaView）
+cmx-model-meta = { workspace = true }
+async-trait = { workspace = true }
 
 # 数值精度（Decimal 列绑定）
 rust_decimal = { workspace = true }

@@ -13,6 +13,7 @@
 //! SQL 全部来自 cmx-dct-model；本层接 cmx-database-pg 全局 manager 执行 + 事务编排。
 
 mod error;
+mod hier_service;
 mod hierarchy;
 mod import_export;
 mod query;
@@ -20,6 +21,7 @@ mod resolve;
 mod write;
 
 pub use error::{api_err, api_err_db};
+pub use hier_service::DctHierService;
 pub use import_export::*;
 pub use query::{search, search_zmc};
 pub use resolve::{resolve_db_id, resolve_dict};

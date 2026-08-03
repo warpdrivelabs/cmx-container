@@ -57,6 +57,7 @@ members = [
     "crates/libs/cmx-dct/cmx-dct-model",
     "crates/libs/cmx-dct/cmx-dct-store-pg",
     "crates/libs/cmx-dct/cmx-dct-api",
+    "crates/libs/cmx-master-slave",
     "crates/libs/modql/modql-macros",
     "crates/libs/modql",
     "sdk/cmx-cli",
@@ -174,6 +175,8 @@ cmx-dct-model = { path = "crates/libs/cmx-dct/cmx-dct-model", version = "0.1.12"
 cmx-dct-store-pg = { path = "crates/libs/cmx-dct/cmx-dct-store-pg", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 数据字典（DCT）HTTP 层（薄 handler + DctModule 路由，web-server 合并，避免 cmx-api⇄cmx-dct 环）
 cmx-dct-api = { path = "crates/libs/cmx-dct/cmx-dct-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 后端主从协调器（前端 CmxMasterSlave 的 Rust 对等物；近叶子，doc/dct 服务 impl 其 HierService）
+cmx-master-slave = { path = "crates/libs/cmx-master-slave", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 模型中心部署层（编译/初始化/部署，DB 落库）
 cmx-model-deploy = { path = "crates/libs/cmx-model/cmx-model-deploy", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 模型中心 HTTP 层（ModelModule 路由，web-server 合并，避免 cmx-api⇄cmx-model 环）
