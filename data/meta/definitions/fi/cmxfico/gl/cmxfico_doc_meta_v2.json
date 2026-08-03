@@ -167,7 +167,8 @@
               "module": "gl"
             },
             "idCol": "id",
-            "valueField": "code"
+            "valueField": "id",
+            "labelCol": "name"
           },
           "refField": "id",
           "displayField": "name",
@@ -202,14 +203,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择账本",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "dictCode": "cf_ledger",
+            "idCol": "code",
+            "valueField": "code",
+            "labelCol": "name"
           }
         },
         {
@@ -236,16 +238,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择会计期间",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
             },
             "idCol": "code",
-            "valueField": "code"
+            "valueField": "code",
+            "dictCode": "cf_fisc_period",
+            "labelCol": "name"
           }
         },
         {
@@ -616,14 +617,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择客户端",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "dictCode": "cf_client",
+            "idCol": "code",
+            "valueField": "code",
+            "labelCol": "name"
           }
         }
       ],
@@ -686,14 +688,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择客户端",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "dictCode": "cf_client",
+            "idCol": "code",
+            "valueField": "code",
+            "labelCol": "name"
           }
         },
         {
@@ -701,7 +704,7 @@
           "nullable": true,
           "dimType": "attribute",
           "refDict": "comp_unit",
-          "refField": "code",
+          "refField": "id",
           "displayField": "name",
           "physicalField": "BUKRS",
           "id": "comp_unit_id",
@@ -723,14 +726,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择公司代码",
-            "showClear": true,
+            "dictCode": "cf_comp_unit",
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "idCol": "id",
+            "valueField": "id",
+            "labelCol": "name"
           }
         },
         {
@@ -804,9 +808,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择凭证货币(交易币)",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -838,9 +839,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择集团货币",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -1016,14 +1014,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择分类账",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "dictCode": "cf_ledger",
+            "idCol": "code",
+            "valueField": "code",
+            "labelCol": "name"
           }
         },
         {
@@ -1247,8 +1246,6 @@
           "required": true,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择单据类型ID",
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -1281,8 +1278,6 @@
           "required": true,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择业务主体",
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -1351,14 +1346,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择客户端",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "dictCode": "cf_client",
+            "idCol": "code",
+            "valueField": "code",
+            "labelCol": "name"
           }
         },
         {
@@ -1372,7 +1368,7 @@
           },
           "fieldLength": 20,
           "refDict": "comp_unit",
-          "refField": "code",
+          "refField": "id",
           "displayField": "name",
           "physicalField": "BUKRS",
           "intDigits": 20,
@@ -1388,14 +1384,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择公司代码",
-            "showClear": true,
+            "dictCode": "cf_comp_unit",
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "idCol": "id",
+            "valueField": "id",
+            "labelCol": "name"
           }
         },
         {
@@ -1460,9 +1457,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择记账码",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -1495,9 +1489,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择借贷标志",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -1530,9 +1521,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择税码",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -1565,9 +1553,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择特别总账标识",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -1832,14 +1817,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择客户端",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "dictCode": "cf_client",
+            "idCol": "code",
+            "valueField": "code",
+            "labelCol": "name"
           }
         },
         {
@@ -1848,7 +1834,7 @@
           "nullable": true,
           "dimType": "dimension",
           "refDict": "comp_unit",
-          "refField": "code",
+          "refField": "id",
           "displayField": "name",
           "physicalField": "BUKRS",
           "id": "comp_unit_id",
@@ -1867,14 +1853,15 @@
           "width": "100px",
           "required": false,
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择公司代码",
-            "showClear": true,
+            "dictCode": "cf_comp_unit",
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "idCol": "id",
+            "valueField": "id",
+            "labelCol": "name"
           }
         },
         {
@@ -1902,14 +1889,15 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择分类账",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "dictCode": "cf_ledger",
+            "idCol": "code",
+            "valueField": "code",
+            "labelCol": "name"
           }
         },
         {
@@ -1939,9 +1927,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择成本控制范围",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -1976,9 +1961,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择利润中心",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2013,9 +1995,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择成本中心",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2089,9 +2068,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择业务范围",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2126,9 +2102,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择功能范围",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2163,9 +2136,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择贸易伙伴",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2200,9 +2170,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择内部订单",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2237,9 +2204,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择WBS元素",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2274,9 +2238,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择业务伙伴",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2311,9 +2272,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择客户",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2348,9 +2306,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择供应商",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2383,9 +2338,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择付款条件",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2418,9 +2370,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择付款方式",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
@@ -2455,9 +2404,6 @@
           "required": false,
           "align": "left",
           "editSettings": {
-            "helpLayout": "classify",
-            "dictTitle": "选择开户行/银行",
-            "showClear": true,
             "coord": {
               "domain": "fi",
               "application": "cmxfico",
