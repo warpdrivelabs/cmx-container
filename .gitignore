@@ -53,3 +53,4 @@ docker/**/*.zip
 __pycache__/
 /.zcode/
 /.superpowers/
+.playwright-cli
