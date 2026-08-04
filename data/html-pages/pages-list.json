@@ -1305,7 +1305,8 @@
       "module": "gl",
       "page": "voucher-flex",
       "relPath": "fi/cmxfico/gl/voucher-flex.html",
-      "latestHtmlFile": "voucher-flex.html"
+      "latestHtmlFile": "voucher-flex.html",
+      "doc": null
     },
     {
       "app": "cmxfico",
