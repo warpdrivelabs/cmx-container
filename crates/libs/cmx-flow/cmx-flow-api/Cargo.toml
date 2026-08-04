@@ -34,6 +34,9 @@ axum = { workspace = true }
 serde = { workspace = true }
 # JSON 载荷
 serde_json = { workspace = true }
+# F1/F3 集成表：时间戳 + 行 id
+chrono = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 # 日志追踪
 tracing = { workspace = true }
 # 引擎单例 + 定时器 poller（OnceCell / spawn / interval）

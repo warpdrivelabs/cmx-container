@@ -140,6 +140,8 @@ pub fn compile(xml: &str) -> Result<ProcessDefinition> {
         nodes,
         start,
         index,
+        // F4：起点表单（process 级 cmx:startFormKey，前缀无关，同 userTask 的 formKey）。
+        start_form_key: local_attr(&process, "startFormKey"),
     };
     def.validate()?;
     Ok(def)
@@ -172,6 +174,17 @@ fn parse_user_task(node: &Node) -> UserTask {
         multi_instance: parse_multi_instance(node),
         candidates: parse_candidates(node),
         cc: parse_cc(node),
+        // F2：表单绑定（cmx:formKey / formMode / formFields，前缀无关，同 assignee）。
+        form_key: local_attr(node, "formKey"),
+        form_mode: local_attr(node, "formMode"),
+        form_fields: local_attr(node, "formFields")
+            .map(|s| {
+                s.split(',')
+                    .map(|x| x.trim().to_string())
+                    .filter(|x| !x.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default(),
     }
 }
 

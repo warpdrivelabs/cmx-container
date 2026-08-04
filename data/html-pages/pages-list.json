@@ -1350,6 +1350,17 @@
       "page": "voucher-detail",
       "relPath": "fi/cmxfico/gl/voucher-detail.html",
       "latestHtmlFile": "voucher-detail.html"
+    },
+    {
+      "id": "flow-pay-review-form",
+      "name": "付款请款单(HTML表单·流程办理)",
+      "page": "flow-pay-review-form",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "relPath": "fi/cmxfico/gl/flow-pay-review-form.html",
+      "latestHtmlFile": "flow-pay-review-form.html",
+      "details": "F3 html-pages 类任务表单示例：读 host.props/workspace.context 的任务上下文(bizTable/bizId/instanceId)，展示业务字段；审批在待办表单宿主的 property 区。"
     }
   ]
 }

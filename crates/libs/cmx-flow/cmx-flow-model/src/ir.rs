@@ -135,6 +135,15 @@ pub struct UserTask {
     /// 抄送来源（M4.2：节点级抄送表达式）。空 = 该节点不自动抄送。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cc: Vec<CandidateRef>,
+    /// 绑定表单逻辑名（F2）。空 = 该环节无表单（纯审批按钮）。运行期由待办/表单宿主解析成具体页。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form_key: Option<String>,
+    /// 表单模式（F2）：edit | readonly | approve。空 = 默认 approve（审阅 + 意见）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form_mode: Option<String>,
+    /// 本环节可写字段白名单（F2 仅透传；F4 据此限制表单可编辑区）。空 = 不限制。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub form_fields: Vec<String>,
 }
 
 /// 一条候选人引用（候选人表达式的解析产物）。
@@ -250,6 +259,9 @@ pub struct ProcessDefinition {
     pub start: NodeId,
     /// bpmn_id → NodeId 索引，供令牌恢复（持久化存 bpmn_id）与边解析。
     pub index: HashMap<String, NodeId>,
+    /// 起点表单逻辑名（F4：process 级 cmx:startFormKey）。发起时渲染此表单填单。空 = 无起点表单。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_form_key: Option<String>,
 }
 
 impl ProcessDefinition {

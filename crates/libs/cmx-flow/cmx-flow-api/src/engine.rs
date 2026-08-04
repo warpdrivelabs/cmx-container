@@ -75,6 +75,15 @@ async fn build() -> cmx_api::Result<FlowRuntime> {
         tracing::warn!(error = %e, "子流程绑定表建表失败（组织路由配置将不可用）");
     }
 
+    // 2c) F1/F3 集成支撑表（fico-db）：单据↔实例关联 + 任务意见留痕。幂等自举，失败仅告警。
+    if let Err(e) = crate::biz_link::ensure_schema().await {
+        tracing::warn!(error = %e, "F1/F3 集成表建表失败（单据关联/意见留痕将不可用）");
+    }
+    // 2d) F4 表单注册表种入内置示例绑定（幂等）。失败仅告警。
+    if let Err(e) = crate::biz_link::seed_form_bindings().await {
+        tracing::warn!(error = %e, "F4 表单绑定种子失败（待办打开表单将退回硬编码兜底）");
+    }
+
     // 3) 装载库里已发布的定义（设计器产物）。编译失败项跳过不阻断整体启动。
     let mut definitions: Vec<ProcessDefinition> = Vec::new();
     match def_svc.load_published_definitions().await {

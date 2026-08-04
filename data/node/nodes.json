@@ -22,6 +22,89 @@
         }
       },
       "updatedAt": "2026-06-27T17:12:54.600Z"
+    },
+    "flow-task-35b1b866-ea7e-43ed-befe-1c3d485235d4-5cc0a7aa-3b60-4f4e-95a8-49a739af2c6a": {
+      "id": "flow-task-35b1b866-ea7e-43ed-befe-1c3d485235d4-5cc0a7aa-3b60-4f4e-95a8-49a739af2c6a",
+      "name": "PAY-F3-1 · 财务复核",
+      "icon": "workflow-tasks",
+      "details": "待办表单：flow-task-35b1b866-ea7e-43ed-befe-1c3d485235d4-5cc0a7aa-3b60-4f4e-95a8-49a739af2c6a",
+      "workspace": {
+        "id": "flow_task_35b1b866-ea7e-43ed-befe-1c3d485235d4-5cc0a7aa-3b60-4f4e-95a8-49a739af2c6a",
+        "params": {
+          "mode": "task",
+          "formKey": "pay.review",
+          "formMode": "approve",
+          "taskId": "5cc0a7aa-3b60-4f4e-95a8-49a739af2c6a",
+          "instanceId": "35b1b866-ea7e-43ed-befe-1c3d485235d4",
+          "domain": "fi",
+          "application": "cmxfico",
+          "module": "gl",
+          "file": "",
+          "bizTable": "cf_pay_request",
+          "bizId": "PR-F3",
+          "apiPath": "",
+          "title": "PAY-F3-1 · 财务复核"
+        },
+        "content": {
+          "caption": "办理",
+          "icon": "form",
+          "views": [
+            {
+              "id": "flow-task-35b1b866-ea7e-43ed-befe-1c3d485235d4-5cc0a7aa-3b60-4f4e-95a8-49a739af2c6a-content",
+              "tabLabel": "表单",
+              "icon": "form",
+              "type": "native_pages",
+              "native_page": "portal.flow.task-form",
+              "view": "content",
+              "props": {
+                "mode": "task",
+                "formKey": "pay.review",
+                "formMode": "approve",
+                "taskId": "5cc0a7aa-3b60-4f4e-95a8-49a739af2c6a",
+                "instanceId": "35b1b866-ea7e-43ed-befe-1c3d485235d4",
+                "domain": "fi",
+                "application": "cmxfico",
+                "module": "gl",
+                "file": "",
+                "bizTable": "cf_pay_request",
+                "bizId": "PR-F3",
+                "apiPath": "",
+                "title": "PAY-F3-1 · 财务复核"
+              }
+            }
+          ]
+        },
+        "property": {
+          "caption": "轨迹",
+          "icon": "detail-view",
+          "views": [
+            {
+              "id": "flow-task-35b1b866-ea7e-43ed-befe-1c3d485235d4-5cc0a7aa-3b60-4f4e-95a8-49a739af2c6a-property",
+              "tabLabel": "流程",
+              "icon": "detail-view",
+              "type": "native_pages",
+              "native_page": "portal.flow.task-form",
+              "view": "property",
+              "props": {
+                "mode": "task",
+                "formKey": "pay.review",
+                "formMode": "approve",
+                "taskId": "5cc0a7aa-3b60-4f4e-95a8-49a739af2c6a",
+                "instanceId": "35b1b866-ea7e-43ed-befe-1c3d485235d4",
+                "domain": "fi",
+                "application": "cmxfico",
+                "module": "gl",
+                "file": "",
+                "bizTable": "cf_pay_request",
+                "bizId": "PR-F3",
+                "apiPath": "",
+                "title": "PAY-F3-1 · 财务复核"
+              }
+            }
+          ]
+        }
+      },
+      "updatedAt": "2026-08-04T03:56:46.633Z"
     }
   }
 }

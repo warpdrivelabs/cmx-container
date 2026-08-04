@@ -356,6 +356,10 @@ function propertyHtml () {
     h += sec('办理人')
     h += field('指派办理人 (assignee)', 'assignee', b.get?.('flowable:assignee') || '', '单个用户 id，如 mgr')
     h += field('候选角色 (candidateGroups)', 'candidateGroups', b.get?.('flowable:candidateGroups') || '', '支持 role(FIN)，逗号分隔')
+    h += sec('表单绑定')
+    h += field('绑定表单 (cmx:formKey)', 'formKey', getFormAttr(b, 'formKey'), '如 pay.review；办理人点开待办时渲染此表单')
+    h += selectField('表单模式 (formMode)', 'formMode', ['approve', 'edit', 'readonly'], getFormAttr(b, 'formMode') || 'approve')
+    h += field('可写字段 (formFields)', 'formFields', getFormAttr(b, 'formFields'), '逗号分隔；限制本环节可改哪些字段（可空）')
   }
   if (el.type === 'bpmn:CallActivity') {
     const calledKey = getCalledKey(b)
@@ -453,6 +457,12 @@ function field (label, prop, val, hint) {
     `<input data-prop="${esc(prop)}" value="${esc(val)}">` +
     (hint ? `<div class="flow-hint">${esc(hint)}</div>` : '') + `</div>`
 }
+function selectField (label, prop, opts, cur, hint) {
+  const o = opts.map((v) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(v)}</option>`).join('')
+  return `<div class="flow-field"><label>${esc(label)}</label>` +
+    `<select data-prop="${esc(prop)}">${o}</select>` +
+    (hint ? `<div class="flow-hint">${esc(hint)}</div>` : '') + `</div>`
+}
 function sec (t) { return `<div class="flow-sec">${esc(t)}</div>` }
 
 // cmx:calledKey 是自定义命名空间属性，bpmn-js 未注册 moddle 扩展，故落在 businessObject.$attrs
@@ -465,6 +475,19 @@ function setCalledKey (el, value) {
   const attrs = { ...(b.$attrs || {}) }
   if (value) attrs['cmx:calledKey'] = value
   else { delete attrs['cmx:calledKey']; delete attrs.calledKey }
+  state.modeler.get('modeling').updateProperties(el, { $attrs: attrs })
+}
+
+// F2 表单绑定属性同 calledKey：cmx:formKey / cmx:formMode / cmx:formFields 落 $attrs。
+// name 传 'formKey'|'formMode'|'formFields'，读写都走 cmx: 前缀（兼容裸名）。
+function getFormAttr (b, name) {
+  return (b && b.$attrs && (b.$attrs['cmx:' + name] || b.$attrs[name])) || ''
+}
+function setFormAttr (el, name, value) {
+  const b = el.businessObject
+  const attrs = { ...(b.$attrs || {}) }
+  if (value) attrs['cmx:' + name] = value
+  else { delete attrs['cmx:' + name]; delete attrs[name] }
   state.modeler.get('modeling').updateProperties(el, { $attrs: attrs })
 }
 
@@ -1093,6 +1116,7 @@ function applyProp (prop, value) {
     else if (prop === 'candidateGroups') modeling.updateProperties(el, { 'flowable:candidateGroups': value || undefined })
     else if (prop === 'calledElement') modeling.updateProperties(el, { calledElement: value || undefined })
     else if (prop === 'calledKey') setCalledKey(el, value)
+    else if (prop === 'formKey' || prop === 'formMode' || prop === 'formFields') setFormAttr(el, prop, value)
     else if (prop === 'condition') {
       if (value) modeling.updateProperties(el, { conditionExpression: moddle.create('bpmn:FormalExpression', { body: value }) })
       else modeling.updateProperties(el, { conditionExpression: undefined })

@@ -1235,6 +1235,59 @@
           }
         },
         {
+          "id": "fi-gl-flow-todo-center",
+          "name": "flow-todo-center",
+          "caption": "待办中心",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "task",
+          "workspace": {
+            "id": "flow_todo_center",
+            "explorer": {
+              "caption": "待办分类",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "flow-todo-center-explorer",
+                  "tabLabel": "分类",
+                  "icon": "tree",
+                  "type": "native_pages",
+                  "native_page": "portal.flow.todo-center",
+                  "view": "explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "待办中心",
+              "icon": "task",
+              "views": [
+                {
+                  "id": "flow-todo-center-content",
+                  "tabLabel": "待办",
+                  "icon": "task",
+                  "type": "native_pages",
+                  "native_page": "portal.flow.todo-center",
+                  "view": "content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "流程轨迹",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "flow-todo-center-prop",
+                  "tabLabel": "轨迹",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "portal.flow.todo-center",
+                  "view": "property"
+                }
+              ]
+            }
+          }
+        },
+        {
           "id": "fi-gl-rpt-app-workbench",
           "name": "rpt-app-workbench",
           "caption": "报表应用工作台",

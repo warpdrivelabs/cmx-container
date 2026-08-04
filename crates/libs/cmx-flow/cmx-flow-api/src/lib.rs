@@ -5,6 +5,7 @@
 //! 由 web-server（而非 cmx-api）合并 `FlowModule.routes()`，故 cmx-api 不反向依赖本 crate（无环）。
 //! 端点前缀 `/flow/*`（`/api` 前缀由 web-server nest 加），避开 /api/definitions、/api/users 等既有命名。
 
+pub mod biz_link;
 pub mod engine;
 pub mod handlers;
 pub mod views;
@@ -65,7 +66,34 @@ impl ModuleRoutes for FlowModule {
                 "/flow/instances/{id}/cancel",
                 post(handlers::cancel_instance),
             )
+            // —— F1/F3：变量 / 单据关联 / 意见 ——
+            .route(
+                "/flow/instances/{id}/variables",
+                get(handlers::get_instance_variables),
+            )
+            .route("/flow/instances/{id}/biz", get(handlers::get_instance_biz))
+            .route(
+                "/flow/instances/{id}/comments",
+                get(handlers::get_instance_comments),
+            )
+            .route(
+                "/flow/biz/{table}/{bizId}/instances",
+                get(handlers::get_biz_instances),
+            )
+            // —— F4：表单注册表 + 发起态 ——
+            .route(
+                "/flow/forms",
+                get(handlers::list_form_bindings).post(handlers::save_form_binding),
+            )
+            .route("/flow/forms/{key}", get(handlers::get_form_binding))
+            .route("/flow/startable", get(handlers::list_startable_definitions))
             // —— 任务 ——
+            .route("/flow/tasks/my", get(handlers::get_my_tasks))
+            // —— 待办中心分页列表 ——
+            .route("/flow/todos/initiated", get(handlers::get_initiated))
+            .route("/flow/todos/cc", get(handlers::get_cc_todos))
+            .route("/flow/todos/done", get(handlers::get_done_todos))
+            .route("/flow/todos/filters", get(handlers::get_todo_filters))
             .route("/flow/tasks/{id}/complete", post(handlers::complete_task))
             .route("/flow/tasks/{id}/claim", post(handlers::claim_task))
             .route("/flow/tasks/{id}/transfer", post(handlers::transfer_task))
