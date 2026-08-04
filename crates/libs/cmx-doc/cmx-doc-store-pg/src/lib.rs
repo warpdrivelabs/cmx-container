@@ -10,12 +10,14 @@
 //! 强类型 meta 由 cmx-doc-model 提供；本层接 cmx-database(-pg) 全局 manager 执行。
 
 pub mod cache;
+pub mod hier_service;
 pub mod loader;
 pub mod revision;
 pub mod saver;
 pub mod zmc_loader;
 pub mod zmc_util;
 
+pub use hier_service::DocHierService;
 pub use loader::DocLoader;
 pub use revision::{DocRevision, RevisionRecord};
 pub use saver::{BatchItem, BatchOutcome, DocSaver, SaveCtx, SaveMode, SaveResult};

@@ -1208,13 +1208,16 @@ dependencies = [
 name = "cmx-dct-store-pg"
 version = "0.1.12"
 dependencies = [
+ "async-trait",
  "bytes",
  "cmx-api-types",
  "cmx-biz",
  "cmx-core",
  "cmx-database-pg",
  "cmx-dct-model",
+ "cmx-master-slave",
  "cmx-model-meta",
+ "cmx-rowsource",
  "csv",
  "futures",
  "serde",
@@ -1279,12 +1282,15 @@ dependencies = [
 name = "cmx-doc-store-pg"
 version = "0.1.12"
 dependencies = [
+ "async-trait",
  "chrono",
  "cmx-biz",
  "cmx-core",
  "cmx-database",
  "cmx-database-pg",
  "cmx-doc-model",
+ "cmx-master-slave",
+ "cmx-model-meta",
  "cmx-rowsource",
  "cmx-utils",
  "dashmap",
@@ -1517,6 +1523,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "cmx-master-slave"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "cmx-rowsource",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

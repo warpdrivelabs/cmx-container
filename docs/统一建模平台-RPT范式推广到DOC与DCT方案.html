@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>统一建模平台 · RPT 两模式范式推广到 DOC/DCT · 方案</title>
+<style>
+  :root{
+    --ink:#1b2230; --muted:#5b6472; --line:#e3e7ee; --bg:#f7f8fb; --card:#ffffff;
+    --code-bg:#0f1524; --code-ink:#d6def0;
+    --rpt:#2f6fed; --doc:#c65d21; --dct:#1f8a56; --ms:#7c5cff;
+    --keep:#1f8a56; --keep-bg:#e8f6ee; --gap:#b4433a; --gap-bg:#fbecea;
+    --add:#8a6d1f; --add-bg:#faf3df; --accent:#2f6fed;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+       color:var(--ink);background:var(--bg);line-height:1.72;font-size:15px}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px 120px}
+  header.hero{background:linear-gradient(135deg,#111a2e 0%,#1c2a44 45%,#2a1f40 100%);color:#fff;padding:60px 24px 48px}
+  header.hero .inner{max-width:1120px;margin:0 auto}
+  header.hero h1{margin:0 0 12px;font-size:33px;letter-spacing:.3px;line-height:1.25}
+  header.hero .tag{display:inline-block;background:rgba(124,92,255,.2);color:#c3b6ff;
+       border:1px solid rgba(124,92,255,.42);padding:3px 13px;border-radius:999px;font-size:12.5px;margin-bottom:18px}
+  header.hero p.lead{font-size:16.5px;color:#c7cfdd;max-width:860px;margin:8px 0}
+  header.hero .meta{margin-top:20px;font-size:13px;color:#94a0b4}
+  header.hero .meta b{color:#e0e6f0;font-weight:600}
+  nav.toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:28px 0 36px;
+       box-shadow:0 1px 3px rgba(20,30,50,.04)}
+  nav.toc h4{margin:0 0 12px;font-size:12.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
+  nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:44px}
+  nav.toc li{margin:5px 0;break-inside:avoid}
+  nav.toc a{color:var(--ink);text-decoration:none;border-bottom:1px dashed transparent}
+  nav.toc a:hover{color:var(--rpt);border-bottom-color:var(--rpt)}
+  section{margin:0 0 46px}
+  h2{font-size:23px;margin:46px 0 14px;padding-top:14px;border-top:3px solid var(--rpt);display:inline-block}
+  h2 .n{color:var(--rpt);font-weight:800;margin-right:10px}
+  h3{font-size:17.5px;margin:28px 0 10px;color:#2b3345}
+  h4{font-size:14.5px;margin:18px 0 6px;color:#3a4451}
+  p{margin:10px 0}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12.8px;
+       background:#eef1f6;color:#334;padding:1.5px 6px;border-radius:5px}
+  pre{background:var(--code-bg);color:var(--code-ink);padding:18px 20px;border-radius:10px;overflow:auto;
+       font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12.6px;line-height:1.6;margin:14px 0}
+  pre code{background:none;color:inherit;padding:0;font-size:inherit}
+  .cmt{color:#7e8aa5}.kw{color:#e0955b}.str{color:#8fd08f}.ty{color:#6fb8e6}.fn{color:#e6c86f}.nu{color:#d98fd0}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.4px;background:var(--card);
+       border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th{background:#f0f2f7;text-align:left;padding:10px 13px;font-weight:600;color:#3a4451;border-bottom:2px solid var(--line);font-size:12.4px;letter-spacing:.2px}
+  td{padding:9px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#fafbfd}
+  .pill{display:inline-block;padding:2px 9px;border-radius:6px;font-size:11.3px;font-weight:700;white-space:nowrap}
+  .pill.keep{background:var(--keep-bg);color:var(--keep)}
+  .pill.gap{background:var(--gap-bg);color:var(--gap)}
+  .pill.add{background:var(--add-bg);color:var(--add)}
+  .callout{border-radius:11px;padding:16px 20px;margin:18px 0;border:1px solid;position:relative}
+  .callout .h{font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px;font-size:14.5px}
+  .callout.verdict{background:#eef4ff;border-color:#c2d5fb}.callout.verdict .h{color:var(--rpt)}
+  .callout.gap{background:#fbecea;border-color:#f0c3bd}.callout.gap .h{color:var(--gap)}
+  .callout.note{background:#f1f6ff;border-color:#c9dcfb}.callout.note .h{color:var(--accent)}
+  .callout.win{background:#e8f6ee;border-color:#bfe3cd}.callout.win .h{color:var(--keep)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .box h4{margin-top:0}
+  ul.tight{margin:8px 0;padding-left:22px}ul.tight li{margin:5px 0}
+  .dag{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12.3px;background:#fbfcfe;border:1px solid var(--line);
+       border-radius:10px;padding:18px 20px;white-space:pre;overflow:auto;line-height:1.5;color:#334}
+  .mile td:first-child{font-weight:700;color:var(--rpt);white-space:nowrap}
+  .foot{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;text-align:center}
+  .lede{font-size:16px;color:var(--muted)}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;margin-left:4px}
+  .b-rpt{background:#e7efff;color:var(--rpt)}.b-doc{background:#fbeadd;color:var(--doc)}.b-dct{background:#e4f4ea;color:var(--dct)}.b-ms{background:#efeaff;color:var(--ms)}
+  .en{color:var(--muted);font-style:italic;font-size:13.5px}
+  @media(max-width:820px){.grid2,.grid3{grid-template-columns:1fr}nav.toc ol{columns:1}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="inner">
+    <span class="tag">架构评估 + 落地方案 · 基于真实代码核验</span>
+    <h1>把「报表两模式范式」推广到业务单据与数据字典<br>—— 一套统一的层级建模平台</h1>
+    <p class="lead">
+      电子表格（RPT 报表）的「<b>单一模型事实源 + 版式/数据两模式 + 设计/应用双工作台 + 三段式后端</b>」已经跑通、前后端打通。
+      本方案评估把这套范式推广到 <b>DOC 业务单据</b> 与 <b>DCT 数据字典</b>：两者的定义本就分层、每层有各自的数据属性、层间可定义汇总关系，
+      而前端 <code>CmxMasterSlave</code> 早已是一棵递归主从树。结论先行：<b>可行，且大半已经就位</b>——真正要补的只有一处。
+    </p>
+    <p class="meta">
+      <b>评估方法</b>：4 路并行只读代码勘探（CmxMasterSlave / RPT / DOC / DCT），下述每条结论均标注真实 file:line &nbsp;·&nbsp;
+      <b>结论</b>：范式可复用，唯一实缺 = 后端「层间汇总」权威引擎 &nbsp;·&nbsp; <b>许可</b>：Apache-2.0
+    </p>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <h4>目录 · Contents</h4>
+  <ol>
+    <li><a href="#tldr">00 · 一页结论</a></li>
+    <li><a href="#pattern">01 · RPT 范式拆解</a></li>
+    <li><a href="#ms">02 · CmxMasterSlave 现状（超预期）</a></li>
+    <li><a href="#doc">03 · DOC 映射：分层单据</a></li>
+    <li><a href="#dct">04 · DCT 映射：分类/分组/分级</a></li>
+    <li><a href="#gap">05 · 唯一实缺：层间汇总引擎</a></li>
+    <li><a href="#unify">06 · 统一架构</a></li>
+    <li><a href="#agg">07 · 汇总关系的声明与执行</a></li>
+    <li><a href="#roadmap">08 · 分期路线图</a></li>
+    <li><a href="#risk">09 · 风险与取舍</a></li>
+  </ol>
+</nav>
+
+<section id="tldr">
+  <h2><span class="n">00</span>一页结论</h2>
+  <p class="lede">用户的设想在架构上成立，而且比预想更接近现成——四个子系统早已长在同一条链上，只差最后一块拼图。</p>
+  <div class="callout verdict">
+    <div class="h">✅ 可行性裁决：推广可行，大半已就位</div>
+    RPT 的成功范式（模型单一事实源 + 两模式存储 + 双工作台 + 三段式后端）<b>不是 RPT 私有的</b>，
+    而 DOC 与 DCT 已经各自复刻了它的后端骨架（<code>cmx-doc</code> / <code>cmx-dct</code> 三段式 crate 群）、共享了定义解析层、并且都已接到 <code>CmxMasterSlave</code> 主从模型上。
+    <b>唯一真正缺失的功能</b>是：把「层间汇总关系」从纸面定义变成后端可持久化、可重算的权威能力——前端其实已经会算了。
+  </div>
+  <table>
+    <thead><tr><th style="width:24%">范式要件</th><th style="width:12%">RPT</th><th style="width:12%">DOC 现状</th><th style="width:12%">DCT 现状</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>三段式后端 model/store-pg/api</td><td><span class="pill keep">有</span></td><td><span class="pill keep">有</span></td><td><span class="pill keep">有</span></td><td>已统一（对标 cmx-rpt 抽出）</td></tr>
+      <tr><td>metaKind 定义分类 + 共享解析</td><td><span class="pill keep">有</span></td><td><span class="pill keep">有</span></td><td><span class="pill keep">有</span></td><td><code>resolve.rs</code> 三方共享</td></tr>
+      <tr><td>分层模型 + 每层独立属性</td><td><span class="pill keep">有</span></td><td><span class="pill keep">有</span></td><td><span class="pill keep">有</span></td><td>DOC 4 层 / DCT 自分级+分类</td></tr>
+      <tr><td>前端主从递归树 CmxMasterSlave</td><td>—</td><td><span class="pill keep">有</span></td><td><span class="pill keep">有</span></td><td>N 层任意深，已接入</td></tr>
+      <tr><td>层间汇总（前端计算）</td><td>—</td><td><span class="pill keep">有</span></td><td><span class="pill keep">有</span></td><td><code>addAggregation</code> 一等能力</td></tr>
+      <tr><td>两模式存储（定义↔数据分离）</td><td><span class="pill keep">有</span></td><td><span class="pill add">半</span></td><td><span class="pill add">半</span></td><td>DOC/DCT 数据侧待对齐</td></tr>
+      <tr><td>层间汇总（后端权威重算/落库）</td><td><span class="pill keep">有*</span></td><td><span class="pill gap">缺</span></td><td><span class="pill gap">缺</span></td><td><b>本方案核心补口</b></td></tr>
+    </tbody>
+  </table>
+  <p class="en">* RPT 的汇总/上卷计算真实存在，但在 <code>cmx-rpt-store-pg</code>（报表侧），并非 DOC 自身层间上卷。</p>
+</section>
+<section id="pattern">
+  <h2><span class="n">01</span>RPT 范式拆解 <span class="en">what made reports work</span></h2>
+  <p>把报表平台之所以成功的东西提炼成五个可复用要件。每一件都要问：<b>这是通用的，还是 RPT 私有的？</b></p>
+
+  <div class="dag">┌─ ① 定义层 ────────────────────────────────────────────────┐  通用
+│  moduleMeta.metaKind ∈ {DOC, DCT, RPT, BASE} + baseXxxMetaRef │
+│  共享 resolve.rs：业务编码 → 定义文件（确定性版本选择）        │
+├─ ② 两模式模型（单一事实源，分两层存储）────────────────────┤  通用 ★最强
+│  定义/版式：按 (code, version) 存    → BLOB + 关系投影         │
+│  数据：     按 (作用域维度) 存        → 单元格行，N 元幂等 UPSERT │
+│  一个 /open 端点：带作用域维度就并入数据，不带就只出骨架        │
+├─ ③ 设计工作台 ────────────────────────────────────────────┤  通用外壳
+│  三栏（类别/列表/属性）+ 画布，以 {version} 打开               │
+├─ ④ 应用工作台 ────────────────────────────────────────────┤  通用外壳
+│  镜像三栏（期间+组织树）+ 数据画布，以 {version, 作用域} 打开  │
+├─ ⑤ 三段式后端 ────────────────────────────────────────────┤  通用三元
+│  model（中立 DTO）· store-pg（全部 IO，无 DDL）· api（薄 handler）│
+│  + 可选领域引擎（RPT 的公式 crate 属私有）                     │
+└──────────────────────────────────────────────────────────────┘</div>
+
+  <table>
+    <thead><tr><th style="width:20%">要件</th><th style="width:44%">RPT 里的真实落点</th><th>通用性判定</th></tr></thead>
+    <tbody>
+      <tr><td>① 定义层</td><td><code>cmx-model-meta/definitions/{store,resolve}.rs</code> · <code>infer_base_file</code> 按 metaKind 分流</td><td><span class="pill keep">通用</span> DOC/DCT 已共用同一 resolve</td></tr>
+      <tr><td>② 两模式</td><td><code>cmx-rpt-store-pg/lib.rs</code>：<code>load/save_layout</code>(code+version) · <code>query/save_data</code>(org+period) · <code>open_report</code> 合流</td><td><span class="pill keep">通用</span> 最值得推广的资产</td></tr>
+      <tr><td>③ 设计台</td><td><code>native-pages/portal/rpt/designer-workbench.js</code> + <code>designer.js</code>（蓝）</td><td><span class="pill keep">通用外壳</span> 内容 RPT 私有</td></tr>
+      <tr><td>④ 应用台</td><td><code>report-app-workbench.js</code> + <code>report-applier.js</code>（青绿）</td><td><span class="pill keep">通用外壳</span></td></tr>
+      <tr><td>⑤ 三段后端</td><td><code>cmx-rpt-{model,store-pg,api}</code> + <code>cmx-rpt-formula</code></td><td><span class="pill keep">三元通用</span> formula 私有</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout note">
+    <div class="h">💡 两模式为什么是最强资产</div>
+    「<b>定义按 (code, version) 存、数据按 (作用域维度) 存、一个端点按是否带作用域决定要不要并数据</b>」——
+    这个分离对任何「一份模板 × 多个作用域实例」的业务都成立：报表是 <code>org+period</code>，单据是 <code>org+期间/单据号</code>，
+    字典其实退化成「只有定义、作用域为全局」。推广它，等于让 DOC/DCT 也获得「设计一次、多作用域复用、每作用域一份数据、幂等落库」。
+  </div>
+
+  <div class="callout gap">
+    <div class="h">⚠ 一个必须说清的现实：RPT 有两套 cr_* 表家族</div>
+    勘探发现 RPT 存在两条并行血脉：<b>活跃工作台用</b> <code>cr_report_fmt</code>/<code>cr_cell_data</code>（<code>cmx-rpt-store-pg</code>）；
+    <b>metaKind 部署编译出</b> <code>cr_report_instance</code>/<code>cr_cell_value</code>（<code>cmx-model-deploy::compile_rpt</code> 读 base 的 storageTables）。
+    两者同 <code>cr_</code> 前缀但不同表、不同子系统。<b>推广要以活跃的 store-pg 那条为范本</b>，部署编译那条是较少走的平行支线。
+  </div>
+</section>
+<section id="ms">
+  <h2><span class="n">02</span>CmxMasterSlave 现状 <span class="en">— it already does more than you asked</span></h2>
+  <p>用户指出前端有 <code>CmxMasterSlave</code> 管主从数据、与单据/字典的分层定义一致。<b>核验后要更正一句：它不止“主从”，它是一棵任意 N 层递归树，而且层间汇总是它的一等内建能力。</b></p>
+
+  <div class="grid2">
+    <div class="box">
+      <h4>🌲 任意 N 层，不是两层</h4>
+      <code>_registerSchema</code> 递归注册 schema，节点形状仅 <code>{ id, children? }</code>，全点号路径（<code>orders.details.taxes</code>）。
+      数据树 <code>CmxDataSet</code> 每行挂 <code>_children:{childId:CmxDataSet}</code>，路径解析逐段下行、<b>无深度上限</b>。
+      <p class="en">packages/cmx-data-comp/src/lib/cmx-master-slave.js:89（_registerSchema，递归）</p>
+    </div>
+    <div class="box">
+      <h4>➕ 层间汇总 = 一等内建</h4>
+      <code>addAggregation({from, to, toField, field, agg, scope})</code>：把 <code>from</code> 层某字段按 sum/avg/min/max/count（或自定义函数）
+      汇总回写到 <code>to</code> 层的 <code>toField</code>。<b>正是「父层字段 = 子层字段之和」</b>。
+      <p class="en">cmx-master-slave.js:206（addAggregation）· :33（AGG_FUNCS）</p>
+    </div>
+    <div class="box">
+      <h4>🔗 跨多层级联上卷</h4>
+      <code>_cascade</code>：某规则写完的字段若是另一规则的 <code>from</code>，自动再触发——
+      <b>子明细→明细→主表</b> 逐层传导，带成环检测与 16 层级联安全阀。
+      <p class="en">cmx-master-slave.js:836（_cascade，深度上限=级联安全，非树深）</p>
+    </div>
+    <div class="box">
+      <h4>🎛️ 定义驱动 + 命令式双可用</h4>
+      页面 <code>dataFlow.{schema,aggregations,relations}</code> 直接构造；也可 <code>new CmxMasterSlave({...})</code> 命令式。
+      后端元数据经 <code>cmx-doc-meta-loader</code> 转成 N 层 schema。
+      <p class="en">init-page-models.js:711 · cmx-doc-meta-loader.js:61（buildMasterSlaveSchema）</p>
+    </div>
+  </div>
+
+  <div class="callout win">
+    <div class="h">🎁 直接后果：用户想要的「层间汇总关系」在前端已经能算了</div>
+    这意味着推广的重点<b>不在前端</b>——前端主从树、N 层、层间与级联汇总都齐。重点在<b>让后端也拥有同一份汇总语义</b>：
+    可声明（进定义 JSON）、可校验、可持久化、可离线重算（不依赖浏览器打开）。这正是第 05 / 07 节的主题。
+  </div>
+
+  <h3>汇总规则的真实形状</h3>
+<pre><code><span class="cmt">// 前端已支持（cmx-master-slave.js），也是我们要让后端读懂的同一份声明：</span>
+{ <span class="str">"from"</span>: <span class="str">"voucher.account_lines"</span>,   <span class="cmt">// 子层路径</span>
+  <span class="str">"to"</span>:   <span class="str">"voucher.header"</span>,          <span class="cmt">// 目标层（任意祖先，不限相邻）</span>
+  <span class="str">"field"</span>: <span class="str">"local_dr"</span>,              <span class="cmt">// 子层被汇总字段</span>
+  <span class="str">"toField"</span>: <span class="str">"total_local_dr"</span>,       <span class="cmt">// 父层承接字段</span>
+  <span class="str">"agg"</span>: <span class="str">"sum"</span> }                    <span class="cmt">// sum|avg|min|max|count|自定义 fn</span>
+</code></pre>
+</section>
+<section id="doc">
+  <h2><span class="n">03</span>DOC 映射：分层单据 <span class="badge b-doc">业务单据</span></h2>
+  <p>用户原话：「单据定义是分层，每层都有相应的不同的数据属性，每层的数据属性间还可以定义汇总关系。」——逐句对代码核验：</p>
+  <table>
+    <thead><tr><th style="width:30%">用户描述</th><th style="width:14%">核验</th><th>代码证据</th></tr></thead>
+    <tbody>
+      <tr><td>单据定义是分层</td><td><span class="pill keep">属实</span></td><td>示例定义 <code>cmxfico_doc_meta_v2.json</code> 声明 4 层（凭证批→头→科目行→辅助行），<code>voucherSchema.schema</code> 嵌套数组 + <code>relations</code> 父子键（<code>upper_id</code>）。<b>层数与表名全在定义 JSON 里，不在引擎里</b></td></tr>
+      <tr><td>每层有不同的数据属性</td><td><span class="pill keep">属实</span></td><td>每层 <code>voucherTables[].fields[]</code> 各自定义列；<code>ColumnView.dim_type∈{attribute,dimension,measure}</code>。引擎按定义读列，不认识任何具体列名</td></tr>
+      <tr><td>层间可定义汇总关系</td><td><span class="pill gap">仅纸面</span></td><td><code>voucherSchema.aggregations[]</code> <b>存在但是占位</b>：<code>"to":"上层"</code> 是字面字符串；<code>DocMetaView::parse</code> <b>根本不读它</b>（meta.rs 中 aggregation 引用数 = 0）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout win">
+    <div class="h">✅ 关键澄清：引擎完全通用，绝无凭证特例（已逐行核验）</div>
+    「凭证批→头→科目行→辅助行」这套 4 层结构，是<b>定义文件 <code>cmxfico_doc_meta_v2.json</code> 里的数据</b>，<b>不是引擎里的代码</b>。逐行核验 <code>cmx-doc-{model,store-pg,api}</code>：
+    <ul class="tight" style="margin-top:8px">
+      <li><b>0 处</b>非注释代码出现 <code>cv_batch/cv_header/cv_acc_line/cv_aux_line</code>——全部 12 处 <code>cv_*</code> 引用都是 <code>///</code> 文档注释里的举例（「如 <code>cv_batch</code>」），无一是可执行逻辑。</li>
+      <li>装载器完全按定义驱动：<code>loader.rs</code> 读 <code>layer.table_name</code> + <code>meta.child_layers(parent.id)</code> + <code>for child_layer in child_layers</code>——<b>走定义声明的任意层、任意深度</b>，不知「凭证」为何物、不写死「4 层」。</li>
+      <li><code>sql_builder.rs</code> 顶部明写<b>「通用性铁律：本模块不认识任何具体单据（不出现 cv_batch/local_dr 等词）」</b>；<code>saver.rs</code> 的父子重指向注释<b>「与层序无关」</b>。</li>
+      <li>借贷平衡等凭证语义只存在于<b>定义里的 <code>validationRules</code></b>（由通用 <code>formula.rs</code> 表达式引擎跑），不是引擎硬编码的业务规则。</li>
+    </ul>
+    换言之：DOC 引擎已经是「<b>元数据驱动的通用分层单据引擎</b>」——把定义换成采购订单（头→行→交货计划）或工单（工单→工序→物料），同一套引擎零改动即可跑。这正是推广得以成立的前提，也是绝不能破坏的底线。
+  </div>
+
+  <div class="callout gap">
+    <div class="h">⚠ DOC 的「层间汇总」目前是纸面声明，不落地</div>
+    定义里确有两处汇总痕迹，但都<b>不产生真实计算</b>：<br>
+    ① <code>voucherSchema.aggregations[]</code>——<code>"from":"...entered_dr"</code> / <code>"to":"上层"</code> 全是占位串，只有一个只读 schema 可视化页 <code>doc-base-schema.html</code> 拿去展示，后端 parse 直接丢弃。<br>
+    ② <code>voucherTables[].summaries[]</code>——被解析成 <code>SummaryView</code>，但 <code>sql_builder.rs</code> 只生成逐层 <code>SELECT ... WHERE upper_id=ANY($ids)</code>，<b>没有一处 <code>SUM(</code> / <code>GROUP BY</code></b>，<code>saver.rs</code> 从不写汇总表。列上的 <code>agg:"sum"</code> 注释原文说得很直白：「便于前端识别可上卷列」——是展示元数据，不是计算契约。
+  </div>
+
+  <h4>DOC 已具备 RPT 范式的哪半</h4>
+  <ul class="tight">
+    <li><span class="pill keep">有</span> <b>强类型定义投影</b> <code>DocMetaView</code>（<code>layer_order/layers/layer_groups/relations/validation_rules/status_flow/versioning</code>）——比 RPT 活跃层还成熟（RPT 活跃层是裸 <code>serde_json::Value</code>）。</li>
+    <li><span class="pill keep">有</span> <b>元数据驱动的通用引擎</b>：三段式 <code>cmx-doc-{model,store-pg,api}</code> + ZmcDataSet 零拷贝按定义 BFS 装载 + 落库前列级校验，全程不认识任何具体单据。</li>
+    <li><span class="pill keep">有</span> <b>设计工作台</b>（<code>native-pages/demo/doc-base/*</code> 四区：explorer/content/property）。</li>
+    <li><span class="pill add">半</span> <b>两模式</b>：定义侧成熟；数据侧有 <code>/api/doc/data/*</code> 装载与 <code>/save</code> 落库，但未按 RPT 那样把「定义 vs 作用域数据」显式二分 + 单端点合流。</li>
+    <li><span class="pill gap">缺</span> <b>层间汇总执行</b>——见上。</li>
+  </ul>
+</section>
+
+<section id="dct">
+  <h2><span class="n">04</span>DCT 映射：分类/分组/分级 <span class="badge b-dct">数据字典</span></h2>
+  <p>用户原话：「数据字典可以分类，分组，分级，也是分层的一种，前端 CmxMasterSlave 都可以适配。」——核验结论：<b>三种形态确实都是层级/主从的特例，而且都已经接在 CmxMasterSlave 上了。</b></p>
+  <table>
+    <thead><tr><th style="width:14%">形态</th><th style="width:22%">结构表达</th><th style="width:30%">主从映射</th><th>已有工作台</th></tr></thead>
+    <tbody>
+      <tr><td><b>分级</b><br>self-graded</td><td>同一张表 <code>parent_id</code> 自引用 + <code>full_path/level_no/is_leaf</code></td><td>单实体自树：<code>schema:[{id:"dict"}]</code> + <code>parentField</code></td><td><code>dicttree-*.html</code>（gl_account）</td></tr>
+      <tr><td><b>分类</b><br>classify</td><td>CLASSIFY 类别表 + items 表以 <code>refDict</code> 外键相连</td><td>类别→条目 主从：<code>schema:[{id:"tree"},{id:"dict"}]</code></td><td><code>dictcls-*.html</code></td></tr>
+      <tr><td><b>分组</b><br>group/relation</td><td>RELATION 连接表：<code>relation.master</code> ↔ <code>relation.auxiliary</code> 多对多</td><td>主字典→成员 主从，落到 <code>master_id/aux_id</code> 两个 dimension 槽</td><td><code>dictrel-*.html</code></td></tr>
+      <tr><td><b>平级</b><br>flat</td><td>单表无层级</td><td>退化主从：<code>schema:[{id:"dict"}]</code></td><td><code>dictflat-*.html</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout win">
+    <div class="h">✔ 每个字典工作台的 -model 页都已实例化 CmxMasterSlave</div>
+    分级=自引用父子树；分类/分组=主(类别/组)→从(条目/成员)。base 的 <code>relationCommonFields</code> 字段集本身就是 master/aux 主从形状，原文注释：「关系字典用于关联主字典（分组）与辅字典（业务）…编译期落到 master_id/aux_id 两个 dimension 槽」。<b>用户的判断完全被代码印证。</b>
+  </div>
+
+  <div class="callout note">
+    <div class="h">📎 两处顺带更正（勘探所得）</div>
+    ① 顶层 key 是 <code>moduleMeta</code>（每字典表内是 <code>dictMeta</code>），<b>不存在 <code>dctMeta</code> 顶层 key</b>——我此前记反了。<br>
+    ② DCT 前端存在两种绑定风格并存：<code>dictflat/dictcls/dictrel</code> 是手写 fetch + <code>setFlatData</code>；只有 <code>dicttree</code> 用了声明式 <code>CmxDCTMeta</code>+<code>source.apiPath</code>（最接近 RPT 应用器范式）。统一推广时，把前三者迁到 <code>dicttree</code> 已示范的声明式风格即可。
+  </div>
+
+  <p><b>DCT 的特殊性——汇总退化：</b>字典多为查找/维度数据，「层间汇总」在多数字典无意义。但<b>分级字典的「子节点计数 / 小计上卷」是有意义的</b>（如成本中心树按父节点汇总下属数量或某度量）。这落进同一套汇总声明即可，只是用得少。DCT 的数据作用域也退化——多为全局（无 org+period），所以两模式在 DCT 主要体现为「定义即数据模板」，作用域维度为空。</p>
+</section>
+<section id="gap">
+  <h2><span class="n">05</span>唯一实缺：层间汇总的后端权威引擎</h2>
+  <p>把三个子系统叠在一起看，缺口收敛成一个点。这是整份方案唯一需要「造新东西」的地方，其余都是「复用 + 对齐」。</p>
+
+  <div class="dag">能力              前端(CmxMasterSlave)   DOC 后端        DCT 后端      RPT 后端
+─────────────────────────────────────────────────────────────────────────
+层间汇总·声明      ✔ aggregations 配置     △ 占位串未解析   —            ✔ 公式/上卷
+层间汇总·计算      ✔ addAggregation        ✘ 无             ✘ 无          ✔ expand.rs(报表侧)
+层间汇总·落库      ✘(前端不落库)           ✘ 无             ✘ 无          ✔ cr_cell_data
+                                          ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+                                          这一格就是全部缺口</div>
+
+  <div class="callout gap">
+    <div class="h">🎯 缺口精确定义</div>
+    <b>一个「定义声明的、后端可执行的、结果可持久化的层间汇总引擎」</b>，语义与前端 <code>addAggregation</code> 对齐（同一份 <code>{from,to,field,toField,agg}</code> 声明两端都读），
+    使得：① 定义里写的汇总关系被后端 <code>*MetaView::parse</code> 真正解析；② 保存单据/字典时后端按拓扑序重算父层承接字段（不信任前端计算值，服务端为准）；③ 汇总结果随数据落库，脱离浏览器也成立（批量导入、报表取数直接读到已上卷的父层值）。
+  </div>
+
+  <p><b>为什么这是「一处」而不是「三处」：</b>因为 DOC/DCT/RPT 已共享 model/store-pg/api 三段式与 <code>cmx-model</code> 定义解析层。汇总引擎应当做成<b>一个中立 crate</b>（<code>cmx-agg</code> 或并入 <code>cmx-model</code>），三个 store-pg 都调它——而不是各写一份。它与前端 <code>AGG_FUNCS</code> 语义逐字对齐，形成「一份声明、两端执行」。</p>
+</section>
+
+<section id="unify">
+  <h2><span class="n">06</span>统一架构 <span class="en">— one modeling platform, four kinds</span></h2>
+  <p>推广的终局：DOC/DCT/RPT（乃至 FLX）成为同一个「层级建模平台」的四种 metaKind，共享定义层、两模式存储、双工作台外壳、三段式后端与<b>同一套汇总引擎</b>；差异收敛到各自的「领域内容」。</p>
+
+  <div class="dag">┌──────────────────────── 统一层级建模平台 ────────────────────────┐
+│  定义层  moduleMeta.metaKind + baseXxxMetaRef + resolve.rs(共享)    │
+├───────────────────────────────────────────────────────────────────┤
+│  中立引擎（新/复用，三方共享）                                       │
+│    ├ cmx-agg      层间汇总：{from,to,field,toField,agg} 拓扑重算 ★新 │
+│    ├ 校验         列级 type/length/precision/nullable（已共享）      │
+│    └ resolve      业务编码→定义文件（已共享）                        │
+├──────────────┬──────────────┬──────────────┬─────────────────────┤
+│  DOC          │  DCT          │  RPT          │  FLX(后续)           │
+│  cv_* 4 层     │  cf_* 分级/类  │  cr_* 报表     │                     │
+│  DocMetaView   │  DictView     │ (裸 json→补投影)│                     │
+│  三段 crate    │  三段 crate    │  三段+formula  │                     │
+├──────────────┴──────────────┴──────────────┴─────────────────────┤
+│  两模式存储     定义(code,version) ┆ 数据(作用域维度)  一端点合流      │
+├───────────────────────────────────────────────────────────────────┤
+│  前端  CmxMasterSlave（N 层递归树 + 层间/级联汇总）                  │
+│        设计工作台(蓝) ┆ 应用工作台(青绿)  —— 四区 native-pages 外壳  │
+└───────────────────────────────────────────────────────────────────┘</div>
+
+  <div class="grid3">
+    <div class="box"><h4 style="color:var(--doc)">DOC 收敛动作</h4><ul class="tight">
+      <li>让 <code>DocMetaView::parse</code> 解析 <code>aggregations</code>（今被丢弃）</li>
+      <li>接 <code>cmx-agg</code>，saver 落库前按拓扑重算父层</li>
+      <li>数据侧显式二分 + <code>/open</code> 合流（对齐 RPT）</li>
+    </ul></div>
+    <div class="box"><h4 style="color:var(--dct)">DCT 收敛动作</h4><ul class="tight">
+      <li>三工作台迁到 <code>dicttree</code> 的声明式 <code>CmxDCTMeta</code></li>
+      <li>分级字典可选接汇总（小计/计数上卷）</li>
+      <li>RELATION 若需后端解释再补（当前当平表）</li>
+    </ul></div>
+    <div class="box"><h4 style="color:var(--rpt)">RPT 反哺动作</h4><ul class="tight">
+      <li>给活跃层补强类型定义投影（对齐 DocMetaView）</li>
+      <li>汇总/上卷抽进 <code>cmx-agg</code> 与 DOC 共用</li>
+      <li>明确活跃 cr_* 与部署 cr_* 两血脉边界</li>
+    </ul></div>
+  </div>
+</section>
+<section id="agg">
+  <h2><span class="n">07</span>汇总关系的声明与执行 <span class="en">— one declaration, both ends</span></h2>
+  <p>汇总引擎是本方案唯一的新造件，值得把契约钉死。核心原则：<b>定义里声明一次，前端与后端读同一份，服务端计算为权威</b>。</p>
+
+  <h3>① 声明（进定义 JSON，DOC/DCT 通用）</h3>
+<pre><code><span class="cmt">// voucherSchema.aggregations —— 把今天的占位串改成真实路径 + 声明语义</span>
+<span class="str">"aggregations"</span>: [
+  { <span class="str">"from"</span>: <span class="str">"cv_acc_line"</span>, <span class="str">"to"</span>: <span class="str">"cv_header"</span>,
+    <span class="str">"field"</span>: <span class="str">"local_dr"</span>, <span class="str">"toField"</span>: <span class="str">"total_local_dr"</span>, <span class="str">"agg"</span>: <span class="str">"sum"</span> },
+  { <span class="str">"from"</span>: <span class="str">"cv_aux_line"</span>, <span class="str">"to"</span>: <span class="str">"cv_acc_line"</span>,
+    <span class="str">"field"</span>: <span class="str">"local_dr"</span>, <span class="str">"toField"</span>: <span class="str">"local_dr"</span>, <span class="str">"agg"</span>: <span class="str">"sum"</span> }
+  <span class="cmt">// 两条串联 = 辅助行→科目行→凭证头 逐层上卷（拓扑序自动推导）</span>
+]</code></pre>
+
+  <h3>② 后端执行（新中立 crate <code>cmx-agg</code>，三方共享）</h3>
+<pre><code><span class="cmt">// 语义与前端 AGG_FUNCS 逐字对齐；DOC/DCT/RPT 的 store-pg 都调它</span>
+<span class="kw">pub struct</span> <span class="ty">AggRule</span> { from: String, to: String, field: String, to_field: String, agg: <span class="ty">AggFn</span> }
+<span class="kw">pub enum</span> <span class="ty">AggFn</span> { Sum, Avg, Min, Max, Count }
+
+<span class="cmt">// 保存前：按 (from→to) 建 DAG 拓扑排序，逐层把子层聚合回写父层承接字段</span>
+<span class="kw">pub fn</span> <span class="fn">rollup</span>(tree: &<span class="kw">mut</span> <span class="ty">LayerTree</span>, rules: &[<span class="ty">AggRule</span>]) -> <span class="ty">Result</span>&lt;()&gt; {
+    <span class="kw">let</span> order = <span class="fn">topo_sort</span>(rules)?;      <span class="cmt">// 子明细→明细→主表；成环即报错</span>
+    <span class="kw">for</span> rule <span class="kw">in</span> order {
+        <span class="fn">recompute_parent_field</span>(tree, rule); <span class="cmt">// SUM(子层.field)→父层.to_field</span>
+    }
+    <span class="ty">Ok</span>(())
+}</code></pre>
+
+  <div class="callout note">
+    <div class="h">⚙️ 两种执行时机，按业务选</div>
+    <b>写时上卷（推荐 DOC 凭证类）</b>：saver 落库前对整棵变更树 <code>rollup</code>，父层承接字段随子层一并 UPSERT——脱离浏览器也对，报表取数直接读到已上卷值。<br>
+    <b>读时上卷（可选，省存储）</b>：装载时按 <code>aggregations</code> 生成 <code>SELECT SUM(...) ... GROUP BY upper_id</code> 现算——不落库，适合纯展示。<br>
+    两者共用同一份 <code>AggRule</code> 声明，只是消费点不同。DOC 六币种借贷「逐层上卷」属前者。
+  </div>
+
+  <div class="callout win">
+    <div class="h">✅ 为什么这条路低风险</div>
+    ① 声明格式<b>已存在</b>（前端在用、DOC 定义里有占位位），只是让后端也读；② 计算语义<b>已被前端验证</b>（<code>AGG_FUNCS</code> + <code>_cascade</code> 跑了很久）；③ 落库通道<b>已存在</b>（DOC saver 的列级校验 + N 元幂等 UPSERT + 铸号），汇总值只是多几列承接字段；④ 抽成中立 crate 后三方零重复。真正的新代码只有「拓扑排序 + 逐层重算」这一小核。
+  </div>
+</section>
+
+<section id="roadmap">
+  <h2><span class="n">08</span>分期路线图 <span class="en">— ship in slices</span></h2>
+  <p>每期独立可用、独立验收，沿用「小步过三关（test + clippy + fmt）+ 真机 E2E」的既有节奏。前期全是低风险对齐，新造件集中在 P2。</p>
+  <table class="mile">
+    <thead><tr><th style="width:9%">阶段</th><th style="width:30%">交付</th><th style="width:20%">性质</th><th>验收</th></tr></thead>
+    <tbody>
+      <tr><td>P0</td><td>范式对齐盘点：确认 DOC/DCT 两模式二分点、统一声明式绑定风格清单</td><td><span class="pill keep">纯梳理</span></td><td>三子系统端点/绑定风格对照表；无代码</td></tr>
+      <tr><td>P1</td><td>DCT 三工作台（flat/cls/rel）迁到 <code>dicttree</code> 声明式 <code>CmxDCTMeta</code>+<code>source.apiPath</code></td><td><span class="pill keep">前端对齐</span></td><td>四区工作台行为不变，绑定风格统一；Playwright 回归</td></tr>
+      <tr><td>P2</td><td><b>新 <code>cmx-agg</code> 中立 crate</b>：<code>AggRule</code>/<code>AggFn</code>/<code>topo_sort</code>/<code>rollup</code>，语义对齐前端 AGG_FUNCS</td><td><span class="pill add">唯一新造</span></td><td>单测覆盖 sum/avg/min/max/count + 多层级联 + 成环报错</td></tr>
+      <tr><td>P3</td><td>DOC 接汇总：<code>DocMetaView::parse</code> 读 <code>aggregations</code> + saver 落库前 <code>rollup</code> 写时上卷</td><td><span class="pill add">接线</span></td><td>凭证保存 → 头/科目行承接字段 = 子层 SUM，落库回读一致；六币种逐层上卷 E2E</td></tr>
+      <tr><td>P4</td><td>DOC 两模式显式化：定义(code+version) vs 数据(org+作用域) 二分 + <code>/open</code> 合流端点（对齐 RPT）</td><td><span class="pill keep">范式对齐</span></td><td>设计台 <code>{version}</code> 打开出骨架；应用台带作用域并数据；字节级 parity</td></tr>
+      <tr><td>P5</td><td>DCT 可选汇总（分级字典小计/计数上卷）+ RPT 反哺（活跃层强类型投影、上卷抽进 <code>cmx-agg</code>）</td><td><span class="pill keep">收敛</span></td><td>成本中心树按父上卷；RPT 复用 cmx-agg 值等价</td></tr>
+    </tbody>
+  </table>
+  <p class="en">关键顺序：P2（汇总引擎）先行，P3 才能接。P1/P4 是纯对齐可与 P2 并行。</p>
+</section>
+
+<section id="risk">
+  <h2><span class="n">09</span>风险与取舍</h2>
+  <ul class="tight">
+    <li><b>引擎绝不认识具体单据（已是底线，不能破）</b>：层数、表名、列名、层间关系、汇总规则全部只存在于<b>定义 JSON</b>；<code>cmx-doc</code> 引擎逐行核验 0 处凭证特例，<code>cmx-agg</code> 汇总引擎同样只吃 <code>{from,to,field,toField,agg}</code> 声明、绝不硬编码任何 <code>cv_*</code>/层序。推广时任何「为某类单据加 if 分支」都是架构倒退，必须拒绝。</li>
+    <li><b>不要过度统一</b>：RPT 的 SpreadJS 自由画布 BLOB 是「版式即真相」，DOC/DCT 是结构化表——<b>不要</b>逼 DOC/DCT 也用电子表格 BLOB。共享的是「模型+两模式+汇总+三段后端+工作台外壳」，不是渲染内核。</li>
+    <li><b>写时 vs 读时上卷要一表一议</b>：凭证类（借贷平衡、审计留痕）走写时落库；纯展示维度走读时现算。混用同一声明但消费点不同，别一刀切。</li>
+    <li><b>服务端计算为权威</b>：绝不信任前端上卷值直接落库（防篡改、防浏览器缺陷）。前端 <code>addAggregation</code> 是即时反馈，<code>cmx-agg</code> 是落库前重算的最终裁判——语义对齐但后端说了算。</li>
+    <li><b>成环与深度</b>：汇总 DAG 必须拓扑可排（<code>topo_sort</code> 成环即拒），对齐前端 16 层级联安全阀；跨层汇总链过长时给出定义期告警。</li>
+    <li><b>RPT 两套 cr_* 血脉</b>：推广以活跃 <code>cmx-rpt-store-pg</code> 为范本；<code>compile_rpt</code> 那条部署编译血脉是平行支线，别混。</li>
+    <li><b>DCT 汇总多数无意义</b>：别为字典强行造汇总 UI；只在分级字典按需开。DCT 的两模式主要退化为「定义即模板、作用域为空」。</li>
+    <li><b>校验/错误码已就绪可复用</b>：落库前列级校验（type/length/precision/nullable）+ 结构化 violations + CmxErrCode 已在 DOC/DCT 共用，汇总承接字段天然纳入同一校验，无需另起。</li>
+  </ul>
+
+  <div class="callout verdict">
+    <div class="h">🧭 一页纸总结</div>
+    用户的设想成立且大半已就位：<b>RPT 范式是通用模板，DOC/DCT 已复刻其后端骨架、共享定义解析、并都接到 CmxMasterSlave 递归主从树上；前端连层间/级联汇总都已内建。</b>
+    推广 = 把「两模式存储」显式对齐到 DOC/DCT（低风险） + 把字典三工作台统一到声明式绑定（低风险） + <b>补齐唯一实缺：一个定义声明、服务端权威、可落库的层间汇总引擎 <code>cmx-agg</code>（三方共享，与前端语义逐字对齐）</b>。新代码集中在一个小 crate 的「拓扑排序 + 逐层重算」，其余皆复用。
+  </div>
+</section>
+
+<div class="foot">
+  统一层级建模平台 · RPT 范式推广到 DOC / DCT · 只出方案不动代码 · 结论均基于真实代码核验 · Apache-2.0 · 2026
+</div>
+
+</div>
+</body>
+</html>

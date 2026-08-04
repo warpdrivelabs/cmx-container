@@ -23,6 +23,11 @@ cmx-biz = { workspace = true }
 cmx-api-types = { workspace = true }
 # 内部依赖 - 模型中心（definitions::store 读定义 JSON + resolve::resolve_dict_file 定位文件）
 cmx-model-meta = { workspace = true }
+# 内部依赖 - 后端主从协调器（本 crate impl 其 HierService，把 DCT 接为可换后端服务）
+cmx-master-slave = { workspace = true }
+# 内部依赖 - 零拷贝行源（ZmcDataSet<TokioPgRowSource> 返回类型对齐 HierService::Row）
+cmx-rowsource = { workspace = true }
+async-trait = { workspace = true }
 
 # JSON（定义解析 + 请求/结果集交换）
 serde_json = { workspace = true }
@@ -38,3 +43,7 @@ csv = { workspace = true }
 futures = { workspace = true }
 # 字节缓冲（mpsc<Bytes> 传输导出分片）
 bytes = { workspace = true }
+
+[dev-dependencies]
+# 真机集成测试（hier_service_pg：注册数据源 + 经 CmxMasterSlave 装载）
+tokio = { workspace = true }
