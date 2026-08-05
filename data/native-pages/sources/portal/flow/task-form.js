@@ -42,6 +42,7 @@ function propsOf (ctx) {
     mode: p.mode || 'task',
     formKey: p.formKey || '',
     formMode: p.formMode || 'approve',
+    viewOnly: !!p.viewOnly,
     taskId: p.taskId || '',
     instanceId: p.instanceId || '',
     bizTable: p.bizTable || '',
@@ -238,14 +239,16 @@ function contentHtml (st) {
         <div class="tf-cmt-body">${esc(c.comment || '')}</div></div>`).join('')
     : '<div class="tf-hint">暂无审批意见</div>'
 
-  const approveArea = noComment
-    ? `<div class="tf-actions"><button class="tf-btn ok" data-confirm>确认知悉（办结）</button></div>`
-    : `<label class="tf-label">我的意见</label>
+  const approveArea = p.viewOnly
+    ? ''  // 查看态：只看单据/轨迹 + 意见历史，不出任何办结动作
+    : (noComment
+      ? `<div class="tf-actions"><button class="tf-btn ok" data-confirm>确认知悉（办结）</button></div>`
+      : `<label class="tf-label">我的意见</label>
        <textarea class="tf-comment" data-comment placeholder="填写审批意见..."></textarea>
        <div class="tf-actions">
          <button class="tf-btn ok" data-approve>同意</button>
          <button class="tf-btn danger" data-reject>驳回</button>
-       </div>`
+       </div>`)
 
   return `<section class="tf">
     <div class="tf-bar">
@@ -293,14 +296,16 @@ function trailHtml (st) {
           <em>${esc(fmtTime(c.createdAt))}</em></div>
         <div class="tf-cmt-body">${esc(c.comment || '')}</div></div>`).join('')
     : '<div class="tf-hint">暂无审批意见</div>'
-  const approveArea = noComment
-    ? `<div class="tf-actions"><button class="tf-btn ok" data-confirm>确认知悉（办结）</button></div>`
-    : `<label class="tf-label">我的意见</label>
+  const approveArea = p.viewOnly
+    ? ''  // 查看态：只看单据/轨迹 + 意见历史，不出任何办结动作
+    : (noComment
+      ? `<div class="tf-actions"><button class="tf-btn ok" data-confirm>确认知悉（办结）</button></div>`
+      : `<label class="tf-label">我的意见</label>
        <textarea class="tf-comment" data-comment placeholder="填写审批意见..."></textarea>
        <div class="tf-actions">
          <button class="tf-btn ok" data-approve>同意</button>
          <button class="tf-btn danger" data-reject>驳回</button>
-       </div>`
+       </div>`)
   return `<section class="tf">
     <div class="tf-prop-head"><b>${esc(inst?.businessKey || p.instanceId || '')}</b><small>${esc(p.formKey || '')} · ${esc(modeLabel(p.formMode))}</small></div>
     <div class="tf-prop-body">

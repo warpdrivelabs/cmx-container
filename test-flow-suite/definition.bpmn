@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn" xmlns:cmx="http://cmx/flow">
+  <process id="test_expense" name="差旅报销审批（完整测试）" isExecutable="true">
+    <startEvent id="s"/>
+    <sequenceFlow id="f0" sourceRef="s" targetRef="apply"/>
+    <userTask id="apply" name="填写报销单" flowable:assignee="zhang" cmx:formKey="expense.form" cmx:formMode="edit"/>
+    <sequenceFlow id="f1" sourceRef="apply" targetRef="review"/>
+    <userTask id="review" name="经理审批" flowable:assignee="li" cmx:formKey="expense.form" cmx:formMode="approve" cmx:cc="observer"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="gw"/>
+    <exclusiveGateway id="gw" name="金额分支"/>
+    <sequenceFlow id="f3big" sourceRef="gw" targetRef="director">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${amount &gt;= 5000}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f3small" sourceRef="gw" targetRef="finance">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${amount &lt; 5000}</conditionExpression>
+    </sequenceFlow>
+    <userTask id="director" name="总监审批（大额·待认领）" flowable:candidateUsers="wang,zhao" cmx:formKey="expense.form" cmx:formMode="approve"/>
+    <sequenceFlow id="f4" sourceRef="director" targetRef="finance"/>
+    <userTask id="finance" name="财务复核" flowable:assignee="qian" cmx:formKey="expense.form" cmx:formMode="approve"/>
+    <sequenceFlow id="f5" sourceRef="finance" targetRef="e"/>
+    <endEvent id="e"/>
+  </process>
+</definitions>

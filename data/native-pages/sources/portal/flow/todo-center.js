@@ -34,7 +34,7 @@ async function resolveForm (formKey) {
   try {
     const b = await apiJson('/api/flow/forms/' + enc(formKey))
     if (b && b.formKey) {
-      const f = { kind: b.kind || 'native', nativePage: b.nativePage || '', nativeView: b.nativeView || b.view || 'content', htmlPage: b.htmlPage || '', bizTable: b.bizTable || '', domain: b.domain || '', application: b.application || '', module: b.module || '', file: b.file || '', apiPath: b.apiPath || '', title: b.title || '' }
+      const f = { kind: b.kind || 'native', nativePage: b.nativePage || '', nativeView: b.nativeView || b.view || 'content', htmlPage: b.htmlPage || '', workspaceNode: b.workspaceNode || '', bizTable: b.bizTable || '', domain: b.domain || '', application: b.application || '', module: b.module || '', file: b.file || '', apiPath: b.apiPath || '', title: b.title || '' }
       formCache[formKey] = f
       return f
     }
@@ -337,7 +337,7 @@ function bind (root, view, host) {
     root.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); claimTodo(b.dataset.claim) }))
     root.querySelectorAll('[data-transfer]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); transferTodo(b.dataset.transfer) }))
     root.querySelectorAll('[data-start]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); openStartForm(b.dataset.start, b) }))
-    root.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); selectTodo(b.dataset.view) }))
+    root.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); viewTodo(b.dataset.view, b) }))
     root.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); cancelInstance(b.dataset.cancel) }))
     root.querySelectorAll('[data-ccread]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); markCcRead(b.dataset.ccread) }))
   }
@@ -456,14 +456,16 @@ function ccToTodo (c) {
 }
 function instToTodo (i) {
   // /api/flow/todos/initiated 返回 RawTodo 投影：taskId(已 inst- 前缀)/instanceId/definitionKey/
-  // businessKey/state/applicant/amount/createdAt。
+  // businessKey/state/applicant/amount/createdAt/currentNode/formKey（当前活动环节反查）。
   return {
     taskId: i.taskId || ('inst-' + i.instanceId), instanceId: i.instanceId,
     businessKey: i.businessKey,
-    definitionName: i.definitionKey,
+    definitionName: i.definitionKey, definitionKey: i.definitionKey,
     nodeName: stateLabel(i.state), state: i.state,
+    currentNode: i.currentNode, nodeBpmnId: i.currentNode,
     applicant: i.applicant, amount: i.amount,
-    formKey: null, createdAt: i.createdAt || null,
+    formKey: i.formKey || null, formMode: i.formMode || 'approve',
+    createdAt: i.createdAt || null,
   }
 }
 function stateLabel (s) {
@@ -529,7 +531,22 @@ function openStartForm (defKey, sourceEl) {
 function openTaskForm (taskId, sourceEl) {
   const t = state.todos.find((x) => x.taskId === taskId)
   if (!t) return
-  resolveForm(t.formKey).then((f) => buildAndOpenTaskForm(t, f, sourceEl))
+  resolveForm(t.formKey).then((f) => {
+    // kind='workspace'：打开节点定义的完整工作台（content=业务表单/菜单），property 叠加审批视图。
+    if (f && f.kind === 'workspace' && f.workspaceNode) return buildWorkspaceWorknode(t, f, sourceEl, { readonly: false })
+    return buildAndOpenTaskForm(t, f, sourceEl)
+  })
+}
+
+// 查看（我发起的 / 抄送我的 / 我已办）：同样开完整工作台，但 property 叠加**只读**任务视图
+// （只看轨迹+意见，无同意/驳回）。无 workspace 绑定则退回页内 property 轨迹（selectTodo）。
+function viewTodo (taskId, sourceEl) {
+  const t = state.todos.find((x) => x.taskId === taskId)
+  if (!t) return
+  resolveForm(t.formKey).then((f) => {
+    if (f && f.kind === 'workspace' && f.workspaceNode) return buildWorkspaceWorknode(t, f, sourceEl, { readonly: true })
+    return selectTodo(taskId)
+  }).catch(() => selectTodo(taskId))
 }
 
 function buildAndOpenTaskForm (t, f, sourceEl) {
@@ -588,7 +605,81 @@ function buildAndOpenTaskForm (t, f, sourceEl) {
   openWorkNode(workNode, sourceEl, initialContext)
 }
 
-// openWorkNode —— 与报表应用器同款：优先全局 openTab，再走 portal-help-action / inlineNode 事件，
+// 任务上下文（传给节点表单页 / 叠加的审批视图作 props）。
+function taskCtxOf (t, f) {
+  return {
+    mode: 'task', formKey: t.formKey || '', formMode: t.formMode || 'approve',
+    taskId: t.taskId, instanceId: t.instanceId,
+    bizTable: t.bizTable || (f && f.bizTable) || '', bizId: t.bizId || '',
+    businessKey: t.businessKey || '', nodeName: t.nodeName || '',
+    domain: (f && f.domain) || '', application: (f && f.application) || '', module: (f && f.module) || '',
+    file: (f && f.file) || '', apiPath: (f && f.apiPath) || '',
+  }
+}
+
+// kind='workspace'：取节点定义的完整 workspace node（门户文件库），把任务上下文注入各区视图 props，
+// 并在 **property 区叠加**一个任务处理视图（办理=审批控制台；查看=只读轨迹）。节点原有 property 视图保留在前。
+// 取不到 node / 无 workspace 时兜底回退旧 task-form 路径，保证不回归。
+async function buildWorkspaceWorknode (t, f, sourceEl, opts) {
+  const readonly = !!(opts && opts.readonly)
+  let node = null
+  try {
+    node = await apiJson('/api/workspace-nodes/' + enc(f.workspaceNode))
+  } catch { /* 取不到 → 兜底 */ }
+  const ws = node && node.workspace
+  if (!ws || typeof ws !== 'object') return buildAndOpenTaskForm(t, f, sourceEl)
+
+  const taskCtx = taskCtxOf(t, f)
+  // 深拷贝，避免污染缓存/复用；注入 props。
+  const workspace = deepClone(ws)
+  injectTaskProps(workspace, taskCtx)
+
+  // property 叠加：追加审批/只读任务视图（保留节点自带 property 视图在前）。
+  if (!workspace.property || typeof workspace.property !== 'object') {
+    workspace.property = { caption: '处理', icon: 'detail-view', views: [] }
+  }
+  if (!Array.isArray(workspace.property.views)) workspace.property.views = []
+  workspace.property.views.push({
+    id: 'flow-task-approval',
+    tabLabel: readonly ? '轨迹' : '审批', icon: 'detail-view',
+    type: 'native_pages', native_page: 'portal.flow.task-form', view: 'property',
+    props: { ...taskCtx, formMode: readonly ? 'readonly' : (t.formMode || 'approve'), viewOnly: readonly },
+  })
+
+  const sid = slug(`${t.instanceId}-${t.taskId}`)
+  const title = `${t.businessKey || t.instanceId} · ${t.nodeName || ''}`
+  const workNode = {
+    id: `flow-wsform-${sid}`, name: `flow-wsform-${sid}`, type: 'workspace-node',
+    caption: title, menuName: title, icon: node.icon || 'workflow-tasks', openType: 0, status: 1,
+    workspace: { ...workspace, id: `flow_wsform_${sid}`, params: taskCtx },
+  }
+  return openWorkNode(workNode, sourceEl)
+}
+
+// 结构化深拷贝（无 structuredClone 时退回 JSON）。
+function deepClone (o) {
+  try { return (typeof structuredClone === 'function') ? structuredClone(o) : JSON.parse(JSON.stringify(o)) }
+  catch { return JSON.parse(JSON.stringify(o)) }
+}
+
+// 给 workspace 各区（content/explorer/property/bottom/...）的 native_pages / html_pages 视图 props
+// 注入任务上下文（浅合并，节点已配的 props 优先保留）。空区/空 views/非对象 props 全容错。
+function injectTaskProps (workspace, taskCtx) {
+  if (!workspace || typeof workspace !== 'object') return
+  for (const key of Object.keys(workspace)) {
+    const region = workspace[key]
+    const views = region && Array.isArray(region.views) ? region.views
+      : (Array.isArray(region) ? region : null)
+    if (!views) continue
+    for (const v of views) {
+      if (!v || typeof v !== 'object') continue
+      if (v.type === 'native_pages' || v.type === 'html_pages') {
+        const p = (v.props && typeof v.props === 'object') ? v.props : {}
+        v.props = { ...taskCtx, ...p }   // 节点已配的键优先（覆盖 taskCtx 默认）
+      }
+    }
+  }
+}
 // 最后 POST /api/workspace-nodes 兜底。sourceEl 必须是门户 DOM 内的元素，事件才能 bubble 到 portal-app。
 // initialContext（可选）：html_pages 表单的动态跳转传参（portal 在 hydrate 前 ws.context.set 逐键写入）。
 async function openWorkNode (workNode, sourceEl, initialContext) {

@@ -63,6 +63,8 @@ pub const DDL_STATEMENTS: &[&str] = &[
     "ALTER TABLE cmx_flow_form_binding ADD COLUMN IF NOT EXISTS native_view VARCHAR(64)",
     "ALTER TABLE cmx_flow_form_binding ADD COLUMN IF NOT EXISTS file VARCHAR(128)",
     "ALTER TABLE cmx_flow_form_binding ADD COLUMN IF NOT EXISTS pk_field VARCHAR(64)",
+    // kind='workspace' 时指向门户工作区节点库（data/node/nodes.json）的一个完整 workspace node id。
+    "ALTER TABLE cmx_flow_form_binding ADD COLUMN IF NOT EXISTS workspace_node VARCHAR(128)",
 ];
 
 /// 自举建表（engine build 后调一次）。失败仅告警，不阻断启动。
@@ -291,6 +293,8 @@ pub struct RawTodo {
     pub created_at: Option<String>,
     /// true = 候选未认领（需先 claim），false = 直派给我。
     pub claimable: bool,
+    /// 实例列表用：当前活动节点 bpmn id（node_bpmn_id 位被状态占用，故单列）。cc/done 留空。
+    pub current_node: Option<String>,
 }
 
 /// 直派待办：走 idx_cmx_flow_task_open (assignee, completed)，只活跃实例。
@@ -391,6 +395,7 @@ async fn rows_to_todos(sql: &str, tag: &str, claimable: bool) -> Result<Vec<RawT
             variables_json: get_opt(row, schema, "variables"),
             created_at: get_ts_rfc3339(row, schema, "created_at"),
             claimable,
+            current_node: get_opt(row, schema, "node_bpmn_id"),
         });
     }
     Ok(out)
@@ -421,8 +426,11 @@ pub async fn list_instances_paged(f: &TodoFilter) -> Result<TodoPage, String> {
     )
     .await?;
     let sql = format!(
-        "SELECT id AS instance_id, definition_key, business_key, state, variables, created_at \
-         FROM cmx_flow_instance WHERE {cond} ORDER BY created_at DESC LIMIT {size} OFFSET {offset}"
+        "SELECT i.id AS instance_id, i.definition_key, i.business_key, i.state, i.variables, i.created_at, \
+         (SELECT tk.node_bpmn_id FROM cmx_flow_token tk \
+            WHERE tk.instance_id = i.id AND tk.state <> 'ENDED' \
+            ORDER BY tk.created_at DESC LIMIT 1) AS current_node \
+         FROM cmx_flow_instance i WHERE {cond} ORDER BY i.created_at DESC LIMIT {size} OFFSET {offset}"
     );
     let ds = query_sql(FLOW_DB_ID, None, &sql, "flow_inst_paged")
         .await
@@ -440,6 +448,7 @@ pub async fn list_instances_paged(f: &TodoFilter) -> Result<TodoPage, String> {
             variables_json: get_opt(row, schema, "variables"),
             created_at: get_ts_rfc3339(row, schema, "created_at"),
             claimable: false,
+            current_node: get_opt(row, schema, "current_node"),
         })
         .collect();
     Ok(TodoPage { rows, total })
@@ -519,6 +528,7 @@ pub async fn list_cc_paged(user_id: &str, f: &TodoFilter) -> Result<TodoPage, St
             variables_json: get_opt(row, schema, "variables"),
             created_at: get_ts_rfc3339(row, schema, "created_at"),
             claimable: false,
+            current_node: get_opt(row, schema, "node_bpmn_id"),
         })
         .collect();
     Ok(TodoPage { rows, total })
@@ -555,18 +565,21 @@ pub struct FormBinding {
     pub file: Option<String>,
     pub pk_field: Option<String>,
     pub title: Option<String>,
+    /// kind='workspace' 时指向门户工作区节点库的完整 workspace node id。
+    pub workspace_node: Option<String>,
 }
 
 /// upsert 一条表单绑定（form_key 主键）。
 pub async fn upsert_form_binding(b: FormBinding) -> Result<(), String> {
     let sql = "INSERT INTO cmx_flow_form_binding \
-        (form_key, kind, native_page, native_view, html_page, biz_table, domain, application, module, file, pk_field, title, updated_at) \
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) \
+        (form_key, kind, native_page, native_view, html_page, biz_table, domain, application, module, file, pk_field, title, workspace_node, updated_at) \
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) \
         ON CONFLICT (form_key) DO UPDATE SET \
           kind=EXCLUDED.kind, native_page=EXCLUDED.native_page, native_view=EXCLUDED.native_view, \
           html_page=EXCLUDED.html_page, biz_table=EXCLUDED.biz_table, domain=EXCLUDED.domain, \
           application=EXCLUDED.application, module=EXCLUDED.module, file=EXCLUDED.file, \
-          pk_field=EXCLUDED.pk_field, title=EXCLUDED.title, updated_at=EXCLUDED.updated_at";
+          pk_field=EXCLUDED.pk_field, title=EXCLUDED.title, workspace_node=EXCLUDED.workspace_node, \
+          updated_at=EXCLUDED.updated_at";
     let params = SqlParams::DataValues(vec![
         DataValue::String(b.form_key),
         DataValue::String(b.kind),
@@ -580,6 +593,7 @@ pub async fn upsert_form_binding(b: FormBinding) -> Result<(), String> {
         opt_str(b.file),
         opt_str(b.pk_field),
         opt_str(b.title),
+        opt_str(b.workspace_node),
         DataValue::DateTime(Utc::now()),
     ]);
     execute_sql_with_params(FLOW_DB_ID, None, sql, params)
@@ -605,10 +619,11 @@ fn form_binding_json(
         "file": get_opt(row, schema, "file"),
         "pkField": get_opt(row, schema, "pk_field"),
         "title": get_opt(row, schema, "title"),
+        "workspaceNode": get_opt(row, schema, "workspace_node"),
     })
 }
 
-const FORM_BINDING_COLS: &str = "form_key, kind, native_page, native_view, html_page, biz_table, domain, application, module, file, pk_field, title";
+const FORM_BINDING_COLS: &str = "form_key, kind, native_page, native_view, html_page, biz_table, domain, application, module, file, pk_field, title, workspace_node";
 
 /// 取一条表单绑定；不存在返回 None。
 pub async fn get_form_binding(form_key: &str) -> Result<Option<Value>, String> {
@@ -660,6 +675,21 @@ pub async fn seed_form_bindings() -> Result<(), String> {
         application: Some("cmxfico".into()),
         module: Some("gl".into()),
         title: Some("请款单复核（HTML 表单）".into()),
+        ..Default::default()
+    })
+    .await?;
+    // 完整测试流程（test_expense）的表单：kind='workspace' → 门户工作区节点 flow-form-expense
+    // （explorer+content+property 三区都有；见 data/node/nodes.json）。办理/查看打开完整工作台，
+    // property 区叠加审批/只读任务视图。所有 userTask 都绑此 formKey。
+    upsert_form_binding(FormBinding {
+        form_key: "expense.form".into(),
+        kind: "workspace".into(),
+        workspace_node: Some("flow-form-expense".into()),
+        biz_table: Some("cf_expense".into()),
+        domain: Some("fi".into()),
+        application: Some("cmxfico".into()),
+        module: Some("gl".into()),
+        title: Some("差旅报销工作台".into()),
         ..Default::default()
     })
     .await?;

@@ -49,6 +49,7 @@ const EMPTY_DIAGRAM = `<?xml version="1.0" encoding="UTF-8"?>
   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:flowable="http://flowable.org/bpmn"
+  xmlns:cmx="http://cmx/flow"
   id="Definitions_1" targetNamespace="http://cmx/flow">
   <bpmn:process id="new_process" name="新建流程" isExecutable="true">
     <bpmn:startEvent id="start" name="开始"/>
@@ -360,6 +361,19 @@ function propertyHtml () {
     h += field('绑定表单 (cmx:formKey)', 'formKey', getFormAttr(b, 'formKey'), '如 pay.review；办理人点开待办时渲染此表单')
     h += selectField('表单模式 (formMode)', 'formMode', ['approve', 'edit', 'readonly'], getFormAttr(b, 'formMode') || 'approve')
     h += field('可写字段 (formFields)', 'formFields', getFormAttr(b, 'formFields'), '逗号分隔；限制本环节可改哪些字段（可空）')
+    // 完整工作台表单：用已有工作区节点对话框编辑一个多区/多视图 workspace，绑到本节点 formKey。
+    // 办理/查看时打开该工作台，property 区叠加审批/只读任务视图。需先填 formKey。
+    {
+      const fk = getFormAttr(b, 'formKey')
+      const wsId = wsNodeIdFor(state.selectedKey, el.id)
+      h += `<div class="flow-field">
+        <button class="flow-btn primary block" data-edit-ws-node ${fk ? '' : 'disabled'}>
+          <ui5-icon name="form"></ui5-icon> 编辑表单工作台</button>
+        <div class="flow-hint">${fk
+          ? `打开工作区节点对话框编辑「${esc(wsId)}」（content=业务表单/菜单、property=业务视图）；保存后自动把 formKey=<b>${esc(fk)}</b> 绑定到该工作台。`
+          : '先填「绑定表单 (cmx:formKey)」再编辑工作台。'}</div>
+      </div>`
+    }
   }
   if (el.type === 'bpmn:CallActivity') {
     const calledKey = getCalledKey(b)
@@ -491,6 +505,45 @@ function setFormAttr (el, name, value) {
   state.modeler.get('modeling').updateProperties(el, { $attrs: attrs })
 }
 
+// 本节点表单工作台的确定性 id（清洗成 SAFE_ID：仅 [A-Za-z0-9._-]，无冒号/尖括号）。
+function wsNodeIdFor (defKey, nodeId) {
+  const clean = (s) => String(s || '').replace(/[^A-Za-z0-9._-]+/g, '_')
+  return `flow-form-${clean(defKey || 'def')}-${clean(nodeId || 'node')}`.slice(0, 128)
+}
+
+// 向门户 shell 派发 portal-help-action（穿透 shadow bubble 到 portal-app）。sourceEl 在门户 DOM 内。
+function dispatchPortalAction (sourceEl, detail) {
+  const ev = () => new CustomEvent('portal-help-action', { detail, bubbles: true, composed: true })
+  try { if (sourceEl?.dispatchEvent) { sourceEl.dispatchEvent(ev()); return true } } catch {}
+  try { document.dispatchEvent(ev()); return true } catch {}
+  return false
+}
+
+// 点「编辑表单工作台」：① 打开已有工作区节点对话框编辑该 workspace node（门户 shell 处理，存 nodes.json）；
+// ② 监听保存事件，把 formKey → workspaceNode 落 /api/flow/forms 注册表（kind='workspace'）。
+async function openWsNodeEditor (sourceEl) {
+  const el = state.selectedElement
+  if (!el) return
+  const fk = getFormAttr(el.businessObject, 'formKey')
+  if (!fk) { toast('请先填「绑定表单 (cmx:formKey)」'); return }
+  const wsId = wsNodeIdFor(state.selectedKey, el.id)
+  // 保存成功后自动把 formKey 绑到该工作台（一次即可；用 once 监听）。
+  const onSaved = async (e) => {
+    const savedId = e?.detail?.id
+    if (savedId && savedId !== wsId) return   // 不是本节点的工作台
+    try {
+      await apiJson('/api/flow/forms', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formKey: fk, kind: 'workspace', workspaceNode: wsId, title: `流程表单工作台 · ${fk}` }),
+      })
+      toast(`已绑定 formKey=${fk} → 工作台 ${wsId}`)
+    } catch (err) { toast('绑定注册表失败: ' + err.message) }
+  }
+  try { document.addEventListener('workspace-node-saved', onSaved, { once: true }) } catch {}
+  const ok = dispatchPortalAction(sourceEl, { kind: 'editWorkspaceNode', id: wsId })
+  if (!ok) { try { document.removeEventListener('workspace-node-saved', onSaved) } catch {}; toast('无法打开工作区节点对话框') }
+}
+
 /** property 区的 DAM 归属下拉（写 state.defDam，保存草稿时随请求落库）。 */
 function damDefField (label, prop, list, cur) {
   return `<div class="flow-field"><label>${esc(label)}</label>` +
@@ -556,6 +609,8 @@ function bind (root, view, host) {
       const key = el ? getCalledKey(el.businessObject) : ''
       if (key) openBindingDialog(key)
     })
+    // 打开工作区节点对话框编辑本节点的表单工作台。
+    root.querySelector('[data-edit-ws-node]')?.addEventListener('click', (e) => openWsNodeEditor(e.currentTarget))
     bindBindingDialog(root)
   }
 }
@@ -952,6 +1007,12 @@ function waitForSize (el, tries = 40) {
 async function openDiagram (xml) {
   if (!state.modeler) return
   try {
+    // 兼容旧图：DB 里此前存的图可能没声明 xmlns:cmx（本次修复前铸的），
+    // 一旦用户在其上重新绑定表单/子流程键，cmx:* 属性会在 saveXML 时被 moddle 静默丢弃。
+    // 载入前补声明该命名空间即可让 cmx:formKey / cmx:calledKey 等正常回写。幂等，已声明则不动。
+    if (!/xmlns:cmx\s*=/.test(xml)) {
+      xml = xml.replace(/(<bpmn:definitions\b)/, '$1 xmlns:cmx="http://cmx/flow"')
+    }
     const noDI = !/BPMNDiagram|BPMNPlane/i.test(xml)
     let toImport = xml
     if (noDI) { toImport = layoutXml(xml) }

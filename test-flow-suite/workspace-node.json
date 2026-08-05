@@ -1,0 +1,29 @@
+{
+  "id": "flow-form-expense",
+  "name": "差旅报销工作台",
+  "icon": "form",
+  "details": "完整流程测试：节点绑定的完整 workspace node（explorer+content+property 三区）",
+  "workspace": {
+    "explorer": {
+      "caption": "报销单导航",
+      "icon": "tree",
+      "views": [
+        { "id": "exp-explorer", "tabLabel": "明细项", "icon": "tree", "type": "native_pages", "native_page": "demo.product-explorer", "view": "content", "props": {} }
+      ]
+    },
+    "content": {
+      "caption": "报销单据",
+      "icon": "document",
+      "views": [
+        { "id": "exp-form", "tabLabel": "报销单", "icon": "document", "type": "native_pages", "native_page": "portal.flow.task-form", "view": "content", "props": {} }
+      ]
+    },
+    "property": {
+      "caption": "单据信息",
+      "icon": "detail-view",
+      "views": [
+        { "id": "exp-detail", "tabLabel": "明细详情", "icon": "detail-view", "type": "native_pages", "native_page": "demo.product-content", "view": "content", "props": {} }
+      ]
+    }
+  }
+}

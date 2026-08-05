@@ -602,6 +602,8 @@ pub struct FormBindingReq {
     pk_field: Option<String>,
     #[serde(default)]
     title: Option<String>,
+    #[serde(default)]
+    workspace_node: Option<String>,
 }
 fn default_native() -> String {
     "native".to_string()
@@ -627,6 +629,7 @@ pub async fn save_form_binding(
         file: req.file,
         pk_field: req.pk_field,
         title: req.title,
+        workspace_node: req.workspace_node,
     })
     .await
     .map_err(msg_err)?;
@@ -974,13 +977,27 @@ impl ListQuery {
 }
 
 /// 把 RawTodo 投影成前端待办 JSON（含变量投影 + 状态/申请人）。用于实例/抄送/已办列表。
-fn raw_todo_json(t: &crate::biz_link::RawTodo) -> Value {
+/// `defs`：已装载定义，用于按 (definitionKey, currentNode) 反查该环节 formKey/formMode
+/// （查看时据此打开节点表单工作台）。
+fn raw_todo_json(t: &crate::biz_link::RawTodo, defs: &[cmx_flow_model::ProcessDefinition]) -> Value {
     let vars: Value = t
         .variables_json
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or(Value::Null);
     let vget = |k: &str| vars.get(k).cloned().unwrap_or(Value::Null);
+    // 反查当前环节的表单绑定（cc/done 的 current_node = 真实节点；initiated = 当前活动令牌节点）。
+    let (form_key, form_mode) = t
+        .current_node
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .and_then(|node| {
+            defs.iter()
+                .find(|d| d.key == t.definition_key)
+                .map(|d| form_of_task(d, node))
+        })
+        .map(|(fk, fm, _)| (fk, fm))
+        .unwrap_or((None, None));
     json!({
         "taskId": t.task_id,
         "instanceId": t.instance_id,
@@ -989,6 +1006,9 @@ fn raw_todo_json(t: &crate::biz_link::RawTodo) -> Value {
         "definitionKey": t.definition_key,
         "businessKey": t.business_key,
         "state": t.node_bpmn_id, // 实例列表复用 node 位存状态
+        "currentNode": t.current_node,
+        "formKey": form_key,
+        "formMode": form_mode.unwrap_or_else(|| "approve".to_string()),
         "bizTable": vget("bizTable"),
         "bizId": vget("bizId"),
         "applicant": vget("applicant"),
@@ -997,8 +1017,12 @@ fn raw_todo_json(t: &crate::biz_link::RawTodo) -> Value {
     })
 }
 
-fn page_resp(page: crate::biz_link::TodoPage, f: &crate::biz_link::TodoFilter) -> Json<ApiResp<Value>> {
-    let items: Vec<Value> = page.rows.iter().map(raw_todo_json).collect();
+fn page_resp(
+    page: crate::biz_link::TodoPage,
+    f: &crate::biz_link::TodoFilter,
+    defs: &[cmx_flow_model::ProcessDefinition],
+) -> Json<ApiResp<Value>> {
+    let items: Vec<Value> = page.rows.iter().map(|t| raw_todo_json(t, defs)).collect();
     let (pno, psize) = f.norm();
     Json(ApiResp::ok(json!({
         "tasks": items, "total": page.total, "page": pno, "pageSize": psize,
@@ -1011,12 +1035,13 @@ pub async fn get_initiated(
     CmxSvrContext(_ctx): CmxSvrContext,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
-    let _rt = flow().await?;
+    let rt = flow().await?;
     let f = q.to_filter();
     let page = crate::biz_link::list_instances_paged(&f)
         .await
         .map_err(msg_err)?;
-    Ok(page_resp(page, &f))
+    let defs = rt.definitions.read().await;
+    Ok(page_resp(page, &f, &defs))
 }
 
 /// 抄送我的（分页过滤）。
@@ -1025,13 +1050,14 @@ pub async fn get_cc_todos(
     CmxSvrContext(_ctx): CmxSvrContext,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
-    let _rt = flow().await?;
+    let rt = flow().await?;
     let f = q.to_filter();
     let user = q.user.clone().unwrap_or_default();
     let page = crate::biz_link::list_cc_paged(&user, &f)
         .await
         .map_err(msg_err)?;
-    Ok(page_resp(page, &f))
+    let defs = rt.definitions.read().await;
+    Ok(page_resp(page, &f, &defs))
 }
 
 /// 我已办（历史任务，分页过滤）。
@@ -1040,13 +1066,14 @@ pub async fn get_done_todos(
     CmxSvrContext(_ctx): CmxSvrContext,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
-    let _rt = flow().await?;
+    let rt = flow().await?;
     let f = q.to_filter();
     let user = q.user.clone().unwrap_or_default();
     let page = crate::biz_link::list_done_paged(&user, &f)
         .await
         .map_err(msg_err)?;
-    Ok(page_resp(page, &f))
+    let defs = rt.definitions.read().await;
+    Ok(page_resp(page, &f, &defs))
 }
 
 /// 过滤选项源：流程下拉（已有实例的定义）+ 已装载定义（含名称/节点）。
