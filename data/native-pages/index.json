@@ -224,6 +224,48 @@
       "details": "展示组件库演示 · native_pages · 静态演示 6 个展示类组件（cmx-panel/cmx-toolbar/cmx-status-tag/cmx-empty-state/cmx-desc-list/cmx-filter-bar）+ cmxConfirm 确认对话框，neo 主题；纯前端模拟数据，无后端依赖。",
       "sourceType": "js",
       "relPath": "portal/display/showcase.js"
+    },
+    {
+      "id": "portal.mdm.activation-mapper",
+      "name": "MDM 激活映射配置器",
+      "details": "配置 CR 单据字段→主数据字段的激活映射，存入 cmx_mdm_activation 供激活器读取执行。支持头映射（两列 select 对照）+ 明细映射（按 lineType 分组）。",
+      "sourceType": "js",
+      "relPath": "portal/mdm/activation-mapper.js"
+    },
+    {
+      "id": "portal.mdm.cr-editor",
+      "name": "MDM 变更申请录入台",
+      "details": "录入主数据变更申请（CR）：头表单（供应商关键字段）+ 明细行（银行账户 revo-grid 增删行），保存草稿 / 提交审批，走 /api/mdm/change-requests create/submit 端点。",
+      "sourceType": "js",
+      "relPath": "portal/mdm/cr-editor.js"
+    },
+    {
+      "id": "portal.mdm.cr-todo",
+      "name": "MDM 变更申请待办台",
+      "details": "变更申请待办：按状态过滤（草稿/待审批/已驳回/已激活/已作废），行内操作提交/通过/驳回/作废/修改重提（克隆）/查看详情，走 /api/mdm/change-requests 审批端点。",
+      "sourceType": "js",
+      "relPath": "portal/mdm/cr-todo.js"
+    },
+    {
+      "id": "portal.mdm.duplicate-check",
+      "name": "MDM 查重候选台",
+      "details": "主数据查重：选记录→find-duplicates 候选列表（score+裁决+字段对照）→合并（merge-requests）/还原（undo），走 /api/mdm/records/find-duplicates 与 /api/mdm/merge-requests 端点。",
+      "sourceType": "js",
+      "relPath": "portal/mdm/duplicate-check.js"
+    },
+    {
+      "id": "portal.mdm.steward",
+      "name": "MDM 数据管家工作台",
+      "details": "管家评审：四区队列（待审/已合并/已驳回/已还原）+ 红线 diff（master vs victim 字段对照）+ 逐字段裁决（master/victim/手填→overrides）合并 + 驳回，走 /api/mdm/merge-requests detail/reject 端点。",
+      "sourceType": "js",
+      "relPath": "portal/mdm/steward.js"
+    },
+    {
+      "id": "portal.mdm.health",
+      "name": "MDM 健康检查",
+      "details": "验证 MDM 后端端点可用性（health/activations/change-requests/merge-requests）+ 主数据治理概览 KPI。",
+      "sourceType": "js",
+      "relPath": "portal/mdm/mdm-health.js"
     }
   ]
 }

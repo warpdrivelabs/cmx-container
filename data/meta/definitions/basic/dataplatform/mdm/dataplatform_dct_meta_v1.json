@@ -1,0 +1,195 @@
+{
+  "moduleMeta": {
+    "metaName": "MDM 主数据字典元数据",
+    "metaKind": "DCT",
+    "moduleCode": "MDM",
+    "moduleName": "企业主数据",
+    "version": 1,
+    "versionName": "",
+    "designStyle": "separate-dictionary-tables",
+    "isDefault": true,
+    "remark": "MDM 独立新域主数据(cm_*),只存 published,草稿走 CR 单据。明细表通过业务命名外键(如 supplier_id)挂头表,无物理 FK。"
+  },
+  "baseDctMetaRef": {
+    "file": "base_dct_meta_v1.json",
+    "version": 1,
+    "fieldSets": [
+      "dictionaryCommonFields",
+      "dictionaryAuditFields",
+      "mdmGovernanceFields"
+    ],
+    "remark": "复用 base:公共列 + 审计列 + MDM 治理列。注:此数组仅元数据声明,不参与建表列生成——列生成走各 dictionaryTable 自己的 baseFieldSet/auditFieldSet/*FieldSet 键(compile 兜底分支识别 mdmGovernanceFieldSet)。"
+  },
+  "dictionaryTableConventions": {
+    "remark": "MDM 字典表约定:主键 id(BIGINT,由 baseFieldSet=dictionaryCommonFields 注入);明细表用业务命名外键(如 supplier_id)挂头表,无物理 FK;治理列由 mdmGovernanceFieldSet 注入(lifecycle_status 只 published/frozen/archived/merged)。"
+  },
+  "dictionaryTables": [
+    {
+      "dictMeta": {
+        "dictCode": "supplier",
+        "dictName": "供应商",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cm_supplier",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "供应商主数据头表(激活区,只 published)",
+        "codeLength": 32
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "id": "name",
+          "name": "name",
+          "caption": { "zh_CN": "供应商名称" },
+          "dimType": "attribute",
+          "edit": { "mode": "cmx-text-input", "required": true },
+          "display": { "mode": "text", "align": "left" },
+          "width": "200px",
+          "required": true,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "id": "short_name",
+          "name": "short_name",
+          "caption": { "zh_CN": "简称" },
+          "dimType": "attribute",
+          "edit": { "mode": "cmx-text-input" },
+          "display": { "mode": "text", "align": "left" },
+          "width": "140px",
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true,
+          "id": "tax_no",
+          "name": "tax_no",
+          "caption": { "zh_CN": "税号" },
+          "dimType": "attribute",
+          "edit": { "mode": "cmx-text-input" },
+          "display": { "mode": "text", "align": "left" },
+          "width": "140px",
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "id": "credit_code",
+          "name": "credit_code",
+          "caption": { "zh_CN": "统一社会信用代码" },
+          "dimType": "attribute",
+          "edit": { "mode": "cmx-text-input" },
+          "display": { "mode": "text", "align": "left" },
+          "width": "180px",
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true,
+          "id": "phone",
+          "name": "phone",
+          "caption": { "zh_CN": "电话" },
+          "dimType": "attribute",
+          "edit": { "mode": "cmx-text-input" },
+          "display": { "mode": "text", "align": "left" },
+          "width": "120px",
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "mdmGovernanceFieldSet": "mdmGovernanceFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [ "code" ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "supplier_bank",
+        "dictName": "供应商银行账户",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cm_bank_account",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "account_no",
+        "remark": "供应商银行账户明细(独立 DCT,通过 supplier_id 关联 cm_supplier,无物理 FK)",
+        "codeLength": 32
+      },
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "supplier_id",
+          "name": "supplier_id",
+          "caption": { "zh_CN": "所属供应商ID" },
+          "dimType": "attribute",
+          "edit": { "mode": "readonly" },
+          "display": { "mode": "text", "align": "left" },
+          "width": "120px",
+          "required": false,
+          "visible": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "id": "account_no",
+          "name": "account_no",
+          "caption": { "zh_CN": "银行账号" },
+          "dimType": "attribute",
+          "edit": { "mode": "cmx-text-input", "required": true },
+          "display": { "mode": "text", "align": "left" },
+          "width": "180px",
+          "required": true,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "id": "bank_name",
+          "name": "bank_name",
+          "caption": { "zh_CN": "开户行" },
+          "dimType": "attribute",
+          "edit": { "mode": "cmx-text-input" },
+          "display": { "mode": "text", "align": "left" },
+          "width": "160px",
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "mdmGovernanceFieldSet": "mdmGovernanceFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [ "supplier_id", "account_no" ]
+      ]
+    }
+  ],
+  "updatedAt": "2026-08-04T18:30:00.000Z"
+}

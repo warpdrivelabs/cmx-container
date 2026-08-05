@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "mdm-root",
+      "name": "mdm",
+      "caption": "主数据管理",
+      "icon": "database",
+      "expanded": true,
+      "children": [
+        {
+          "id": "mdm-activation-mapper",
+          "name": "activation-mapper",
+          "caption": "激活映射配置器",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/database-search",
+          "workspace": {
+            "id": "mdm_activation_mapper",
+            "content": {
+              "caption": "激活映射配置器",
+              "icon": "tabler-outline/database-search",
+              "views": [
+                {
+                  "id": "mdm-activation-mapper-content",
+                  "tabLabel": "激活映射",
+                  "icon": "tabler-outline/database-search",
+                  "type": "native_pages",
+                  "native_page": "portal.mdm.activation-mapper",
+                  "view": "content"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mdm-cr-editor",
+          "name": "cr-editor",
+          "caption": "变更申请录入",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/plus",
+          "workspace": {
+            "id": "mdm_cr_editor",
+            "content": {
+              "caption": "变更申请录入",
+              "icon": "tabler-outline/plus",
+              "views": [
+                {
+                  "id": "mdm-cr-editor-content",
+                  "tabLabel": "录入",
+                  "icon": "tabler-outline/plus",
+                  "type": "native_pages",
+                  "native_page": "portal.mdm.cr-editor",
+                  "view": "content"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mdm-cr-todo",
+          "name": "cr-todo",
+          "caption": "变更申请待办",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/checklist",
+          "workspace": {
+            "id": "mdm_cr_todo",
+            "content": {
+              "caption": "变更申请待办",
+              "icon": "tabler-outline/checklist",
+              "views": [
+                {
+                  "id": "mdm-cr-todo-content",
+                  "tabLabel": "待办",
+                  "icon": "tabler-outline/checklist",
+                  "type": "native_pages",
+                  "native_page": "portal.mdm.cr-todo",
+                  "view": "content"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mdm-duplicate-check",
+          "name": "duplicate-check",
+          "caption": "查重候选台",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/copy-check",
+          "workspace": {
+            "id": "mdm_duplicate_check",
+            "content": {
+              "caption": "查重候选台",
+              "icon": "tabler-outline/copy-check",
+              "views": [
+                {
+                  "id": "mdm-duplicate-check-content",
+                  "tabLabel": "查重",
+                  "icon": "tabler-outline/copy-check",
+                  "type": "native_pages",
+                  "native_page": "portal.mdm.duplicate-check",
+                  "view": "content"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mdm-steward",
+          "name": "steward",
+          "caption": "数据管家工作台",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/user-check",
+          "workspace": {
+            "id": "mdm_steward",
+            "content": {
+              "caption": "数据管家工作台",
+              "icon": "tabler-outline/user-check",
+              "views": [
+                {
+                  "id": "mdm-steward-content",
+                  "tabLabel": "管家",
+                  "icon": "tabler-outline/user-check",
+                  "type": "native_pages",
+                  "native_page": "portal.mdm.steward",
+                  "view": "content"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mdm-health",
+          "name": "mdm-health",
+          "caption": "MDM 健康检查",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/heart-rate-monitor",
+          "workspace": {
+            "id": "mdm_health",
+            "content": {
+              "caption": "MDM 健康检查",
+              "icon": "tabler-outline/heart-rate-monitor",
+              "views": [
+                {
+                  "id": "mdm-health-content",
+                  "tabLabel": "健康检查",
+                  "icon": "tabler-outline/heart-rate-monitor",
+                  "type": "native_pages",
+                  "native_page": "portal.mdm.health",
+                  "view": "content"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -980,6 +980,96 @@
           "align": "left"
         }
       ]
+    },
+    "mdmGovernanceFields": {
+      "remark": "MDM 主数据治理字段:lifecycle_status 只 published/frozen/archived/merged(无 draft);published_version 激活版本号;effective_date 未来生效日(可空,>今天则激活器记 pending 不立即落 published)。",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "id": "lifecycle_status",
+          "name": "lifecycle_status",
+          "caption": {
+            "zh_CN": "主数据生命周期状态"
+          },
+          "dimType": "attribute",
+          "defaultValue": "published",
+          "enumValues": [
+            {
+              "value": "published",
+              "label": "已发布"
+            },
+            {
+              "value": "frozen",
+              "label": "冻结"
+            },
+            {
+              "value": "archived",
+              "label": "归档"
+            },
+            {
+              "value": "merged",
+              "label": "已合并"
+            }
+          ],
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": true,
+          "align": "left"
+        },
+        {
+          "dataType": "INT",
+          "fieldLength": 11,
+          "nullable": false,
+          "intDigits": 11,
+          "decimalDigits": 0,
+          "id": "published_version",
+          "name": "published_version",
+          "caption": {
+            "zh_CN": "激活版本号"
+          },
+          "dimType": "attribute",
+          "defaultValue": "1",
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 0,
+          "nullable": true,
+          "id": "effective_date",
+          "name": "effective_date",
+          "caption": {
+            "zh_CN": "生效日(可空,>今天则未来生效)"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-date-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left"
+        }
+      ]
     }
   },
   "updatedAt": "2026-07-29T01:37:32.025Z"
