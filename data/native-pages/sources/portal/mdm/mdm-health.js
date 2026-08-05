@@ -39,7 +39,7 @@ function styleCss() {
   .tbl td { padding:10px 12px; border-bottom:1px solid var(--sapList_BorderColor); }
   .muted { color:var(--sapContent_LabelColor); }
   cmx-panel, cmx-toolbar { display:block; }
-  .pg-body { max-width:1100px; display:flex; flex-direction:column; gap:14px; }
+  .pg-body { display:flex; flex-direction:column; gap:14px; }
   `
 }
 

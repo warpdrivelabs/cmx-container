@@ -29,22 +29,8 @@ async function apiPost(url, payload, dbId) {
   return unwrap(r, await r.json().catch(() => null))
 }
 
-// 弹层挂 document.body（无 transform 祖先，position:fixed 才能铺满视口），
-// 并自带内联样式（shadowRoot 内 <style> 作用不到 body）。前缀类名防污染。
+// 详情/编辑为整页+面包屑（不用弹框），便于后续叠加流程展示。
 let rootEl = null
-
-function dlgCss() {
-  return `
-  .mdm-mask { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:999; }
-  .mdm-dlg { width:720px; max-height:82vh; overflow:auto; border-radius:10px; padding:20px;
-    background:var(--sapList_Background,#1a2332); color:var(--sapTextColor,#eef); border:1px solid var(--sapList_BorderColor,#334); }
-  .mdm-dlg h3 { margin:0 0 14px; font-size:16px; color:var(--sapTitleColor,#fff); }
-  .mdm-dlg .sec { margin:16px 0 8px; font-size:13px; font-weight:600; }
-  .mdm-dlg .tbl { width:100%; border-collapse:collapse; font-size:13px; }
-  .mdm-dlg .tbl th { text-align:left; padding:8px 10px; font-size:12px; color:var(--sapContent_LabelColor,#9ab); border-bottom:1px solid var(--sapList_BorderColor,#334); }
-  .mdm-dlg .tbl td { padding:8px 10px; border-bottom:1px solid var(--sapList_BorderColor,#334); }
-  `
-}
 
 const STATUS_META = {
   draft: { name: '草稿', tone: 'neutral' },
@@ -54,13 +40,18 @@ const STATUS_META = {
   rejected: { name: '已驳回', tone: 'danger' },
   aborted: { name: '已作废', tone: 'neutral' },
 }
-const state = { dbId: '', filter: 'all', list: [] }
+const state = { dbId: '', filter: 'all', list: [], view: 'list', detail: null }
 
 function styleCss() {
   return `
   .pg { height:100%; overflow:auto; box-sizing:border-box; padding:16px 20px;
     background:var(--sapBackgroundColor); color:var(--sapTextColor);
     font-family:var(--sapFontFamily,'72','Segoe UI',Arial,sans-serif); }
+  .crumb { display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:10px; color:var(--sapContent_LabelColor); }
+  .crumb a { color:var(--sapLinkColor,#0a6ed1); cursor:pointer; }
+  .crumb .cur { color:var(--sapTitleColor); font-weight:600; }
+  .card { background:var(--sapList_Background); border:1px solid var(--sapList_BorderColor); border-radius:8px; padding:12px 14px; margin-bottom:12px; }
+  .card-title { font-size:14px; font-weight:600; color:var(--sapTitleColor); margin-bottom:8px; }
   .pg-head { margin-bottom:14px; }
   .pg-title { font-size:20px; font-weight:600; color:var(--sapTitleColor); }
   .pg-sub { font-size:12px; color:var(--sapContent_LabelColor); margin-top:2px; }
@@ -130,7 +121,33 @@ function tableHtml() {
   return `<table class="tbl"><thead><tr><th>ID</th><th>单据号</th><th>名称</th><th>类型</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${trs}</tbody></table>`
 }
 
+function crumbHtml(sub) {
+  return `<div class="crumb"><a id="crumbList">变更申请待办</a>${sub ? `<span class="sep">/</span><span class="cur">${sub}</span>` : ''}</div>`
+}
+
+function detailHtml() {
+  const d = state.detail || {}; const h = d.head || {}; const lines = d.lines || []
+  const kv = (l, v) => `<cmx-desc-item label="${l}">${v ?? '—'}</cmx-desc-item>`
+  const lineRows = lines.map((l, i) => {
+    const p = (l.line_payload && typeof l.line_payload === 'object') ? l.line_payload : {}
+    return `<tr><td>${i + 1}</td><td>${l.line_type || ''}</td><td>${l.line_action || ''}</td><td>${p.account_no || ''}</td><td>${p.bank_name || ''}</td></tr>`
+  }).join('') || '<tr><td colspan="5" class="muted">无明细行</td></tr>'
+  return `<div class="pg">${crumbHtml('申请详情')}
+    <div class="card"><div class="card-title">CR-${h.id ?? ''} 基本信息</div>
+      <cmx-desc-list columns="3" border>
+        ${kv('单据号', h.doc_no)}${kv('状态', (STATUS_META[h.doc_status] || {}).name || h.doc_status)}
+        ${kv('单据类型', h.doc_type)}${kv('变更类型', h.cr_type)}
+        ${kv('目标字典', h.target_dict_code)}${kv('目标记录ID', h.target_record_id)}
+        ${kv('供应商名称', h.name)}${kv('税号', h.tax_no)}${kv('信用代码', h.credit_code)}
+      </cmx-desc-list></div>
+    <div class="card"><div class="card-title">明细行</div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>类型</th><th>操作</th><th>账号</th><th>开户行</th></tr></thead><tbody>${lineRows}</tbody></table></div></div>
+    <div class="card"><div class="card-title">关联流程（预留）</div>
+      <cmx-empty-state icon="process" title="暂无流程" description="后续在此展示该申请的审批/激活流程"></cmx-empty-state></div>`
+}
+
 function viewHtml() {
+  if (state.view === 'detail') return detailHtml()
   return `<div class="pg">
     <div class="pg-head"><div class="pg-title">变更申请待办</div>
       <div class="pg-sub">提交 / 审批 / 驳回 / 修改重提 / 作废，审批通过自动激活落字典</div></div>
@@ -173,40 +190,39 @@ async function doAction(act, id) {
       const ok = await M.cmxConfirm?.({ title: '作废', message: `确认作废 CR-${crId}？`, danger: true })
       if (ok === false) return
       await apiPost('/api/mdm/change-requests/abort', { crId }, state.dbId); M.cmxInfo?.(`CR-${crId} 已作废`)
-    } else if (act === 'view') { await showDetail(crId); return }
+    } else if (act === 'view') { openTab(currentHost, `申请·${crId}`, 'portal.mdm.cr-detail', { crId }); return }
     await load(); refresh()
   } catch (e) { cmx().cmxError?.(`操作失败：${e.message}`) }
 }
 
-async function showDetail(crId) {
-  const d = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
-  const h = d.head || {}; const lines = d.lines || []
-  const kv = (l, v) => `<cmx-desc-item label="${l}">${v ?? '—'}</cmx-desc-item>`
-  const lineRows = lines.map((l, i) => {
-    const p = (l.line_payload && typeof l.line_payload === 'object') ? l.line_payload : {}
-    return `<tr><td>${i + 1}</td><td>${l.line_type || ''}</td><td>${l.line_action || ''}</td><td>${p.account_no || ''}</td><td>${p.bank_name || ''}</td></tr>`
-  }).join('') || '<tr><td colspan="5" class="muted">无明细行</td></tr>'
-  const mask = document.createElement('div'); mask.className = 'mdm-mask'
-  mask.innerHTML = `<style>${dlgCss()}</style><div class="mdm-dlg"><h3>CR-${crId} 详情</h3>
-    <cmx-desc-list columns="2" border>
-      ${kv('单据号', h.doc_no)}${kv('状态', (STATUS_META[h.doc_status] || {}).name || h.doc_status)}
-      ${kv('单据类型', h.doc_type)}${kv('变更类型', h.cr_type)}
-      ${kv('目标字典', h.target_dict_code)}${kv('目标记录ID', h.target_record_id)}
-      ${kv('供应商名称', h.name)}${kv('税号', h.tax_no)}
-      ${kv('信用代码', h.credit_code)}${kv('简称', h.short_name)}
-    </cmx-desc-list>
-    <div class="sec">明细行</div>
-    <table class="tbl"><thead><tr><th>#</th><th>类型</th><th>操作</th><th>账号</th><th>开户行</th></tr></thead><tbody>${lineRows}</tbody></table>
-    <div style="margin-top:16px;text-align:right"><ui5-button design="Default" id="dlgClose">关闭</ui5-button></div></div>`
-  mask.addEventListener('click', (e) => { if (e.target === mask) mask.remove() })
-  mask.querySelector('#dlgClose').addEventListener('click', () => mask.remove())
-  document.body.appendChild(mask)
+/**
+ * 打开并列门户标签页。opts.single=true 单例复用；默认按 context.crId 多开（不同行多个详情 tab）。
+ * addTab 按 id 去重：同 id 复用并同步 context，不同 id 新开。
+ */
+function openTab(host, caption, nativePage, context, opts = {}) {
+  let app = null
+  try { app = document.querySelector('cmx-portal-app') } catch { app = null }
+  if (!app || typeof app.openNode !== 'function') {
+    let n = host
+    for (let i = 0; i < 6 && n; i++) {
+      if (typeof n.openNode === 'function') { app = n; break }
+      const r = n.getRootNode && n.getRootNode(); n = r && r.host
+    }
+  }
+  if (!app || typeof app.openNode !== 'function') { console.warn('[cr-todo] 未找到 portal-app.openNode'); return }
+  const ctxKey = (context && context.crId) || ''
+  const key = opts.single ? 'single' : (ctxKey || Date.now())
+  app.openNode({
+    id: `${nativePage}-${key}`, name: nativePage, caption, type: 'workspace-node',
+    workspace: { content: { caption, views: [{ type: 'native_pages', native_page: nativePage, view: 'content' }] } },
+  }, { initialContext: context })
 }
 
 async function load() { state.list = (await apiGet('/api/mdm/change-requests', state.dbId)) || [] }
 
 function bind(root) {
   rootEl = root
+  root.querySelector('#crumbList')?.addEventListener('click', () => { state.view = 'list'; state.detail = null; refresh() })
   root.querySelectorAll('cmx-kpi-card[clickable]').forEach((k) => k.addEventListener('cmx-kpi-click', () => {
     state.filter = k.dataset.k || 'all'; refresh()
   }))

@@ -31,7 +31,7 @@ async function apiPost(url, payload, dbId) {
   return unwrap(r, await r.json().catch(() => null))
 }
 
-const state = { dbId: '', crFields: [], cmFields: [], crLineFields: [], list: [], current: null }
+const state = { dbId: '', crFields: [], cmFields: [], crLineFields: [], list: [], current: null, headerRows: [] }
 
 // ── 元数据 ───────────────────────────────────────────────────────────────────
 async function loadMeta() {
@@ -47,8 +47,16 @@ async function loadTargetMeta(dictCode) {
 }
 async function loadList() { state.list = (await apiGet('/api/mdm/activations', state.dbId)) || [] }
 
-const crOptions = () => state.crFields.map((f) => ({ value: f.name, label: f.caption || f.name }))
-const cmOptions = () => state.cmFields.map((f) => ({ value: f.name, label: f.caption || f.name }))
+// 显示「字段名（字段）」更直观；caption 兼容字符串或 {zh_CN} 对象；无 caption 仅显示字段
+const capOf = (f) => {
+  const c = f.caption
+  if (!c) return ''
+  if (typeof c === 'string') return c
+  return c.zh_CN || c.zh || c.label || ''
+}
+const disp = (f) => { const c = capOf(f); return (c && c !== f.name ? `${c}（${f.name}）` : f.name) }
+const crOptions = () => state.crFields.map((f) => ({ value: f.name, label: disp(f) }))
+const cmOptions = () => state.cmFields.map((f) => ({ value: f.name, label: disp(f) }))
 
 function styleCss() {
   return `
@@ -72,6 +80,10 @@ function styleCss() {
   .f-item { display:flex; flex-direction:column; gap:6px; min-width:0; }
   .f-item > label { font-size:12px; color:var(--sapContent_LabelColor); }
   .grid-wrap { height:240px; }
+  .tbl { width:100%; border-collapse:collapse; font-size:13px; }
+  .tbl th { text-align:left; padding:8px 10px; font-size:12px; font-weight:600; color:var(--sapContent_LabelColor); border-bottom:1px solid var(--sapList_BorderColor); }
+  .tbl td { padding:8px 10px; border-bottom:1px solid var(--sapList_BorderColor); }
+  .tbl ui5-select { width:100%; display:block; }
   .line-group { border:1px solid var(--sapList_BorderColor); border-radius:6px; padding:12px; margin-bottom:12px; }
   .line-meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
   .muted { color:var(--sapContent_LabelColor); }
@@ -120,7 +132,7 @@ function formHtml() {
       <ui5-button design="Default" icon="refresh" id="amLoadMeta">加载字段</ui5-button>
       <ui5-button design="Default" icon="add" id="amAddRow">增行</ui5-button>
     </cmx-toolbar>
-    <div class="grid-wrap" id="amHeaderGrid"></div>
+    <div id="amHeaderTable"></div>
   </cmx-panel>
   <cmx-panel title="明细映射 line_mappings" icon="table-view">
     <cmx-toolbar><ui5-button design="Default" icon="add" id="amAddLine">增明细组</ui5-button></cmx-toolbar>
@@ -132,33 +144,26 @@ function viewHtml() {
   return `<div class="pg">${headHtml()}<div class="layout"><div class="side">${sideHtml()}</div><div class="main">${state.current ? formHtml() : '<cmx-panel title="映射配置"><div class="muted" style="padding:24px">请从左侧选择或「新建」一份映射</div></cmx-panel>'}</div></div></div>`
 }
 
-// ── 头映射 grid ──────────────────────────────────────────────────────────────
-let headerGrid = null
-function buildHeaderColumnModel() {
-  const C = cmx(); if (!C.CmxColumnModel || !C.CmxColumn) return null
-  const cm = new C.CmxColumnModel({ datasetId: 'headerMap' })
-  cm.setMembers([
-    new C.CmxColumn({ name: 'sourceField', caption: 'CR 单据字段', width: '220px', edit: { mode: 'select' }, editorOptions: crOptions() }),
-    new C.CmxColumn({ name: 'targetField', caption: '主数据字段', width: '220px', edit: { mode: 'select' }, editorOptions: cmOptions() }),
-  ])
-  return cm
-}
-function gridToMapping(grid) {
-  const rows = (grid.getDataSet && grid.getDataSet().getRows()) || []
-  const m = {}; for (const r of rows) { if (r.sourceField && r.targetField) m[r.sourceField] = r.targetField }
+// ── 头映射（普通可编辑表格，规避 revo-grid 弹层/页内时序不渲染问题）──────────
+const mappingToRows = (hm) => Object.entries(hm || {}).map(([sourceField, targetField]) => ({ sourceField, targetField }))
+function syncHeaderRowsFromMapping() { state.headerRows = mappingToRows(state.current?.header_mapping) }
+function headerRowsToMapping() {
+  const m = {}; for (const r of state.headerRows) if (r.sourceField && r.targetField) m[r.sourceField] = r.targetField
   return m
 }
-const mappingToRows = (hm) => Object.entries(hm || {}).map(([sourceField, targetField]) => ({ sourceField, targetField }))
-function bindHeaderGrid() {
-  const C = cmx(); const wrap = q('amHeaderGrid'); if (!wrap) return
-  wrap.innerHTML = ''
-  const grid = document.createElement('cmx-revo-grid')
-  const cm = buildHeaderColumnModel(); if (cm) grid.setColumnModel(cm)
-  grid.setOptions?.({ editable: true, fillHeight: true, showRowIndex: true })
-  const rows = mappingToRows(state.current?.header_mapping)
-  if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows(rows); grid.setDataSet(ds) }
-  else grid.setDataSet?.(rows)
-  wrap.appendChild(grid); headerGrid = grid
+const optHtml = (opts, val) => `<ui5-option value=""></ui5-option>` + opts.map((o) => `<ui5-option value="${o.value}" ${o.value === val ? 'selected' : ''}>${o.label}</ui5-option>`).join('')
+function renderHeaderTable() {
+  const wrap = q('amHeaderTable'); if (!wrap) return
+  wrap.innerHTML = `<table class="tbl"><thead><tr><th>CR 单据字段</th><th>主数据字段</th><th style="width:70px"></th></tr></thead><tbody>
+    ${state.headerRows.map((r, i) => `<tr data-i="${i}">
+      <td><ui5-select class="hm-src" data-i="${i}">${optHtml(crOptions(), r.sourceField)}</ui5-select></td>
+      <td><ui5-select class="hm-tgt" data-i="${i}">${optHtml(cmOptions(), r.targetField)}</ui5-select></td>
+      <td><ui5-button design="Transparent" icon="delete" data-hdel="${i}">删除</ui5-button></td></tr>`).join('')
+      || '<tr><td colspan="3" class="muted">暂无头映射，点击「增行」添加</td></tr>'}
+    </tbody></table>`
+  wrap.querySelectorAll('ui5-select.hm-src').forEach((s) => s.addEventListener('change', () => { state.headerRows[+s.dataset.i].sourceField = s.value }))
+  wrap.querySelectorAll('ui5-select.hm-tgt').forEach((s) => s.addEventListener('change', () => { state.headerRows[+s.dataset.i].targetField = s.value }))
+  wrap.querySelectorAll('[data-hdel]').forEach((b) => b.addEventListener('click', () => { state.headerRows.splice(+b.dataset.hdel, 1); renderHeaderTable() }))
 }
 
 // ── 明细映射 ─────────────────────────────────────────────────────────────────
@@ -193,7 +198,7 @@ function collectForm() {
   const c = state.current
   c.activation_code = val('amCode'); c.source_doc_type = val('amSdt'); c.cr_type = val('amCrt')
   c.target_dict = val('amTd'); c.target_table = val('amTt'); c.code_rule_code = val('amCrc') || null
-  if (headerGrid) c.header_mapping = gridToMapping(headerGrid)
+  c.header_mapping = headerRowsToMapping()
   return c
 }
 async function save() {
@@ -207,11 +212,11 @@ async function save() {
 }
 function newMapping() {
   state.current = { activation_code: '', source_doc_type: '', cr_type: 'create', target_dict: '', target_table: '', header_mapping: {}, line_mappings: [], code_rule_code: null }
-  refresh()
+  syncHeaderRowsFromMapping(); refresh()
 }
 function selectByCode(code) {
   state.current = state.list.find((it) => it.activation_code === code) || null
-  refresh()
+  syncHeaderRowsFromMapping(); refresh()
 }
 
 function bind(root) {
@@ -220,17 +225,15 @@ function bind(root) {
   root.querySelector('#amNew')?.addEventListener('click', newMapping)
   root.querySelector('#amReload')?.addEventListener('click', async () => { await loadList(); refresh() })
   root.querySelector('#amSave')?.addEventListener('click', save)
-  root.querySelector('#amLoadMeta')?.addEventListener('click', async () => { await loadTargetMeta(val('amTd')); bindHeaderGrid() })
-  root.querySelector('#amAddRow')?.addEventListener('click', () => {
-    const ds = headerGrid?.getDataSet?.(); if (ds?.addRow) ds.addRow({ sourceField: '', targetField: '' })
-  })
+  root.querySelector('#amLoadMeta')?.addEventListener('click', async () => { await loadTargetMeta(val('amTd')); renderHeaderTable() })
+  root.querySelector('#amAddRow')?.addEventListener('click', () => { state.headerRows.push({ sourceField: '', targetField: '' }); renderHeaderTable() })
   root.querySelector('#amAddLine')?.addEventListener('click', () => {
     if (!state.current.line_mappings) state.current.line_mappings = []
     state.current.line_mappings.push({ lineType: '', targetDict: '', targetTable: '', parentIdField: '', fields: {} })
     renderLineGroups()
   })
-  root.querySelector('#amTd')?.addEventListener('change', async (e) => { await loadTargetMeta((e.target.value || '').trim()); bindHeaderGrid() })
-  if (state.current) { bindHeaderGrid(); renderLineGroups() }
+  root.querySelector('#amTd')?.addEventListener('change', async (e) => { await loadTargetMeta((e.target.value || '').trim()); renderHeaderTable() })
+  if (state.current) { renderHeaderTable(); renderLineGroups() }
 }
 
 function refresh() {

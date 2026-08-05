@@ -43,7 +43,7 @@ function styleCss() {
   .pg-head { margin-bottom:14px; }
   .pg-title { font-size:20px; font-weight:600; color:var(--sapTitleColor); }
   .pg-sub { font-size:12px; color:var(--sapContent_LabelColor); margin-top:2px; }
-  .pg-body { display:flex; flex-direction:column; gap:14px; max-width:1200px; }
+  .pg-body { display:flex; flex-direction:column; gap:14px; }
   .bar { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; padding:6px 2px; }
   .bar .f-item { display:flex; flex-direction:column; gap:6px; min-width:280px; }
   .bar label { font-size:12px; color:var(--sapContent_LabelColor); }

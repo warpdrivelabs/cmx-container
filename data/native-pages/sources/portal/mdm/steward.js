@@ -46,7 +46,15 @@ function styleCss() {
   .pg-head { margin-bottom:14px; }
   .pg-title { font-size:20px; font-weight:600; color:var(--sapTitleColor); }
   .pg-sub { font-size:12px; color:var(--sapContent_LabelColor); margin-top:2px; }
-  .kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:14px; }
+  .zone-bar { display:flex; gap:8px; margin-bottom:14px; background:var(--sapList_Background);
+    border:1px solid var(--sapList_BorderColor); border-radius:8px; padding:8px; }
+  .zone-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 12px;
+    border-radius:6px; cursor:pointer; border:1px solid transparent; }
+  .zone-tab .z-name { font-size:13px; color:var(--sapTextColor); }
+  .zone-tab .z-count { font-size:16px; font-weight:600; color:var(--sapContent_LabelColor); }
+  .zone-tab:hover { background:var(--sapList_Hover_Background); }
+  .zone-tab.active { border-color:var(--neo-cyan,#00b4d8); background:color-mix(in srgb, var(--neo-cyan,#00b4d8) 12%, transparent); }
+  .zone-tab.active .z-name, .zone-tab.active .z-count { color:var(--neo-cyan,#00b4d8); }
   .tbl { width:100%; border-collapse:collapse; font-size:13px; }
   .tbl th { text-align:left; padding:10px 12px; font-size:12px; font-weight:600; color:var(--sapContent_LabelColor);
     border-bottom:1px solid var(--sapList_BorderColor); }
@@ -66,21 +74,25 @@ function styleCss() {
 }
 
 async function loadGroups() {
-  state.groups = (await apiGet(`/api/mdm/merge-requests?dictCode=supplier&status=${state.zone}`, state.dbId)) || []
+  state.groups = (await apiGet(`/api/mdm/merge-requests?dictCode=supplier`, state.dbId)) || []
 }
+function zoneCount(code) { return state.groups.filter((g) => g.status === code).length }
+function filteredGroups() { return state.groups.filter((g) => g.status === state.zone) }
 async function loadDetail(mergeId) {
   state.detail = await apiGet(`/api/mdm/merge-requests/detail?mergeId=${mergeId}`, state.dbId)
   state.rulings = {}
 }
 
-function kpiHtml() {
-  const card = (z) => `<cmx-kpi-card variant="card" label="${z.name}" value="${state.zone === z.code ? '●' : ''}" tone="${z.tone}" data-z="${z.code}" clickable></cmx-kpi-card>`
-  // 数值需各区计数：并行拉取太重，这里用当前区列表长度+切换；简化为切换器
-  return `<div class="kpi-row">${ZONES.map((z) => `<cmx-kpi-card variant="inline" label="${z.name}" value="${z.code === state.zone ? '当前' : ''}" tone="${z.tone}" data-z="${z.code}" clickable></cmx-kpi-card>`).join('')}</div>`
+function zoneBarHtml() {
+  return `<div class="zone-bar">${ZONES.map((z) => `
+    <div class="zone-tab ${state.zone === z.code ? 'active' : ''}" data-z="${z.code}">
+      <span class="z-name">${z.name}</span><span class="z-count">${zoneCount(z.code)}</span>
+    </div>`).join('')}</div>`
 }
 
 function queueHtml() {
-  const rows = state.groups.length ? state.groups.map((g) => `<tr>
+  const list = filteredGroups()
+  const rows = list.length ? list.map((g) => `<tr>
     <td class="muted">${g.id}</td><td class="muted">${g.master_id ?? ''}</td><td>${g.score ?? ''}</td>
     <td><cmx-status-tag tone="${(ZONES.find((z) => z.code === g.status) || {}).tone || 'neutral'}" variant="subtle" size="sm">${g.status}</cmx-status-tag></td>
     <td>${g.status === 'pending' ? `<ui5-button design="Emphasized" icon="inspect" data-review="${g.id}">评审</ui5-button><ui5-button design="Transparent" icon="decline" data-rej="${g.id}">驳回</ui5-button>` : ''}</td></tr>`).join('') : null
@@ -158,7 +170,7 @@ function bindDiff(scope) {
 function viewHtml() {
   return `<div class="pg"><div class="pg-head"><div class="pg-title">数据管家工作台</div>
     <div class="pg-sub">匹配评审 · 字段级存活裁决 · 合并/驳回/还原</div></div>
-    ${kpiHtml()}${queueHtml()}</div>`
+    ${zoneBarHtml()}${queueHtml()}</div>`
 }
 
 function collectRulings() {
@@ -189,8 +201,8 @@ async function doReject(id) {
 }
 
 function bind(root) {
-  root.querySelectorAll('cmx-kpi-card[data-z]').forEach((k) => k.addEventListener('cmx-kpi-click', async () => {
-    state.zone = k.dataset.z; state.detail = null; await loadGroups(); refresh()
+  root.querySelectorAll('.zone-tab').forEach((k) => k.addEventListener('click', () => {
+    state.zone = k.dataset.z; state.detail = null; refresh()
   }))
   root.querySelectorAll('[data-review]').forEach((b) => b.addEventListener('click', async () => { await loadDetail(b.dataset.review); openDiff() }))
   root.querySelectorAll('[data-rej]').forEach((b) => b.addEventListener('click', () => doReject(b.dataset.rej)))
