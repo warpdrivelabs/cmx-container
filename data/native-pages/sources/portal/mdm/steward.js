@@ -74,7 +74,8 @@ function styleCss() {
 }
 
 async function loadGroups() {
-  state.groups = (await apiGet(`/api/mdm/merge-requests?dictCode=supplier`, state.dbId)) || []
+  const d = (await apiGet(`/api/mdm/merge-requests?dictCode=supplier&pageSize=200`, state.dbId)) || {}
+  state.groups = d.list || []
 }
 function zoneCount(code) { return state.groups.filter((g) => g.status === code).length }
 function filteredGroups() { return state.groups.filter((g) => g.status === state.zone) }

@@ -20,7 +20,7 @@ function unwrap(res, body) {
   return body
 }
 
-const state = { dbId: '', suppliers: [], kw: '' }
+const state = { dbId: '', suppliers: [], kw: '', domain: '', application: '' }
 let rootEl = null
 
 function styleCss() {
@@ -67,6 +67,8 @@ function openTab(host, caption, nativePage, context, opts = {}) {
   const key = opts.single ? 'single' : (ctxKey || Date.now())
   app.openNode({
     id: `${nativePage}-${key}`, name: nativePage, caption, type: 'workspace-node',
+    // 带上域/应用（来自当前页 ctx.props，不写死）：F5 重建动态页时据此切换左侧菜单与右上角域
+    domain_code: state.domain, application_code: state.application,
     workspace: { content: { caption, views: [{ type: 'native_pages', native_page: nativePage, view: 'content' }] } },
   }, { initialContext: context })
 }
@@ -142,6 +144,8 @@ export default {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
       state.dbId = (ctx && ctx.props && (ctx.props.dbId || ctx.props.db_id)) || ''
+      state.domain = (ctx && ctx.props && ctx.props.domain) || ''
+      state.application = (ctx && ctx.props && ctx.props.application) || ''
       try { await loadSuppliers() } catch (e) { console.error('[cr-editor] init fail', e) }
       if (host) whenRendered(host, '.pg', (r) => bind(r))
       return `<style>${styleCss()}</style>${viewHtml()}`

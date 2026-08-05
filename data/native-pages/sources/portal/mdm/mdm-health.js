@@ -47,17 +47,23 @@ async function runChecks() {
   const checks = []
   const t = (name, fn) => fn().then((d) => ({ name, ok: true, detail: d }))
     .catch((e) => ({ name, ok: false, detail: e.message }))
+  // 轻量检查：pageSize=1 只取 total，避免全量拉取（数据量大时性能安全）
   checks.push(await t('模块健康 /api/mdm/health', async () => { const d = await apiGet('/api/mdm/health', state.dbId); return `status=${d.status}` }))
   checks.push(await t('激活映射 /api/mdm/activations', async () => { const d = await apiGet('/api/mdm/activations', state.dbId); return `${(d || []).length} 条映射` }))
-  checks.push(await t('变更申请 /api/mdm/change-requests', async () => { const d = await apiGet('/api/mdm/change-requests', state.dbId); return `${(d || []).length} 条申请` }))
-  checks.push(await t('合并请求 /api/mdm/merge-requests', async () => { const d = await apiGet('/api/mdm/merge-requests?dictCode=supplier', state.dbId); return `${(d || []).length} 条合并` }))
+  checks.push(await t('变更申请 /api/mdm/change-requests', async () => { const d = await apiGet('/api/mdm/change-requests?page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
+  checks.push(await t('合并请求 /api/mdm/merge-requests', async () => { const d = await apiGet('/api/mdm/merge-requests?dictCode=supplier&page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
+  checks.push(await t('变更历史 /api/mdm/audit', async () => { const d = await apiGet('/api/mdm/audit?page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
+  checks.push(await t('事件 /api/mdm/events', async () => { const d = await apiGet('/api/mdm/events?page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
+  checks.push(await t('订阅 /api/mdm/subscriptions', async () => { const d = await apiGet('/api/mdm/subscriptions?page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
   state.checks = checks
 
-  // 概览统计
+  // 概览统计：按状态分页取 total（不拉全量）
   try {
-    const crs = await apiGet('/api/mdm/change-requests', state.dbId) || []
-    const by = (s) => crs.filter((r) => r.doc_status === s).length
-    state.stats = { cr: crs.length, draft: by('draft'), approving: by('approving'), activated: by('activated'), rejected: by('rejected') }
+    const tot = async (qs) => { const d = await apiGet(`/api/mdm/change-requests${qs}&pageSize=1`, state.dbId); return d?.total ?? 0 }
+    state.stats = {
+      cr: await tot('?page=1'), draft: await tot('?docStatus=draft'), approving: await tot('?docStatus=approving'),
+      activated: await tot('?docStatus=activated'), rejected: await tot('?docStatus=rejected'),
+    }
   } catch { state.stats = null }
 }
 

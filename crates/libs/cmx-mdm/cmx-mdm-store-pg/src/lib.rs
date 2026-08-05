@@ -27,8 +27,9 @@ pub use error::{api_err, api_err_db};
 pub use activation_service::{activate, merge, unmerge};
 // M3 匹配/合并 store 对 api 层暴露
 pub use match_store::{
-    get_match_group, insert_match_group, list_match_groups, load_by_ids, load_published,
-    transition_match_group, update_match_group,
+    get_match_group, insert_match_group, list_audit, list_events, list_match_groups,
+    list_subscriptions, load_by_ids, load_published, transition_match_group, update_match_group,
+    upsert_subscription,
 };
 // set_cr_status 供 api 层改 CR 状态(submit/reject,自动提交);激活器内部直接用 md_accessor
 pub use md_accessor::set_cr_status as set_cr_status_pub;

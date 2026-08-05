@@ -49,6 +49,14 @@ impl ModuleRoutes for MdmModule {
                 get(mdm::mdm_merge_requests_list).post(mdm::mdm_merge_requests_create),
             )
             .route("/mdm/merge-requests/undo", post(mdm::mdm_merge_requests_undo))
+            // MDM 治理端点（分页 + 无 path variable）
+            .route("/mdm/audit", get(mdm::mdm_audit_list))
+            .route("/mdm/events", get(mdm::mdm_events_list))
+            .route(
+                "/mdm/subscriptions",
+                get(mdm::mdm_subscriptions_list).post(mdm::mdm_subscriptions_save),
+            )
+            .route("/mdm/publish", post(mdm::mdm_publish))
             // M4 · 管家工作台：详情（红线 diff）/ 驳回
             .route("/mdm/merge-requests/detail", get(mdm::mdm_merge_request_detail))
             .route("/mdm/merge-requests/reject", post(mdm::mdm_merge_request_reject))

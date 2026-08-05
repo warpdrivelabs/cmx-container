@@ -40,7 +40,7 @@ const STATUS_META = {
   rejected: { name: '已驳回', tone: 'danger' },
   aborted: { name: '已作废', tone: 'neutral' },
 }
-const state = { dbId: '', filter: 'all', list: [], view: 'list', detail: null }
+const state = { dbId: '', filter: 'all', list: [], view: 'list', detail: null, domain: '', application: '' }
 
 function styleCss() {
   return `
@@ -214,11 +214,16 @@ function openTab(host, caption, nativePage, context, opts = {}) {
   const key = opts.single ? 'single' : (ctxKey || Date.now())
   app.openNode({
     id: `${nativePage}-${key}`, name: nativePage, caption, type: 'workspace-node',
+    // 域/应用取自当前页 ctx.props（不写死）：F5 重建动态页时据此切换左侧菜单与右上角域
+    domain_code: state.domain, application_code: state.application,
     workspace: { content: { caption, views: [{ type: 'native_pages', native_page: nativePage, view: 'content' }] } },
   }, { initialContext: context })
 }
 
-async function load() { state.list = (await apiGet('/api/mdm/change-requests', state.dbId)) || [] }
+async function load() {
+  const d = (await apiGet('/api/mdm/change-requests?pageSize=200', state.dbId)) || {}
+  state.list = d.list || []
+}
 
 function bind(root) {
   rootEl = root

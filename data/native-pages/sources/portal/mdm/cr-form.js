@@ -21,7 +21,7 @@ async function apiPost(url, payload, dbId) {
 }
 
 const BIZ_FIELDS = ['name', 'tax_no', 'credit_code', 'short_name']
-const state = { dbId: '', mode: 'create', supplier: null }
+const state = { dbId: '', mode: 'create', supplier: null, bankLines: [] }
 let rootEl = null
 const q = (id) => rootEl && rootEl.querySelector('#' + id)
 const val = (id) => { const el = q(id); return el ? (el.value || '').trim() : '' }
@@ -38,7 +38,13 @@ function styleCss() {
   .f-item { display:flex; flex-direction:column; gap:6px; min-width:0; }
   .f-item > label { font-size:12px; color:var(--sapContent_LabelColor); }
   .req::after { content:' *'; color:var(--sapNegativeColor,#e90b0b); }
-  .bank-fill { flex:1; min-height:160px; }
+  .bank-fill { flex:1; min-height:180px; overflow:auto; border:1px solid var(--sapList_BorderColor); border-radius:6px; }
+  .tbl { width:100%; border-collapse:collapse; font-size:13px; }
+  .tbl th { position:sticky; top:0; text-align:left; padding:8px 10px; font-size:12px; font-weight:600; color:var(--sapContent_LabelColor);
+    border-bottom:1px solid var(--sapList_BorderColor); background:var(--sapList_Background); }
+  .tbl td { padding:8px 10px; border-bottom:1px solid var(--sapList_BorderColor); }
+  .tbl input { width:100%; box-sizing:border-box; padding:6px 8px; font-size:13px; border-radius:4px;
+    border:1px solid var(--sapField_BorderColor); background:var(--sapField_Background); color:var(--sapField_TextColor); }
   .foot { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
   cmx-toolbar { display:block; }
   `
@@ -64,6 +70,8 @@ function viewHtml() {
     </div></div></div>`
 }
 
+// 银行行用组件库 cmx-revo-grid（可编辑）。增行用 CmxDataSet.addRow（触发 _refreshSource）+
+// refreshLayout 双保险，保证新行即时可见；容器 .bank-fill 有最低高度。
 let bankGrid = null
 let lineSeq = 0
 const newLine = () => { lineSeq += 1; return { id: `nl_${Date.now()}_${lineSeq}`, account_no: '', bank_name: '' } }
@@ -83,6 +91,7 @@ function bindBankGrid() {
   if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows([newLine()]); grid.setDataSet(ds) }
   else grid.setDataSet?.([newLine()])
   wrap.appendChild(grid); bankGrid = grid
+  queueMicrotask(() => grid.refreshLayout?.())
 }
 function collectLines() {
   const ds = bankGrid?.getDataSet?.()
@@ -116,8 +125,15 @@ async function doSave(submit) {
 function bind(root) {
   rootEl = root
   bindBankGrid()
-  root.querySelector('#fAddRow')?.addEventListener('click', () => bankGrid?.addRow?.(newLine()))
-  root.querySelector('#fDelRow')?.addEventListener('click', () => { const ids = bankGrid?.getSelectedIds?.(); if (ids?.length) bankGrid.removeRows(ids) })
+  root.querySelector('#fAddRow')?.addEventListener('click', () => {
+    const C = cmx()
+    const ds = bankGrid?.getDataSet?.()
+    if (ds?.addRow) ds.addRow(newLine()); else bankGrid?.addRow?.(newLine())
+    queueMicrotask(() => bankGrid?.refreshLayout?.())
+  })
+  root.querySelector('#fDelRow')?.addEventListener('click', () => {
+    const ids = bankGrid?.getSelectedIds?.(); if (ids?.length) { bankGrid.removeRows(ids); queueMicrotask(() => bankGrid?.refreshLayout?.()) }
+  })
   root.querySelector('#fSave')?.addEventListener('click', () => doSave(false))
   root.querySelector('#fSubmit')?.addEventListener('click', () => doSave(true))
 }
@@ -146,6 +162,7 @@ export default {
       const ctxGet = (k) => { try { return host?.workspace?.context?.get?.(k) } catch { return undefined } }
       state.mode = ctxGet('mode') || 'create'
       state.supplier = ctxGet('supplier') || null
+      state.bankLines = [{ account_no: '', bank_name: '' }]
       if (host) whenRendered(host, '.pg', (r) => bind(r))
       return `<style>${styleCss()}</style>${viewHtml()}`
     },

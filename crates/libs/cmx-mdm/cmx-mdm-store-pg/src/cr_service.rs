@@ -35,35 +35,46 @@ pub async fn check_status(
     Ok(head)
 }
 
-/// CR 列表。可选过滤 docStatus。返回精简字段。
+/// CR 列表（分页，返回 total）。可选过滤 docStatus。
+/// 返回 (list, total)。page 从 1 起；page_size<=0 时默认 20。
 pub async fn list_cr(
     mm: &DatabaseManager,
     db_id: &str,
     doc_status: Option<&str>,
-) -> Result<Vec<Value>, cmx_api_types::Error> {
-    let (sql, params): (String, Vec<DataValue>) = if let Some(st) = doc_status {
-        (
-            "SELECT id, doc_no, name, cr_type, doc_status, create_time \
-             FROM cv_mdm_apply WHERE doc_status = $1 AND delete_flag = 0 \
-             ORDER BY create_time DESC"
-                .to_string(),
-            vec![DataValue::String(st.into())],
-        )
+    page: i64,
+    page_size: i64,
+) -> Result<(Vec<Value>, i64), cmx_api_types::Error> {
+    let (where_sql, mut params): (String, Vec<DataValue>) = if let Some(st) = doc_status {
+        ("doc_status = $1 AND delete_flag = 0".to_string(), vec![DataValue::String(st.into())])
     } else {
-        (
-            "SELECT id, doc_no, name, cr_type, doc_status, create_time \
-             FROM cv_mdm_apply WHERE delete_flag = 0 \
-             ORDER BY create_time DESC"
-                .to_string(),
-            vec![],
-        )
+        ("delete_flag = 0".to_string(), vec![])
     };
+    // 总数
+    let cnt_sql = format!("SELECT COUNT(*) AS c FROM cv_mdm_apply WHERE {where_sql}");
+    let cds = mm
+        .query_sql_with_datavalues(db_id, None, &cnt_sql, params.clone(), "mdm_cr_count")
+        .await
+        .map_err(|e| api_err(&format!("查 CR 总数失败: {e}")))?;
+    let total = cds.rows.first()
+        .and_then(|r| r.get_by_name_as::<i64>(cds.schema.as_ref(), "c"))
+        .unwrap_or(0);
+    // 分页
+    let ps = if page_size > 0 { page_size } else { 20 };
+    let pg = if page > 0 { page } else { 1 };
+    let off = (pg - 1) * ps;
+    let n = params.len() as i64;
+    params.push(DataValue::Int(ps));
+    params.push(DataValue::Int(off));
+    let sql = format!(
+        "SELECT id, doc_no, name, cr_type, doc_status, create_time \
+         FROM cv_mdm_apply WHERE {where_sql} ORDER BY create_time DESC \
+         LIMIT ${} OFFSET ${}", n + 1, n + 2);
     let ds = mm
         .query_sql_with_datavalues(db_id, None, &sql, params, "mdm_cr_list")
         .await
         .map_err(|e| api_err(&format!("查 CR 列表失败: {e}")))?;
     let schema = ds.schema.as_ref();
-    Ok(ds.rows.iter().map(|r| r.to_json_value(schema)).collect())
+    Ok((ds.rows.iter().map(|r| r.to_json_value(schema)).collect(), total))
 }
 
 /// CR 详情(头+行)。

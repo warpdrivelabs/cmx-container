@@ -52,7 +52,12 @@
                   "icon": "tabler-outline/plus",
                   "type": "native_pages",
                   "native_page": "portal.mdm.cr-editor",
-                  "view": "content"
+                  "view": "content",
+                  "props": {
+                    "domain": "basic",
+                    "application": "dataplatform",
+                    "module": "mdm"
+                  }
                 }
               ]
             }
@@ -77,7 +82,12 @@
                   "icon": "tabler-outline/checklist",
                   "type": "native_pages",
                   "native_page": "portal.mdm.cr-todo",
-                  "view": "content"
+                  "view": "content",
+                  "props": {
+                    "domain": "basic",
+                    "application": "dataplatform",
+                    "module": "mdm"
+                  }
                 }
               ]
             }
