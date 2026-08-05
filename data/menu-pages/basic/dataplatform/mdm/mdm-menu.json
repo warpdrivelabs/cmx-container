@@ -112,7 +112,12 @@
                                     "icon": "tabler-outline/copy-check",
                                     "type": "native_pages",
                                     "native_page": "portal.mdm.duplicate-check",
-                                    "view": "content"
+                                    "view": "content",
+                                    "props": {
+                                        "domain": "basic",
+                                        "application": "dataplatform",
+                                        "module": "mdm"
+                                    }
                                 }
                             ]
                         }

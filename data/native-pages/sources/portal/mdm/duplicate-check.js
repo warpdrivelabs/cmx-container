@@ -46,9 +46,20 @@ const DECISION_META = {
 }
 const statusCn = (s) => STATUS_CN[s] || s || ''
 
+// 字典坐标四元组（domain/application/module/dbId），全部来自 ctx.props，代码中不写死。
+// 参照 data-editor.js 的 readDef：缺值返回 null，调用方据提示而非兜底默认值。
+let coord = null
+// 拼接 domain/application/module query 段（与 data-editor qs 一致）
+function coordQs(extra = {}) {
+  if (!coord) return new URLSearchParams(extra).toString()
+  return new URLSearchParams({
+    domain: coord.domain, application: coord.application, module: coord.module,
+    ...(coord.dbId ? {} : {}), ...extra,
+  }).toString()
+}
+
 // 全局状态
 const state = {
-  dbId: '', domain: '', application: '', module: '',
   dictCode: '', dictMeta: null,            // 选中的字典 + 其 meta（columns）
   rule: null,                              // 当前查重规则（来自 match-config 或用户新建）
   rules: [],                               // 该字典已有规则列表
@@ -78,7 +89,9 @@ function styleCss() {
   .neo-panel-body { padding:12px 14px; }
   .muted { color:var(--sapContent_LabelColor,#6a6d70); }
   .bar { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
-  .bar .f-item { display:flex; flex-direction:column; gap:4px; min-width:240px; flex:1 1 240px; }
+  .bar .f-item { display:flex; flex-direction:column; gap:4px; min-width:200px; flex:1 1 200px; }
+  /* 字典选择框：下拉型，限制宽度避免过宽 */
+  .bar .f-item.f-dict { flex:0 0 280px; max-width:300px; }
   .bar label { font-size:12px; color:var(--sapContent_LabelColor,#6a6d70); }
   cmx-dict-select { display:block; }
   .hint { font-size:12px; color:var(--sapContent_LabelColor,#6a6d70); margin-top:6px; }
@@ -111,39 +124,65 @@ function styleCss() {
 }
 
 // ── 字典选择 ────────────────────────────────────────────────────────────
+// 字典列表缓存（dictCode → {dictCode,dictName,targetTable}），避免每次搜索重复请求
+let _dictListCache = null
+async function loadDictList() {
+  if (_dictListCache) return _dictListCache
+  if (!coord) return []
+  const out = []
+  try {
+    // 1. 取该域所有 DCT 定义文件（domain/application/module 来自 coord，不写死）
+    const d = await apiGet(`/api/definitions/list?${coordQs({ kind: 'DCT' })}`, coord.dbId)
+    const files = (d && d.items) || []
+    // 2. 对每个文件取 config，读 dictionaryTables[].dictMeta 拿 dictCode/dictName/tableName
+    await Promise.all(files.map(async (f) => {
+      try {
+        const fCoord = {
+          domain: f.domain || coord.domain, application: f.application || coord.application,
+          module: f.module || coord.module, dbId: coord.dbId,
+        }
+        const cfg = await apiGet(`/api/definitions/config?${new URLSearchParams({ kind: 'DCT', domain: fCoord.domain, application: fCoord.application, module: fCoord.module, file: f.file }).toString()}`, fCoord.dbId)
+        const tables = (cfg && cfg.dictionaryTables) || []
+        for (const t of tables) {
+          const m = t.dictMeta || {}
+          if (m.dictCode) out.push({ dictCode: m.dictCode, dictName: m.dictName || m.dictCode, targetTable: m.tableName || '' })
+        }
+      } catch (e) { /* 单文件失败跳过 */ }
+    }))
+  } catch (e) { /* 整体失败返回空 */ }
+  _dictListCache = out
+  return out
+}
+
 function dictSource() {
-  // 走 /api/model/definitions/list?kind=DCT 取所有字典定义文件，再聚合 dictCode。
-  // 简化：直接列几个已知 mdm 域字典（supplier），帮助弹窗用 dct/data/search。
+  // 走 /api/definitions/list?kind=DCT 取该域所有 DCT 定义文件，再对每个文件取 config 读
+  // dictionaryTables[].dictMeta 聚合出 dictCode/dictName/tableName 列表（缓存在 _dictListCache）。
   return {
-    keyField: 'dictCode', labelField: 'dictName', pageSize: 50,
+    keyField: 'dictCode', labelField: 'dictName', pageSize: 100,
     search: async (query) => {
-      const d = await apiGet('/api/model/definitions/list?kind=DCT&domain=basic&application=dataplatform&module=mdm', state.dbId)
-      const items = (d && d.items) || []
-      // 每个 file 再取 config 读 dictionaryTables（这里简化：本地维护可选字典）
-      const known = [{ dictCode: 'supplier', dictName: '供应商', targetTable: 'cm_supplier' }]
-      const q = (query || '').toLowerCase()
-      return known.filter((x) => !q || x.dictName.toLowerCase().includes(q) || x.dictCode.toLowerCase().includes(q))
+      const all = await loadDictList()
+      const q = (query || '').toLowerCase().trim()
+      if (!q) return all
+      return all.filter((x) => (x.dictName || '').toLowerCase().includes(q) || (x.dictCode || '').toLowerCase().includes(q))
     },
     loadByKeys: async (keys) => {
-      const known = [{ dictCode: 'supplier', dictName: '供应商', targetTable: 'cm_supplier' }]
-      return known.filter((x) => keys.includes(x.dictCode))
+      const all = await loadDictList()
+      return all.filter((x) => keys.includes(x.dictCode))
     },
   }
 }
 
 function recordSource() {
-  if (!state.dictCode) return null
+  if (!state.dictCode || !coord) return null
   return {
     keyField: 'id', labelField: 'name', pageSize: 50,
     search: async (query, o) => {
-      const q = new URLSearchParams({ domain: state.domain, application: state.application, module: state.module, dict: state.dictCode })
-      const d = await apiPost('/api/dct/data/search?' + q.toString(), { page: (o && o.page) || 1, pageSize: (o && o.pageSize) || 50, q: query || '' }, state.dbId)
+      const d = await apiPost('/api/dct/data/search?' + coordQs({ dict: state.dictCode }), { page: (o && o.page) || 1, pageSize: (o && o.pageSize) || 50, q: query || '' }, coord.dbId)
       return (d && d.rows) || []
     },
     loadByKeys: async (keys) => {
       if (!keys || !keys.length) return []
-      const q = new URLSearchParams({ domain: state.domain, application: state.application, module: state.module, dict: state.dictCode })
-      const d = await apiPost('/api/dct/data/search?' + q.toString(), { page: 1, pageSize: Math.max(20, keys.length), filters: { id: keys } }, state.dbId)
+      const d = await apiPost('/api/dct/data/search?' + coordQs({ dict: state.dictCode }), { page: 1, pageSize: Math.max(20, keys.length), filters: { id: keys } }, coord.dbId)
       return (d && d.rows) || []
     },
   }
@@ -151,13 +190,12 @@ function recordSource() {
 
 async function loadDictMeta() {
   if (!state.dictCode) { state.dictMeta = null; return }
-  const q = new URLSearchParams({ domain: state.domain, application: state.application, module: state.module, dict: state.dictCode, with_props: 'true' })
-  state.dictMeta = await apiGet('/api/dct/meta?' + q.toString(), state.dbId)
+  state.dictMeta = await apiGet('/api/dct/meta?' + coordQs({ dict: state.dictCode, with_props: 'true' }), coord && coord.dbId)
 }
 
 async function loadRules() {
   if (!state.dictCode) { state.rules = []; return }
-  state.rules = (await apiGet(`/api/mdm/match-configs?dictCode=${encodeURIComponent(state.dictCode)}`, state.dbId)) || []
+  state.rules = (await apiGet(`/api/mdm/match-configs?dictCode=${encodeURIComponent(state.dictCode)}`, coord && coord.dbId)) || []
   // 默认选第一条
   if (state.rules.length && !state.rule) state.rule = normalizeRule(state.rules[0])
   else if (!state.rules.length) state.rule = null
@@ -195,15 +233,16 @@ function condHtml() {
   return `<section class="neo-panel">
     <div class="neo-panel-head"><div class="pt"><ui5-icon name="filter"></ui5-icon>查重条件</div></div>
     <div class="neo-panel-body">
+      ${!coord ? '<div class="hint">页面坐标缺失：请在菜单节点 props 中配置 domain / application / module。</div>' : `
       <div class="bar">
-        <div class="f-item">
+        <div class="f-item f-dict">
           <label>数据字典</label>
           <cmx-dict-select id="dcDict" ${state.dictCode ? `value="${state.dictCode}"` : ''}></cmx-dict-select>
         </div>
         ${recSel}
         <ui5-button design="Emphasized" icon="search" id="dcFind" ?disabled=${!state.dictCode || !state.targetId || !ruleHasFields()}>查重</ui5-button>
       </div>
-      ${state.dictCode ? ruleHtml() : '<div class="hint">请先选择数据字典</div>'}
+      ${state.dictCode ? ruleHtml() : '<div class="hint">请先选择数据字典</div>'}`}
     </div>
   </section>`
 }
@@ -382,6 +421,7 @@ function bind(root) {
     dcDict.configure({
       dictCode: '_selector', idCol: 'dictCode', labelCol: 'dictName',
       helpLayout: 'grid', dataSource: dictSource(), dictTitle: '选择数据字典',
+      helpDialogWidth: '40vw', helpDialogHeight: '70vh',
       columns: [new C.CmxColumn({ id: 'dictCode', caption: '字典码', dataType: 'VARCHAR', width: '140px' }), new C.CmxColumn({ id: 'dictName', caption: '字典名称', dataType: 'VARCHAR' })],
     })
     dcDict.addEventListener('cmx-dict-change', (e) => { const d = e.detail || {}; onDictChange(d.id || '') })
@@ -394,7 +434,7 @@ function bind(root) {
       const cols = []
       const mc = (state.dictMeta && state.dictMeta.columns) || []
       ;['code', 'name', 'credit_code'].forEach((id) => { const c = mc.find((x) => x.name === id); if (c) cols.push(new C.CmxColumn({ id: c.name, caption: c.caption, dataType: 'VARCHAR', width: c.name === 'name' ? '200px' : '140px' })) })
-      dcRecord.configure({ dictCode: state.dictCode, idCol: 'id', labelCol: 'name', helpLayout: 'grid', dataSource: ds, dictTitle: '选择目标记录', columns: cols })
+      dcRecord.configure({ dictCode: state.dictCode, idCol: 'id', labelCol: 'name', helpLayout: 'grid', dataSource: ds, dictTitle: '选择目标记录', helpDialogWidth: '60vw', helpDialogHeight: '80vh', columns: cols })
       dcRecord.addEventListener('cmx-dict-change', (e) => { const d = e.detail || {}; onRecordChange(d) })
     }
   }
@@ -491,7 +531,7 @@ async function runFind() {
     dictCode: state.dictCode, recordId: Number(state.targetId), targetTable: r.targetTable,
     specs: r.specs, clusterKeys: r.clusterKeys, surviveFields: r.surviveFields,
   }
-  state.result = await apiPost('/api/mdm/records/find-duplicates', payload, state.dbId)
+  state.result = await apiPost('/api/mdm/records/find-duplicates', payload, coord && coord.dbId)
   state.selCand = null; state.victimIds = []
   refresh()
   cmx().cmxInfo?.(`查重完成，发现 ${((state.result && state.result.candidates) || []).length} 个候选`)
@@ -514,7 +554,7 @@ async function doMerge() {
   await apiPost('/api/mdm/merge-requests', {
     dictCode: state.dictCode, masterId: Number(state.targetId), victimIds: state.victimIds,
     targetTable: r.targetTable, surviveFields: r.surviveFields,
-  }, state.dbId)
+  }, coord && coord.dbId)
   M.cmxInfo?.('合并成功')
   // 刷新候选（剔除已合并）+ 历史
   state.victimIds = []; state.selCand = null
@@ -529,7 +569,7 @@ async function doUndo(mergeId) {
     title: '确认还原', message: '还原会让被合并方完整恢复（状态、明细、交叉引用）；但主记录被合并带过来的字段值不会回退。是否继续？',
   })
   if (ok === false) return
-  await apiPost('/api/mdm/merge-requests/undo', { mergeId: Number(mergeId) }, state.dbId)
+  await apiPost('/api/mdm/merge-requests/undo', { mergeId: Number(mergeId) }, coord && coord.dbId)
   M.cmxInfo?.('已还原')
   await loadHist(); refresh()
 }
@@ -546,7 +586,7 @@ async function saveRule() {
     id: r.id || '', ruleName: r.ruleName, dictCode: state.dictCode, targetTable: r.targetTable,
     specs: r.specs, clusterKeys: r.clusterKeys, surviveFields: r.surviveFields, thresholds: r.thresholds,
   }
-  const saved = await apiPost('/api/mdm/match-configs', payload, state.dbId)
+  const saved = await apiPost('/api/mdm/match-configs', payload, coord && coord.dbId)
   if (saved && saved.id) state.rule.id = saved.id
   state.ruleDirty = false
   await loadRules()
@@ -557,7 +597,7 @@ async function saveRule() {
 async function loadHist() {
   const q = new URLSearchParams({ page: String(state.histPage), pageSize: String(state.histPageSize) })
   if (state.histDict) q.set('dictCode', state.histDict)
-  const d = await apiGet('/api/mdm/merge-requests?' + q.toString(), state.dbId)
+  const d = await apiGet('/api/mdm/merge-requests?' + q.toString(), coord && coord.dbId)
   state.histList = (d && d.list) || []
   state.histTotal = (d && d.total) || 0
   // 关键字二次过滤（后端暂不支持名称搜索，前端按 masterName/memberNames 过滤）
@@ -587,19 +627,27 @@ function whenRendered(host, sel, cb, t) {
   requestAnimationFrame(() => whenRendered(host, sel, cb, n - 1))
 }
 
+// 从 ctx.props 读取字典坐标四元组（参照 data-editor.js readDef），不写死默认值。
+// domain/application/module 缺任一返回 null（调用方据提示，不用兜底默认）。
+function readCoord(ctx) {
+  const p = (ctx && ctx.props) || {}
+  const c = {
+    domain: p.domain || '', application: p.application || '',
+    module: p.module || '', dbId: p.dbId || p.db_id || '',
+  }
+  return (c.domain && c.application && c.module) ? c : null
+}
+
 export default {
   defaultView: 'content',
   views: {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
-      const props = (ctx && ctx.props) || {}
-      state.domain = props.domain || 'basic'
-      state.application = props.application || 'dataplatform'
-      state.module = props.module || 'mdm'
-      state.dbId = props.dbId || props.db_id || ''
-      // 初始加载历史（独立常驻）
+      coord = readCoord(ctx)
+      // 初始加载历史（独立常驻，coord 可能为 null——历史区按字典过滤时再用）
       try { await loadHist() } catch (e) { console.error('[duplicate-check] loadHist fail', e) }
       if (host) whenRendered(host, '.pg', (r) => { rootEl = r; bind(r) })
+      // coord 缺失时仍渲染页面，条件区提示「请配置菜单 props 的 domain/application/module」
       return `<style>${styleCss()}</style>${viewHtml()}`
     },
   },
