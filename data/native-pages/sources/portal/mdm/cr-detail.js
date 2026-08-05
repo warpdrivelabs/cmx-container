@@ -51,8 +51,8 @@ function viewHtml() {
       </cmx-desc-list></div>
     <div class="card"><div class="card-title">明细行</div>
       <table class="tbl"><thead><tr><th>#</th><th>类型</th><th>操作</th><th>账号</th><th>开户行</th></tr></thead><tbody>${lineRows}</tbody></table></div>
-    <div class="card"><div class="card-title">关联流程（预留）</div>
-      <cmx-empty-state icon="process" title="暂无流程" description="后续在此展示该申请的审批/激活流程"></cmx-empty-state></div></div>`
+    <div class="card"><div class="card-title">关联流程</div>
+      <cmx-empty-state icon="process" title="暂无流程" description="审批记录后续从流程引擎接入"></cmx-empty-state></div></div>`
 }
 let currentHost = null
 export default {

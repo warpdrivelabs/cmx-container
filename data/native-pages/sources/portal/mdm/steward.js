@@ -97,10 +97,10 @@ function queueHtml() {
     <td class="muted">${g.id}</td><td class="muted">${g.master_id ?? ''}</td><td>${g.score ?? ''}</td>
     <td><cmx-status-tag tone="${(ZONES.find((z) => z.code === g.status) || {}).tone || 'neutral'}" variant="subtle" size="sm">${g.status}</cmx-status-tag></td>
     <td>${g.status === 'pending' ? `<ui5-button design="Emphasized" icon="inspect" data-review="${g.id}">评审</ui5-button><ui5-button design="Transparent" icon="decline" data-rej="${g.id}">驳回</ui5-button>` : ''}</td></tr>`).join('') : null
-  return `<cmx-panel title="评审队列 · ${state.zone}" icon="queue">
+  return `<cmx-panel title="评审队列 · ${state.zone}" icon="list">
     ${rows
       ? `<table class="tbl"><thead><tr><th>group</th><th>master</th><th>score</th><th>status</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`
-      : `<cmx-empty-state icon="queue" title="该区暂无合并请求"></cmx-empty-state>`}
+      : `<cmx-empty-state icon="list" title="该区暂无合并请求"></cmx-empty-state>`}
   </cmx-panel>`
 }
 

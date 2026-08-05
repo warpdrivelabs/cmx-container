@@ -199,8 +199,9 @@ function buildListGrid() {
       new C.CmxColumn({ id: 'create_time', caption: '创建时间', dataType: 'VARCHAR', width: '150px', display: {
         mode: 'text', format: 'datetime:YYYY-MM-DD HH:mm:ss', align: 'center',
       } }),
-      new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '180px', edit: { mode: 'readonly' },
+      new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '200px', edit: { mode: 'readonly' },
         display: { mode: 'actions', actions: [
+          { text: '详情', actionRef: 'view', icon: 'detail-view' },
           { text: '提交',   actionRef: 'submit',  visible: is('draft') },
           { text: '作废',   actionRef: 'abort',   variant: 'negative', visible: is('draft') },
           { text: '通过',   actionRef: 'approve', variant: 'emphasized', visible: is('approving') },
@@ -251,7 +252,7 @@ async function doAction(act, id) {
       const ok = await M.cmxConfirm?.({ title: '作废', message: `确认作废 CR-${crId}？`, danger: true })
       if (ok === false) return
       await apiPost('/api/mdm/change-requests/abort', { crId }, state.dbId); M.cmxInfo?.(`CR-${crId} 已作废`)
-    } else if (act === 'view') { openTab(currentHost, `申请·${crId}`, 'portal.mdm.cr-detail', { crId }); return }
+    } else if (act === 'view') { openTab(currentHost, `单据·CR-${crId}`, 'portal.mdm.cr-detail', { crId }); return }
     await load(); refresh()
   } catch (e) { cmx().cmxError?.(`操作失败：${e.message}`) }
 }
