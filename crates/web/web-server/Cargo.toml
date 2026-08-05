@@ -23,6 +23,8 @@ cmx-doc-api = { workspace = true }
 cmx-dct-api = { workspace = true }
 # 内部依赖 - 主数据（MDM）HTTP 层（MdmModule 路由，同破环设计）
 cmx-mdm-api = { workspace = true }
+# 内部依赖 - 编码引擎 HTTP 层（CodeModule 路由，同破环设计）
+cmx-code-api = { workspace = true }
 # 内部依赖 - 异步任务中心内核（init_job_subsystem 启动 + JobManager 单例）
 cmx-job-core = { workspace = true }
 # 内部依赖 - 异步任务中心 PG 持久化（PgJobStore：cmx_job_* 落库 + 崩溃恢复）

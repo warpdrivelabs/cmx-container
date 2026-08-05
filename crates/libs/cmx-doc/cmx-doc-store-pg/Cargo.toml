@@ -14,6 +14,8 @@ authors.workspace = true
 cmx-doc-model = { workspace = true }
 # 内部依赖 - 核心库（DataValue/DataSet/Row/Schema/ColumnarCodec）
 cmx-core = { workspace = true }
+# 内部依赖 - 跨模块 trait 注入（GlobalCodeMinter：编码引擎钩子注入点）
+cmx-traits = { workspace = true }
 # 内部依赖 - 数据库（sqlx 驱动门面：DatabaseManager，老链路 + sqlx 零拷贝）
 cmx-database = { workspace = true }
 # 内部依赖 - 数据库（tokio-postgres 并行 DB 层：ZmcDataSet 零拷贝新链路）

@@ -44,6 +44,8 @@ pub struct LayerView {
     pub schema: Arc<Schema>,
     /// 落库前列级校验规范（含类型/长度/精度/nullable；从合并后原始字段构建）。
     pub spec: Arc<cmx_biz::validation::TableSpec>,
+    /// 编码规则挂载点声明（来自 voucherTables[i].codeRule，None=未配置编码引擎）。
+    pub code_rule: Option<serde_json::Value>,
 }
 
 impl LayerView {
@@ -548,6 +550,7 @@ fn parse_layer(
         agg_fields,
         schema,
         spec,
+        code_rule: t.get("codeRule").cloned(),
     })
 }
 
