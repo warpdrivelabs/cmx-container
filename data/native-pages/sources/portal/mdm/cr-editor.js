@@ -20,7 +20,16 @@ function unwrap(res, body) {
   return body
 }
 
-const state = { dbId: '', suppliers: [], kw: '', domain: '', application: '' }
+const state = { suppliers: [], kw: '' }
+
+// 字典坐标四元组（domain/application/module/dbId），全部来自 ctx.props，代码中不写死。
+let coord = null
+function coordQs(extra = {}) {
+  if (!coord) return new URLSearchParams(extra).toString()
+  return new URLSearchParams({
+    domain: coord.domain, application: coord.application, module: coord.module, ...extra,
+  }).toString()
+}
 let rootEl = null
 
 function styleCss() {
@@ -68,14 +77,15 @@ function openTab(host, caption, nativePage, context, opts = {}) {
   app.openNode({
     id: `${nativePage}-${key}`, name: nativePage, caption, type: 'workspace-node',
     // 带上域/应用（来自当前页 ctx.props，不写死）：F5 重建动态页时据此切换左侧菜单与右上角域
-    domain_code: state.domain, application_code: state.application,
+    domain_code: (coord && coord.domain) || '', application_code: (coord && coord.application) || '',
     workspace: { content: { caption, views: [{ type: 'native_pages', native_page: nativePage, view: 'content' }] } },
   }, { initialContext: context })
 }
 
 async function loadSuppliers() {
-  const h = { Accept: 'application/json' }; if (state.dbId) h.db_id = state.dbId
-  const res = await fetch('/api/dct/export?domain=basic&application=dataplatform&module=mdm&dict=supplier', { headers: h, credentials: 'same-origin' })
+  if (!coord) { state.suppliers = []; return }
+  const h = { Accept: 'application/json' }; if (coord.dbId) h.db_id = coord.dbId
+  const res = await fetch(`/api/dct/export?${coordQs({ dict: 'supplier' })}`, { headers: h, credentials: 'same-origin' })
   const text = await res.text()
   state.suppliers = text.split('\n').filter((l) => l.trim()).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
 }
@@ -138,14 +148,19 @@ function whenRendered(host, sel, cb, t) {
   requestAnimationFrame(() => whenRendered(host, sel, cb, n - 1))
 }
 
+// 从 ctx.props 读取字典坐标四元组（不写死默认值）；缺 domain/application/module 返回 null。
+function readCoord(ctx) {
+  const p = (ctx && ctx.props) || {}
+  const c = { domain: p.domain || '', application: p.application || '', module: p.module || '', dbId: p.dbId || p.db_id || '' }
+  return (c.domain && c.application && c.module) ? c : null
+}
+
 export default {
   defaultView: 'content',
   views: {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
-      state.dbId = (ctx && ctx.props && (ctx.props.dbId || ctx.props.db_id)) || ''
-      state.domain = (ctx && ctx.props && ctx.props.domain) || ''
-      state.application = (ctx && ctx.props && ctx.props.application) || ''
+      coord = readCoord(ctx)
       try { await loadSuppliers() } catch (e) { console.error('[cr-editor] init fail', e) }
       if (host) whenRendered(host, '.pg', (r) => bind(r))
       return `<style>${styleCss()}</style>${viewHtml()}`

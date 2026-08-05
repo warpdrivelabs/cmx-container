@@ -31,21 +31,32 @@ async function apiPost(url, payload, dbId) {
   return unwrap(r, await r.json().catch(() => null))
 }
 
-const state = { dbId: '', crFields: [], cmFields: [], crLineFields: [], list: [], current: null, headerRows: [] }
+const state = { crFields: [], cmFields: [], crLineFields: [], list: [], current: null, headerRows: [] }
+
+// 字典坐标四元组（domain/application/module/dbId），全部来自 ctx.props，代码中不写死。
+let coord = null
+function coordQs(extra = {}) {
+  if (!coord) return new URLSearchParams(extra).toString()
+  return new URLSearchParams({
+    domain: coord.domain, application: coord.application, module: coord.module, ...extra,
+  }).toString()
+}
 
 // ── 元数据 ───────────────────────────────────────────────────────────────────
 async function loadMeta() {
-  const docMeta = await apiGet('/api/doc/meta?domain=basic&application=dataplatform&module=mdm&file=dataplatform_doc_meta_v1.json', state.dbId)
+  if (!coord) return
+  // doc/meta 文件名约定为 {module}_doc_meta_v1.json（与 domain/application/module 同坐标）
+  const docMeta = await apiGet(`/api/doc/meta?${coordQs({ file: `${coord.module}_doc_meta_v1.json` })}`, coord.dbId)
   const layers = (docMeta && docMeta.layers) || []
   state.crFields = (layers.find((l) => l.tableName === 'cv_mdm_apply') || {}).columns || []
   state.crLineFields = (layers.find((l) => l.tableName === 'cv_mdm_apply_line') || {}).columns || []
 }
 async function loadTargetMeta(dictCode) {
-  if (!dictCode) { state.cmFields = []; return }
-  const m = await apiGet(`/api/dct/meta?domain=basic&application=dataplatform&module=mdm&dict=${encodeURIComponent(dictCode)}`, state.dbId)
+  if (!dictCode || !coord) { state.cmFields = []; return }
+  const m = await apiGet(`/api/dct/meta?${coordQs({ dict: dictCode })}`, coord.dbId)
   state.cmFields = (m && m.columns) || []
 }
-async function loadList() { state.list = (await apiGet('/api/mdm/activations', state.dbId)) || [] }
+async function loadList() { state.list = (await apiGet('/api/mdm/activations', coord && coord.dbId)) || [] }
 
 // 显示「字段名（字段）」更直观；caption 兼容字符串或 {zh_CN} 对象；无 caption 仅显示字段
 const capOf = (f) => {
@@ -206,7 +217,7 @@ async function save() {
   try {
     const cfg = collectForm()
     if (!cfg.activation_code || !cfg.source_doc_type || !cfg.target_dict) { M.cmxWarn?.('映射码/来源单据类型/目标字典 不能为空'); return }
-    await apiPost('/api/mdm/activations', cfg, state.dbId)
+    await apiPost('/api/mdm/activations', cfg, coord && coord.dbId)
     M.cmxInfo?.('保存成功'); await loadList(); refresh()
   } catch (e) { M.cmxError?.(`保存失败：${e.message}`) }
 }
@@ -251,12 +262,19 @@ function whenRendered(host, sel, cb, t) {
   requestAnimationFrame(() => whenRendered(host, sel, cb, n - 1))
 }
 
+// 从 ctx.props 读取字典坐标四元组（不写死默认值）；缺 domain/application/module 返回 null。
+function readCoord(ctx) {
+  const p = (ctx && ctx.props) || {}
+  const c = { domain: p.domain || '', application: p.application || '', module: p.module || '', dbId: p.dbId || p.db_id || '' }
+  return (c.domain && c.application && c.module) ? c : null
+}
+
 export default {
   defaultView: 'content',
   views: {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
-      state.dbId = (ctx && ctx.props && (ctx.props.dbId || ctx.props.db_id)) || ''
+      coord = readCoord(ctx)
       try { await loadMeta(); await loadList() } catch (e) { console.error('[activation-mapper] init fail', e) }
       if (host) whenRendered(host, '.pg', (r) => bind(r))
       return `<style>${styleCss()}</style>${viewHtml()}`
