@@ -60,6 +60,9 @@ impl ModuleRoutes for MdmModule {
             // M4 · 管家工作台：详情（红线 diff）/ 驳回
             .route("/mdm/merge-requests/detail", get(mdm::mdm_merge_request_detail))
             .route("/mdm/merge-requests/reject", post(mdm::mdm_merge_request_reject))
+            // 查重规则配置（规则维护内嵌查重界面，无独立管理页）
+            .route("/mdm/match-configs", get(mdm::mdm_match_configs_list).post(mdm::mdm_match_configs_save))
+            .route("/mdm/match-configs/delete", post(mdm::mdm_match_configs_delete))
     }
 
     fn prefix() -> &'static str {

@@ -15,7 +15,7 @@ use cmx_api::CmxAppState;
 use cmx_api::middleware::CmxSvrContext;
 use cmx_api::{ApiResp, Result};
 
-use cmx_database_pg::get_default_pg_db_manager;
+use cmx_database_pg::{get_default_pg_db_manager, DatabaseManager};
 use cmx_dct_store_pg::resolve_db_id;
 use cmx_mdm_model::activation::ActivationConfig;
 use cmx_mdm_model::codegen::RandomCodeGenerator;
@@ -291,6 +291,7 @@ use cmx_mdm_model::survivorship::SurvivorRule;
 use std::collections::HashMap;
 
 /// dict → 物理表/明细表解析（M3 MVP 注册表；M6 多域改走 DCT meta tableName）。
+/// 仅用于 merge/undo 的明细表 reparent（头表名现由 body.targetTable 传入）。
 fn dict_tables(dict_code: &str) -> Option<(String, Vec<(String, String)>)> {
     match dict_code {
         "supplier" => Some((
@@ -301,28 +302,14 @@ fn dict_tables(dict_code: &str) -> Option<(String, Vec<(String, String)>)> {
     }
 }
 
-/// 默认比较/存活字段（supplier）。
-fn default_specs() -> Vec<MatchFieldSpec> {
-    vec![
-        MatchFieldSpec { field: "credit_code".into(), weight: 40, kind: FieldKind::Exact },
-        MatchFieldSpec { field: "tax_no".into(), weight: 30, kind: FieldKind::Exact },
-        MatchFieldSpec { field: "name".into(), weight: 30, kind: FieldKind::EditDistance },
-    ]
-}
-fn default_cluster_keys() -> Vec<&'static str> {
-    vec!["credit_code", "tax_no", "name"]
-}
-fn default_survive_fields() -> Vec<String> {
-    ["name", "tax_no", "credit_code", "short_name", "phone"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
-}
 fn load_columns() -> Vec<&'static str> {
     vec!["id", "name", "tax_no", "credit_code", "short_name", "phone", "update_time"]
 }
 
-/// 实时查重。body { dictCode, recordId }。
+/// 实时查重（纯查询，不落库）。body { dictCode, recordId, targetTable, specs, clusterKeys, surviveFields }。
+///
+/// 返回目标记录字段值 + 每个候选的字段值（供前端做字段对比表）。
+/// 候选裁决：≥95 自动合并 / 80-94 待评审 / <80 不匹配（[match_algo::decide] 双阈值）。
 pub async fn mdm_find_duplicates(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -331,46 +318,51 @@ pub async fn mdm_find_duplicates(
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
-    let (head_table, _lines) = dict_tables(&body.dict_code)
-        .ok_or_else(|| store::api_err(&format!("字典 {} 未配置表映射", body.dict_code)))?;
 
-    let all = store::load_published(mm, &db_id, &head_table, &load_columns()).await?;
+    // 把 DTO specs 转成 MatchFieldSpec（校验 kind 合法）
+    let specs: Vec<MatchFieldSpec> = body.specs.iter()
+        .map(|s| s.to_match_spec()).collect::<Result<Vec<_>>>()?;
+    if specs.is_empty() {
+        return Err(store::api_err("查重字段（specs）不能为空"));
+    }
+    let cluster_keys: Vec<&str> = body.cluster_keys.iter().map(|s| s.as_str()).collect();
+
+    // 装载列 = id ∪ specs 字段 ∪ surviveFields ∪ {update_time}（防注入经 load_published validate_ident）
+    let mut col_set: Vec<String> = vec!["id".into(), "update_time".into()];
+    for s in &body.specs { col_set.push(s.field.clone()); }
+    for f in &body.survive_fields { col_set.push(f.clone()); }
+    col_set.sort(); col_set.dedup();
+    let columns: Vec<&str> = col_set.iter().map(|s| s.as_str()).collect();
+
+    let all = store::load_published(mm, &db_id, &body.target_table, &columns).await?;
     let target = all
         .iter()
         .find(|r| r.id == body.record_id)
         .cloned()
         .ok_or_else(|| store::api_err(&format!("记录 {} 不存在或非 published", body.record_id)))?;
 
-    let specs = default_specs();
-    let keys = default_cluster_keys();
-    let candidates = find_candidates(&target, &all, &specs, &keys);
+    let candidates = find_candidates(&target, &all, &specs, &cluster_keys);
 
-    // 承载 match_group（pending），供后续合并/评审
-    let member_ids: Vec<i64> = std::iter::once(target.id)
-        .chain(candidates.iter().map(|c| c.record_id))
-        .collect();
-    let top_score = candidates.first().map(|c| c.score as i64).unwrap_or(0);
-    // 审查 C2：查重目标默认 master，管家 UI 可改选
-    let group_id = store::insert_match_group(
-        mm, &db_id, None, &body.dict_code, &format!("dup:{}", target.id),
-        &json!(member_ids), Some(target.id), top_score,
-        candidates.first().map(|c| format!("{:?}", c.decision).to_lowercase()).as_deref().unwrap_or("nomatch"),
-        "pending",
-    )
-    .await?;
-
+    // 不落库（查重预览）。落库收敛到 mdm_merge_requests_create 一处。
     Ok(Json(ApiResp::ok(json!({
-        "matchGroupId": group_id,
         "targetId": target.id,
-        "candidates": candidates.iter().map(|c| json!({
-            "recordId": c.record_id,
-            "score": c.score,
-            "decision": format!("{:?}", c.decision),
-        })).collect::<Vec<_>>(),
+        "targetFields": target.fields,
+        "candidates": candidates.iter().map(|c| {
+            // 回填候选的字段值（供前端对比表）
+            let rec = all.iter().find(|r| r.id == c.record_id);
+            json!({
+                "recordId": c.record_id,
+                "score": c.score,
+                "decision": format!("{:?}", c.decision),
+                "fields": rec.map(|r| r.fields.clone()).unwrap_or_default(),
+            })
+        }).collect::<Vec<_>>(),
+        "thresholds": { "auto_merge": 95, "review": 80 },
     }))))
 }
 
-/// 合并请求列表。GET ?dictCode=&status=。
+/// 合并请求列表。GET ?dictCode=&status=&excludePending=&page=&pageSize=。
+/// 默认排除 pending（查重预览不再落 pending；历史区只看真正合并过的）。
 pub async fn mdm_merge_requests_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -379,12 +371,93 @@ pub async fn mdm_merge_requests_list(
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    // excludePending 默认 true（"1"/"true"）；显式传 false 关闭
+    let exclude_pending = match q.exclude_pending.as_deref() {
+        Some("0") | Some("false") | Some("False") => false,
+        _ => true,
+    };
+    let exclude_statuses: Option<&[&str]> = if exclude_pending { Some(&["pending"]) } else { None };
     let (list, total) = store::list_match_groups(
-        mm, &db_id, q.dict_code.as_deref(), q.status.as_deref(), q.page, q.page_size)
+        mm, &db_id, q.dict_code.as_deref(), q.status.as_deref(),
+        exclude_statuses, q.page, q.page_size)
         .await?;
+
+    // 回填可读名称：按 group 的 master_id / member_ids 联查目标表 name/code
+    let list = enrich_group_names(&mm, &db_id, list).await;
+
     Ok(Json(ApiResp::ok(json!({
         "list": list, "total": total, "page": q.page, "pageSize": q.page_size,
     }))))
+}
+
+/// 回填每条 match_group 的 master/member 可读名称。
+/// member_ids 是 JSONB（DB 返回转义字符串），parse 后联查目标表。
+async fn enrich_group_names(
+    mm: &DatabaseManager,
+    db_id: &str,
+    mut groups: Vec<Value>,
+) -> Vec<Value> {
+    // 按 dict_code 分组批量查（每字典一次 load_by_ids）
+    use std::collections::HashMap;
+    let mut by_dict: HashMap<String, Vec<i64>> = HashMap::new();
+    for g in &groups {
+        let dict_code = g.get("dict_code").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        if dict_code.is_empty() { continue; }
+        let master_id = g.get("master_id").and_then(|v| v.as_i64()).unwrap_or(0);
+        let members_raw = g.get("member_ids").cloned().unwrap_or(Value::Null);
+        let members = match members_raw {
+            Value::String(s) => serde_json::from_str::<Value>(&s).unwrap_or(Value::Null),
+            v => v,
+        };
+        let member_ids: Vec<i64> = members
+            .as_array()
+            .map(|a| a.iter().filter_map(|m| m.as_i64()).collect())
+            .unwrap_or_default();
+        let entry = by_dict.entry(dict_code).or_default();
+        if master_id > 0 { entry.push(master_id); }
+        for id in member_ids { entry.push(id); }
+    }
+
+    // 每字典查一次（dict→table 映射仍用注册表；通用化后 target_table 由配置带，此处兜底 supplier）
+    let mut name_cache: HashMap<(String, i64), (String, String)> = HashMap::new(); // (dict,id) -> (name,code)
+    for (dict_code, ids) in &by_dict {
+        let table = match dict_code.as_str() {
+            "supplier" => "cm_supplier",
+            _ => continue, // 未知字典跳过（名称留空）
+        };
+        let cols = ["id", "name", "code"];
+        if let Ok(rows) = store::load_by_ids(mm, db_id, None, table, &cols, ids).await {
+            for r in rows {
+                let get = |k: &str| r.fields.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                name_cache.insert((dict_code.clone(), r.id), (get("name"), get("code")));
+            }
+        }
+    }
+
+    for g in groups.iter_mut() {
+        let dict_code = g.get("dict_code").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let master_id = g.get("master_id").and_then(|v| v.as_i64()).unwrap_or(0);
+        if let Some((n, c)) = name_cache.get(&(dict_code.clone(), master_id)) {
+            g["masterName"] = json!(n);
+            g["masterCode"] = json!(c);
+        }
+        let members_raw = g.get("member_ids").cloned().unwrap_or(Value::Null);
+        let members = match members_raw {
+            Value::String(s) => serde_json::from_str::<Value>(&s).unwrap_or(Value::Null),
+            v => v,
+        };
+        let member_names: Vec<Value> = members
+            .as_array()
+            .map(|a| {
+                a.iter().filter_map(|m| m.as_i64()).map(|id| {
+                    let (n, c) = name_cache.get(&(dict_code.clone(), id)).cloned().unwrap_or_default();
+                    json!({ "id": id, "name": n, "code": c })
+                }).collect()
+            })
+            .unwrap_or_default();
+        g["memberNames"] = json!(member_names);
+    }
+    groups
 }
 
 /// 确认合并。body { dictCode, masterId, victimIds, survivorship? }。
@@ -396,8 +469,12 @@ pub async fn mdm_merge_requests_create(
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
-    let (head_table, line_tables) = dict_tables(&body.dict_code)
-        .ok_or_else(|| store::api_err(&format!("字典 {} 未配置表映射", body.dict_code)))?;
+    // 头表名由 body.targetTable 传入（来自查重规则，替代硬编码 dict_tables 头表）；
+    // line_tables（明细表 reparent）仍由 dict_tables 解析，未知字典给空明细。
+    let head_table = body.target_table.clone();
+    let line_tables: Vec<(String, String)> = dict_tables(&body.dict_code)
+        .map(|(_h, lines)| lines)
+        .unwrap_or_default();
     let operated_by = svr_ctx
         .auth_context
         .as_ref()
@@ -438,9 +515,11 @@ pub async fn mdm_merge_requests_create(
     }
     let overrides = body.overrides.clone().unwrap_or_default();
 
+    // 存活字段由 body.survive_fields 传入（来自查重规则）；空则 master 原值全保留
+    let survive_fields: Vec<String> = body.survive_fields.clone();
     let master_id = store::merge(
         mm, &db_id, &body.dict_code, &head_table, body.master_id, &body.victim_ids,
-        &default_survive_fields(), &rules, &overrides, &line_tables, operated_by, group_id,
+        &survive_fields, &rules, &overrides, &line_tables, operated_by, group_id,
     )
     .await?;
 
@@ -569,6 +648,43 @@ pub struct FindDupBody {
     pub dict_code: String,
     #[serde(alias = "recordId")]
     pub record_id: i64,
+    /// 目标头物理表（从 dct/meta tableName 或 match_config 带入，替代硬编码 dict_tables）
+    #[serde(alias = "targetTable")]
+    pub target_table: String,
+    /// 比较字段规则（替代硬编码 default_specs）
+    #[serde(default)]
+    pub specs: Vec<SpecDto>,
+    /// 分块簇键（替代硬编码 default_cluster_keys）
+    #[serde(default, alias = "clusterKeys")]
+    pub cluster_keys: Vec<String>,
+    /// 存活字段（供前端做字段对比展示用；查重本身只需 specs）
+    #[serde(default, alias = "surviveFields")]
+    pub survive_fields: Vec<String>,
+}
+
+/// 比较字段 DTO（kind: "Exact" | "EditDistance"）。
+#[derive(serde::Deserialize)]
+pub struct SpecDto {
+    pub field: String,
+    #[serde(default = "default_weight")]
+    pub weight: u32,
+    #[serde(default = "default_kind")]
+    pub kind: String,
+}
+fn default_weight() -> u32 { 0 }
+fn default_kind() -> String { "Exact".into() }
+
+impl SpecDto {
+    fn to_match_spec(&self) -> Result<MatchFieldSpec> {
+        let kind = match self.kind.as_str() {
+            "Exact" | "exact" => FieldKind::Exact,
+            "EditDistance" | "edit_distance" | "editDistance" => FieldKind::EditDistance,
+            other => return Err(store::api_err(&format!(
+                "字段 {field} 的比较方式 {other:?} 不合法（Exact / EditDistance）", field = self.field
+            ))),
+        };
+        Ok(MatchFieldSpec { field: self.field.clone(), weight: self.weight, kind })
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -577,6 +693,10 @@ pub struct MergeListQuery {
     pub dict_code: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
+    /// 默认排除 pending（查重预览不再落 pending；历史区只看真正合并过的）。
+    /// "1"/"true" 或缺省=排除；"0"/"false"=不排除。
+    #[serde(default, alias = "excludePending")]
+    pub exclude_pending: Option<String>,
     #[serde(default = "default_page")]
     pub page: i64,
     #[serde(default = "default_page_size", alias = "pageSize")]
@@ -609,6 +729,12 @@ pub struct MergeBody {
     /// 管家路径复用 group（审查 C1）；不传则新插
     #[serde(default, alias = "mergeId")]
     pub merge_id: Option<i64>,
+    /// 目标头物理表（来自查重规则，替代硬编码 dict_tables 头表）
+    #[serde(default, alias = "targetTable")]
+    pub target_table: String,
+    /// 存活字段（来自查重规则，替代硬编码 default_survive_fields）
+    #[serde(default, alias = "surviveFields")]
+    pub survive_fields: Vec<String>,
     #[serde(default)]
     pub survivorship: Option<serde_json::Map<String, Value>>,
     /// 人工裁决显式真值（选 victim/手填，审查 A1/A2）；键 ⊆ survive_fields
@@ -699,4 +825,73 @@ pub async fn mdm_publish(
     let dict = body.get("dict").and_then(|v| v.as_str()).unwrap_or("");
     if dict.is_empty() { return Err(store::api_err("dict 不能为空")) }
     Ok(Json(ApiResp::ok(json!({ "dict": dict, "published": true }))))
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 查重规则配置（match-configs）—— 规则维护内嵌查重界面，无独立管理页
+// ════════════════════════════════════════════════════════════════════════════
+
+/// 查重规则列表。GET ?dictCode=（可空，空则列全部）。
+pub async fn mdm_match_configs_list(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Query(q): Query<MatchConfigQuery>,
+) -> Result<Json<ApiResp<Value>>> {
+    let mm = get_default_pg_db_manager();
+    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let list = store::list_match_config(mm, &db_id, q.dict_code.as_deref()).await?;
+    Ok(Json(ApiResp::ok(json!(list))))
+}
+
+/// 查重规则保存（upsert）。POST body { id?, ruleName, dictCode, targetTable, specs, clusterKeys, surviveFields, thresholds? }。
+/// id 空=新建；id 非空或 (dictCode,ruleName) 已存在=更新。
+pub async fn mdm_match_configs_save(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Json<ApiResp<Value>>> {
+    let mm = get_default_pg_db_manager();
+    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let operated_by = svr_ctx
+        .auth_context
+        .as_ref()
+        .and_then(|a| a.user_id.parse::<i64>().ok())
+        .unwrap_or(0);
+    // 注入操作人（upsert_match_config 不强求，存 created_by/updated_by 便于审计）
+    let mut body = body;
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("updated_by".into(), json!(operated_by));
+        if obj.get("id").and_then(|v| v.as_str()).map(|s| s.is_empty()).unwrap_or(true) {
+            obj.insert("created_by".into(), json!(operated_by));
+        }
+    }
+    let id = store::upsert_match_config(mm, &db_id, &body).await?;
+    Ok(Json(ApiResp::ok(json!({ "id": id }))))
+}
+
+/// 查重规则删除（软删 is_active=FALSE）。POST body { configId }。
+pub async fn mdm_match_configs_delete(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(body): Json<MatchConfigDeleteBody>,
+) -> Result<Json<ApiResp<Value>>> {
+    let mm = get_default_pg_db_manager();
+    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let n = store::delete_match_config(mm, &db_id, &body.config_id).await?;
+    Ok(Json(ApiResp::ok(json!({ "configId": body.config_id, "affected": n }))))
+}
+
+#[derive(serde::Deserialize)]
+pub struct MatchConfigQuery {
+    #[serde(default, alias = "dictCode")]
+    pub dict_code: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct MatchConfigDeleteBody {
+    #[serde(alias = "configId")]
+    pub config_id: String,
 }

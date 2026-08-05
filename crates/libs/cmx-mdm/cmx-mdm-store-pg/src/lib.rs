@@ -17,6 +17,7 @@ mod cr_service;
 mod dct_accessor;
 mod doc_accessor;
 mod error;
+mod match_config_store;
 mod match_store;
 mod md_accessor;
 
@@ -30,6 +31,10 @@ pub use match_store::{
     get_match_group, insert_match_group, list_audit, list_events, list_match_groups,
     list_subscriptions, load_by_ids, load_published, transition_match_group, update_match_group,
     upsert_subscription,
+};
+// 查重规则配置 store 对 api 层暴露（查重界面内维护）
+pub use match_config_store::{
+    delete_match_config, get_match_config, list_match_config, upsert_match_config,
 };
 // set_cr_status 供 api 层改 CR 状态(submit/reject,自动提交);激活器内部直接用 md_accessor
 pub use md_accessor::set_cr_status as set_cr_status_pub;

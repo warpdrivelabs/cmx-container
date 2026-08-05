@@ -188,6 +188,7 @@ pub async fn list_match_groups(
     db_id: &str,
     dict_code: Option<&str>,
     status: Option<&str>,
+    exclude_statuses: Option<&[&str]>,
     page: i64,
     page_size: i64,
 ) -> Result<(Vec<Value>, i64), cmx_api_types::Error> {
@@ -200,6 +201,19 @@ pub async fn list_match_groups(
     if let Some(s) = status {
         clauses.push(format!("status = ${}", params.len() + 1));
         params.push(DataValue::String(s.into()));
+    }
+    if let Some(excl) = exclude_statuses
+        && !excl.is_empty()
+    {
+        let ph: Vec<String> = excl
+            .iter()
+            .map(|s| {
+                let p = format!("${}", params.len() + 1);
+                params.push(DataValue::String((*s).into()));
+                p
+            })
+            .collect();
+        clauses.push(format!("status NOT IN ({})", ph.join(", ")));
     }
     let where_sql = clauses.join(" AND ");
     // 总数
