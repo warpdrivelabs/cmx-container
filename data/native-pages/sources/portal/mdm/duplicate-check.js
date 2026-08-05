@@ -38,6 +38,8 @@ async function apiPost(url, payload, dbId) {
 const STATUS_CN = {
   pending: '待处理', reviewed: '已合并', rejected: '已驳回', unmerged: '已还原',
   automerge: '自动合并', review: '待评审', nomatch: '不匹配',
+  // survivorship_log 字段来源
+  master: '主记录', victim: '被合并方', override: '人工裁决',
 }
 const DECISION_META = {
   AutoMerge: { name: '自动合并', tone: 'success' },
@@ -60,7 +62,7 @@ function coordQs(extra = {}) {
 
 // 全局状态
 const state = {
-  dictCode: '', dictMeta: null,            // 选中的字典 + 其 meta（columns）
+  dictCode: '', dictName: '', dictMeta: null,  // 选中的字典 + 其 meta（columns）
   rule: null,                              // 当前查重规则（来自 match-config 或用户新建）
   rules: [],                               // 该字典已有规则列表
   ruleDirty: false,                        // 规则编辑器有未保存改动
@@ -70,6 +72,8 @@ const state = {
   victimIds: [],                           // 勾选待合并的 victim id
   // 历史区
   histDict: '', histKw: '', histPage: 1, histPageSize: 10, histList: [], histTotal: 0,
+  histDetailId: null, histDetail: null,   // 详情查看：选中 mergeId + detail 数据
+  activeTab: 'dup',                       // 当前 tab（dup/hist），refresh 后保持不跳回
 }
 
 function styleCss() {
@@ -104,6 +108,13 @@ function styleCss() {
   .rule-row ui5-select { min-width:120px; }
   .survive-row { margin-top:8px; }
   .survive-row .chk-grid { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:4px; }
+  /* tab 布局（面板显隐由 cmx-view-tabs 组件用 inline style 接管，此处只管 tab 按钮样式） */
+  cmx-view-tabs { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
+  .dc-tab-bar { display:flex; gap:4px; border-bottom:1px solid var(--sapGroup_ContentBorderColor,#d9d9d9); margin-bottom:10px; }
+  .dc-tab { appearance:none; border:none; background:transparent; cursor:pointer; padding:8px 16px;
+    font-size:13px; color:var(--sapContent_LabelColor,#6a6d70); border-bottom:2px solid transparent; }
+  .dc-tab.active { color:var(--neo-cyan,#00b4d8); border-bottom-color:var(--neo-cyan,#00b4d8); font-weight:600; }
+  .dc-panel { flex:1 1 auto; min-height:0; }
   /* 候选区 */
   .cand-wrap { min-height:200px; }
   .tbl { width:100%; border-collapse:collapse; font-size:13px; }
@@ -240,7 +251,7 @@ function condHtml() {
           <cmx-dict-select id="dcDict" ${state.dictCode ? `value="${state.dictCode}"` : ''}></cmx-dict-select>
         </div>
         ${recSel}
-        <ui5-button design="Emphasized" icon="search" id="dcFind" ?disabled=${!state.dictCode || !state.targetId || !ruleHasFields()}>查重</ui5-button>
+        <ui5-button design="Emphasized" icon="search" id="dcFind" ${(!state.dictCode || !state.targetId || !ruleHasFields()) ? 'disabled' : ''}>查重</ui5-button>
       </div>
       ${state.dictCode ? ruleHtml() : '<div class="hint">请先选择数据字典</div>'}`}
     </div>
@@ -249,46 +260,23 @@ function condHtml() {
 
 function ruleHtml() {
   if (!state.dictMeta) return '<div class="hint">加载字典字段中…</div>'
-  const r = state.rule || newBlankRule()
-  const ruleOpts = state.rules.map((x) => `<ui5-option value="${x.id}" ${String(r.id) === String(x.id) ? 'selected' : ''}>${x.rule_name}</ui5-option>`).join('')
-  // 字段勾选列表
-  const fields = pickableFields()
-  const fieldRows = fields.map((f) => {
-    const sel = r.specs.find((s) => s.field === f.name)
-    const checked = !!sel
-    const weight = sel ? sel.weight : ''
-    const kind = sel ? sel.kind : 'Exact'
-    return `<div class="rule-row">
-      <ui5-checkbox ?checked=${checked} data-field="${f.name}" class="rf-chk"></ui5-checkbox>
-      <span class="rf-name" title="${f.name}">${f.caption}</span>
-      <ui5-select data-field="${f.name}" class="rf-kind" ?disabled=${!checked}>
-        <ui5-option value="Exact" ${kind === 'Exact' ? 'selected' : ''}>精确匹配</ui5-option>
-        <ui5-option value="EditDistance" ${kind === 'EditDistance' ? 'selected' : ''}>相似度</ui5-option>
-      </ui5-select>
-      <ui5-number-input data-field="${f.name}" class="rf-wt" value="${weight}" min="0" max="100" step="5" ?disabled=${!checked} style="width:90px;"></ui5-number-input>
-    </div>`
-  }).join('')
-  // 存活字段多选
-  const surviveChks = fields.map((f) => `<ui5-checkbox ?checked=${r.surviveFields.includes(f.name)} data-sv="${f.name}">${f.caption}</ui5-checkbox>`).join('')
+  const r = state.rule
+  const curId = r ? String(r.id) : ''
+  const ruleOpts = state.rules.map((x) => `<ui5-option value="${x.id}" ${String(x.id) === curId ? 'selected' : ''}>${x.rule_name}</ui5-option>`).join('')
+  const hasRule = !!r
   return `<div class="rule-bar">
     <label style="font-size:12px;color:var(--sapContent_LabelColor,#6a6d70);">查重规则</label>
-    <ui5-select id="dcRule" style="min-width:200px;">${ruleOpts || '<ui5-option value="">（暂无规则）</ui5-option>'}</ui5-select>
-    <ui5-button design="Transparent" icon="edit" id="dcRuleToggle">编辑</ui5-button>
+    <ui5-select id="dcRule" style="min-width:220px;">${ruleOpts || '<ui5-option value="">（暂无规则，请新建）</ui5-option>'}</ui5-select>
     <ui5-button design="Transparent" icon="add" id="dcRuleNew">新建</ui5-button>
-    <ui5-button design="Emphasized" icon="save" id="dcRuleSave" ?disabled=${!ruleHasFields()}>保存规则</ui5-button>
-  </div>
-  <div class="rule-fields">
-    <div style="font-size:12px;color:var(--sapContent_LabelColor,#6a6d70);margin-bottom:4px;">查重字段（勾选参与比较的字段，配置权重与比较方式）</div>
-    ${fieldRows || '<div class="hint">该字典无可选字段</div>'}
-  </div>
-  <div class="survive-row">
-    <div style="font-size:12px;color:var(--sapContent_LabelColor,#6a6d70);">存活字段（合并时保留这些字段的值，参与对比展示）</div>
-    <div class="chk-grid">${surviveChks}</div>
+    <ui5-button design="Transparent" icon="edit" id="dcRuleEdit" ${!hasRule ? 'disabled' : ''}>编辑</ui5-button>
+    <ui5-button design="Transparent" icon="delete" id="dcRuleDel" ${!hasRule ? 'disabled' : ''}>删除</ui5-button>
   </div>`
 }
 
 function newBlankRule() {
-  return { id: '', ruleName: '新规则', dictCode: state.dictCode, targetTable: (state.dictMeta && state.dictMeta.tableName) || '', specs: [], clusterKeys: [], surviveFields: [], thresholds: { auto_merge: 95, review: 80 } }
+  // 新规则：存活字段默认全选（合并时保留所有业务字段值，减少用户困惑）
+  const allFields = pickableFields().map((f) => f.name)
+  return { id: '', ruleName: '新规则', dictCode: state.dictCode, targetTable: (state.dictMeta && state.dictMeta.tableName) || '', specs: [], clusterKeys: [], surviveFields: allFields, thresholds: { auto_merge: 95, review: 80 } }
 }
 
 function pickableFields() {
@@ -300,6 +288,28 @@ function pickableFields() {
     if (['create_by', 'create_time', 'update_by', 'update_time', 'lifecycle_status', 'published_version', 'sort_no', 'code'].includes(c.name)) return false
     return true
   })
+}
+
+// 目标记录帮助弹框的列/主键/标签列，全部从字典元数据构建（不写死）。
+// 列取：codeField + labelField + 前几个可选字段（上限 5 列），用各列 caption/dataType。
+function recordColumns() {
+  const C = cmx()
+  const m = state.dictMeta || {}
+  const colsAll = m.columns || []
+  const idCol = m.idField || m.pk || 'id'
+  const labelCol = m.labelField || 'name'
+  const codeCol = m.codeField || 'code'
+  const byName = (n) => colsAll.find((c) => c.name === n)
+  const picked = []
+  const push = (c, w) => { if (c && !picked.some((p) => p.id === c.name)) picked.push(new C.CmxColumn({ id: c.name, caption: c.caption || c.name, dataType: c.dataType || 'VARCHAR', width: w })) }
+  push(byName(codeCol), '140px')
+  push(byName(labelCol), '200px')
+  for (const f of pickableFields()) {
+    if (picked.length >= 5) break
+    if (f.name === codeCol || f.name === labelCol) continue
+    push(f, '140px')
+  }
+  return { cols: picked, idCol, labelCol }
 }
 
 function ruleHasFields() { return !!(state.rule && state.rule.specs && state.rule.specs.length) }
@@ -317,21 +327,28 @@ function candHtml() {
     const ck = state.victimIds.includes(c.recordId)
     const sel = state.selCand && String(state.selCand.recordId) === String(c.recordId)
     const rec = c.fields || {}
+    const lbl = state.dictMeta ? (rec[state.dictMeta.labelField || 'name'] ?? '') : (rec.name || '')
+    const cod = state.dictMeta ? (rec[state.dictMeta.codeField || 'code'] ?? '') : (rec.code || '')
     return `<tr data-cand="${c.recordId}" class="${sel ? 'sel' : ''}">
-      <td><ui5-checkbox ?checked=${ck} data-victim="${c.recordId}"></ui5-checkbox></td>
-      <td>${rec.name || ''}</td><td class="muted">${rec.code || ''}</td>
+      <td><ui5-checkbox ${ck ? 'checked' : ''} data-victim="${c.recordId}"></ui5-checkbox></td>
+      <td class="muted">${c.recordId}</td>
+      <td>${lbl}</td><td class="muted">${cod}</td>
       <td class="score">${c.score}</td>
       <td><cmx-status-tag tone="${m.tone}" variant="subtle" dot size="sm">${m.name}</cmx-status-tag></td>
     </tr>`
   }).join('')
+  // 表头用字典元数据的标签列/代码列 caption
+  const capOf = (n, fb) => { const c = (state.dictMeta && state.dictMeta.columns || []).find((x) => x.name === n); return (c && c.caption) || fb }
+  const lblCap = capOf(state.dictMeta ? state.dictMeta.labelField : 'name', '候选名称')
+  const codCap = capOf(state.dictMeta ? state.dictMeta.codeField : 'code', '代码')
   const candList = cands.length
-    ? `<table class="tbl"><thead><tr><th></th><th>候选名称</th><th>代码</th><th>score</th><th>裁决</th></tr></thead><tbody>${rows}</tbody></table>`
+    ? `<table class="tbl"><thead><tr><th></th><th>ID</th><th>${lblCap}</th><th>${codCap}</th><th>score</th><th>裁决</th></tr></thead><tbody>${rows}</tbody></table>`
     : `<div class="empty">未发现重复候选</div>`
   return `<section class="neo-panel">
     <div class="neo-panel-head">
       <div class="pt"><ui5-icon name="duplicate"></ui5-icon>查重候选（${cands.length}）</div>
       <cmx-toolbar>
-        <ui5-button design="Emphasized" icon="combine" id="dcMerge" ?disabled=${state.victimIds.length === 0}>执行合并（${state.victimIds.length}）</ui5-button>
+        <ui5-button design="Emphasized" icon="combine" id="dcMerge" ${state.victimIds.length === 0 ? 'disabled' : ''}>执行合并（${state.victimIds.length}）</ui5-button>
       </cmx-toolbar>
     </div>
     <div class="neo-panel-body">
@@ -357,22 +374,37 @@ function cmpHtml() {
     return `<tr class="${diff ? 'diff' : 'same'}"><td>${caption(f)}</td><td>${tv}</td><td>${cv}</td>
       <td>${diff ? '<cmx-status-tag tone="negative" variant="subtle" size="sm">差异</cmx-status-tag>' : '<cmx-status-tag tone="positive" variant="subtle" size="sm">一致</cmx-status-tag>'}</td></tr>`
   }).join('')
+  const lblF = state.dictMeta ? (state.dictMeta.labelField || 'name') : 'name'
+  const candLabel = candF[lblF] || cand.recordId
   return `<div style="margin-top:14px;">
-    <div class="cmp-tip">字段对比：当前目标记录 vs 候选记录「${candF.name || cand.recordId}」。目标记录默认为<b>主记录(master)</b>，勾选候选作<b>被合并方(victim)</b>，其值按存活规则并入主记录。</div>
+    <div class="cmp-tip">字段对比：当前目标记录 vs 候选记录「${candLabel}」。目标记录默认为<b>主记录(master)</b>，勾选候选作<b>被合并方(victim)</b>，其值按存活规则并入主记录。</div>
     <table class="tbl"><thead><tr><th>字段</th><th>当前目标记录</th><th>候选记录</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table>
   </div>`
 }
 const fmt = (v) => (v === null || v === undefined || v === '') ? '<span class="muted">—</span>' : String(v)
+
+// 记录展示标签：id + code + 名称（合并确认框/候选展示用），字段列来自字典元数据
+function recLabel(fields, id) {
+  const f = fields || {}
+  const lblF = state.dictMeta ? (state.dictMeta.labelField || 'name') : 'name'
+  const codF = state.dictMeta ? (state.dictMeta.codeField || 'code') : 'code'
+  const parts = [id != null ? `#${id}` : '', f[codF] || '', f[lblF] || ''].filter(Boolean)
+  return parts.join(' ') || String(id ?? '')
+}
 function eqVal(a, b) { return String(a) === String(b) }
 
 // ── 渲染：合并历史区 ────────────────────────────────────────────────────
 function histHtml() {
   const rows = state.histList.map((g) => {
     const members = g.memberNames || []
-    const victims = members.filter((m) => String(m.id) !== String(g.master_id)).map((m) => m.name || m.code || m.id).join('、')
+    // master：优先后端回填的 masterName；还原后 master_id 可能为 NULL，回退 member[0]（member_ids 首元素即 master）
+    const master = members.find((m) => String(m.id) === String(g.master_id)) || members[0]
+    const masterLabel = g.masterName || (master && (master.name || master.code)) || (g.master_id != null ? g.master_id : '') || '—'
+    const victims = members.filter((m) => m !== master).map((m) => m.name || m.code || m.id).join('、')
     const st = statusCn(g.status)
     const canUndo = g.status === 'reviewed'
-    return `<tr><td>${g.masterName || g.master_id}</td><td>${victims}</td>
+    const sel = String(state.histDetailId) === String(g.id)
+    return `<tr data-mid="${g.id}" class="hist-row ${sel ? 'sel' : ''}"><td>${masterLabel}</td><td>${victims}</td>
       <td><cmx-status-tag tone="${g.status === 'reviewed' ? 'success' : (g.status === 'unmerged' ? 'neutral' : 'negative')}" variant="subtle" dot size="sm">${st}</cmx-status-tag></td>
       <td>${g.score ?? ''}</td><td class="muted">${fmtTime(g.created_at)}</td>
       <td>${canUndo ? `<ui5-button design="Transparent" icon="reset" data-undo="${g.id}">还原</ui5-button>` : ''}</td></tr>`
@@ -391,30 +423,75 @@ function histHtml() {
       </div>
       ${state.histList.length
         ? `<table class="tbl"><thead><tr><th>主记录</th><th>被合并方</th><th>状态</th><th>score</th><th>合并时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`
-        : '<div class="empty">暂无合并记录</div>'}
+        : '<div class="empty">暂无合并记录，点击行可查看合并详情</div>'}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
         <span class="muted" style="font-size:12px;">第 ${state.histPage} / ${totalPages} 页</span>
         <div style="display:flex;gap:6px;">
-          <ui5-button design="Transparent" icon="nav-left" id="dcHistPrev" ?disabled=${state.histPage <= 1}>上一页</ui5-button>
-          <ui5-button design="Transparent" icon="nav-right" id="dcHistNext" ?disabled=${state.histPage >= totalPages}>下一页</ui5-button>
+          <ui5-button design="Transparent" icon="nav-left" id="dcHistPrev" ${state.histPage <= 1 ? 'disabled' : ''}>上一页</ui5-button>
+          <ui5-button design="Transparent" icon="nav-right" id="dcHistNext" ${state.histPage >= totalPages ? 'disabled' : ''}>下一页</ui5-button>
         </div>
       </div>
+      ${state.histDetail ? histDetailHtml() : ''}
     </div>
   </section>`
+}
+
+// 合并详情：master/victims 字段对比 + survivorship 日志
+function histDetailHtml() {
+  const d = state.histDetail || {}
+  const master = d.master || {}
+  const victims = d.victims || []
+  const slog = (d.group && d.group.survivorship_log) || {}
+  const fields = slog.fields || []
+  const fieldSet = Array.from(new Set([...Object.keys(master), ...victims.flatMap((v) => Object.keys(v))]))
+    .filter((k) => !['id', 'update_time', 'create_time', 'lifecycle_status', 'published_version'].includes(k))
+  const rows = fieldSet.map((f) => {
+    const mv = fmt(master[f])
+    const vvs = victims.map((v) => fmt(v[f])).join(' / ')
+    const diff = victims.some((v) => !eqVal(fmt(master[f]), fmt(v[f])))
+    const log = fields.find((x) => x.field === f)
+    const from = log ? statusCn(log.from) || log.from : ''
+    return `<tr class="${diff ? 'diff' : 'same'}"><td>${f}</td><td>${mv}</td><td>${vvs}</td>
+      <td>${from ? `<cmx-status-tag tone="${log.from === 'master' ? 'info' : (log.from === 'override' ? 'warning' : 'positive')}" variant="subtle" size="sm">${from}</cmx-status-tag>` : ''}</td></tr>`
+  }).join('')
+  const reparented = slog.reparented ? Object.entries(slog.reparented).map(([t, ids]) => `${t}: ${(ids || []).length} 行`).join('，') : ''
+  const lblF = state.dictMeta ? (state.dictMeta.labelField || 'name') : 'name'
+  const masterLabel = master[lblF] || master.id || ''
+  const victimLabels = victims.map((v) => v[lblF] || v.id).join('、')
+  return `<div style="margin-top:14px;border-top:1px solid var(--sapGroup_ContentBorderColor,#d9d9d9);padding-top:10px;">
+    <div class="cmp-tip">合并详情：主记录「${masterLabel}」vs 被合并方（${victimLabels}）。来源列说明存活值取自 master/victim/override。</div>
+    <table class="tbl"><thead><tr><th>字段</th><th>主记录</th><th>被合并方</th><th>存活来源</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">无字段差异</td></tr>'}</tbody></table>
+    ${reparented ? `<div class="cmp-tip">明细行迁移：${reparented}</div>` : ''}
+  </div>`
 }
 const fmtTime = (s) => { if (!s) return ''; try { return new Date(s).toLocaleString('zh-CN', { hour12: false }) } catch { return s } }
 
 function viewHtml() {
   return `<div class="pg">
     <div class="pg-head"><div class="pg-title">主数据查重</div>
-      <div class="pg-sub">识别一物多码：选择字典与记录，比对字段后合并重复项</div></div>
-    ${condHtml()}${candHtml()}${histHtml()}
+      <div class="pg-sub">识别一物多码：选择字典与记录，比对字段后合并重复项；查看历史合并并还原</div></div>
+    <cmx-view-tabs active="${state.activeTab}" id="dcTabs">
+      <div slot="tabs" class="dc-tab-bar">
+        <button class="dc-tab" data-view="dup">查重候选</button>
+        <button class="dc-tab" data-view="hist">合并历史</button>
+      </div>
+      <div data-view-panel="dup" class="dc-panel">${condHtml()}${candHtml()}</div>
+      <div data-view-panel="hist" class="dc-panel">${histHtml()}</div>
+    </cmx-view-tabs>
   </div>`
 }
 
 // ── 事件绑定 ────────────────────────────────────────────────────────────
 function bind(root) {
   const C = cmx()
+  // tab 切换：记录当前 tab（refresh 后保持不跳回）；切到「合并历史」时按需加载
+  root.querySelector('#dcTabs')?.addEventListener('cmx-view-change', (e) => {
+    const v = (e.detail && e.detail.view) || 'dup'
+    state.activeTab = v
+    if (v === 'hist' && state.histList.length === 0) {
+      loadHist().then(refresh).catch((err) => cmx().cmxError?.(`加载历史失败：${err.message}`))
+    }
+  })
   // 字典选择
   const dcDict = root.querySelector('#dcDict')
   if (dcDict && C.CmxColumn) {
@@ -424,18 +501,26 @@ function bind(root) {
       helpDialogWidth: '40vw', helpDialogHeight: '70vh',
       columns: [new C.CmxColumn({ id: 'dictCode', caption: '字典码', dataType: 'VARCHAR', width: '140px' }), new C.CmxColumn({ id: 'dictName', caption: '字典名称', dataType: 'VARCHAR' })],
     })
-    dcDict.addEventListener('cmx-dict-change', (e) => { const d = e.detail || {}; onDictChange(d.id || '') })
+    dcDict.addEventListener('cmx-dict-change', (e) => { const d = e.detail || {}; onDictChange(d) })
+    // 回显当前已选字典（value= HTML 属性不触发内部 _value，需 setValue 程序化）
+    if (state.dictCode && typeof dcDict.setValue === 'function') {
+      dcDict.setValue(state.dictCode, { silent: true, displayText: state.dictName || state.dictCode }).catch(() => {})
+    }
   }
-  // 目标记录选择
+  // 目标记录选择（列/主键/标签列全部来自字典元数据，不写死）
   const dcRecord = root.querySelector('#dcRecord')
-  if (dcRecord && C.CmxColumn && state.dictCode) {
+  if (dcRecord && C.CmxColumn && state.dictCode && state.dictMeta) {
     const ds = recordSource()
     if (ds) {
-      const cols = []
-      const mc = (state.dictMeta && state.dictMeta.columns) || []
-      ;['code', 'name', 'credit_code'].forEach((id) => { const c = mc.find((x) => x.name === id); if (c) cols.push(new C.CmxColumn({ id: c.name, caption: c.caption, dataType: 'VARCHAR', width: c.name === 'name' ? '200px' : '140px' })) })
-      dcRecord.configure({ dictCode: state.dictCode, idCol: 'id', labelCol: 'name', helpLayout: 'grid', dataSource: ds, dictTitle: '选择目标记录', helpDialogWidth: '60vw', helpDialogHeight: '80vh', columns: cols })
+      const { cols, idCol, labelCol } = recordColumns()
+      dcRecord.configure({ dictCode: state.dictCode, idCol, labelCol, helpLayout: 'grid', dataSource: ds, dictTitle: '选择目标记录', helpDialogWidth: '60vw', helpDialogHeight: '80vh', columns: cols })
       dcRecord.addEventListener('cmx-dict-change', (e) => { const d = e.detail || {}; onRecordChange(d) })
+      // 回显当前已选目标记录（显示文本取 labelCol/codeCol）
+      if (state.targetId != null && typeof dcRecord.setValue === 'function') {
+        const row = state.targetRow || {}
+        const txt = row[labelCol] || row[state.dictMeta.codeField] || String(state.targetId)
+        dcRecord.setValue(String(state.targetId), { silent: true, displayText: txt }).catch(() => {})
+      }
     }
   }
   // 查重按钮
@@ -445,16 +530,10 @@ function bind(root) {
     const id = e.target.value; const r = state.rules.find((x) => String(x.id) === String(id))
     if (r) { state.rule = normalizeRule(r); refresh() }
   })
-  // 编辑/新建/保存
-  root.querySelector('#dcRuleNew')?.addEventListener('click', () => { state.rule = newBlankRule(); refresh() })
-  root.querySelector('#dcRuleToggle')?.addEventListener('click', () => { /* 编辑模式：当前编辑器即编辑态 */ })
-  // 字段勾选/权重/比较方式
-  root.querySelectorAll('.rf-chk').forEach((ck) => ck.addEventListener('change', () => syncRuleFromUi(root)))
-  root.querySelectorAll('.rf-kind').forEach((s) => s.addEventListener('change', () => syncRuleFromUi(root)))
-  root.querySelectorAll('.rf-wt').forEach((w) => w.addEventListener('change', () => syncRuleFromUi(root)))
-  root.querySelectorAll('[data-sv]').forEach((ck) => ck.addEventListener('change', () => syncRuleFromUi(root)))
-  // 保存规则
-  root.querySelector('#dcRuleSave')?.addEventListener('click', () => saveRule().catch((e) => cmx().cmxError?.(`保存规则失败：${e.message}`)))
+  // 新建/编辑 → 弹框；删除 → 二次确认
+  root.querySelector('#dcRuleNew')?.addEventListener('click', () => openRuleDialog(newBlankRule()))
+  root.querySelector('#dcRuleEdit')?.addEventListener('click', () => { if (state.rule) openRuleDialog(JSON.parse(JSON.stringify(state.rule))) })
+  root.querySelector('#dcRuleDel')?.addEventListener('click', () => deleteRule().catch((e) => cmx().cmxError?.(`删除规则失败：${e.message}`)))
   // 候选行点击对比 + 勾选 victim
   root.querySelectorAll('tr[data-cand]').forEach((tr) => {
     tr.addEventListener('click', (e) => {
@@ -480,35 +559,162 @@ function bind(root) {
   root.querySelector('#dcHistSearch')?.addEventListener('click', () => { state.histPage = 1; loadHist().then(refresh) })
   root.querySelector('#dcHistPrev')?.addEventListener('click', () => { if (state.histPage > 1) { state.histPage--; loadHist().then(refresh) } })
   root.querySelector('#dcHistNext')?.addEventListener('click', () => { state.histPage++; loadHist().then(refresh) })
-  root.querySelectorAll('[data-undo]').forEach((b) => b.addEventListener('click', () => doUndo(b.dataset.undo).catch((e) => cmx().cmxError?.(`还原失败：${e.message}`))))
+  root.querySelectorAll('[data-undo]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); doUndo(b.dataset.undo).catch((err) => cmx().cmxError?.(`还原失败：${err.message}`)) }))
+  // 历史行点击 → 加载合并详情
+  root.querySelectorAll('tr.hist-row').forEach((tr) => tr.addEventListener('click', () => loadHistDetail(tr.dataset.mid).catch((err) => cmx().cmxError?.(`加载详情失败：${err.message}`))))
+}
+
+async function loadHistDetail(mid) {
+  if (!mid) return
+  // 同一行再次点击 → 收起详情
+  if (String(state.histDetailId) === String(mid)) {
+    state.histDetailId = null; state.histDetail = null; refresh(); return
+  }
+  state.histDetailId = mid; state.histDetail = null
+  refresh()
+  const d = await apiGet(`/api/mdm/merge-requests/detail?mergeId=${encodeURIComponent(mid)}`, coord && coord.dbId)
+  state.histDetail = d
+  refresh()
 }
 
 // 从 UI 控件同步规则到 state.rule
-function syncRuleFromUi(root) {
-  if (!state.rule) state.rule = newBlankRule()
+// ── 规则编辑弹框（cmx-floating-dialog）────────────────────────────────────
+// 字段勾选区只在弹框内出现，主页面保持简洁（下拉 + 新建/编辑/删除按钮）。
+function ruleDialogHtml(rule) {
+  const fields = pickableFields()
+  const rows = fields.map((f) => {
+    const sel = rule.specs.find((s) => s.field === f.name)
+    const checked = !!sel
+    const weight = sel ? sel.weight : ''
+    const kind = sel ? sel.kind : 'Exact'
+    return `<div class="rule-row">
+      <ui5-checkbox ${checked ? 'checked' : ''} data-field="${f.name}" class="rf-chk"></ui5-checkbox>
+      <span class="rf-name" title="${f.name}">${f.caption}</span>
+      <ui5-select data-field="${f.name}" class="rf-kind" ${!checked ? 'disabled' : ''}>
+        <ui5-option value="Exact" ${kind === 'Exact' ? 'selected' : ''}>精确匹配</ui5-option>
+        <ui5-option value="EditDistance" ${kind === 'EditDistance' ? 'selected' : ''}>相似度</ui5-option>
+      </ui5-select>
+      <ui5-number-input data-field="${f.name}" class="rf-wt" value="${weight}" min="0" max="100" step="5" ${!checked ? 'disabled' : ''} style="width:90px;"></ui5-number-input>
+    </div>`
+  }).join('')
+  const surviveChks = fields.map((f) => `<ui5-checkbox ${rule.surviveFields.includes(f.name) ? 'checked' : ''} data-sv="${f.name}">${f.caption}</ui5-checkbox>`).join('')
+  return `<div class="rule-dlg">
+    <div class="rule-dlg-row"><label>规则名</label><ui5-input id="rdName" value="${rule.ruleName || ''}" placeholder="如：供应商默认查重"></ui5-input></div>
+    <div class="rule-dlg-sec">查重字段（勾选参与比较的字段，配置比较方式与权重）</div>
+    <div class="rule-fields">${rows || '<div class="hint">该字典无可选字段</div>'}</div>
+    <div class="rule-dlg-sec">合并保留字段（合并时主记录保留这些字段的值；未勾选的字段合并时不参与存活裁决，保留主记录原值）</div>
+    <div class="chk-grid">${surviveChks}</div>
+  </div>`
+}
+
+// 从弹框 DOM 收集规则数据，返回 {rule, ok, msg}
+function collectFromDialog(dlgRoot, baseRule) {
+  const name = (dlgRoot.querySelector('#rdName')?.value || '').trim()
+  if (!name) return { ok: false, msg: '请填写规则名' }
   const fields = pickableFields()
   const specs = []
   fields.forEach((f) => {
-    const ck = root.querySelector(`.rf-chk[data-field="${f.name}"]`)
+    const ck = dlgRoot.querySelector(`.rf-chk[data-field="${f.name}"]`)
     if (ck && ck.checked) {
-      const kindSel = root.querySelector(`.rf-kind[data-field="${f.name}"]`)
-      const wtInput = root.querySelector(`.rf-wt[data-field="${f.name}"]`)
+      const kindSel = dlgRoot.querySelector(`.rf-kind[data-field="${f.name}"]`)
+      const wtInput = dlgRoot.querySelector(`.rf-wt[data-field="${f.name}"]`)
       specs.push({ field: f.name, weight: Number((wtInput && wtInput.value) || 0), kind: (kindSel && kindSel.value) || 'Exact' })
     }
   })
+  if (!specs.length) return { ok: false, msg: '请至少勾选一个查重字段' }
   const surviveFields = []
-  root.querySelectorAll('[data-sv]').forEach((ck) => { if (ck.checked) surviveFields.push(ck.dataset.sv) })
-  state.rule.specs = specs
-  state.rule.clusterKeys = specs.map((s) => s.field)
-  state.rule.surviveFields = surviveFields
-  state.rule.targetTable = (state.dictMeta && state.dictMeta.tableName) || state.rule.targetTable
-  state.ruleDirty = true
-  // 只刷新查重按钮可用性（避免重渲染丢焦点）
-  const findBtn = root.querySelector('#dcFind'); if (findBtn) findBtn.disabled = !state.dictCode || !state.targetId || !ruleHasFields()
+  dlgRoot.querySelectorAll('[data-sv]').forEach((ck) => { if (ck.checked) surviveFields.push(ck.dataset.sv) })
+  return {
+    ok: true,
+    rule: {
+      ...baseRule,
+      ruleName: name,
+      specs, clusterKeys: specs.map((s) => s.field), surviveFields,
+      targetTable: (state.dictMeta && state.dictMeta.tableName) || baseRule.targetTable,
+    },
+  }
 }
 
-async function onDictChange(dictCode) {
+function openRuleDialog(baseRule) {
+  const C = cmx()
+  if (!customElements.get('cmx-floating-dialog')) { C.cmxError?.('弹框组件未就绪'); return }
+  const dlg = document.createElement('cmx-floating-dialog')
+  dlg.configure({
+    title: baseRule.id ? '编辑查重规则' : '新建查重规则',
+    icon: 'settings',
+    confirmText: '保存',
+    cancelText: '取消',
+    dialogWidth: '640px',
+    dialogHeight: '80vh',
+    beforeClose: async (ctx) => {
+      if (ctx.action !== 'confirm') return true
+      // 校验 + 落盘；失败拦截关闭
+      const collected = collectFromDialog(dlg, baseRule)
+      if (!collected.ok) { C.cmxWarn?.(collected.msg); return false }
+      try {
+        const payload = { id: collected.rule.id || 0, ruleName: collected.rule.ruleName, dictCode: state.dictCode, targetTable: collected.rule.targetTable, specs: collected.rule.specs, clusterKeys: collected.rule.clusterKeys, surviveFields: collected.rule.surviveFields, thresholds: collected.rule.thresholds }
+        const saved = await apiPost('/api/mdm/match-configs', payload, coord && coord.dbId)
+        if (saved && saved.id) collected.rule.id = saved.id
+        state.rule = collected.rule
+        await loadRules()
+        // loadRules 会重置 state.rule 为第一条，需回选刚保存的
+        state.rule = state.rules.find((x) => String(x.id) === String(collected.rule.id)) ? normalizeRule(state.rules.find((x) => String(x.id) === String(collected.rule.id))) : collected.rule
+        C.cmxInfo?.('规则已保存')
+        refresh()
+        return true
+      } catch (e) {
+        C.cmxError?.(`保存失败：${e.message}`)
+        return false
+      }
+    },
+  })
+  const wrap = document.createElement('div')
+  wrap.style.cssText = 'padding:14px 18px;'
+  wrap.innerHTML = `<style>
+    .rule-dlg { display:flex; flex-direction:column; gap:10px; }
+    .rule-dlg-row { display:flex; flex-direction:column; gap:4px; }
+    .rule-dlg-row label { font-size:12px; color:var(--sapContent_LabelColor,#6a6d70); }
+    .rule-dlg-sec { font-size:12px; color:var(--sapContent_LabelColor,#6a6d70); margin-top:4px; }
+    .rule-fields { display:flex; flex-direction:column; gap:6px; max-height:300px; overflow:auto; }
+    .rule-row { display:flex; gap:8px; align-items:center; padding:5px 8px; border-radius:4px; background:var(--sapList_Background,#fff); border:1px solid var(--sapGroup_ContentBorderColor,#d9d9d9); }
+    .rule-row .rf-name { min-width:140px; font-size:13px; }
+    .chk-grid { display:flex; flex-wrap:wrap; gap:8px 18px; }
+  </style>` + ruleDialogHtml(baseRule)
+  // 勾选字段时联动启用/禁用该行的「匹配方式」与「权重」控件
+  wrap.querySelectorAll('.rf-chk').forEach((ck) => {
+    ck.addEventListener('change', () => {
+      const row = ck.closest('.rule-row')
+      if (!row) return
+      const toggle = (el) => { if (!el) return; if (ck.checked) el.removeAttribute('disabled'); else el.setAttribute('disabled', '') }
+      toggle(row.querySelector('.rf-kind'))
+      toggle(row.querySelector('.rf-wt'))
+    })
+  })
+  dlg.setSingleRegion(wrap, { label: '规则配置', icon: 'settings' })
+  document.body.appendChild(dlg)
+  dlg.openModal().then(() => {
+    // 弹框关闭后移除 DOM（无论 confirm/cancel）
+    dlg.remove()
+  })
+}
+
+async function deleteRule() {
+  const M = cmx()
+  if (!state.rule || !state.rule.id) { M.cmxWarn?.('请先选择要删除的规则'); return }
+  const ok = await M.cmxConfirm?.({ title: '删除规则', message: `确认删除规则「${state.rule.ruleName}」？`, danger: true })
+  if (ok === false) return
+  await apiPost('/api/mdm/match-configs/delete', { configId: Number(state.rule.id) }, coord && coord.dbId)
+  M.cmxInfo?.('规则已删除')
+  state.rule = null
+  await loadRules()
+  refresh()
+}
+
+async function onDictChange(detail) {
+  console.log(detail)
+  const dictCode = (detail && (detail.id || detail.dictCode)) || ''
   state.dictCode = dictCode
+  state.dictName = (detail && (detail.text || (detail.plain && detail.plain.dictName) || (detail.row && detail.row.dictName))) || dictCode
   state.dictMeta = null; state.rule = null; state.rules = []
   state.targetId = null; state.targetRow = null; state.result = null; state.selCand = null; state.victimIds = []
   if (!dictCode) { refresh(); return }
@@ -527,9 +733,12 @@ function onRecordChange(detail) {
 async function runFind() {
   if (!state.dictCode || !state.targetId || !ruleHasFields()) { cmx().cmxWarn?.('请先选择字典、目标记录，并配置查重字段'); return }
   const r = state.rule
+  const lblF = state.dictMeta ? (state.dictMeta.labelField || 'name') : 'name'
+  const codF = state.dictMeta ? (state.dictMeta.codeField || 'code') : 'code'
   const payload = {
     dictCode: state.dictCode, recordId: Number(state.targetId), targetTable: r.targetTable,
     specs: r.specs, clusterKeys: r.clusterKeys, surviveFields: r.surviveFields,
+    displayFields: [lblF, codF],
   }
   state.result = await apiPost('/api/mdm/records/find-duplicates', payload, coord && coord.dbId)
   state.selCand = null; state.victimIds = []
@@ -541,10 +750,11 @@ async function doMerge() {
   const M = cmx()
   if (!state.victimIds.length) { M.cmxWarn?.('请先勾选要合并的候选'); return }
   const r = state.rule; if (!r) return
-  const targetName = (state.targetRow && (state.targetRow.name || state.targetRow.code)) || state.targetId
+  // master/victim 均展示 id + code + 名称（master 用后端返回的 targetFields，含 code/name）
+  const targetName = recLabel((state.result && state.result.targetFields) || state.targetRow, state.targetId)
   const victims = state.victimIds.map((id) => {
     const c = (state.result.candidates || []).find((x) => String(x.recordId) === String(id))
-    return (c && c.fields && (c.fields.name || c.fields.code)) || id
+    return recLabel(c && c.fields, id)
   })
   const ok = await M.cmxConfirm?.({
     title: '确认合并', danger: true,
@@ -571,27 +781,15 @@ async function doUndo(mergeId) {
   if (ok === false) return
   await apiPost('/api/mdm/merge-requests/undo', { mergeId: Number(mergeId) }, coord && coord.dbId)
   M.cmxInfo?.('已还原')
+  state.histDetailId = null; state.histDetail = null
   await loadHist(); refresh()
 }
 
 async function saveRule() {
+  // 兼容旧调用；实际保存逻辑在 openRuleDialog 的 beforeClose 钩子内完成
   const M = cmx()
-  if (!ruleHasFields()) { M.cmxWarn?.('请至少勾选一个查重字段'); return }
-  if (!state.rule.ruleName || state.rule.ruleName === '新规则') {
-    const name = await M.cmxPrompt?.('请输入规则名称') // 若无 cmxPrompt 则用默认
-    state.rule.ruleName = name || `规则_${Date.now()}`
-  }
-  const r = state.rule
-  const payload = {
-    id: r.id || '', ruleName: r.ruleName, dictCode: state.dictCode, targetTable: r.targetTable,
-    specs: r.specs, clusterKeys: r.clusterKeys, surviveFields: r.surviveFields, thresholds: r.thresholds,
-  }
-  const saved = await apiPost('/api/mdm/match-configs', payload, coord && coord.dbId)
-  if (saved && saved.id) state.rule.id = saved.id
-  state.ruleDirty = false
-  await loadRules()
-  M.cmxInfo?.('规则已保存')
-  refresh()
+  if (!state.rule) { M.cmxWarn?.('请先新建或选择规则'); return }
+  openRuleDialog(JSON.parse(JSON.stringify(state.rule)))
 }
 
 async function loadHist() {
@@ -644,8 +842,7 @@ export default {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
       coord = readCoord(ctx)
-      // 初始加载历史（独立常驻，coord 可能为 null——历史区按字典过滤时再用）
-      try { await loadHist() } catch (e) { console.error('[duplicate-check] loadHist fail', e) }
+      // 历史改为切到「合并历史」tab 时按需加载（loadHist 在 bind 的 cmx-view-change 里触发）
       if (host) whenRendered(host, '.pg', (r) => { rootEl = r; bind(r) })
       // coord 缺失时仍渲染页面，条件区提示「请配置菜单 props 的 domain/application/module」
       return `<style>${styleCss()}</style>${viewHtml()}`

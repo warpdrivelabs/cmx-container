@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS cmx_mdm_match_config;
+DROP TABLE IF EXISTS md_match_config;

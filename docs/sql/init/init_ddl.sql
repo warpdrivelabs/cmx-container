@@ -3034,7 +3034,28 @@ CREATE TABLE md_value_map (
 COMMENT ON TABLE  md_value_map IS '主数据值映射（Value Mapping）';
 COMMENT ON COLUMN md_value_map.id IS '主键（应用层生成）';
 
--- 5. 匹配组/存活裁决
+-- 5. 查重规则配置（查重界面内维护，find-duplicates 读取执行）
+DROP TABLE IF EXISTS md_match_config;
+CREATE TABLE md_match_config (
+    id             BIGINT       NOT NULL,
+    rule_name      VARCHAR(128) NOT NULL,
+    dict_code      VARCHAR(64)  NOT NULL,
+    target_table   VARCHAR(64)  NOT NULL,
+    specs          JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    cluster_keys   JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    survive_fields JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    thresholds     JSONB,
+    is_active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_match_config IS '查重规则配置（按字典维度），查重界面内维护，find-duplicates 读取执行';
+COMMENT ON COLUMN md_match_config.id IS '主键（应用层生成）';
+COMMENT ON COLUMN md_match_config.specs IS '比较字段 [{field,weight,kind:Exact|EditDistance}]';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_match_config_dict_rule ON md_match_config (dict_code, rule_name);
+CREATE        INDEX IF NOT EXISTS idx_md_match_config_dict      ON md_match_config (dict_code);
+
+-- 6. 匹配组/存活裁决
 DROP TABLE IF EXISTS md_match_group;
 CREATE TABLE md_match_group (
     id               BIGINT       NOT NULL,
@@ -3054,7 +3075,7 @@ COMMENT ON COLUMN md_match_group.id     IS '主键（应用层生成）';
 COMMENT ON COLUMN md_match_group.status IS 'pending/auto_merged/reviewed/rejected';
 CREATE INDEX IF NOT EXISTS idx_md_match_group_dict ON md_match_group (dict_code, status);
 
--- 6. 分发订阅
+-- 7. 分发订阅
 DROP TABLE IF EXISTS md_subscription;
 CREATE TABLE md_subscription (
     id          BIGINT       NOT NULL,
@@ -3071,7 +3092,7 @@ COMMENT ON TABLE  md_subscription IS '分发订阅配置';
 COMMENT ON COLUMN md_subscription.id      IS '主键（应用层生成）';
 COMMENT ON COLUMN md_subscription.channel IS '通道 event/rest/batch';
 
--- 7. 分发事件日志（激活器激活成功时写入；主键 VARCHAR(64) snowflake，seq 为有序拉取列非主键）
+-- 8. 分发事件日志（激活器激活成功时写入；主键 VARCHAR(64) snowflake，seq 为有序拉取列非主键）
 DROP TABLE IF EXISTS md_event_log;
 CREATE TABLE md_event_log (
     id          VARCHAR(64)  NOT NULL,

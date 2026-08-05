@@ -327,10 +327,12 @@ pub async fn mdm_find_duplicates(
     }
     let cluster_keys: Vec<&str> = body.cluster_keys.iter().map(|s| s.as_str()).collect();
 
-    // 装载列 = id ∪ specs 字段 ∪ surviveFields ∪ {update_time}（防注入经 load_published validate_ident）
+    // 装载列 = id ∪ specs 字段 ∪ surviveFields ∪ displayFields ∪ {update_time}
+    // （防注入经 load_published validate_ident；displayFields 仅展示用，如 label/code）
     let mut col_set: Vec<String> = vec!["id".into(), "update_time".into()];
     for s in &body.specs { col_set.push(s.field.clone()); }
     for f in &body.survive_fields { col_set.push(f.clone()); }
+    for f in &body.display_fields { col_set.push(f.clone()); }
     col_set.sort(); col_set.dedup();
     let columns: Vec<&str> = col_set.iter().map(|s| s.as_str()).collect();
 
@@ -660,6 +662,9 @@ pub struct FindDupBody {
     /// 存活字段（供前端做字段对比展示用；查重本身只需 specs）
     #[serde(default, alias = "surviveFields")]
     pub survive_fields: Vec<String>,
+    /// 仅用于展示的附加列（如 labelField/codeField），不参与匹配/存活，只随候选字段返回
+    #[serde(default, alias = "displayFields")]
+    pub display_fields: Vec<String>,
 }
 
 /// 比较字段 DTO（kind: "Exact" | "EditDistance"）。
@@ -845,28 +850,15 @@ pub async fn mdm_match_configs_list(
 }
 
 /// 查重规则保存（upsert）。POST body { id?, ruleName, dictCode, targetTable, specs, clusterKeys, surviveFields, thresholds? }。
-/// id 空=新建；id 非空或 (dictCode,ruleName) 已存在=更新。
+/// id 缺省/0=新建；id 非零或 (dictCode,ruleName) 已存在=更新。返回规则 id（i64）。
 pub async fn mdm_match_configs_save(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    CmxSvrContext(_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
-    let operated_by = svr_ctx
-        .auth_context
-        .as_ref()
-        .and_then(|a| a.user_id.parse::<i64>().ok())
-        .unwrap_or(0);
-    // 注入操作人（upsert_match_config 不强求，存 created_by/updated_by 便于审计）
-    let mut body = body;
-    if let Some(obj) = body.as_object_mut() {
-        obj.insert("updated_by".into(), json!(operated_by));
-        if obj.get("id").and_then(|v| v.as_str()).map(|s| s.is_empty()).unwrap_or(true) {
-            obj.insert("created_by".into(), json!(operated_by));
-        }
-    }
     let id = store::upsert_match_config(mm, &db_id, &body).await?;
     Ok(Json(ApiResp::ok(json!({ "id": id }))))
 }
@@ -880,7 +872,7 @@ pub async fn mdm_match_configs_delete(
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
-    let n = store::delete_match_config(mm, &db_id, &body.config_id).await?;
+    let n = store::delete_match_config(mm, &db_id, body.config_id).await?;
     Ok(Json(ApiResp::ok(json!({ "configId": body.config_id, "affected": n }))))
 }
 
@@ -893,5 +885,5 @@ pub struct MatchConfigQuery {
 #[derive(serde::Deserialize)]
 pub struct MatchConfigDeleteBody {
     #[serde(alias = "configId")]
-    pub config_id: String,
+    pub config_id: i64,
 }

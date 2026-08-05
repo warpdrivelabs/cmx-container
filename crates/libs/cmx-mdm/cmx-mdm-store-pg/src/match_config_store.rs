@@ -1,17 +1,17 @@
-//! cmx_mdm_match_config 查重规则配置读写。
+//! md_match_config 查重规则配置读写（治理表，md_ 前缀 + BIGINT 主键，对齐 md_match_group）。
 //!
 //! - [`list_match_config`]：查重界面按字典列规则（下拉「已有规则」用）。
 //! - [`get_match_config`]：按 id 取单条。
-//! - [`upsert_match_config`]：新建/编辑规则（id 为空则新建，非空则按 (dict_code, rule_name) upsert）。
-//! - [`delete_match_config`]：按 id 删除。
+//! - [`upsert_match_config`]：新建/编辑规则（id 为 0 则新建，非 0 则按 (dict_code, rule_name) upsert）。
+//! - [`delete_match_config`]：按 id 软删（is_active=FALSE）。
 //!
-//! 规则维护发生在查重界面内（选字典→选已有规则/新建/编辑），无独立管理页。
+//! 规则维护发生在查重界面内（选字典→选已有规则/新建/编辑弹框），无独立管理页。
 //! JSONB 列（specs/cluster_keys/survive_fields/thresholds）在 DB 以 text 返回，需 parse_jsonb_field。
 
 use cmx_core::dv;
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 use cmx_database_pg::DatabaseManager;
-use cmx_utils::snowflake_id_str;
+use cmx_utils::next_pk_id;
 use serde_json::Value;
 
 use crate::error::{api_err, api_err_db};
@@ -30,8 +30,8 @@ pub async fn list_match_config(
     }
     let sql = format!(
         r#"SELECT id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields,
-                  thresholds, is_active, created_at, updated_at
-           FROM cmx_mdm_match_config WHERE {} ORDER BY rule_name"#,
+                  thresholds, is_active, created_at
+           FROM md_match_config WHERE {} ORDER BY rule_name"#,
         where_clauses.join(" AND ")
     );
     let ds = mm
@@ -55,17 +55,17 @@ pub async fn list_match_config(
 pub async fn get_match_config(
     mm: &DatabaseManager,
     db_id: &str,
-    config_id: &str,
+    config_id: i64,
 ) -> Result<Option<Value>, cmx_api_types::Error> {
     let sql = r#"SELECT id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields,
-                        thresholds, is_active, created_at, updated_at
-                 FROM cmx_mdm_match_config WHERE id = $1"#;
+                        thresholds, is_active, created_at
+                 FROM md_match_config WHERE id = $1"#;
     let ds = mm
         .query_sql_with_datavalues(
             db_id,
             None,
             sql,
-            dv![DataValue::String(config_id.into())],
+            dv![DataValue::Int(config_id)],
             "mdm_mcfg_get",
         )
         .await
@@ -83,16 +83,16 @@ pub async fn get_match_config(
 
 /// upsert 配置项（由 handler 反序列化好的 Value 透传）。
 ///
-/// - `id` 为空字符串：新建（snowflake 生成 id）。
-/// - `id` 非空：按 (dict_code, rule_name) upsert（保留原 id）。
+/// - `id` 为 0 或缺失：新建（next_pk_id 生成 id）。
+/// - `id` 非零：按 (dict_code, rule_name) upsert（保留原 id）。
 ///
 /// `cfg` 须含 rule_name/dict_code/target_table/specs/cluster_keys/survive_fields/thresholds(可选)。
-/// 返回规则 id。
+/// 返回规则 id（i64）。
 pub async fn upsert_match_config(
     mm: &DatabaseManager,
     db_id: &str,
     cfg: &Value,
-) -> Result<String, cmx_api_types::Error> {
+) -> Result<i64, cmx_api_types::Error> {
     // 兼容驼峰（前端契约）与下划线（DB 风格）两种 key
     let pick_str = |k1: &str, k2: &str| cfg.get(k1).and_then(|v| v.as_str()).or_else(|| cfg.get(k2).and_then(|v| v.as_str()));
     let rule_name = pick_str("ruleName", "rule_name")
@@ -107,8 +107,9 @@ pub async fn upsert_match_config(
     let survive_fields = cfg.get("surviveFields").or_else(|| cfg.get("survive_fields")).unwrap_or(&empty_arr);
     let thresholds = cfg.get("thresholds"); // 可空
 
-    let existing_id = cfg.get("id").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
-    let id = existing_id.map(|s| s.to_string()).unwrap_or_else(snowflake_id_str);
+    // id：0/缺失=新建(next_pk_id)；非零=按 (dict_code,rule_name) upsert 保留原 id
+    let existing_id = cfg.get("id").and_then(|v| v.as_i64()).filter(|i| *i > 0);
+    let id = existing_id.unwrap_or_else(next_pk_id);
 
     let specs_json = serde_json::to_string(specs).map_err(|e| api_err(&format!("specs 序列化失败: {e}")))?;
     let ck_json = serde_json::to_string(cluster_keys).map_err(|e| api_err(&format!("cluster_keys 序列化失败: {e}")))?;
@@ -122,24 +123,23 @@ pub async fn upsert_match_config(
         _ => DataValue::NullTyped(SqlTypeMarker::Json),
     };
 
-    let sql = r#"INSERT INTO cmx_mdm_match_config
+    let sql = r#"INSERT INTO md_match_config
                    (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields,
-                    thresholds, is_active, updated_at)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,now())
+                    thresholds, is_active)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE)
                  ON CONFLICT (dict_code, rule_name) DO UPDATE SET
                    target_table   = EXCLUDED.target_table,
                    specs          = EXCLUDED.specs,
                    cluster_keys   = EXCLUDED.cluster_keys,
                    survive_fields = EXCLUDED.survive_fields,
                    thresholds     = EXCLUDED.thresholds,
-                   is_active      = TRUE,
-                   updated_at     = now()"#;
+                   is_active      = TRUE"#;
     mm.execute_sql_with_datavalues(
         db_id,
         None,
         sql,
         dv![
-            DataValue::String(id.clone()),
+            DataValue::Int(id),
             DataValue::String(rule_name.into()),
             DataValue::String(dict_code.into()),
             DataValue::String(target_table.into()),
@@ -151,9 +151,8 @@ pub async fn upsert_match_config(
     )
     .await
     .map_err(|e| api_err_db(&format!("保存查重规则失败: {e}")))?;
-    // ON CONFLICT 更新分支不会返回 EXCLUDED.id，需反查确保返回正确 id
+    // ON CONFLICT 更新分支不返回 EXCLUDED.id，需反查确保返回正确 id
     if existing_id.is_none() {
-        // 可能因冲突走了更新分支，反查 (dict_code, rule_name) 的真实 id
         let real = resolve_id(mm, db_id, dict_code, rule_name).await?;
         return Ok(real);
     }
@@ -165,8 +164,8 @@ async fn resolve_id(
     db_id: &str,
     dict_code: &str,
     rule_name: &str,
-) -> Result<String, cmx_api_types::Error> {
-    let sql = "SELECT id FROM cmx_mdm_match_config WHERE dict_code = $1 AND rule_name = $2";
+) -> Result<i64, cmx_api_types::Error> {
+    let sql = "SELECT id FROM md_match_config WHERE dict_code = $1 AND rule_name = $2";
     let ds = mm
         .query_sql_with_datavalues(
             db_id,
@@ -179,10 +178,7 @@ async fn resolve_id(
         .map_err(|e| api_err_db(&format!("反查规则 id 失败: {e}")))?;
     ds.rows
         .first()
-        .and_then(|r| {
-            let v = r.to_json_value(ds.schema.as_ref());
-            v.get("id").and_then(|x| x.as_str()).map(|s| s.to_string())
-        })
+        .and_then(|r| r.get_by_name_as::<i64>(ds.schema.as_ref(), "id"))
         .ok_or_else(|| api_err("保存后反查规则 id 为空"))
 }
 
@@ -190,15 +186,15 @@ async fn resolve_id(
 pub async fn delete_match_config(
     mm: &DatabaseManager,
     db_id: &str,
-    config_id: &str,
+    config_id: i64,
 ) -> Result<u64, cmx_api_types::Error> {
-    let sql = "UPDATE cmx_mdm_match_config SET is_active = FALSE, updated_at = now() WHERE id = $1";
+    let sql = "UPDATE md_match_config SET is_active = FALSE WHERE id = $1";
     let n = mm
         .execute_sql_with_datavalues(
             db_id,
             None,
             sql,
-            dv![DataValue::String(config_id.into())],
+            dv![DataValue::Int(config_id)],
         )
         .await
         .map_err(|e| api_err_db(&format!("删除查重规则失败: {e}")))?;
