@@ -1057,6 +1057,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-code-api"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "axum",
+ "cmx-api",
+ "cmx-api-types",
+ "cmx-code-model",
+ "cmx-core",
+ "cmx-database-pg",
+ "cmx-traits",
+ "cmx-utils",
+ "regex",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-code-model"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "cmx-core",
+ "rand 0.8.5",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "cmx-core"
 version = "0.1.12"
 dependencies = [
@@ -1218,6 +1253,7 @@ dependencies = [
  "cmx-master-slave",
  "cmx-model-meta",
  "cmx-rowsource",
+ "cmx-traits",
  "csv",
  "futures",
  "serde",
@@ -1292,6 +1328,7 @@ dependencies = [
  "cmx-master-slave",
  "cmx-model-meta",
  "cmx-rowsource",
+ "cmx-traits",
  "cmx-utils",
  "dashmap",
  "rmp-serde",
@@ -8840,6 +8877,7 @@ dependencies = [
  "cmx-auth",
  "cmx-biz",
  "cmx-buffer",
+ "cmx-code-api",
  "cmx-core",
  "cmx-database",
  "cmx-database-pg",

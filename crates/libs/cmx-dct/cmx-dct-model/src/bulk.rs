@@ -354,6 +354,7 @@ mod tests {
                 columns: std::collections::HashMap::new(),
                 order: Vec::new(),
             }),
+            code_rule: None,
         }
     }
 

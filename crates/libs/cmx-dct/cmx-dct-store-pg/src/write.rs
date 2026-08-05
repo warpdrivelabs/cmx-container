@@ -58,6 +58,10 @@ pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertO
         serde_json::Map::new()
     };
 
+    // 编码引擎铸号：若字典配置了 codeRule(mode=auto)，为 code_field 为空的行铸业务编码。
+    // 未配置编码引擎（code_rule=None 或 GlobalCodeMinter 未注入）→ 跳过（现状零影响）。
+    mint_codes_for_inserts(view, &mut rows, db_id).await;
+
     // 落库前列级校验：类型/长度/精度/非空（NOT NULL 跳过服务端 backfill 列）。一次回报全部。
     let vopts = cmx_biz::validation::ValidateOptions::insert(SERVER_FILLED_COLS, SERVER_REPLACED_COLS);
     let mut violations = Vec::new();
@@ -619,4 +623,79 @@ async fn save_apply(
     }
 
     Ok((affected, updated_at, conflict, id_map))
+}
+
+/// 编码引擎铸号：若字典配置了 codeRule(mode=auto)，为 code_field 为空的行铸业务编码。
+///
+/// 批量铸号（方案 §4.5 + §4.1 buffer 推进）：待铸号行收集后一次调 `mint_batch`，
+/// engine 内按 prefix 分组 + buffer 推进，同 prefix 多行一次反查 max 取连续号
+/// （修复附录 C.2.10/C.2.11）。
+/// 未配置编码引擎（code_rule=None 或 GlobalCodeMinter 未注入）→ 静默跳过（现状零影响）。
+/// 铸号失败记 warn 日志（不阻断主流程——编码失败不应阻断业务保存）。
+pub(crate) async fn mint_codes_for_inserts(
+    view: &DictView,
+    rows: &mut [serde_json::Map<String, Value>],
+    db_id: &str,
+) {
+    // 无 codeRule → 跳过
+    let Some(code_rule) = &view.code_rule else {
+        return;
+    };
+
+    // 非 auto mode（manual）→ 跳过（用户手敲）
+    let mode = code_rule.get("mode").and_then(|v| v.as_str()).unwrap_or("manual");
+    if mode != "auto" {
+        return;
+    }
+
+    // 编码引擎未注入 → 跳过（现状零影响）
+    let Some(minter) = cmx_traits::code::GlobalCodeMinter::get() else {
+        return;
+    };
+
+    let code_field = &view.code_field;
+    let target = serde_json::json!({
+        "kind": "dct",
+        "code": view.table_name,
+        "field": code_field,
+    });
+
+    // 收集待铸号行的索引 + attrs（跳过已有 code 的行）
+    let mut pending: Vec<(usize, Value)> = Vec::new();
+    for (idx, row) in rows.iter().enumerate() {
+        // 已有 code 值 → 跳过（前端手填或预览传的）
+        if let Some(existing) = row.get(code_field) {
+            if !existing.is_null() && existing.as_str().map(|s| !s.is_empty()).unwrap_or(false) {
+                continue;
+            }
+        }
+        // 行属性（供 ref 段取字段值 + condition 求值）
+        let attrs = Value::Object(row.clone());
+        pending.push((idx, attrs));
+    }
+
+    if pending.is_empty() {
+        return;
+    }
+
+    // 批量铸号：一次调 mint_batch，engine 内按 prefix 分组 + buffer 推进
+    let attrs_list: Vec<Value> = pending.iter().map(|(_, a)| a.clone()).collect();
+    match minter
+        .mint_batch(code_rule, &target, &attrs_list, db_id, None)
+        .await
+    {
+        Ok(codes) => {
+            for ((row_idx, _), code) in pending.iter().zip(codes.iter()) {
+                rows[*row_idx].insert(code_field.clone(), Value::String(code.clone()));
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                target: "cmx_dct::mint_code",
+                dict = %view.dict_code, field = %code_field, error = %e,
+                row_count = pending.len(),
+                "编码引擎批量铸号失败，跳过这些行（不阻断保存）"
+            );
+        }
+    }
 }

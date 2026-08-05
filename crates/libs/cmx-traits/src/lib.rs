@@ -25,6 +25,7 @@
 
 // 模块声明
 pub mod auth;
+pub mod code;
 pub mod error;
 pub mod event_bus;
 pub mod function_invoker;

@@ -140,6 +140,14 @@ async fn main() -> Result<()> {
     init_plugins().await?;
     init_service_invoker().await?;
 
+    // 初始化编码引擎全局注入（供 DCT/DOC 钩子调用，未注入则钩子跳过=现状零影响）。
+    {
+        let engine = std::sync::Arc::new(cmx_code_api::engine::CodeEngine);
+        if let Err(e) = cmx_traits::code::GlobalCodeMinter::set(engine) {
+            tracing::warn!("编码引擎全局注入失败（可能重复初始化）：{e}");
+        }
+    }
+
     // 初始化审计日志器（依赖 DatabaseManager，必须在 init_datasources 之后）
     let audit_logger = build_audit_logger().await?;
 

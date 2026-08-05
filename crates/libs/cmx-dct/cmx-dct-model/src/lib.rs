@@ -60,6 +60,8 @@ pub struct DictView {
     pub pk: String,
     /// 落库前列级校验规范（进程内缓存，含类型/长度/精度/nullable）。
     pub spec: std::sync::Arc<cmx_biz::validation::TableSpec>,
+    /// 编码规则挂载点声明（来自 dictMeta.codeRule，None=未配置编码引擎）。
+    pub code_rule: Option<serde_json::Value>,
 }
 
 #[derive(Clone)]

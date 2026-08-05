@@ -143,6 +143,25 @@
       "tableAlias": "凭证批",
       "fields": [
         {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "doc_no",
+          "name": "doc_no",
+          "caption": {
+            "zh_CN": "凭证批号"
+          },
+          "fieldLength": 32,
+          "edit": {
+            "mode": "cmx-input"
+          },
+          "display": {
+            "mode": "text"
+          },
+          "width": "160px",
+          "required": false
+        },
+        {
           "dataType": "BIGINT",
           "nullable": true,
           "dimType": "dimension",
@@ -656,7 +675,13 @@
         "own",
         "documentLifecycleFields",
         "documentTechnicalFields"
-      ]
+      ],
+      "codeRule": {
+        "mode": "auto",
+        "field": "doc_no",
+        "ruleCode": "voucher_batch_daily",
+        "enableGap": false
+      }
     },
     {
       "level": "L2",
