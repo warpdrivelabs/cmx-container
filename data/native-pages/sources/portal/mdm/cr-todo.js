@@ -1,5 +1,5 @@
 /**
- * MDM 变更申请待办台（native-page · 企业级重设计）。
+ * MDM 供应商单据列表台（native-page · 企业级重设计）。
  *
  * 布局：页头 → KPI 统计卡（草稿/待审批/已驳回/已处理，点击过滤）→ 列表面板
  * （cmx-filter-bar + 企业表格 + cmx-status-tag + 行内 ui5-button 操作）→ 详情弹层（cmx-desc-list）。
@@ -40,13 +40,19 @@ const STATUS_META = {
   rejected: { name: '已驳回', tone: 'danger' },
   aborted: { name: '已作废', tone: 'neutral' },
 }
-const state = { dbId: '', filter: 'all', list: [], view: 'list', detail: null, domain: '', application: '' }
+const state = { dbId: '', filter: 'all', list: [], view: 'list', detail: null, domain: '', application: '', page: 1, pageSize: 20, total: 0, counts: { draft: 0, approving: 0, rejected: 0, done: 0 } }
 
 function styleCss() {
   return `
-  .pg { height:100%; overflow:auto; box-sizing:border-box; padding:16px 20px;
+  .pg { height:100%; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; padding:16px 20px;
     background:var(--sapBackgroundColor); color:var(--sapTextColor);
     font-family:var(--sapFontFamily,'72','Segoe UI',Arial,sans-serif); }
+  /* 列表卡片撑满剩余高度，仅表格内部滚动 */
+  .list-card { display:flex; flex-direction:column; flex:1; min-height:0;
+    background:var(--sapList_Background); border:1px solid var(--sapList_BorderColor); border-radius:8px; padding:12px 14px; }
+  .tbl-wrap { flex:1; min-height:0; overflow:hidden; }
+  .tbl-wrap cmx-revo-grid { display:block; width:100%; height:100%; }
+  .tbl th { position:sticky; top:0; }
   .crumb { display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:10px; color:var(--sapContent_LabelColor); }
   .crumb a { color:var(--sapLinkColor,#0a6ed1); cursor:pointer; }
   .crumb .cur { color:var(--sapTitleColor); font-weight:600; }
@@ -71,29 +77,31 @@ function styleCss() {
   `
 }
 
-function counts() {
-  const c = { draft: 0, approving: 0, rejected: 0, done: 0 }
-  for (const r of state.list) {
-    if (r.doc_status === 'draft') c.draft++
-    else if (r.doc_status === 'approving') c.approving++
-    else if (r.doc_status === 'rejected') c.rejected++
-    else if (r.doc_status === 'activated' || r.doc_status === 'aborted') c.done++
+function counts() { return state.counts }
+
+// KPI 轻量计数：pageSize=1 只取 total（不拉数据）；已处理=activated+aborted
+async function loadCounts() {
+  const one = async (docStatus) => {
+    const d = (await apiGet(`/api/mdm/change-requests?${new URLSearchParams({ page: 1, pageSize: 1, docStatus })}`, state.dbId)) || {}
+    return Number(d.total) || 0
   }
-  return c
+  try {
+    const [draft, approving, rejected, activated, aborted] = await Promise.all([
+      one('draft'), one('approving'), one('rejected'), one('activated'), one('aborted'),
+    ])
+    state.counts = { draft, approving, rejected, done: activated + aborted }
+  } catch (e) { /* 计数失败不影响列表 */ }
 }
 
 function kpiHtml() {
   const c = counts()
-  const card = (label, value, tone, key) =>
-    `<cmx-kpi-card variant="card" label="${label}" value="${value}" tone="${tone}" data-k="${key}" clickable></cmx-kpi-card>`
-  return `<div class="kpi-row">${card('草稿', c.draft, 'neutral', 'draft')}${card('待审批', c.approving, 'warning', 'approving')}${card('已驳回', c.rejected, 'danger', 'rejected')}${card('已处理', c.done, 'success', 'done')}</div>`
+  const card = (label, value, tone, key, clickable = true) =>
+    `<cmx-kpi-card variant="card" label="${label}" value="${value}" tone="${tone}" data-k="${key}" ${clickable ? 'clickable' : ''}></cmx-kpi-card>`
+  return `<div class="kpi-row">${card('草稿', c.draft, 'neutral', 'draft')}${card('待审批', c.approving, 'warning', 'approving')}${card('已驳回', c.rejected, 'danger', 'rejected')}${card('已处理', c.done, 'success', 'done', false)}</div>`
 }
 
-function filtered() {
-  if (state.filter === 'all') return state.list
-  if (state.filter === 'done') return state.list.filter((r) => r.doc_status === 'activated' || r.doc_status === 'aborted')
-  return state.list.filter((r) => r.doc_status === state.filter)
-}
+// 列表已由服务端按 docStatus 过滤，前端直接展示当前页
+function filtered() { return state.list }
 
 function actionsHtml(r) {
   const id = r.id; const s = r.doc_status
@@ -122,7 +130,7 @@ function tableHtml() {
 }
 
 function crumbHtml(sub) {
-  return `<div class="crumb"><a id="crumbList">变更申请待办</a>${sub ? `<span class="sep">/</span><span class="cur">${sub}</span>` : ''}</div>`
+  return `<div class="crumb"><a id="crumbList">供应商单据列表</a>${sub ? `<span class="sep">/</span><span class="cur">${sub}</span>` : ''}</div>`
 }
 
 function detailHtml() {
@@ -149,23 +157,76 @@ function detailHtml() {
 function viewHtml() {
   if (state.view === 'detail') return detailHtml()
   return `<div class="pg">
-    <div class="pg-head"><div class="pg-title">变更申请待办</div>
+    <div class="pg-head"><div class="pg-title">供应商单据列表</div>
       <div class="pg-sub">提交 / 审批 / 驳回 / 修改重提 / 作废，审批通过自动激活落字典</div></div>
     ${kpiHtml()}
-    <cmx-panel title="申请列表" icon="list">
+    <div class="list-card">
+      <div class="card-title">申请列表（共 ${state.total} 条）</div>
       <cmx-filter-bar id="ctFilter" search-placeholder="单据号/名称">
         <ui5-select id="ctStatus">
           <ui5-option value="all" ${state.filter === 'all' ? 'selected' : ''}>全部</ui5-option>
           <ui5-option value="draft" ${state.filter === 'draft' ? 'selected' : ''}>草稿</ui5-option>
           <ui5-option value="approving" ${state.filter === 'approving' ? 'selected' : ''}>待审批</ui5-option>
           <ui5-option value="rejected" ${state.filter === 'rejected' ? 'selected' : ''}>已驳回</ui5-option>
-          <ui5-option value="done" ${state.filter === 'done' ? 'selected' : ''}>已处理</ui5-option>
+          <ui5-option value="activated" ${state.filter === 'activated' ? 'selected' : ''}>已激活</ui5-option>
+          <ui5-option value="aborted" ${state.filter === 'aborted' ? 'selected' : ''}>已作废</ui5-option>
         </ui5-select>
         <ui5-button slot="actions" design="Transparent" icon="refresh" id="ctReload">刷新</ui5-button>
       </cmx-filter-bar>
-      ${tableHtml()}
-    </cmx-panel>
+      <div class="tbl-wrap"><cmx-revo-grid id="ctGrid"></cmx-revo-grid></div>
+      <cmx-pager id="ctPager" page-size="20" page-sizes="10,20,50,100"></cmx-pager>
+    </div>
   </div>`
+}
+
+// 供应商单据列表用 cmx-revo-grid（只读 + 操作列）。操作列走 display.mode='actions'，
+// 按钮按 doc_status 通过 visible(model) 显隐；点击派发 cmx-cell-link-click（与 cr-editor 同模式）。
+function buildListGrid() {
+  const C = cmx(); const wrap = rootEl && rootEl.querySelector('.tbl-wrap'); if (!wrap) return
+  const old = wrap.querySelector('cmx-revo-grid'); if (old) old.remove()
+  const grid = document.createElement('cmx-revo-grid')
+  grid.setAttribute('data-cmx-embed', '')
+  wrap.appendChild(grid)
+  const is = (s) => (m) => m.doc_status === s
+  if (C.CmxColumnModel && C.CmxColumn) {
+    const cm = new C.CmxColumnModel({ datasetId: 'crList' })
+    cm.setMembers([
+      new C.CmxColumn({ id: 'id', caption: 'ID', dataType: 'VARCHAR', width: '110px' }),
+      new C.CmxColumn({ id: 'doc_no', caption: '单据号', dataType: 'VARCHAR', width: '150px' }),
+      new C.CmxColumn({ id: 'name', caption: '名称', dataType: 'VARCHAR', width: '180px' }),
+      new C.CmxColumn({ id: 'doc_type', caption: '类型', dataType: 'VARCHAR', width: '150px' }),
+      new C.CmxColumn({ id: 'status_name', caption: '状态', dataType: 'VARCHAR', width: '90px' }),
+      new C.CmxColumn({ id: 'create_time', caption: '创建时间', dataType: 'VARCHAR', width: '150px', display: {
+        mode: 'text', format: 'datetime:YYYY-MM-DD HH:mm:ss', align: 'center',
+      } }),
+      new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '180px', edit: { mode: 'readonly' },
+        display: { mode: 'actions', actions: [
+          { text: '提交',   actionRef: 'submit',  visible: is('draft') },
+          { text: '作废',   actionRef: 'abort',   variant: 'negative', visible: is('draft') },
+          { text: '通过',   actionRef: 'approve', variant: 'emphasized', visible: is('approving') },
+          { text: '驳回',   actionRef: 'reject',  variant: 'negative', visible: is('approving') },
+          { text: '修改重提', actionRef: 'clone',  visible: is('rejected') },
+        ] } }),
+    ])
+    grid.setColumnModel(cm)
+  }
+  grid.setOptions?.({ selectionMode: 'none', fillHeight: true, showRowIndex: true, showTotals: false })
+  // 操作列点击：rowId 为 revo 行索引，反查真实行
+  grid.addEventListener('cmx-cell-link-click', (e) => {
+    const d = e.detail || {}; const ds = grid._ds
+    const row = (ds && ds.rows && !isNaN(parseInt(d.rowId, 10))) ? ds.rows[parseInt(d.rowId, 10)] : null
+    if (!row) return
+    const r = row.toPlainObject ? row.toPlainObject() : row
+    if (r.id == null) return
+    doAction(d.actionRef, String(r.id))
+  })
+  const rows = state.list.map((r) => ({ ...r, status_name: (STATUS_META[r.doc_status] || {}).name || r.doc_status }))
+  const fill = () => {
+    if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows(rows); grid.setDataSet(ds) }
+    else grid.setDataSet?.(rows)
+    grid.refreshLayout?.()
+  }
+  requestAnimationFrame(() => requestAnimationFrame(fill))
 }
 
 // ── 操作 ─────────────────────────────────────────────────────────────────────
@@ -221,19 +282,34 @@ function openTab(host, caption, nativePage, context, opts = {}) {
 }
 
 async function load() {
-  const d = (await apiGet('/api/mdm/change-requests?pageSize=200', state.dbId)) || {}
+  const params = { page: state.page, pageSize: state.pageSize }
+  if (state.filter !== 'all') params.docStatus = state.filter
+  const d = (await apiGet(`/api/mdm/change-requests?${new URLSearchParams(params)}`, state.dbId)) || {}
   state.list = d.list || []
+  state.total = Number(d.total) || 0
 }
 
 function bind(root) {
   rootEl = root
+  const reload = async () => { await load(); refresh() }
   root.querySelector('#crumbList')?.addEventListener('click', () => { state.view = 'list'; state.detail = null; refresh() })
   root.querySelectorAll('cmx-kpi-card[clickable]').forEach((k) => k.addEventListener('cmx-kpi-click', () => {
-    state.filter = k.dataset.k || 'all'; refresh()
+    state.filter = k.dataset.k || 'all'; state.page = 1; reload()
   }))
-  root.querySelector('#ctStatus')?.addEventListener('change', (e) => { state.filter = e.target.value || 'all'; refresh() })
-  root.querySelector('#ctReload')?.addEventListener('click', async () => { await load(); refresh() })
-  root.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => doAction(b.dataset.act, b.dataset.id)))
+  root.querySelector('#ctStatus')?.addEventListener('change', (e) => { state.filter = e.target.value || 'all'; state.page = 1; reload() })
+  root.querySelector('#ctReload')?.addEventListener('click', async () => { await Promise.all([load(), loadCounts()]); refresh() })
+  // 分页（cmx-pager 独立模式）
+  const pager = root.querySelector('#ctPager')
+  if (pager) {
+    pager.total = state.total; pager.page = state.page; pager.pageSize = state.pageSize
+    pager.addEventListener('page-change', (e) => {
+      const d = e.detail || {}
+      if (d.pageSize && d.pageSize !== state.pageSize) { state.pageSize = d.pageSize; state.page = 1 }
+      else state.page = d.page || 1
+      reload()
+    })
+  }
+  buildListGrid()
 }
 
 function refresh() {
@@ -256,8 +332,10 @@ export default {
   views: {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
-      state.dbId = (ctx && ctx.props && (ctx.props.dbId || ctx.props.db_id)) || ''
-      try { await load() } catch (e) { console.error('[cr-todo] init fail', e) }
+      const props = (ctx && ctx.props) || {}
+      state.dbId = props.dbId || props.db_id || ''
+      state.domain = props.domain || ''; state.application = props.application || ''
+      try { await Promise.all([load(), loadCounts()]) } catch (e) { console.error('[cr-todo] init fail', e) }
       if (host) whenRendered(host, '.pg', (r) => bind(r))
       return `<style>${styleCss()}</style>${viewHtml()}`
     },

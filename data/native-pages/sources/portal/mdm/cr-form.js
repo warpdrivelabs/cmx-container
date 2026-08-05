@@ -38,7 +38,8 @@ function styleCss() {
   .f-item { display:flex; flex-direction:column; gap:6px; min-width:0; }
   .f-item > label { font-size:12px; color:var(--sapContent_LabelColor); }
   .req::after { content:' *'; color:var(--sapNegativeColor,#e90b0b); }
-  .bank-fill { flex:1; min-height:180px; overflow:auto; border:1px solid var(--sapList_BorderColor); border-radius:6px; }
+  .bank-fill { flex:1; min-height:200px; overflow:hidden; border:1px solid var(--sapList_BorderColor); border-radius:6px; }
+  .bank-fill cmx-revo-grid { display:block; width:100%; height:100%; min-height:200px; }
   .tbl { width:100%; border-collapse:collapse; font-size:13px; }
   .tbl th { position:sticky; top:0; text-align:left; padding:8px 10px; font-size:12px; font-weight:600; color:var(--sapContent_LabelColor);
     border-bottom:1px solid var(--sapList_BorderColor); background:var(--sapList_Background); }
@@ -55,12 +56,7 @@ function viewHtml() {
   const isEdit = state.mode === 'update'
   return `<div class="pg"><div class="card">
     <div class="card-title">${isEdit ? '变更供应商' : '新增供应商'}</div>
-    <div class="form-grid">
-      <div class="f-item"><label><span class="req">供应商名称</span></label><ui5-input id="fName" value="${o.name || ''}"></ui5-input></div>
-      <div class="f-item"><label>税号</label><ui5-input id="fTaxNo" value="${o.tax_no || ''}"></ui5-input></div>
-      <div class="f-item"><label>统一社会信用代码</label><ui5-input id="fCreditCode" value="${o.credit_code || ''}"></ui5-input></div>
-      <div class="f-item"><label>简称</label><ui5-input id="fShortName" value="${o.short_name || ''}"></ui5-input></div>
-    </div>
+    <div id="fForm"></div>
     <div class="card-title" style="font-size:13px">银行账户</div>
     <cmx-toolbar><ui5-button design="Default" icon="add" id="fAddRow">增行</ui5-button><ui5-button design="Transparent" icon="delete" id="fDelRow">删选中</ui5-button></cmx-toolbar>
     <div class="bank-fill" id="fGrid"></div>
@@ -73,25 +69,53 @@ function viewHtml() {
 // 银行行用组件库 cmx-revo-grid（可编辑）。增行用 CmxDataSet.addRow（触发 _refreshSource）+
 // refreshLayout 双保险，保证新行即时可见；容器 .bank-fill 有最低高度。
 let bankGrid = null
+let headForm = null
 let lineSeq = 0
 const newLine = () => { lineSeq += 1; return { id: `nl_${Date.now()}_${lineSeq}`, account_no: '', bank_name: '' } }
+
+// 顶部表单用 cmx-ui5-form（字段定义来自 CmxColumnModel，默认 Neo 皮肤）
+function buildForm() {
+  const C = cmx(); const wrap = q('fForm'); if (!wrap) return
+  wrap.innerHTML = ''
+  const form = document.createElement('cmx-ui5-form')
+  if (C.CmxColumnModel && C.CmxColumn) {
+    const cm = new C.CmxColumnModel({ datasetId: 'supplierHead' })
+    cm.setMembers([
+      new C.CmxColumn({ id: 'name', caption: '供应商名称', dataType: 'VARCHAR', required: true, edit: { mode: 'text' } }),
+      new C.CmxColumn({ id: 'tax_no', caption: '税号', dataType: 'VARCHAR', edit: { mode: 'text' } }),
+      new C.CmxColumn({ id: 'credit_code', caption: '统一社会信用代码', dataType: 'VARCHAR', edit: { mode: 'text' } }),
+      new C.CmxColumn({ id: 'short_name', caption: '简称', dataType: 'VARCHAR', edit: { mode: 'text' } }),
+    ])
+    form.setColumnModel(cm)
+  }
+  form.setLayout?.('S1 M2 L3 XL3')
+  form.setDataSet?.({ ...(state.supplier || {}) })
+  wrap.appendChild(form); headForm = form
+}
+
+// 银行账户用 cmx-revo-grid（可编辑）。列成员键必须用 id（CmxColumn 以 id 为字段键）。
+// 顺序对齐 data-editor：先 appendChild 入 DOM，再 setColumnModel/setOptions，等两帧后 setDataSet。
 function bindBankGrid() {
   const C = cmx(); const wrap = q('fGrid'); if (!wrap) return
   wrap.innerHTML = ''
   const grid = document.createElement('cmx-revo-grid')
+  grid.setAttribute('data-cmx-embed', '')
+  wrap.appendChild(grid); bankGrid = grid
   if (C.CmxColumnModel && C.CmxColumn) {
     const cm = new C.CmxColumnModel({ datasetId: 'bankLines' })
     cm.setMembers([
-      new C.CmxColumn({ name: 'account_no', caption: '银行账号', width: '260px', edit: { mode: 'cmx-text-input' } }),
-      new C.CmxColumn({ name: 'bank_name', caption: '开户行', width: '260px', edit: { mode: 'cmx-text-input' } }),
+      new C.CmxColumn({ id: 'account_no', caption: '银行账号', dataType: 'VARCHAR', width: '260px', edit: { mode: 'cmx-text-input' } }),
+      new C.CmxColumn({ id: 'bank_name', caption: '开户行', width: '260px', edit: { mode: 'cmx-text-input' } }),
     ])
     grid.setColumnModel(cm)
   }
-  grid.setOptions?.({ editable: true, fillHeight: true, showRowIndex: true, selectionMode: 'multi' })
-  if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows([newLine()]); grid.setDataSet(ds) }
-  else grid.setDataSet?.([newLine()])
-  wrap.appendChild(grid); bankGrid = grid
-  queueMicrotask(() => grid.refreshLayout?.())
+  grid.setOptions?.({ editable: true, fillHeight: true, showRowIndex: true, selectionMode: 'multi', showTotals: false })
+  const fill = () => {
+    if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows([newLine()]); grid.setDataSet(ds) }
+    else grid.setDataSet?.([newLine()])
+    grid.refreshLayout?.()
+  }
+  requestAnimationFrame(() => requestAnimationFrame(fill))
 }
 function collectLines() {
   const ds = bankGrid?.getDataSet?.()
@@ -101,7 +125,8 @@ function collectLines() {
 }
 
 function buildHead() {
-  const name = val('fName'); const tax = val('fTaxNo'); const cc = val('fCreditCode'); const sn = val('fShortName')
+  const row = (headForm && headForm.getData && headForm.getData()) || {}
+  const name = (row.name || '').trim(); const tax = (row.tax_no || '').trim(); const cc = (row.credit_code || '').trim(); const sn = (row.short_name || '').trim()
   if (state.mode === 'update') {
     const o = state.supplier || {}
     const deltas = {}
@@ -114,7 +139,8 @@ function buildHead() {
 }
 async function doSave(submit) {
   const M = cmx()
-  if (!val('fName')) { M.cmxWarn?.('供应商名称不能为空'); return }
+  const headRow = (headForm && headForm.getData && headForm.getData()) || {}
+  if (!(headRow.name || '').trim()) { M.cmxWarn?.('供应商名称不能为空'); return }
   try {
     const d = await apiPost('/api/mdm/change-requests/create', { head: buildHead(), lines: collectLines() }, state.dbId)
     if (submit) await apiPost('/api/mdm/change-requests/submit', { crId: d.crId }, state.dbId)
@@ -124,7 +150,8 @@ async function doSave(submit) {
 
 function bind(root) {
   rootEl = root
-  bindBankGrid()
+  try { bindBankGrid() } catch (e) { console.error('[cr-form] bindBankGrid fail', e) }
+  try { buildForm() } catch (e) { console.error('[cr-form] buildForm fail', e) }
   root.querySelector('#fAddRow')?.addEventListener('click', () => {
     const C = cmx()
     const ds = bankGrid?.getDataSet?.()

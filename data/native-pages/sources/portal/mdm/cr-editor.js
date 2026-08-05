@@ -11,6 +11,8 @@
  * 契约：export default { defaultView:'content', views:{ async content(ctx) } }。
  */
 
+const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
+
 function unwrap(res, body) {
   if (body && typeof body === 'object' && typeof body.code === 'number') {
     if (body.code !== 0) { const e = new Error(body.msg || `业务错误 ${body.code}`); e.body = body; throw e }
@@ -19,8 +21,13 @@ function unwrap(res, body) {
   if (!res.ok) { const e = new Error((body && body.error) || `HTTP ${res.status}`); e.status = res.status; throw e }
   return body
 }
+async function apiPost(url, payload, dbId) {
+  const h = { 'Content-Type': 'application/json', Accept: 'application/json' }; if (dbId) h.db_id = dbId
+  const r = await fetch(url, { method: 'POST', headers: h, credentials: 'same-origin', body: JSON.stringify(payload || {}) })
+  return unwrap(r, await r.json().catch(() => null))
+}
 
-const state = { suppliers: [], kw: '' }
+const state = { suppliers: [], kw: '', page: 1, pageSize: 20, total: 0 }
 
 // 字典坐标四元组（domain/application/module/dbId），全部来自 ctx.props，代码中不写死。
 let coord = null
@@ -34,7 +41,7 @@ let rootEl = null
 
 function styleCss() {
   return `
-  .pg { height:100%; display:flex; flex-direction:column; box-sizing:border-box; padding:12px 20px 16px;
+  .pg { height:100%; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; padding:12px 20px 16px;
     background:var(--sapBackgroundColor); color:var(--sapTextColor);
     font-family:var(--sapFontFamily,'72','Segoe UI',Arial,sans-serif); }
   .pg-head { margin-bottom:10px; }
@@ -44,7 +51,8 @@ function styleCss() {
     background:var(--sapList_Background); border:1px solid var(--sapList_BorderColor); border-radius:8px; padding:12px 14px; }
   .card-hd { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; }
   .card-title { font-size:15px; font-weight:600; color:var(--sapTitleColor); }
-  .tbl-wrap { flex:1; min-height:0; overflow:auto; }
+  .tbl-wrap { flex:1; min-height:0; overflow:hidden; }
+  .tbl-wrap cmx-revo-grid { display:block; width:100%; height:100%; }
   .tbl { width:100%; border-collapse:collapse; font-size:13px; }
   .tbl th { position:sticky; top:0; text-align:left; padding:9px 12px; font-size:12px; font-weight:600; color:var(--sapContent_LabelColor);
     border-bottom:1px solid var(--sapList_BorderColor); background:var(--sapList_Background); }
@@ -82,35 +90,72 @@ function openTab(host, caption, nativePage, context, opts = {}) {
   }, { initialContext: context })
 }
 
+// 分页加载供应商（POST /api/dct/data/search，遵循 AGENTS.md：列表分页走 body）
 async function loadSuppliers() {
-  if (!coord) { state.suppliers = []; return }
-  const h = { Accept: 'application/json' }; if (coord.dbId) h.db_id = coord.dbId
-  const res = await fetch(`/api/dct/export?${coordQs({ dict: 'supplier' })}`, { headers: h, credentials: 'same-origin' })
-  const text = await res.text()
-  state.suppliers = text.split('\n').filter((l) => l.trim()).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
-}
-function filtered() {
-  const kw = state.kw.trim().toLowerCase()
-  if (!kw) return state.suppliers
-  return state.suppliers.filter((s) => [s.name, s.code, s.credit_code, s.tax_no].some((v) => String(v || '').toLowerCase().includes(kw)))
+  if (!coord) { state.suppliers = []; state.total = 0; return }
+  const d = (await apiPost(`/api/dct/data/search?${coordQs({ dict: 'supplier' })}`, {
+    page: state.page, pageSize: state.pageSize, q: state.kw || '',
+  }, coord.dbId)) || {}
+  state.suppliers = d.rows || []
+  state.total = Number(d.total) || 0
 }
 
 function viewHtml() {
-  const rows = filtered()
-  const body = rows.length ? rows.map((s) => `<tr>
-    <td class="muted">${s.code || ''}</td><td>${s.name || ''}</td><td>${s.tax_no || ''}</td><td>${s.credit_code || ''}</td><td>${s.short_name || ''}</td><td class="muted">v${s.published_version ?? 1}</td>
-    <td><ui5-button design="Transparent" icon="show" data-view="${s.id}">查看详情</ui5-button><ui5-button design="Transparent" icon="edit" data-edit="${s.id}">变更</ui5-button></td></tr>`).join('')
-    : '<tr><td colspan="7" class="muted">暂无供应商，点击「新增供应商」创建</td></tr>'
   return `<div class="pg">
-    <div class="pg-head"><div class="pg-title">供应商主数据</div>
+    <div class="pg-head"><div class="pg-title">供应商列表</div>
       <div class="pg-sub">浏览已发布供应商；新增/变更/详情以并列标签页打开</div></div>
     <div class="card">
-      <div class="card-hd"><div class="card-title">供应商列表</div>
+      <div class="card-hd"><div class="card-title">供应商列表（共 ${state.total} 条）</div>
         <cmx-toolbar><ui5-button design="Emphasized" icon="add" id="ceAdd">新增供应商</ui5-button><ui5-button design="Transparent" icon="refresh" slot="actions" id="ceReload">刷新</ui5-button></cmx-toolbar></div>
       <cmx-filter-bar id="ceFilter" search-placeholder="名称/编码/信用代码"></cmx-filter-bar>
-      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>编码</th><th>名称</th><th>税号</th><th>信用代码</th><th>简称</th><th>版本</th><th>操作</th></tr></thead><tbody>${body}</tbody></table></div>
+      <div class="tbl-wrap"><cmx-revo-grid id="ceGrid"></cmx-revo-grid></div>
+      <cmx-pager id="cePager" page-size="20" page-sizes="10,20,50,100"></cmx-pager>
     </div></div>`
 }
+
+// 供应商列表用 cmx-revo-grid（只读 + 操作列）。每次 bind 重建（refresh 会重渲染 DOM）。
+function buildListGrid() {
+  const C = cmx(); const wrap = rootEl && rootEl.querySelector('.tbl-wrap'); if (!wrap) return
+  const old = wrap.querySelector('cmx-revo-grid'); if (old) old.remove()
+  const grid = document.createElement('cmx-revo-grid')
+  grid.setAttribute('data-cmx-embed', '')
+  wrap.appendChild(grid)
+  if (C.CmxColumnModel && C.CmxColumn) {
+    const cm = new C.CmxColumnModel({ datasetId: 'suppliers' })
+    cm.setMembers([
+      new C.CmxColumn({ id: 'code', caption: '编码', dataType: 'VARCHAR', width: '140px' }),
+      new C.CmxColumn({ id: 'name', caption: '名称', dataType: 'VARCHAR', width: '180px' }),
+      new C.CmxColumn({ id: 'tax_no', caption: '税号', dataType: 'VARCHAR', width: '150px' }),
+      new C.CmxColumn({ id: 'credit_code', caption: '信用代码', dataType: 'VARCHAR', width: '180px' }),
+      new C.CmxColumn({ id: 'short_name', caption: '简称', dataType: 'VARCHAR', width: '120px' }),
+      new C.CmxColumn({ id: 'published_version', caption: '版本', dataType: 'INT', width: '70px' }),
+      new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '150px', edit: { mode: 'readonly' },
+        display: { mode: 'actions', actions: [
+          { text: '查看详情', actionRef: 'view', icon: 'show' },
+          { text: '变更', actionRef: 'edit', icon: 'edit' },
+        ] } }),
+    ])
+    grid.setColumnModel(cm)
+  }
+  grid.setOptions?.({ selectionMode: 'none', fillHeight: true, showRowIndex: true, showTotals: false })
+  // 操作列点击：rowId 为 revo 行索引，反查真实行
+  grid.addEventListener('cmx-cell-link-click', (e) => {
+    const d = e.detail || {}; const ds = grid._ds
+    const row = (ds && ds.rows && !isNaN(parseInt(d.rowId, 10))) ? ds.rows[parseInt(d.rowId, 10)] : null
+    const s = row ? (row.toPlainObject ? row.toPlainObject() : row) : null
+    if (!s) return
+    if (d.actionRef === 'view') openTab(currentHost, `供应商·${s.name || ''}`, 'portal.mdm.supplier-detail', { supplier: s })
+    else if (d.actionRef === 'edit') openTab(currentHost, `变更·${s.name || ''}`, 'portal.mdm.cr-form', { mode: 'update', supplier: s })
+  })
+  const fill = () => {
+    if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows(state.suppliers); grid.setDataSet(ds) }
+    else grid.setDataSet?.(state.suppliers)
+    grid.refreshLayout?.()
+  }
+  requestAnimationFrame(() => requestAnimationFrame(fill))
+  listGrid = grid
+}
+let listGrid = null
 
 // 事件委托挂在 document（模块在主 realm 执行；composed 事件必冒泡到 document），
 // 在 content() 里立即挂载，不依赖 DOM 挂载时机，规避 shadow 内逐个绑定/whenRendered 时机失效。
@@ -121,16 +166,20 @@ function bind(root) {
   // 新增=单例（只开一个）；详情/变更=按行 id 多开
   root.querySelector('#ceAdd')?.addEventListener('click', () => openTab(host, '新增供应商', 'portal.mdm.cr-form', { mode: 'create' }, { single: true }))
   root.querySelector('#ceReload')?.addEventListener('click', () => { loadSuppliers().then(refresh) })
-  root.querySelector('#ceFilter')?.addEventListener('cmx-filter-search', (e) => { state.kw = e.detail?.text || ''; refresh() })
-  root.querySelector('#ceFilter')?.addEventListener('cmx-filter-reset', () => { state.kw = ''; refresh() })
-  root.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
-    const s = state.suppliers.find((x) => String(x.id) === String(b.dataset.view))
-    openTab(host, `供应商·${s?.name || ''}`, 'portal.mdm.supplier-detail', { supplier: s })
-  }))
-  root.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
-    const s = state.suppliers.find((x) => String(x.id) === String(b.dataset.edit))
-    openTab(host, `变更·${s?.name || ''}`, 'portal.mdm.cr-form', { mode: 'update', supplier: s })
-  }))
+  root.querySelector('#ceFilter')?.addEventListener('cmx-filter-search', (e) => { state.kw = e.detail?.text || ''; state.page = 1; loadSuppliers().then(refresh) })
+  root.querySelector('#ceFilter')?.addEventListener('cmx-filter-reset', () => { state.kw = ''; state.page = 1; loadSuppliers().then(refresh) })
+  // 分页（cmx-pager 独立模式）
+  const pager = root.querySelector('#cePager')
+  if (pager) {
+    pager.total = state.total; pager.page = state.page; pager.pageSize = state.pageSize
+    pager.addEventListener('page-change', (e) => {
+      const d = e.detail || {}
+      if (d.pageSize && d.pageSize !== state.pageSize) { state.pageSize = d.pageSize; state.page = 1 }
+      else state.page = d.page || 1
+      loadSuppliers().then(refresh)
+    })
+  }
+  buildListGrid()
 }
 
 function refresh() {

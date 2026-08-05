@@ -234,15 +234,15 @@
     },
     {
       "id": "portal.mdm.cr-editor",
-      "name": "MDM 变更申请录入台",
+      "name": "MDM 供应商列表台",
       "details": "录入主数据变更申请（CR）：头表单（供应商关键字段）+ 明细行（银行账户 revo-grid 增删行），保存草稿 / 提交审批，走 /api/mdm/change-requests create/submit 端点。",
       "sourceType": "js",
       "relPath": "portal/mdm/cr-editor.js"
     },
     {
       "id": "portal.mdm.cr-todo",
-      "name": "MDM 变更申请待办台",
-      "details": "变更申请待办：按状态过滤（草稿/待审批/已驳回/已激活/已作废），行内操作提交/通过/驳回/作废/修改重提（克隆）/查看详情，走 /api/mdm/change-requests 审批端点。",
+      "name": "MDM 供应商单据列表台",
+      "details": "待办列表：按状态过滤（草稿/待审批/已驳回/已激活/已作废），行内操作提交/通过/驳回/作废/修改重提（克隆）/查看详情，走 /api/mdm/change-requests 审批端点。",
       "sourceType": "js",
       "relPath": "portal/mdm/cr-todo.js"
     },
