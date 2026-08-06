@@ -31,7 +31,6 @@ use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, 
 
 use cmx_api::CmxAppState;
 use cmx_api::middleware::CmxSvrContext;
-use cmx_api::rest::header_parse::get_db_id_from_header;
 use cmx_api::{ApiResp, Result};
 
 /// `/api/doc/data/*` 装载端点共用查询参数（GET 便捷路径：URL query）。
@@ -73,6 +72,39 @@ enum Exit {
     ZmcMsgpack,
     /// ZmcDataSet + 纯 JSON
     ZmcJson,
+}
+
+/// 从请求头中提取 `db_id`，如果不存在则返回业务库 ID。
+///
+/// # 参数
+/// - `header`: HTTP 请求头的引用（`HeaderMap`）。
+///
+/// # 返回值
+/// 返回一个 `String`，表示要使用的数据库 ID：
+/// - 如果请求头中包含有效的 `db_id`，则使用该值；
+/// - 否则，异步获取并返回业务库 ID（无业务库时由 `get_biz_db_id` 回退到默认库）。
+///
+/// # 错误处理
+/// 如果 `db_id` 头存在但包含非法字符（非 ASCII 或无效 UTF-8），
+/// 则会回退到业务库 ID（不会 panic）。
+async fn resolve_doc_db_id(header: &HeaderMap) -> String {
+    if let Some(db_id_header) = header.get("db_id") {
+        // 将 HeaderValue 转换为 &str（可能失败，例如包含非 UTF-8 字节）
+        match db_id_header.to_str() {
+            Ok(db_id_str) => {
+                // 成功解析，返回副本（转换为 String）
+                return db_id_str.to_owned();
+            }
+            Err(_) => {
+                // 记录警告日志（如使用 tracing 或 log crate）
+                tracing::error!("Invalid UTF-8 in 'db_id' header, falling back to biz db.");
+                return get_default_db_manager().get_biz_db_id().await;
+            }
+        }
+    }
+
+    // 如果头不存在或解析失败，则获取业务库 ID（无业务库时回退到默认库）
+    get_default_db_manager().get_biz_db_id().await
 }
 
 /// 从 GET query 构造简单 DocQuery（根层等值 + limit + depth）。
@@ -173,7 +205,7 @@ async fn doc_load_entry(
     headers: HeaderMap,
     body: Option<Value>,
 ) -> Result<axum::response::Response> {
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_doc_db_id(&headers).await;
     let meta = resolve_doc_meta(
         &q.domain,
         &q.application,
@@ -357,7 +389,7 @@ pub async fn doc_children(
         doc.layer = %req.layer,
         "handler invoked"
     );
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_doc_db_id(&headers).await;
     let meta = resolve_doc_meta(
         &req.domain,
         &req.application,
@@ -428,7 +460,7 @@ pub async fn doc_data_stream(
         doc.file = %q.file.as_deref().unwrap_or("(auto)"),
         "handler invoked"
     );
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_doc_db_id(&headers).await;
     let meta = resolve_doc_meta(
         &q.domain,
         &q.application,
@@ -695,7 +727,7 @@ pub async fn doc_save(
         "handler invoked"
     );
     let mm = get_default_db_manager();
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_doc_db_id(&headers).await;
 
     // file 兜底：query 未带 file（前端不传时）→ 按 moduleCode/doc 自动解析默认 DOC 文件，
     // 与装载接口 doc_load_entry 的「file 缺省自动解析」语义一致。
@@ -792,7 +824,7 @@ pub async fn doc_save_batch(
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_db_manager();
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_doc_db_id(&headers).await;
 
     let atomic = body.get("atomic").and_then(|v| v.as_bool()).unwrap_or(true);
     let docs = body
@@ -931,7 +963,7 @@ pub async fn doc_revisions(
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_db_manager();
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_doc_db_id(&headers).await;
     let list = DocRevision::list(mm, &db_id, &q.doc_file, &q.root_id).await?;
     Ok(Json(ApiResp::ok(list)))
 }
@@ -944,7 +976,7 @@ pub async fn doc_revision(
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_db_manager();
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_doc_db_id(&headers).await;
     let snap = DocRevision::get_snapshot(mm, &db_id, &q.doc_file, &q.root_id, q.rev).await?;
     Ok(Json(ApiResp::ok(snap)))
 }
@@ -960,7 +992,7 @@ pub async fn doc_restore(
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_db_manager();
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_doc_db_id(&headers).await;
 
     let root_id = body
         .get("rootId")
