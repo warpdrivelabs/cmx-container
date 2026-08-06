@@ -155,6 +155,12 @@ pub struct DomainTreeNodeData {
     /// 标签
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<String>,
+    /// 图标（UI5 图标名，来自 cmx_domain/cmx_application/cmx_module.icon）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// 显示名（中文标题，来自 cmx_domain/cmx_application/cmx_module.title；name 是短码）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     /// 节点类型（domain / application / module）
     pub node_type: String,
     /// 层级（1=域, 2=应用, 3=模块）

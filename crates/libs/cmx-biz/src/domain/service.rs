@@ -209,6 +209,8 @@ impl DomainService {
             description: Self::get_string_opt(row, schema, "description"),
             r#type: Self::get_string_opt(row, schema, "type"),
             tags: Self::get_string_opt(row, schema, "tags"),
+            icon: Self::get_string_opt(row, schema, "icon"),
+            title: Self::get_string_opt(row, schema, "title"),
             node_type: Self::get_string_required(row, schema, "node_type")?,
             level: Self::get_i32(row, schema, "level"),
             domain_code: Self::get_string_opt(row, schema, "domain_code"),

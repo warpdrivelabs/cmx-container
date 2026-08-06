@@ -58,9 +58,11 @@ fn ai_routes() -> Router<CmxAppState> {
 // ─── 域 / 菜单 / 活动 / 工作区节点 ───
 fn meta_routes() -> Router<CmxAppState> {
     Router::new()
-        .route("/domains", get(meta::get_domains))
-        .route("/menu-pages", get(meta::get_menu_pages))
-        .route("/activities", get(meta::get_activities))
+        // 以下三路由已由 POST /api/domains/tree + GET /api/menu/tree 统一替代（前端 domains-tree-api.js）。
+        // handler/service 代码保留（meta.rs / domains.rs / activities.rs / menu_pages.rs），便于回退时取消注释。
+        // .route("/domains", get(meta::get_domains))
+        // .route("/menu-pages", get(meta::get_menu_pages))
+        // .route("/activities", get(meta::get_activities))
         .route(
             "/workspace-nodes",
             get(meta::list_workspace_nodes).post(meta::save_workspace_node),
