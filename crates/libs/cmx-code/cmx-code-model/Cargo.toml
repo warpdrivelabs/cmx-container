@@ -1,0 +1,26 @@
+[package]
+name = "cmx-code-model"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# 内部依赖 - 核心库（DataValue：SQL 参数强类型绑定）
+cmx-core = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# 错误处理
+thiserror = { workspace = true }
+# 时间处理（日期段、时间戳）
+chrono = { workspace = true }
+# 正则表达式（manual mode pattern 校验）
+regex = { workspace = true }
+# 异步 trait（Advance trait + SegmentResolver trait）
+async-trait = { workspace = true }
+# 随机数生成（随机段 charset/range，C5 阶段使用）
+rand = { workspace = true }
+
+[dev-dependencies]
+# 异步运行时（测试 async fn）
+tokio = { workspace = true }

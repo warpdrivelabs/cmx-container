@@ -44,6 +44,7 @@ pub struct ResolveInput {
 const MENU_REFS: &[&str] = &[
     "fi.cmxfico.gl.explorer-menu",
     "fi.cmxfico.report.report-menu",
+    "basic.dataplatform.mdm.mdm-menu",
 ];
 
 /// 递归收集一棵菜单树里所有 `type:"workspace-node"` 且带 workspace 的项。

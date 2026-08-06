@@ -25,11 +25,11 @@ pub async fn get_db_id_from_header(header: &HeaderMap) -> String {
             Err(_) => {
                 // 记录警告日志（如使用 tracing 或 log crate）
                 tracing::error!("Invalid UTF-8 in 'db_id' header, falling back to default.");
-                return get_default_db_manager().get_default_db_id().await;
+                return get_default_db_manager().get_biz_db_id().await;
             }
         }
     }
 
-    // 如果头不存在或解析失败，则获取默认数据库 ID
-    get_default_db_manager().get_default_db_id().await
+    // 如果头不存在或解析失败，则获取默认    据库 ID
+    get_default_db_manager().get_biz_db_id().await
 }

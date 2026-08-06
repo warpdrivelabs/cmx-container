@@ -2932,3 +2932,266 @@ COMMENT ON COLUMN cmx_flow_definition_version.version IS '版本号（同 def_ke
 COMMENT ON COLUMN cmx_flow_definition_version.note    IS '本版本变更说明（发布时填写，可空）';
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cmx_flow_def_version ON cmx_flow_definition_version (def_key, version);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_def_version_key   ON cmx_flow_definition_version (def_key);
+
+-- ================================================================
+-- MDM 主数据治理表（平台级，不走 compile）
+-- 含激活映射配置 / 版本留痕 / 交叉引用 / 值映射 / 匹配组 / 分发订阅 / 事件日志
+-- 主键规约：cmx_ 平台表 VARCHAR(64) snowflake；md_ 治理表 BIGINT（承接 cm_*.id）
+-- 无外键约束（关联字段 + 索引替代）
+-- 详见 migrations/20260804_001_mdm_governance
+-- ================================================================
+
+-- 1. 激活映射配置（UI 配置器维护，激活器读取执行）
+DROP TABLE IF EXISTS cmx_mdm_activation;
+CREATE TABLE cmx_mdm_activation (
+    id              VARCHAR(64)  NOT NULL,
+    activation_code VARCHAR(64)  NOT NULL,
+    source_doc_type VARCHAR(64)  NOT NULL,
+    cr_type         VARCHAR(16)  NOT NULL,
+    target_dict     VARCHAR(64)  NOT NULL,
+    target_table    VARCHAR(64)  NOT NULL,
+    header_mapping  JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    line_mappings   JSONB                 DEFAULT '{}'::jsonb,
+    code_rule_code  VARCHAR(64),
+    is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_mdm_activation IS 'MDM 激活映射配置（单据→主数据），UI 配置器维护，激活器读取执行';
+COMMENT ON COLUMN cmx_mdm_activation.id              IS '主键（snowflake，应用层生成）';
+COMMENT ON COLUMN cmx_mdm_activation.activation_code IS '映射码（如 supplier_apply）';
+COMMENT ON COLUMN cmx_mdm_activation.source_doc_type IS '来源单据类型（如 mdm_supplier_apply）';
+COMMENT ON COLUMN cmx_mdm_activation.cr_type         IS '变更类型 create/update/merge/block/flag_delete';
+COMMENT ON COLUMN cmx_mdm_activation.target_dict     IS '目标头字典码（如 supplier）';
+COMMENT ON COLUMN cmx_mdm_activation.target_table    IS '目标头物理表名（如 cm_supplier，配置器选字典时从 dct/meta tableName 一并写入，激活器直接用）';
+COMMENT ON COLUMN cmx_mdm_activation.header_mapping  IS '头映射 {单据字段:主数据列}';
+COMMENT ON COLUMN cmx_mdm_activation.line_mappings   IS '明细映射 [{lineType,targetDict,targetTable,parentIdField,fields}]';
+COMMENT ON COLUMN cmx_mdm_activation.code_rule_code  IS 'code 由哪个编码规则生成（新建时，M8 接 cmx-code）';
+COMMENT ON COLUMN cmx_mdm_activation.is_active       IS '是否启用';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_mdm_activation_code     ON cmx_mdm_activation (activation_code);
+CREATE        INDEX IF NOT EXISTS idx_cmx_mdm_activation_doctype ON cmx_mdm_activation (source_doc_type, cr_type);
+
+-- 2. 主数据版本留痕（激活器写入）
+DROP TABLE IF EXISTS md_audit;
+CREATE TABLE md_audit (
+    id            BIGINT       NOT NULL,
+    dict_code     VARCHAR(64)  NOT NULL,
+    record_id     BIGINT       NOT NULL,
+    version       INT          NOT NULL,
+    action        VARCHAR(16)  NOT NULL,
+    source_cr_id  BIGINT,
+    field         VARCHAR(64),
+    old_value     JSONB,
+    new_value     JSONB,
+    operated_by   BIGINT       NOT NULL,
+    operated_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_audit IS '主数据版本留痕（激活器写入）';
+COMMENT ON COLUMN md_audit.id            IS '主键（应用层生成）';
+COMMENT ON COLUMN md_audit.dict_code     IS 'cm_* 字典码';
+COMMENT ON COLUMN md_audit.record_id     IS 'cm_*.id（无物理FK）';
+COMMENT ON COLUMN md_audit.version       IS '激活版本号';
+COMMENT ON COLUMN md_audit.action        IS 'create/update/freeze/merge/archive';
+COMMENT ON COLUMN md_audit.source_cr_id  IS '触发此变更的 CR 单据 cv_mdm_apply.id';
+COMMENT ON COLUMN md_audit.field         IS '变更字段（变更场景）';
+COMMENT ON COLUMN md_audit.old_value     IS '旧值';
+COMMENT ON COLUMN md_audit.new_value     IS '新值';
+COMMENT ON COLUMN md_audit.operated_by   IS '操作人ID';
+CREATE INDEX IF NOT EXISTS idx_md_audit_record ON md_audit (dict_code, record_id, version);
+
+-- 3. 交叉引用（Key Mapping）
+DROP TABLE IF EXISTS md_xref;
+CREATE TABLE md_xref (
+    id             BIGINT       NOT NULL,
+    dict_code      VARCHAR(64)  NOT NULL,
+    record_id      BIGINT       NOT NULL,
+    source_system  VARCHAR(64)  NOT NULL,
+    source_ref     VARCHAR(128) NOT NULL,
+    xref_status    VARCHAR(16)  NOT NULL DEFAULT 'active',
+    confidence     SMALLINT     NOT NULL DEFAULT 50,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_xref IS '主数据交叉引用（Key Mapping）';
+COMMENT ON COLUMN md_xref.id          IS '主键（应用层生成）';
+COMMENT ON COLUMN md_xref.xref_status IS '引用状态 active/inactive';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_xref_src     ON md_xref (source_system, source_ref);
+CREATE        INDEX IF NOT EXISTS idx_md_xref_record ON md_xref (dict_code, record_id);
+
+-- 4. 值映射（Value Mapping）
+DROP TABLE IF EXISTS md_value_map;
+CREATE TABLE md_value_map (
+    id        BIGINT       NOT NULL,
+    field     VARCHAR(64)  NOT NULL,
+    src_sys   VARCHAR(64)  NOT NULL,
+    src_val   VARCHAR(128) NOT NULL,
+    tgt_sys   VARCHAR(64)  NOT NULL,
+    tgt_val   VARCHAR(128) NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_value_map IS '主数据值映射（Value Mapping）';
+COMMENT ON COLUMN md_value_map.id IS '主键（应用层生成）';
+
+-- 5. 查重规则配置（查重界面内维护，find-duplicates 读取执行）
+DROP TABLE IF EXISTS md_match_config;
+CREATE TABLE md_match_config (
+    id             BIGINT       NOT NULL,
+    rule_name      VARCHAR(128) NOT NULL,
+    dict_code      VARCHAR(64)  NOT NULL,
+    target_table   VARCHAR(64)  NOT NULL,
+    specs          JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    cluster_keys   JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    survive_fields JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    thresholds     JSONB,
+    is_active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_match_config IS '查重规则配置（按字典维度），查重界面内维护，find-duplicates 读取执行';
+COMMENT ON COLUMN md_match_config.id IS '主键（应用层生成）';
+COMMENT ON COLUMN md_match_config.specs IS '比较字段 [{field,weight,kind:Exact|EditDistance}]';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_match_config_dict_rule ON md_match_config (dict_code, rule_name);
+CREATE        INDEX IF NOT EXISTS idx_md_match_config_dict      ON md_match_config (dict_code);
+
+-- 6. 匹配组/存活裁决
+DROP TABLE IF EXISTS md_match_group;
+CREATE TABLE md_match_group (
+    id               BIGINT       NOT NULL,
+    dict_code        VARCHAR(64)  NOT NULL,
+    group_key        VARCHAR(256) NOT NULL,
+    member_ids       JSONB        NOT NULL,
+    master_id        BIGINT,
+    score            SMALLINT     NOT NULL,
+    decision         VARCHAR(16)  NOT NULL,
+    survivorship_log JSONB,
+    status           VARCHAR(16)  NOT NULL DEFAULT 'pending',
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_match_group IS '匹配组/存活裁决';
+COMMENT ON COLUMN md_match_group.id     IS '主键（应用层生成）';
+COMMENT ON COLUMN md_match_group.status IS 'pending/auto_merged/reviewed/rejected';
+CREATE INDEX IF NOT EXISTS idx_md_match_group_dict ON md_match_group (dict_code, status);
+
+-- 7. 分发订阅
+DROP TABLE IF EXISTS md_subscription;
+CREATE TABLE md_subscription (
+    id          BIGINT       NOT NULL,
+    target_sys  VARCHAR(64)  NOT NULL,
+    dict_code   VARCHAR(64)  NOT NULL,
+    filter      JSONB,
+    field_map   JSONB,
+    channel     VARCHAR(16)  NOT NULL,
+    active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_subscription IS '分发订阅配置';
+COMMENT ON COLUMN md_subscription.id      IS '主键（应用层生成）';
+COMMENT ON COLUMN md_subscription.channel IS '通道 event/rest/batch';
+
+-- 8. 分发事件日志（激活器激活成功时写入；主键 VARCHAR(64) snowflake，seq 为有序拉取列非主键）
+DROP TABLE IF EXISTS md_event_log;
+CREATE TABLE md_event_log (
+    id          VARCHAR(64)  NOT NULL,
+    seq         BIGSERIAL    NOT NULL,
+    dict_code   VARCHAR(64)  NOT NULL,
+    record_id   BIGINT       NOT NULL,
+    event_type  VARCHAR(16)  NOT NULL,
+    payload     JSONB        NOT NULL,
+    emitted_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_event_log IS '分发事件日志（delta，消费者按 seq 拉取）';
+COMMENT ON COLUMN md_event_log.id         IS '主键（snowflake，应用层生成，对齐全库主键惯例）';
+COMMENT ON COLUMN md_event_log.seq        IS '有序拉取序列（DB 自增，非主键，供消费者 delta 排序）';
+COMMENT ON COLUMN md_event_log.event_type IS 'created/updated/merged';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_event_log_seq   ON md_event_log (seq);
+CREATE        INDEX IF NOT EXISTS idx_md_event_log_dict ON md_event_log (dict_code, seq);
+
+-- =====================================================
+-- cmx-code 编码引擎（两张表合并迁移）
+-- 1. cmx_code_rule  —— 编码规则库（纯算法：段序列，不带 target，可被多处复用）
+-- 2. cmx_code_gap   —— 编码断号表（连号域空缺号回收，只存空缺 ≠ 已分配）
+-- 规则按域/应用/模块（DAM）隔离，既有规则无 DAM 默认空串，兼容存量
+-- =====================================================
+
+-- ─────────────────────────────────────────────────────
+-- 1. 编码规则库
+-- ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cmx_code_rule (
+    id              BIGINT                  NOT NULL,
+    rule_code       VARCHAR(64)             NOT NULL,
+    rule_name       VARCHAR(128)            NOT NULL,
+    mode            VARCHAR(16)             NOT NULL DEFAULT 'auto',
+    org_scope       VARCHAR(64),
+    condition       TEXT,
+    segments        JSONB                   NOT NULL DEFAULT '[]',
+    joiner          VARCHAR(4)              NOT NULL DEFAULT '',
+    pattern         TEXT,
+    enable_gap      BOOLEAN                 NOT NULL DEFAULT FALSE,
+    use_sequence    BOOLEAN                 NOT NULL DEFAULT FALSE,
+    valid_from      DATE,
+    valid_to        DATE,
+    priority        INT4                    NOT NULL DEFAULT 100,
+    is_active       BOOLEAN                 NOT NULL DEFAULT TRUE,
+    -- DAM 维度（域/应用/模块隔离，空串=兼容存量/全局可见）
+    domain_code     VARCHAR(32)             NOT NULL DEFAULT '',
+    application_code VARCHAR(32)            NOT NULL DEFAULT '',
+    module_code     VARCHAR(32)             NOT NULL DEFAULT '',
+    create_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived        INT4                    NOT NULL DEFAULT 0,
+    create_by       VARCHAR(100),
+    update_by       VARCHAR(100),
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_code_rule_rule_code ON cmx_code_rule (rule_code) WHERE archived = 0;
+CREATE INDEX IF NOT EXISTS ix_cmx_code_rule_active ON cmx_code_rule (is_active, priority);
+CREATE INDEX IF NOT EXISTS ix_cmx_code_rule_archived ON cmx_code_rule (archived);
+-- DAM + archived 复合索引：按模块过滤规则列表的主查询路径
+CREATE INDEX IF NOT EXISTS ix_cmx_code_rule_dam ON cmx_code_rule (domain_code, application_code, module_code, archived);
+
+COMMENT ON TABLE cmx_code_rule IS '编码规则库（纯算法，不带 target，可被多处复用）';
+COMMENT ON COLUMN cmx_code_rule.id IS '主键ID（pk52）';
+COMMENT ON COLUMN cmx_code_rule.rule_code IS '规则码（人类可读，全局唯一，如 supplier_hq）';
+COMMENT ON COLUMN cmx_code_rule.rule_name IS '规则名称（展示用）';
+COMMENT ON COLUMN cmx_code_rule.mode IS '模式：auto（引擎生成）| manual（用户手敲，引擎只校验）';
+COMMENT ON COLUMN cmx_code_rule.org_scope IS '受控组织（可选，逗号分隔多组织，组织命中才生效）';
+COMMENT ON COLUMN cmx_code_rule.condition IS '适用条件（JSON 算子 {"eq":[...]} 或字符串 field==value，可选）';
+COMMENT ON COLUMN cmx_code_rule.segments IS '段序列 JSON（auto 必填）';
+COMMENT ON COLUMN cmx_code_rule.joiner IS '段间连接符（默认空串）';
+COMMENT ON COLUMN cmx_code_rule.pattern IS '校验正则（可选，manual 兜底 + auto 结果校验）';
+COMMENT ON COLUMN cmx_code_rule.enable_gap IS '是否启用断号补偿（连号域才开，默认关）';
+COMMENT ON COLUMN cmx_code_rule.use_sequence IS '是否使用 PG SEQUENCE 兜底（极端高并发可选，默认关）';
+COMMENT ON COLUMN cmx_code_rule.valid_from IS '规则版本化·生效起始日期';
+COMMENT ON COLUMN cmx_code_rule.valid_to IS '规则版本化·生效结束日期';
+COMMENT ON COLUMN cmx_code_rule.priority IS '多规则选优（取大，默认 100）';
+COMMENT ON COLUMN cmx_code_rule.is_active IS '是否启用';
+COMMENT ON COLUMN cmx_code_rule.domain_code IS '所属域编码（如 fi），空串=兼容存量/全局可见';
+COMMENT ON COLUMN cmx_code_rule.application_code IS '所属应用编码（如 cmxfico）';
+COMMENT ON COLUMN cmx_code_rule.module_code IS '所属模块编码（如 gl）';
+
+-- ─────────────────────────────────────────────────────
+-- 2. 编码断号表
+-- ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cmx_code_gap (
+    id              BIGINT                  NOT NULL,
+    prefix          VARCHAR(128)            NOT NULL,
+    serial_val      BIGINT                  NOT NULL,
+    width           INT4                    NOT NULL,
+    create_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id)
+);
+
+-- 按前缀查断号（take_gap 取最小断号）
+CREATE INDEX IF NOT EXISTS ix_cmx_code_gap_prefix ON cmx_code_gap (prefix, serial_val);
+
+COMMENT ON TABLE cmx_code_gap IS '编码断号表（只存空缺，≠已分配；连号域 enable_gap=true 才启用）';
+COMMENT ON COLUMN cmx_code_gap.id IS '主键ID（pk52）';
+COMMENT ON COLUMN cmx_code_gap.prefix IS '断号所属前缀（如 FV20260804）';
+COMMENT ON COLUMN cmx_code_gap.serial_val IS '断号流水值（如 8）';
+COMMENT ON COLUMN cmx_code_gap.width IS '流水宽度（补零用）';

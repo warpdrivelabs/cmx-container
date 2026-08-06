@@ -1,0 +1,74 @@
+//! cmx-mdm-api —— 主数据（MDM）模块的 HTTP 层。
+//!
+//! 实现 cmx-api 的 [`ModuleRoutes`]，由 web-server 合并进主路由（`/mdm/*`，`/api` 前缀由
+//! web-server nest 加）。cmx-api 不反向依赖本 crate（无环）。
+//!
+//! **API 约定**（承接 AGENTS.md §四 第 5 条）：新增接口禁用 Path Variable，资源标识/参数
+//! 走 query（GET）或 JSON body（POST 等）。
+//!
+//! M0 仅一个健康检查端点；M1+ 追加激活映射配置、变更请求激活等治理端点。
+
+pub mod handlers;
+
+use axum::Router;
+use axum::routing::{get, post};
+
+use cmx_api::CmxAppState;
+use cmx_api::routes::traits::ModuleRoutes;
+
+use handlers as mdm;
+
+/// MDM 模块路由聚合（实现 cmx-api 的 ModuleRoutes，由 web-server 合并进主路由）。
+pub struct MdmModule;
+
+impl ModuleRoutes for MdmModule {
+    fn routes(self) -> Router<CmxAppState> {
+        Router::new()
+            // 健康检查
+            .route("/mdm/health", get(mdm::mdm_health))
+            // 激活映射配置 CRUD（配置器 UI 用；GET 列表 + POST 保存）
+            .route(
+                "/mdm/activations",
+                get(mdm::mdm_activations_list).post(mdm::mdm_activations_save),
+            )
+            // 手动触发激活（body: { crId }；禁用 Path Variable，承接 AGENTS.md §四 第 5 条）
+            .route("/mdm/change-requests/activate", post(mdm::mdm_cr_activate))
+            // M2 · CR 变更请求:审批流转/列表/详情（新建走标准 /doc/save）
+            .route("/mdm/change-requests/submit", post(mdm::mdm_cr_submit))
+            .route("/mdm/change-requests/approve", post(mdm::mdm_cr_approve))
+            .route("/mdm/change-requests/reject", post(mdm::mdm_cr_reject))
+            .route("/mdm/change-requests/clone-revise", post(mdm::mdm_cr_clone_revise))
+            .route("/mdm/change-requests/abort", post(mdm::mdm_cr_abort))
+            .route("/mdm/change-requests", get(mdm::mdm_cr_list))
+            .route("/mdm/change-requests/detail", get(mdm::mdm_cr_detail))
+            // M3 · 匹配合并（禁用 Path Variable，参数走 body/query）
+            .route("/mdm/records/find-duplicates", post(mdm::mdm_find_duplicates))
+            .route(
+                "/mdm/merge-requests",
+                get(mdm::mdm_merge_requests_list).post(mdm::mdm_merge_requests_create),
+            )
+            .route("/mdm/merge-requests/undo", post(mdm::mdm_merge_requests_undo))
+            // MDM 治理端点（分页 + 无 path variable）
+            .route("/mdm/audit", get(mdm::mdm_audit_list))
+            .route("/mdm/events", get(mdm::mdm_events_list))
+            .route(
+                "/mdm/subscriptions",
+                get(mdm::mdm_subscriptions_list).post(mdm::mdm_subscriptions_save),
+            )
+            .route("/mdm/publish", post(mdm::mdm_publish))
+            // M4 · 管家工作台：详情（红线 diff）/ 驳回
+            .route("/mdm/merge-requests/detail", get(mdm::mdm_merge_request_detail))
+            .route("/mdm/merge-requests/reject", post(mdm::mdm_merge_request_reject))
+            // 查重规则配置（规则维护内嵌查重界面，无独立管理页）
+            .route("/mdm/match-configs", get(mdm::mdm_match_configs_list).post(mdm::mdm_match_configs_save))
+            .route("/mdm/match-configs/delete", post(mdm::mdm_match_configs_delete))
+    }
+
+    fn prefix() -> &'static str {
+        "mdm"
+    }
+
+    fn module_name(&self) -> &'static str {
+        "mdm"
+    }
+}

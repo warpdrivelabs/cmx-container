@@ -16,7 +16,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 
-use cmx_core::model::cell::DataValue;
+use cmx_core::model::cell::{DataValue, FieldType};
 use cmx_core::model::data::dataset::Schema;
 use cmx_database::DatabaseManager;
 
@@ -328,6 +328,10 @@ impl DocSaver {
             }
             SaveMode::Replace => (changes.clone(), Map::new()),
         };
+        let mut changes_owned = changes_owned;
+        // 编码引擎铸号：遍历每张挂了 codeRule(mode=auto) 的层，为 code_field 为空的行铸业务编码。
+        // 未配置编码引擎（code_rule=None 或 GlobalCodeMinter 未注入）→ 静默跳过（现状零影响）。
+        mint_codes_for_changeset(&mut changes_owned, meta, db_id, txn_id).await;
         let changes = &changes_owned;
         let affected = match mode {
             SaveMode::Merge => Self::apply_merge(mm, db_id, txn_id, meta, changes, &audit).await?,
@@ -613,9 +617,28 @@ impl DocSaver {
             if ncol == 0 {
                 continue;
             }
+            // 构建 JSONB 列掩码：对 FieldType::Json 的列加 `$p::jsonb` cast，规避 PG 在
+            // ON CONFLICT 上下文把 serde_json::Value 参数推断为 text 的问题。
+            let jsonb_col_mask: Vec<bool> = cols
+                .iter()
+                .map(|c| {
+                    layer
+                        .schema
+                        .get_index(c)
+                        .and_then(|i| layer.schema.fields.get(i))
+                        .map(|f| matches!(f.field_type, FieldType::Json))
+                        .unwrap_or(false)
+                })
+                .collect();
             let rows_per_batch = (Self::MAX_PARAMS / ncol).max(1);
             for chunk in value_rows.chunks(rows_per_batch) {
-                let sql = build_multi_insert_sql(&layer.table_name, &cols, chunk.len(), upsert);
+                let sql = build_multi_insert_sql(
+                    &layer.table_name,
+                    &cols,
+                    chunk.len(),
+                    upsert,
+                    &jsonb_col_mask,
+                );
                 let flat: Vec<DataValue> = chunk.iter().flatten().cloned().collect();
                 affected += Self::exec(mm, db_id, txn_id, &sql, flat).await?;
             }
@@ -867,7 +890,14 @@ impl DocSaver {
             .await
             // 落库失败：把 PG 原始错误翻译成优雅提示 + 稳定错误码（唯一键/外键/非空等），
             // 不再暴露英文原文 + SQL。前置列校验已拦大部分，此为兜底。
-            .map_err(|e| BizError::from_db_error(&e.to_string()))
+            .map_err(|e| {
+                tracing::error!(
+                    target: "cmx_doc::saver::exec",
+                    error = %e,
+                    "落库失败（PG 原文见此日志，handler 返回优雅文案）"
+                );
+                BizError::from_db_error(&e.to_string())
+            })
     }
 
     /// 静默零写防护（H1）：changes 里每个 key 必须能对上某一层，否则报错。
@@ -1142,8 +1172,168 @@ fn quote_ident(ident: &str) -> String {
 ///      前端 collector 把默认外键提到顶层，命名外键留在 `fields` 里，故两处都查），若指向某临时
 ///      父 id → 换成父的真号。跨层父子（父在 L1、子在 L2）因用同一张 map，天然连对，与层序无关。
 ///
-/// `child_keys`：本单据全部父子外键列名（去重）。只改 `inserted`；`updated`/`deleted` 不动。
-/// 返回 (改写后的 changeset, idMap)。非对象 changeset 原样返回、空 map。
+/// 编码引擎铸号：遍历每张挂了 codeRule(mode=auto) 的层，为 code_field 为空的 inserted 行铸业务编码。
+///
+/// 对应方案 §10.3 `before_save_doc`。批量铸号（方案 §4.5 + §4.1 buffer 推进）：
+/// 同层待铸号行收集后一次调 `mint_batch`，engine 内按 prefix 分组 + buffer 推进，
+/// 同 prefix 多行一次反查 max 取连续号（修复附录 C.2.10/C.2.11）。
+/// 未配置编码引擎（code_rule=None 或 GlobalCodeMinter 未注入）→ 静默跳过（现状零影响）。
+/// 铸号失败记 warn 日志（不阻断主流程）。
+async fn mint_codes_for_changeset(
+    changes: &mut Value,
+    meta: &DocMetaView,
+    db_id: &str,
+    _txn_id: &str,
+) {
+    // 编码引擎未注入 → 跳过（现状零影响）
+    let Some(minter) = cmx_traits::code::GlobalCodeMinter::get() else {
+        return;
+    };
+
+    // 遍历每层，找挂了 codeRule(auto) 的层
+    for layer in &meta.layers {
+        let Some(code_rule) = &layer.code_rule else {
+            continue;
+        };
+        let mode = code_rule.get("mode").and_then(|v| v.as_str()).unwrap_or("manual");
+        if mode != "auto" {
+            continue;
+        }
+
+        let field = code_rule
+            .get("field")
+            .and_then(|v| v.as_str())
+            .unwrap_or("doc_no")
+            .to_string();
+
+        let target = serde_json::json!({
+            "kind": "doc",
+            "code": layer.table_name,
+            "field": field,
+        });
+
+        let Some(obj) = changes.as_object_mut() else {
+            continue;
+        };
+
+        // 先收集匹配当前层的桶 key（不可变扫描，避免与后续 get_mut 冲突）
+        let matching_keys: Vec<String> = obj.keys()
+            .filter(|k| *k == &layer.table_name || *k == &layer.id)
+            .cloned()
+            .collect();
+        if matching_keys.is_empty() { continue; }
+
+        for layer_key in &matching_keys {
+            let Some(layer_changes) = obj.get_mut(layer_key) else { continue };
+            let Some(layer_obj) = layer_changes.as_object_mut() else { continue };
+            let Some(inserted) = layer_obj.get_mut("inserted").and_then(|v| v.as_array_mut())
+            else { continue };
+
+            // 收集本桶待铸号的行索引 + attrs（跳过已有 code 的行）
+            let mut pending: Vec<(usize, Value)> = Vec::new();
+            for (idx, row_val) in inserted.iter().enumerate() {
+                let Some(row) = row_val.as_object() else { continue };
+                // 已有 code 值（顶层或 fields）→ 跳过
+                let already_has = row.get(&field)
+                    .and_then(|v| v.as_str())
+                    .map(|s| !s.is_empty())
+                    .unwrap_or(false)
+                    || row.get("fields")
+                        .and_then(|f| f.get(&field))
+                        .and_then(|v| v.as_str())
+                        .map(|s| !s.is_empty())
+                        .unwrap_or(false);
+                if already_has { continue; }
+                // 构造 attrs（fields 平铺到顶层 + id）
+                let mut attrs = serde_json::Map::new();
+                if let Some(fields) = row.get("fields").and_then(|v| v.as_object()) {
+                    attrs.extend(fields.iter().map(|(k, v)| (k.clone(), v.clone())));
+                }
+                if let Some(id) = row.get("id") {
+                    attrs.insert("id".into(), id.clone());
+                }
+                pending.push((idx, Value::Object(attrs)));
+            }
+
+            if pending.is_empty() { continue; }
+
+            // 批量铸号（txn_id=None：反查 max 是只读 SELECT，用独立连接避免跨 async 线程的事务上下文丢失）
+            let attrs_list: Vec<Value> = pending.iter().map(|(_, a)| a.clone()).collect();
+            match minter
+                .mint_batch(code_rule, &target, &attrs_list, db_id, None)
+                .await
+            {
+                Ok(codes) => {
+                    // 写回每行：code 同时写顶层（供校验读）和 fields（供落库 row_cols_vals 读）
+                    let mut code_by_id: Vec<(String, String)> = Vec::new();
+                    for ((row_idx, _), code) in pending.iter().zip(codes.iter()) {
+                        if let Some(row) = inserted.get_mut(*row_idx).and_then(|v| v.as_object_mut()) {
+                            row.insert(field.clone(), Value::String(code.clone()));
+                            if let Some(fields) = row.get_mut("fields").and_then(|v| v.as_object_mut()) {
+                                fields.insert(field.clone(), Value::String(code.clone()));
+                            }
+                            // id 可能是字符串（前端临时 id）或数字（mint_ids 后的雪花 id），统一转字符串
+                            if let Some(id) = row.get("id").and_then(value_to_id_string) {
+                                code_by_id.push((id, code.clone()));
+                            }
+                        }
+                    }
+                    // inserted 借用到此结束 → 可安全借 obj 做 cascade
+                    let _ = inserted;
+                    // cascade 回填：父层铸号后，把同值 code 回填到子层同名字段为空的行
+                    if !code_by_id.is_empty() {
+                        cascade_code_to_children(obj, &field, &code_by_id);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target: "cmx_doc::mint_code",
+                        table = %layer.table_name, field = %field, error = %e,
+                        row_count = pending.len(),
+                        "编码引擎批量铸号失败，跳过这些行（不阻断保存）"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// cascade 回填：父层铸号后，把同值 code 回填到子层同名字段为空的行。
+///
+/// 场景：cv_batch 挂了 codeRule 铸 doc_no（批号 BATCH...），cv_header 的 doc_no 通过
+/// documentIdentityFields 引入（nullable=false，NOT NULL 校验）。前端建子行时父行 doc_no
+/// 还没铸（铸号在 saver 内部），继承不到 → 子行 doc_no 空 → 校验失败。
+///
+/// 解法：铸完父层后，遍历所有层的 inserted 行，对 `field` 字段为空且 `upper_id` 匹配父行 id
+/// 的子行，回填父行的 code。子行已有非空值则不覆盖（尊重独立铸号，如 cv_header 挂了自己的 codeRule）。
+fn cascade_code_to_children(obj: &mut serde_json::Map<String, Value>, field: &str, code_by_id: &[(String, String)]) {
+    if code_by_id.is_empty() { return; }
+    for (_layer_key, layer_changes) in obj.iter_mut() {
+        let Some(layer_obj) = layer_changes.as_object_mut() else { continue };
+        let Some(inserted) = layer_obj.get_mut("inserted").and_then(|v| v.as_array_mut())
+        else { continue };
+        for row_val in inserted.iter_mut() {
+            let Some(row) = row_val.as_object_mut() else { continue };
+            let already_has = row.get(field)
+                .and_then(|v| v.as_str())
+                .map(|s| !s.is_empty())
+                .unwrap_or(false)
+                || row.get("fields")
+                    .and_then(|f| f.get(field))
+                    .and_then(|v| v.as_str())
+                    .map(|s| !s.is_empty())
+                    .unwrap_or(false);
+            if already_has { continue; }
+            let Some(uid) = row.get("upper_id").and_then(value_to_id_string) else { continue };
+            let Some((_, code)) = code_by_id.iter().find(|(pid, _)| *pid == uid) else { continue };
+            row.insert(field.to_string(), Value::String(code.clone()));
+            if let Some(fields) = row.get_mut("fields").and_then(|v| v.as_object_mut()) {
+                fields.insert(field.to_string(), Value::String(code.clone()));
+            }
+        }
+    }
+}
+
 fn mint_ids_for_changeset(changes: &Value, child_keys: &[String]) -> (Value, Map<String, Value>) {
     let Some(obj) = changes.as_object() else {
         return (changes.clone(), Map::new());
@@ -1305,7 +1495,13 @@ fn remove_cols(cols: &mut Vec<String>, vals: &mut Vec<DataValue>, drop: &[&str])
 /// 构造多值 INSERT（方案 A）：`INSERT INTO t (c...) VALUES ($1..$k),($k+1..) [ON CONFLICT (id) DO ...]`。
 /// nrows 行 × cols.len() 列，占位符自 $1 连续编号。upsert=true 时加 ON CONFLICT 子句。
 /// 纯函数（无 IO），便于单测占位符/列数/冲突子句正确性。
-fn build_multi_insert_sql(table: &str, cols: &[String], nrows: usize, upsert: bool) -> String {
+fn build_multi_insert_sql(
+    table: &str,
+    cols: &[String],
+    nrows: usize,
+    upsert: bool,
+    jsonb_cols_mask: &[bool],
+) -> String {
     let ncol = cols.len();
     let cols_sql = cols
         .iter()
@@ -1316,9 +1512,17 @@ fn build_multi_insert_sql(table: &str, cols: &[String], nrows: usize, upsert: bo
     let value_groups: Vec<String> = (0..nrows)
         .map(|_| {
             let group: Vec<String> = (0..ncol)
-                .map(|_| {
+                .map(|ci| {
                     p += 1;
-                    format!("${p}")
+                    // JSONB 列加显式 cast：tokio-postgres 绑 serde_json::Value 时，
+                    // 在 ON CONFLICT DO UPDATE 上下文里 PG 参数类型推断会退化为 text，
+                    // 导致「column is of type jsonb but expression is of type text」。
+                    // `$p::jsonb` 强制 PG 按 jsonb 推断，to_sql_checked 收到 JSONB 正确编码。
+                    if jsonb_cols_mask.get(ci).copied().unwrap_or(false) {
+                        format!("${p}::jsonb")
+                    } else {
+                        format!("${p}")
+                    }
                 })
                 .collect();
             format!("({})", group.join(", "))
@@ -1487,7 +1691,7 @@ mod tests {
     #[test]
     fn multi_insert_single_row_upsert() {
         let cols = vec!["id".to_string(), "amount".to_string()];
-        let sql = build_multi_insert_sql("cv_acc_line", &cols, 1, true);
+        let sql = build_multi_insert_sql("cv_acc_line", &cols, 1, true, &[]);
         assert_eq!(
             sql,
             "INSERT INTO \"cv_acc_line\" (\"id\", \"amount\") VALUES ($1, $2) \
@@ -1498,7 +1702,7 @@ mod tests {
     #[test]
     fn multi_insert_three_rows_placeholders_continuous() {
         let cols = vec!["id".to_string(), "a".to_string()];
-        let sql = build_multi_insert_sql("t", &cols, 3, false);
+        let sql = build_multi_insert_sql("t", &cols, 3, false, &[]);
         // 3 行 × 2 列 = $1..$6，连续编号
         assert_eq!(
             sql,
@@ -1509,7 +1713,7 @@ mod tests {
     #[test]
     fn multi_insert_id_only_do_nothing() {
         let cols = vec!["id".to_string()];
-        let sql = build_multi_insert_sql("t", &cols, 1, true);
+        let sql = build_multi_insert_sql("t", &cols, 1, true, &[]);
         // 只有 id 列时冲突不更新
         assert!(sql.ends_with("ON CONFLICT (id) DO NOTHING"));
     }
@@ -1544,7 +1748,7 @@ mod tests {
     fn param_count_matches_placeholders() {
         // 批量插入的参数展平数应 == 占位符数（nrows × ncol）
         let cols = vec!["id".to_string(), "x".to_string(), "y".to_string()];
-        let sql = build_multi_insert_sql("t", &cols, 4, false);
+        let sql = build_multi_insert_sql("t", &cols, 4, false, &[]);
         let max_ph = (1..=100)
             .rev()
             .find(|i| sql.contains(&format!("${i}")))
@@ -1713,7 +1917,7 @@ mod tests {
             "update_time".to_string(),
             "delete_flag".to_string(),
         ];
-        let sql = build_multi_insert_sql("cv_header", &cols, 1, true);
+        let sql = build_multi_insert_sql("cv_header", &cols, 1, true, &[]);
         // 创建审计列不在 SET 子句
         assert!(!sql.contains("\"create_by\" = EXCLUDED"));
         assert!(!sql.contains("\"create_time\" = EXCLUDED"));

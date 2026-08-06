@@ -6,10 +6,12 @@ use axum::Router;
 use cmx_api::CmxAppState;
 use cmx_api::routes::routes_impl::{api_routes, swagger_routes};
 use cmx_api::routes::traits::ModuleRoutes;
+use cmx_code_api::CodeModule;
 use cmx_dct_api::DctModule;
 use cmx_doc_api::DocModule;
 use cmx_flow_api::FlowModule;
 use cmx_job_api::JobModule;
+use cmx_mdm_api::MdmModule;
 use cmx_model_api::ModelModule;
 use cmx_rpt_api::ReportModule;
 
@@ -17,7 +19,8 @@ use cmx_rpt_api::ReportModule;
 ///
 /// 直接调用 cmx-api 的统一路由注册，返回配置好的 Axum Router。
 /// 外部模块路由（报表 ReportModule、流程 FlowModule、业务单据 DocModule、数据字典 DctModule、
-/// 异步任务中心 JobModule、模型中心 ModelModule）在此合并——cmx-api 不依赖它们，避免循环依赖。
+/// 主数据 MdmModule异步任务中心 JobModule、模型中心 ModelModule、编码引擎 CodeModule）在此合并——cmx-api
+/// 不依赖它们，避免循环依赖。
 ///
 /// # Returns
 ///
@@ -28,8 +31,10 @@ pub fn routes() -> Router<CmxAppState> {
         .merge(FlowModule.routes())
         .merge(DocModule.routes())
         .merge(DctModule.routes())
+        .merge(MdmModule.routes())
         .merge(JobModule.routes())
         .merge(ModelModule.routes())
+        .merge(CodeModule.routes())
 }
 
 /// 获取 Swagger 文档路由
