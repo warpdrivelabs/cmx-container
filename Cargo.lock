@@ -1615,6 +1615,7 @@ dependencies = [
  "cmx-core",
  "cmx-database-pg",
  "cmx-mdm-model",
+ "cmx-traits",
  "cmx-utils",
  "serde",
  "serde_json",

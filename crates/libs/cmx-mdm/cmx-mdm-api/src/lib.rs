@@ -33,8 +33,7 @@ impl ModuleRoutes for MdmModule {
             )
             // 手动触发激活（body: { crId }；禁用 Path Variable，承接 AGENTS.md §四 第 5 条）
             .route("/mdm/change-requests/activate", post(mdm::mdm_cr_activate))
-            // M2 · CR 变更请求:新建/审批流转/列表/详情
-            .route("/mdm/change-requests/create", post(mdm::mdm_cr_create))
+            // M2 · CR 变更请求:审批流转/列表/详情（新建走标准 /doc/save）
             .route("/mdm/change-requests/submit", post(mdm::mdm_cr_submit))
             .route("/mdm/change-requests/approve", post(mdm::mdm_cr_approve))
             .route("/mdm/change-requests/reject", post(mdm::mdm_cr_reject))

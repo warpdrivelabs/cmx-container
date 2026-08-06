@@ -10,7 +10,7 @@
 //!   draft ──abort──→ aborted(作废)
 
 use cmx_core::dv;
-use cmx_core::model::cell::{DataValue, SqlTypeMarker};
+use cmx_core::model::cell::DataValue;
 use cmx_database_pg::DatabaseManager;
 use serde_json::{json, Value};
 
@@ -88,112 +88,6 @@ pub async fn get_cr_detail(
     Ok(json!({ "head": head, "lines": lines }))
 }
 
-/// 新建 draft CR(录入台用)。头+行在一个事务内(原子)。返回新 CR id。
-pub async fn create_cr(
-    mm: &DatabaseManager,
-    db_id: &str,
-    head: &Value,
-    lines: &[Value],
-    operated_by: i64,
-) -> Result<i64, cmx_api_types::Error> {
-    let cr_id = cmx_utils::next_pk_id();
-    let h = head.as_object().ok_or_else(|| api_err("CR head 非对象"))?;
-
-    // 开事务(N2:头+行原子)
-    let txn_ctx = mm.get_transaction_context();
-    let guard = txn_ctx
-        .begin_with_guard(db_id)
-        .await
-        .map_err(|e| api_err(&format!("开事务失败: {e}")))?;
-    let txn_id = guard.txn_id().to_string();
-
-    let result = create_cr_inner(mm, db_id, &txn_id, cr_id, h, lines, operated_by).await;
-    match result {
-        Ok(()) => {
-            guard
-                .commit()
-                .await
-                .map_err(|e| api_err(&format!("提交事务失败: {e}")))?;
-            Ok(cr_id)
-        }
-        Err(e) => {
-            tracing::error!(target: "cmx_mdm::cr", cr_id, error = %e, "新建 CR 失败,事务已回滚");
-            Err(e)
-        }
-    }
-}
-
-async fn create_cr_inner(
-    mm: &DatabaseManager,
-    db_id: &str,
-    txn_id: &str,
-    cr_id: i64,
-    h: &serde_json::Map<String, Value>,
-    lines: &[Value],
-    operated_by: i64,
-) -> Result<(), cmx_api_types::Error> {
-    // 头:28 列(非 source_* 子集),doc_status 强制 draft
-    let sql = r#"INSERT INTO cv_mdm_apply
-        (id, upper_id, line_no, doc_no, doc_type_id, doc_type, target_dict_code, target_record_id,
-         source_cr_id, cr_type, effective_date, name, tax_no, credit_code, short_name, ext_attrs,
-         field_deltas, doc_status, business_status, entity_id, doc_date, attach_count, remark,
-         create_by, create_time, update_by, update_time, delete_flag)
-      VALUES ($1, NULL, 1, $2, 1, $3, $4, $5, NULL, $6, NULL, $7, $8, $9, $10, NULL, NULL,
-         'draft', 'normal', 1, CURRENT_DATE, 0, NULL, $11, now(), $11, now(), 0)"#;
-    mm.execute_sql_with_datavalues(
-        db_id,
-        Some(txn_id),
-        sql,
-        dv![
-            DataValue::Int(cr_id),
-            DataValue::String(format!("CR-{cr_id}")),
-            DataValue::String(str_val(h, "doc_type", "mdm_supplier_apply").into()),
-            DataValue::String(str_val(h, "target_dict_code", "supplier").into()),
-            // 空 target_record_id 必须 NullTyped(Int)：裸 Null 绑成 VARCHAR NULL，BIGINT 列拒收（executor/mod.rs:280）
-            h.get("target_record_id")
-                .and_then(|v| v.as_i64())
-                .map(DataValue::Int)
-                .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Int)),
-            DataValue::String(str_val(h, "cr_type", "create").into()),
-            DataValue::String(str_val(h, "name", "").into()),
-            DataValue::String(str_val(h, "tax_no", "").into()),
-            DataValue::String(str_val(h, "credit_code", "").into()),
-            DataValue::String(str_val(h, "short_name", "").into()),
-            DataValue::Int(operated_by),
-        ],
-    )
-    .await
-    .map_err(|e| api_err_db(&format!("新建 CR 头失败: {e}")))?;
-
-    // 行:逐行铸号
-    for (i, line) in lines.iter().enumerate() {
-        let line_id = cmx_utils::next_pk_id();
-        let lo = line.as_object().ok_or_else(|| api_err("CR line 非对象"))?;
-        let sql_l = r#"INSERT INTO cv_mdm_apply_line
-            (id, upper_id, line_no, line_type, line_action, line_payload,
-             create_by, create_time, update_by, update_time, delete_flag)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $7, now(), 0)"#;
-        let payload = lo.get("line_payload").map(|v| v.to_string()).unwrap_or_else(|| "{}".into());
-        mm.execute_sql_with_datavalues(
-            db_id,
-            Some(txn_id),
-            sql_l,
-            dv![
-                DataValue::Int(line_id),
-                DataValue::Int(cr_id),
-                DataValue::Int((i as i64) + 1),
-                DataValue::String(str_val(lo, "line_type", "bank_account").into()),
-                DataValue::String(str_val(lo, "line_action", "insert").into()),
-                DataValue::Json(payload),
-                DataValue::Int(operated_by),
-            ],
-        )
-        .await
-        .map_err(|e| api_err_db(&format!("新建 CR 行失败: {e}")))?;
-    }
-    Ok(())
-}
-
 /// 克隆 CR(驳回复活):基于 rejected CR 复制新 draft。行逐行铸号。返回新 CR id。
 pub async fn clone_revise(
     mm: &DatabaseManager,
@@ -237,6 +131,11 @@ async fn clone_revise_inner(
     src_cr_id: i64,
     operated_by: i64,
 ) -> Result<(), cmx_api_types::Error> {
+    // 铸新 doc_no：走 cmx-code（MDM_GYS 规则），与新建 CR 走标准 /doc/save 的铸号口径一致。
+    // minter 未注入 → 显式报错（main.rs 已无条件注入，None 仅在注入失败时触发，不应静默兜底）。
+    // 铸号在事务内做（传 txn_id），反查 max 的 SELECT 与本事务可见性一致。
+    let doc_no = mint_cr_doc_no(db_id, Some(txn_id)).await?;
+
     // 头:INSERT...SELECT 复制(28 列严格对齐,含 doc_type_id)
     let sql = r#"INSERT INTO cv_mdm_apply
         (id, upper_id, line_no, doc_no, doc_type_id, doc_type, target_dict_code, target_record_id,
@@ -255,7 +154,7 @@ async fn clone_revise_inner(
         sql,
         dv![
             DataValue::Int(new_id),
-            DataValue::String(format!("CR-CLONE-{new_id}")),
+            DataValue::String(doc_no),
             DataValue::Int(src_cr_id), // source_cr_id 指向旧
             DataValue::Int(operated_by),
             DataValue::Int(src_cr_id),
@@ -308,7 +207,20 @@ pub async fn abort_cr(
     set_cr_status(mm, db_id, None, cr_id, "aborted").await
 }
 
-/// 从 JSON Map 取字符串字段(带默认值)。
-fn str_val<'a>(m: &'a serde_json::Map<String, Value>, key: &str, default: &'a str) -> &'a str {
-    m.get(key).and_then(|v| v.as_str()).unwrap_or(default)
+/// 走 cmx-code 为 CR 铸 doc_no（MDM_GYS 规则）。
+///
+/// clone_revise 用：与新建 CR 走标准 `/doc/save` 的铸号口径保持一致（同一规则 MDM_GYS）。
+/// minter 未注入（`GlobalCodeMinter::get()` 返回 None）时**显式报错**——main.rs 已无条件注入
+/// CodeEngine，None 仅在注入失败时触发，静默回退到旧模板（`CR-CLONE-{id}`）会让 doc_no 格式
+/// 与正常 CR 不一致，属隐藏 bug，应显式暴露。
+async fn mint_cr_doc_no(db_id: &str, txn_id: Option<&str>) -> Result<String, cmx_api_types::Error> {
+    let minter = cmx_traits::code::GlobalCodeMinter::get()
+        .ok_or_else(|| api_err("编码引擎未注入，无法铸 CR 单据号"))?;
+    let code_rule = serde_json::json!({ "ruleCode": "MDM_GYS" });
+    let target = serde_json::json!({ "kind": "doc", "code": "cv_mdm_apply", "field": "doc_no" });
+    let attrs = serde_json::json!({});
+    minter
+        .mint(&code_rule, &target, &attrs, db_id, txn_id)
+        .await
+        .map_err(|e| api_err(&format!("铸 CR 单据号失败: {e}")))
 }

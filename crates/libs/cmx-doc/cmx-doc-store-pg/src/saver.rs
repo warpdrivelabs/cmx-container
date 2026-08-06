@@ -16,7 +16,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 
-use cmx_core::model::cell::DataValue;
+use cmx_core::model::cell::{DataValue, FieldType};
 use cmx_core::model::data::dataset::Schema;
 use cmx_database::DatabaseManager;
 
@@ -617,9 +617,28 @@ impl DocSaver {
             if ncol == 0 {
                 continue;
             }
+            // 构建 JSONB 列掩码：对 FieldType::Json 的列加 `$p::jsonb` cast，规避 PG 在
+            // ON CONFLICT 上下文把 serde_json::Value 参数推断为 text 的问题。
+            let jsonb_col_mask: Vec<bool> = cols
+                .iter()
+                .map(|c| {
+                    layer
+                        .schema
+                        .get_index(c)
+                        .and_then(|i| layer.schema.fields.get(i))
+                        .map(|f| matches!(f.field_type, FieldType::Json))
+                        .unwrap_or(false)
+                })
+                .collect();
             let rows_per_batch = (Self::MAX_PARAMS / ncol).max(1);
             for chunk in value_rows.chunks(rows_per_batch) {
-                let sql = build_multi_insert_sql(&layer.table_name, &cols, chunk.len(), upsert);
+                let sql = build_multi_insert_sql(
+                    &layer.table_name,
+                    &cols,
+                    chunk.len(),
+                    upsert,
+                    &jsonb_col_mask,
+                );
                 let flat: Vec<DataValue> = chunk.iter().flatten().cloned().collect();
                 affected += Self::exec(mm, db_id, txn_id, &sql, flat).await?;
             }
@@ -871,7 +890,14 @@ impl DocSaver {
             .await
             // 落库失败：把 PG 原始错误翻译成优雅提示 + 稳定错误码（唯一键/外键/非空等），
             // 不再暴露英文原文 + SQL。前置列校验已拦大部分，此为兜底。
-            .map_err(|e| BizError::from_db_error(&e.to_string()))
+            .map_err(|e| {
+                tracing::error!(
+                    target: "cmx_doc::saver::exec",
+                    error = %e,
+                    "落库失败（PG 原文见此日志，handler 返回优雅文案）"
+                );
+                BizError::from_db_error(&e.to_string())
+            })
     }
 
     /// 静默零写防护（H1）：changes 里每个 key 必须能对上某一层，否则报错。
@@ -1469,7 +1495,13 @@ fn remove_cols(cols: &mut Vec<String>, vals: &mut Vec<DataValue>, drop: &[&str])
 /// 构造多值 INSERT（方案 A）：`INSERT INTO t (c...) VALUES ($1..$k),($k+1..) [ON CONFLICT (id) DO ...]`。
 /// nrows 行 × cols.len() 列，占位符自 $1 连续编号。upsert=true 时加 ON CONFLICT 子句。
 /// 纯函数（无 IO），便于单测占位符/列数/冲突子句正确性。
-fn build_multi_insert_sql(table: &str, cols: &[String], nrows: usize, upsert: bool) -> String {
+fn build_multi_insert_sql(
+    table: &str,
+    cols: &[String],
+    nrows: usize,
+    upsert: bool,
+    jsonb_cols_mask: &[bool],
+) -> String {
     let ncol = cols.len();
     let cols_sql = cols
         .iter()
@@ -1480,9 +1512,17 @@ fn build_multi_insert_sql(table: &str, cols: &[String], nrows: usize, upsert: bo
     let value_groups: Vec<String> = (0..nrows)
         .map(|_| {
             let group: Vec<String> = (0..ncol)
-                .map(|_| {
+                .map(|ci| {
                     p += 1;
-                    format!("${p}")
+                    // JSONB 列加显式 cast：tokio-postgres 绑 serde_json::Value 时，
+                    // 在 ON CONFLICT DO UPDATE 上下文里 PG 参数类型推断会退化为 text，
+                    // 导致「column is of type jsonb but expression is of type text」。
+                    // `$p::jsonb` 强制 PG 按 jsonb 推断，to_sql_checked 收到 JSONB 正确编码。
+                    if jsonb_cols_mask.get(ci).copied().unwrap_or(false) {
+                        format!("${p}::jsonb")
+                    } else {
+                        format!("${p}")
+                    }
                 })
                 .collect();
             format!("({})", group.join(", "))
@@ -1651,7 +1691,7 @@ mod tests {
     #[test]
     fn multi_insert_single_row_upsert() {
         let cols = vec!["id".to_string(), "amount".to_string()];
-        let sql = build_multi_insert_sql("cv_acc_line", &cols, 1, true);
+        let sql = build_multi_insert_sql("cv_acc_line", &cols, 1, true, &[]);
         assert_eq!(
             sql,
             "INSERT INTO \"cv_acc_line\" (\"id\", \"amount\") VALUES ($1, $2) \
@@ -1662,7 +1702,7 @@ mod tests {
     #[test]
     fn multi_insert_three_rows_placeholders_continuous() {
         let cols = vec!["id".to_string(), "a".to_string()];
-        let sql = build_multi_insert_sql("t", &cols, 3, false);
+        let sql = build_multi_insert_sql("t", &cols, 3, false, &[]);
         // 3 行 × 2 列 = $1..$6，连续编号
         assert_eq!(
             sql,
@@ -1673,7 +1713,7 @@ mod tests {
     #[test]
     fn multi_insert_id_only_do_nothing() {
         let cols = vec!["id".to_string()];
-        let sql = build_multi_insert_sql("t", &cols, 1, true);
+        let sql = build_multi_insert_sql("t", &cols, 1, true, &[]);
         // 只有 id 列时冲突不更新
         assert!(sql.ends_with("ON CONFLICT (id) DO NOTHING"));
     }
@@ -1708,7 +1748,7 @@ mod tests {
     fn param_count_matches_placeholders() {
         // 批量插入的参数展平数应 == 占位符数（nrows × ncol）
         let cols = vec!["id".to_string(), "x".to_string(), "y".to_string()];
-        let sql = build_multi_insert_sql("t", &cols, 4, false);
+        let sql = build_multi_insert_sql("t", &cols, 4, false, &[]);
         let max_ph = (1..=100)
             .rev()
             .find(|i| sql.contains(&format!("${i}")))
@@ -1877,7 +1917,7 @@ mod tests {
             "update_time".to_string(),
             "delete_flag".to_string(),
         ];
-        let sql = build_multi_insert_sql("cv_header", &cols, 1, true);
+        let sql = build_multi_insert_sql("cv_header", &cols, 1, true, &[]);
         // 创建审计列不在 SET 子句
         assert!(!sql.contains("\"create_by\" = EXCLUDED"));
         assert!(!sql.contains("\"create_time\" = EXCLUDED"));

@@ -1,8 +1,13 @@
 /**
  * MDM 供应商新增/变更表单页（native-page · 并列标签页）。
  * 由列表页 openNode 打开，经 host.workspace.context 读 { mode:'create'|'update', supplier }。
- * 技术字段（doc_type/cr_type/target_dict/target_record_id/field_deltas）系统自动填充。
- * 银行账户用 cmx-revo-grid 表格组件（整页内渲染，时序稳定）。
+ *
+ * 保存走平台标准单据保存链路：C.saveDocData → POST /doc/save（坐标 basic/dataplatform/mdm），
+ * doc_no 由 cmx-code 按 MDM_GYS 规则铸号，前端不传 doc_no。
+ * NOT NULL 列（doc_status/line_no/doc_type_id/doc_date/entity_id）由前端显式提供；
+ * JSONB 列（field_deltas/line_payload）传对象（不序列化）。
+ * 组件库未加载时直接报错（不降级裸 fetch）——加载失败属异常配置，应显式暴露。
+ * 流转（submit）仍调 MDM 专属接口 /mdm/change-requests/submit。
  */
 
 const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
@@ -117,35 +122,79 @@ function bindBankGrid() {
   }
   requestAnimationFrame(() => requestAnimationFrame(fill))
 }
+// 标准单据保存坐标（basic/dataplatform/mdm）。saveDocData 据此拼 ?domain=&application=&module=&file=。
+const DOC_DEF = { domain: 'basic', application: 'dataplatform', module: 'mdm', file: 'dataplatform_doc_meta_v1.json' }
+const TABLE_NAMES = ['cv_mdm_apply', 'cv_mdm_apply_line']
+const HEAD_TID = 't1' // 头行临时 id；后端 mint_ids 铸真号后经 idMap 回传
+
+// 当天日期串（doc_date NOT NULL 占位）。YYYY-MM-DD。
+function todayStr() { const d = new Date(); const z = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}` }
+
+// 收集银行账户明细为标准 changeset inserted 行。
+// line_payload 传对象（不序列化）——JSONB 列经 json_to_dv_loose 绑成 DataValue::Json；
+// 传字符串会绑成 Text 被 PG jsonb 列拒收。line_no NOT NULL，按序填。
 function collectLines() {
   const ds = bankGrid?.getDataSet?.()
   const rows = ds ? (ds.toPlainRows ? ds.toPlainRows() : (ds.getRows ? ds.getRows() : [])) : []
-  return rows.filter((r) => (r.account_no || r.bank_name))
-    .map((r) => ({ line_type: 'bank_account', line_action: 'insert', line_payload: { account_no: r.account_no || '', bank_name: r.bank_name || '' } }))
+  return rows
+    .filter((r) => (r.account_no || r.bank_name))
+    .map((r, i) => ({
+      id: `l${i + 1}`, upper_id: HEAD_TID, line_no: i + 1,
+      fields: {
+        line_type: 'bank_account', line_action: 'insert',
+        line_payload: { account_no: r.account_no || '', bank_name: r.bank_name || '' },
+      },
+    }))
 }
 
+// 构造头表 fields。NOT NULL 列必须带齐（doc_status/line_no/doc_type_id/doc_date/entity_id），
+// 否则标准保存 validate_changeset 报 422 或落库报 23502。doc_no 不带（cmx-code 铸号）。
+// doc_type_id/entity_id 为占位值（MDM 暂无字典联动/业务主体隔离，待 M7 接入后替换）。
 function buildHead() {
   const row = (headForm && headForm.getData && headForm.getData()) || {}
   const name = (row.name || '').trim(); const tax = (row.tax_no || '').trim(); const cc = (row.credit_code || '').trim(); const sn = (row.short_name || '').trim()
+  // 公共 NOT NULL 占位列
+  const base = { line_no: 1, doc_status: 'draft', doc_type_id: 1, doc_date: todayStr(), entity_id: 1 }
   if (state.mode === 'update') {
     const o = state.supplier || {}
     const deltas = {}
     const cur = { name, tax_no: tax, credit_code: cc, short_name: sn }
     for (const f of BIZ_FIELDS) if ((cur[f] || '') !== (o[f] || '')) deltas[f] = { old: o[f] ?? '', new: cur[f] ?? '' }
-    return { doc_type: 'mdm_supplier_change', cr_type: 'update', target_dict_code: 'supplier',
+    return { ...base, doc_type: 'mdm_supplier_change', cr_type: 'update', target_dict_code: 'supplier',
       target_record_id: Number(o.id), name, tax_no: tax, credit_code: cc, short_name: sn, field_deltas: deltas }
   }
-  return { doc_type: 'mdm_supplier_apply', cr_type: 'create', target_dict_code: 'supplier', name, tax_no: tax, credit_code: cc, short_name: sn }
+  return { ...base, doc_type: 'mdm_supplier_apply', cr_type: 'create', target_dict_code: 'supplier',
+    name, tax_no: tax, credit_code: cc, short_name: sn }
 }
+
 async function doSave(submit) {
-  const M = cmx()
+  const C = cmx()
   const headRow = (headForm && headForm.getData && headForm.getData()) || {}
-  if (!(headRow.name || '').trim()) { M.cmxWarn?.('供应商名称不能为空'); return }
+  if (!(headRow.name || '').trim()) { C.cmxWarn?.('供应商名称不能为空'); return }
+  // 组件库未加载直接报错（不降级裸 fetch）——加载失败属异常配置，应显式暴露。
+  if (typeof C.saveDocData !== 'function') { C.cmxError?.('组件库未加载，无法保存'); return }
+  // 构造标准 merge changeset：头 inserted[0] + 行 inserted[]
+  const changes = { cv_mdm_apply: { inserted: [{ id: HEAD_TID, fields: buildHead() }] } }
+  const lines = collectLines()
+  if (lines.length) changes[TABLE_NAMES[1]] = { inserted: lines }
   try {
-    const d = await apiPost('/api/mdm/change-requests/create', { head: buildHead(), lines: collectLines() }, state.dbId)
-    if (submit) await apiPost('/api/mdm/change-requests/submit', { crId: d.crId }, state.dbId)
-    M.cmxInfo?.(submit ? `CR-${d.crId} 已提交审批` : `已创建变更申请 CR-${d.crId}（草稿）`)
-  } catch (e) { M.cmxError?.(`保存失败：${e.message}`) }
+    const data = await C.saveDocData(null,
+      { ...DOC_DEF, dbId: state.dbId },
+      { saveMode: 'merge', changes, tableNames: TABLE_NAMES })
+    // idMap[HEAD_TID] = 落库真 id（Pk52 在 JS 安全区，可直接用；String() 仅作软约定）
+    const crId = data && data.idMap ? data.idMap[HEAD_TID] : null
+    if (submit && crId != null) {
+      await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId)
+    }
+    C.cmxInfo?.(submit ? `变更申请 ${crId} 已提交审批` : `已创建变更申请 ${crId}（草稿）`)
+  } catch (e) {
+    // 422 列级校验失败：e.violations 经 formatViolations 多行中文展示
+    if (e && e.violations && typeof C.formatViolations === 'function') {
+      C.cmxError?.(`数据校验未通过：\n${C.formatViolations(e.violations, TABLE_NAMES)}`)
+    } else {
+      C.cmxError?.(`保存失败：${e.message}`)
+    }
+  }
 }
 
 function bind(root) {

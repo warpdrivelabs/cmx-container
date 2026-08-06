@@ -106,24 +106,6 @@ pub struct ActivateBody {
 // M2 · CR 变更请求:新建 / 审批流转 / 列表 / 详情
 // ════════════════════════════════════════════════════════════════════════════
 
-/// 新建 draft CR(录入台用)。body: { head: {...}, lines: [...] }
-pub async fn mdm_cr_create(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
-    headers: HeaderMap,
-    Json(body): Json<CreateBody>,
-) -> Result<Json<ApiResp<Value>>> {
-    let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
-    let operated_by = svr_ctx
-        .auth_context
-        .as_ref()
-        .and_then(|a| a.user_id.parse::<i64>().ok())
-        .unwrap_or(0);
-    let cr_id = store::create_cr(mm, &db_id, &body.head, &body.lines, operated_by).await?;
-    Ok(Json(ApiResp::ok(json!({ "crId": cr_id, "status": "draft" }))))
-}
-
 /// 提交审批:draft → approving
 pub async fn mdm_cr_submit(
     State(_s): State<CmxAppState>,
@@ -252,14 +234,6 @@ pub struct RejectBody {
     pub cr_id: i64,
     #[serde(default)]
     pub reason: Option<String>,
-}
-
-/// 新建 CR(头+行)。
-#[derive(serde::Deserialize)]
-pub struct CreateBody {
-    pub head: Value,
-    #[serde(default)]
-    pub lines: Vec<Value>,
 }
 
 /// CR 列表查询（分页）。
