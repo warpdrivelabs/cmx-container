@@ -182,7 +182,9 @@ pub async fn mint_batch(
     if count == 0 {
         return Ok(Vec::new());
     }
-    let prefix = rule_algo::resolve_fixed_segments(rule, ctx)?;
+    // 用 build_prefix_and_specs 一次性拿到 prefix + serial_spec + random_segs，
+    // 以区分「纯固定码」「serial 流水」「random-only」三种场景。
+    let (prefix, serial_spec, random_segs) = rule_algo::build_prefix_and_specs(rule, ctx)?;
     let width = rule.serial_width();
     let start = rule.serial_start();
     let step = rule.serial_step();
@@ -190,10 +192,21 @@ pub async fn mint_batch(
     let pad_side = rule.serial_pad_side();
 
     if width == 0 {
-        // 无流水段：纯固定码重复 count 份（罕见场景）
+        if !random_segs.is_empty() {
+            // random-only 规则：逐条铸号（每条 resolve 换种子），不做 UNIQUE 查重
+            // （DCT try_insert 是 no-op，靠 DB UNIQUE 约束兜底）。
+            let mut codes = Vec::with_capacity(count);
+            for _ in 0..count {
+                codes.push(rule_algo::evaluate_segments(rule, target, ctx, advance).await?);
+            }
+            return Ok(codes);
+        }
+        // 无流水段也无随机段：纯固定码重复 count 份（罕见场景）
         return Ok(vec![prefix; count]);
     }
 
+    // serial/dateSerial 批量取号：一次反查 max 取连续号段
+    let _ = serial_spec; // 已通过 width 判断确认存在，下文直接用 prefix+width 取号
     let max = advance
         .query_max_serial(target, &prefix, width, ctx.minted_buffer())
         .await?;
@@ -221,7 +234,7 @@ pub async fn preview(
     ctx: &ResolveContext,
     advance: &dyn Advance,
 ) -> Result<String> {
-    let prefix = rule_algo::resolve_fixed_segments(rule, ctx)?;
+    let (prefix, _serial_spec, random_segs) = rule_algo::build_prefix_and_specs(rule, ctx)?;
     let width = rule.serial_width();
     let start = rule.serial_start();
     let step = rule.serial_step();
@@ -229,6 +242,10 @@ pub async fn preview(
     let pad_side = rule.serial_pad_side();
 
     if width == 0 {
+        if !random_segs.is_empty() {
+            // random-only 规则：走 evaluate_segments 生成一条预览码（不落库不占号）
+            return rule_algo::evaluate_segments(rule, target, ctx, advance).await;
+        }
         return Ok(prefix);
     }
 

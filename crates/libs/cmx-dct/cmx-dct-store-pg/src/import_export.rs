@@ -442,6 +442,13 @@ async fn push_row(
     row_idx: &mut usize,
     row: Map<String, Value>,
 ) -> Result<()> {
+    // 编码引擎铸号：若字典配置了 auto codeRule 且 code 为空，先铸号再校验
+    // （与 write.rs save 路径一致：铸号在 NOT NULL 校验之前）。
+    let mut row = row;
+    if needs_mint_code(view, &row) {
+        let mut rows_slice = std::slice::from_mut(&mut row);
+        crate::write::mint_codes_for_inserts(view, &mut rows_slice, db_id).await;
+    }
     // 列校验：通过才入 batch；否则记录 skipped + error
     if let Some(violation) = validate_row(view, &row) {
         summary.add_error(*row_idx, violation.0, violation.1);
@@ -454,6 +461,19 @@ async fn push_row(
         apply_import_batch(mm, view, db_id, batch_taken, mode, summary).await?;
     }
     Ok(())
+}
+
+/// 判断某行是否需要编码引擎铸号（有 auto codeRule 且 code 字段为空）。
+fn needs_mint_code(view: &DictView, row: &Map<String, Value>) -> bool {
+    let Some(code_rule) = &view.code_rule else { return false };
+    let mode = code_rule.get("mode").and_then(|v| v.as_str()).unwrap_or("manual");
+    if mode != "auto" { return false }
+    let code_field = &view.code_field;
+    match row.get(code_field) {
+        None => true,
+        Some(Value::Null) => true,
+        Some(v) => v.as_str().map(|s| s.is_empty()).unwrap_or(false),
+    }
 }
 
 /// 单行校验：返回 `(col_name, message)` 表示首个违规；`None` 表示通过。

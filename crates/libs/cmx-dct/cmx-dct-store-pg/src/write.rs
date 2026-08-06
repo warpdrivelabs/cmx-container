@@ -181,9 +181,21 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
         "enter"
     );
 
+    // 编码引擎铸号：若字典配置了 codeRule(mode=auto)，为 inserted 中 code 为空的行铸业务编码。
+    // 必须在 validate_bucket 之前执行--否则空 code 会被 NOT NULL 校验拦下（返 422）。
+    // bucket 是不可变 &Value，有 code_rule 时 clone 一份铸号写回，无 code_rule 时零开销透传。
+    let mut bucket_owned;
+    let effective_bucket: &Value = if view.code_rule.is_some() {
+        bucket_owned = bucket.clone();
+        mint_inserted_codes_inplace(view, &mut bucket_owned, db_id).await;
+        &bucket_owned
+    } else {
+        bucket
+    };
+
     // 落库前列级校验（开事务前，一次回报全部）。inserted 走整行校验（含 NOT NULL，跳过
     // 服务端 backfill 列）；updated 只校验其 fields（不做整表 NOT NULL）。
-    let violations = validate_bucket(view, bucket);
+    let violations = validate_bucket(view, effective_bucket);
     if !violations.is_empty() {
         // 校验未通过：聚合首条违规定位到表+列+行号，便于日志侧反查前端表单字段。
         let first = violations.first();
@@ -211,7 +223,7 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
         api_err(&format!("开启事务失败: {e}"))
     })?;
 
-    let result = save_apply(mm, db_id, &txn_id, view, bucket).await;
+    let result = save_apply(mm, db_id, &txn_id, view, effective_bucket).await;
 
     match result {
         Ok((affected, updated_at, conflict, id_map)) => {
@@ -623,6 +635,44 @@ async fn save_apply(
     }
 
     Ok((affected, updated_at, conflict, id_map))
+}
+
+/// 对 changeset bucket 的 inserted 行做编码引擎铸号（原地修改）。
+///
+/// 从 bucket.inserted 提取 fields -> `mint_codes_for_inserts` 铸号 -> 写回每行的
+/// `fields[code_field]`。供 `save` 路径在 `validate_bucket` 之前调用，使空 code 行
+/// 先被铸号再过 NOT NULL 校验（与 `upsert` 路径 write.rs:63 对齐）。
+///
+/// 无 codeRule / 非 auto mode / 引擎未注入时 `mint_codes_for_inserts` 内部静默跳过。
+async fn mint_inserted_codes_inplace(view: &DictView, bucket: &mut Value, db_id: &str) {
+    let Some(ins) = bucket.get_mut("inserted").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    // 提取每行的 fields Map（与 apply_inserts / validate_bucket 同款 row_fields）
+    let mut rows: Vec<serde_json::Map<String, Value>> =
+        ins.iter().filter_map(row_fields).collect();
+    if rows.is_empty() {
+        return;
+    }
+    // 铸号（写回 rows 的 code_field）
+    mint_codes_for_inserts(view, &mut rows, db_id).await;
+    // 把铸号结果写回 bucket 的 inserted 行（fields[code_field]）
+    let code_field = &view.code_field;
+    for (i, row) in rows.iter().enumerate() {
+        if let Some(code_val) = row.get(code_field) {
+            // code 非空才写回（铸号失败时 code 仍为空，不覆盖）
+            if !code_val.is_null() && code_val.as_str().map(|s| !s.is_empty()).unwrap_or(false) {
+                if let Some(obj) = ins.get_mut(i).and_then(|v| v.as_object_mut()) {
+                    if let Some(fields) = obj.get_mut("fields").and_then(|v| v.as_object_mut()) {
+                        fields.insert(code_field.clone(), code_val.clone());
+                    } else {
+                        // flat object 行格式（无 fields 包装）
+                        obj.insert(code_field.clone(), code_val.clone());
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// 编码引擎铸号：若字典配置了 codeRule(mode=auto)，为 code_field 为空的行铸业务编码。

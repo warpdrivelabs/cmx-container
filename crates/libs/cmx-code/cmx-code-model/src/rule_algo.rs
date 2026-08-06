@@ -120,7 +120,7 @@ pub async fn evaluate_segments(
 /// - prefix：固定段 + reset_key + 段间 joiner 拼接（单条/批量/预览共用，保证格式一致）
 /// - serial_spec：第一个 serial/dateSerial 段的求值结果（None=无流水段）
 /// - random_segs：所有 random 段的声明（换种子重试用）
-fn build_prefix_and_specs(
+pub fn build_prefix_and_specs(
     rule: &RuleSpec,
     ctx: &ResolveContext,
 ) -> Result<(String, Option<SegmentValue>, Vec<SegmentSpec>)> {
