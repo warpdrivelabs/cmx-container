@@ -282,10 +282,13 @@ function whenRendered (host, selector, cb, tries) {
 
 function readDef (ctx) {
   const p = (ctx && ctx.props) || {}
+  // DAM 优先从 workspace.context 读（框架 openNode 时注入），fallback props，最后 DEFAULTS
+  const wctx = ctx && ctx.host && ctx.host.workspace && ctx.host.workspace.context
+  const get = (k) => (wctx && typeof wctx.get === 'function' ? wctx.get(k) : undefined)
   return {
-    domain: p.domain || DEFAULTS.domain,
-    application: p.application || DEFAULTS.application,
-    module: p.module || DEFAULTS.module,
+    domain: get('domain') || p.domain || DEFAULTS.domain,
+    application: get('application') || p.application || DEFAULTS.application,
+    module: get('module') || p.module || DEFAULTS.module,
     file: p.file || DEFAULTS.file,
     dbId: p.dbId || p.db_id || DEFAULTS.dbId,
   }

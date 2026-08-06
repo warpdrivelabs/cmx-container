@@ -335,10 +335,13 @@ function escAttr (s) {
 /* ─────────────── props 归一 ─────────────── */
 function readDef (ctx) {
   const p = (ctx && ctx.props) || {}
+  // DAM 优先从 workspace.context 读（框架 openNode 时注入），fallback props
+  const wctx = ctx && ctx.host && ctx.host.workspace && ctx.host.workspace.context
+  const get = (k) => (wctx && typeof wctx.get === 'function' ? wctx.get(k) : undefined)
   const def = {
-    domain: p.domain || '',
-    application: p.application || '',
-    module: p.module || '',
+    domain: get('domain') || p.domain || '',
+    application: get('application') || p.application || '',
+    module: get('module') || p.module || '',
     dbId: p.dbId || p.db_id || '',
     initialDictCode: p.dictCode || p.dict || '',
   }

@@ -409,11 +409,19 @@ function whenRendered (host, selector, cb, tries) {
   requestAnimationFrame(() => whenRendered(host, selector, cb, t - 1))
 }
 
-/** 校验并归一 props → def；缺关键坐标则报错（页面通用，坐标必须由菜单给）。 */
+/** 校验并归一 props → def；缺关键坐标则报错（页面通用，坐标必须由菜单给）。
+ *  DAM（domain/application/module）优先从 workspace.context 读取（框架 openNode 时注入），
+ *  fallback 到 view props（向后兼容）。file/dbId/apiPath 等仍在 props。 */
 function readDef (ctx) {
   const p = (ctx && ctx.props) || {}
+  // ctx.host.workspace.context：框架在 openNode 时注入 DAM（短名 domain/application/module）
+  const wctx = ctx && ctx.host && ctx.host.workspace && ctx.host.workspace.context
+  const get = (k) => (wctx && typeof wctx.get === 'function' ? wctx.get(k) : undefined)
   const def = {
-    domain: p.domain, application: p.application, module: p.module, file: p.file,
+    domain: get('domain') || p.domain,
+    application: get('application') || p.application,
+    module: get('module') || p.module,
+    file: p.file,
     dbId: p.dbId || p.db_id || '', apiPath: p.apiPath || '', binary: p.binary === true,
     limit: p.limit,
   }

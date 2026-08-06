@@ -384,6 +384,8 @@ pub fn parse_paging(raw: &Value) -> (i64, i64) {
 /// params 直接产出 `Vec<DataValue>`（按列名走 [`to_dv_by_col`] 派发），与 save 路径统一：
 /// 整型列字符串数字 coerce、TIMESTAMP/DATETIME/DATE 列字符串 coerce、NULL 带类型。
 /// 调用方无需再做 `json_to_datavalue` 转换。
+///
+/// filters 值支持标量（`col = $n`）与数组（`col IN (...)`，前端 loadByKeys 约定）两种形态。
 pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<DataValue>) {
     let col_list = view
         .columns
@@ -410,6 +412,10 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Da
     }
 
     // filters: {col: value}（列白名单校验）。
+    // value 支持两种形态：
+    // - 标量（string/number/bool）→ `col = $n`
+    // - 数组 → `col IN ($n, ...)`（前端 loadByKeys 约定：`filters: { keyField: [keys] }`）；
+    //   空数组 / 全 null 元素 → `false`（无匹配，避免非法 `IN ()`）
     if let Some(filters) = raw.get("filters").and_then(|v| v.as_object()) {
         for (k, v) in filters {
             if !valid_col(view, k) {
@@ -417,6 +423,24 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Da
             }
             if v.is_null() {
                 wheres.push(format!("\"{}\" IS NULL", k));
+            } else if let Some(arr) = v.as_array() {
+                let start = n;
+                let mut phs: Vec<String> = Vec::with_capacity(arr.len());
+                for item in arr {
+                    if item.is_null() {
+                        continue;
+                    }
+                    n += 1;
+                    phs.push(format!("${}", n));
+                    params.push(to_dv_by_col(view, k, item));
+                }
+                if phs.is_empty() {
+                    // 空数组 / 全 null：回退占位参数计数，匹配空集
+                    n = start;
+                    wheres.push("false".to_string());
+                } else {
+                    wheres.push(format!("\"{}\" IN ({})", k, phs.join(", ")));
+                }
             } else {
                 n += 1;
                 wheres.push(format!("\"{}\" = ${}", k, n));
@@ -638,3 +662,95 @@ pub fn row_fields(row: &Value) -> Option<serde_json::Map<String, Value>> {
 // ============================================================================
 mod bulk;
 pub use bulk::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 测试列构造器（仅填 search SQL 相关字段，其余置空）。
+    fn col(name: &str, data_type: &str, is_pk: bool) -> DictColumn {
+        DictColumn {
+            name: name.into(),
+            caption: name.into(),
+            data_type: data_type.into(),
+            is_pk,
+            nullable: true,
+            dim_type: "attribute".into(),
+            ref_dict: String::new(),
+            display_field: String::new(),
+            ref_field: String::new(),
+            physical_field: String::new(),
+            edit: None,
+            edit_settings: None,
+            display: None,
+            extra: None,
+        }
+    }
+
+    fn view() -> DictView {
+        DictView {
+            dict_code: "comp_unit".into(),
+            dict_name: "测试".into(),
+            table_name: "cf_comp_unit".into(),
+            id_field: "id".into(),
+            code_field: "code".into(),
+            label_field: "name".into(),
+            parent_field: None,
+            self_hierarchy: false,
+            columns: vec![
+                col("id", "BIGINT", true),
+                col("code", "VARCHAR", false),
+                col("name", "VARCHAR", false),
+            ],
+            pk: "id".into(),
+            spec: std::sync::Arc::new(cmx_biz::validation::TableSpec {
+                table: "cf_comp_unit".into(),
+                columns: std::collections::HashMap::new(),
+                order: vec![],
+            }),
+            code_rule: None,
+        }
+    }
+
+    /// 标量过滤 → `col = $1`。
+    #[test]
+    fn filters_scalar_eq() {
+        let (sql, _cnt, params) = build_search_sql(&view(), &json!({"filters": {"code": "C1"}}));
+        assert!(sql.contains("\"code\" = $1"), "sql: {sql}");
+        assert_eq!(params.len(), 1);
+        assert!(matches!(&params[0], DataValue::String(s) if s == "C1"));
+    }
+
+    /// 数组过滤 → `col IN (...)`，整型列字符串元素 coerce 为 Int（loadByKeys 约定）。
+    #[test]
+    fn filters_array_in_with_int_coerce() {
+        let (sql, _cnt, params) =
+            build_search_sql(&view(), &json!({"filters": {"id": ["1", "2"]}}));
+        assert!(sql.contains("\"id\" IN ($1, $2)"), "sql: {sql}");
+        assert_eq!(params.len(), 2);
+        assert!(matches!(params[0], DataValue::Int(1)));
+        assert!(matches!(params[1], DataValue::Int(2)));
+    }
+
+    /// 空数组 → `false`（无匹配），不产参数。
+    #[test]
+    fn filters_empty_array_false() {
+        let (sql, _cnt, params) = build_search_sql(&view(), &json!({"filters": {"id": []}}));
+        assert!(sql.contains("WHERE false"), "sql: {sql}");
+        assert!(params.is_empty());
+    }
+
+    /// 数组内 null 元素被跳过；全 null 退化为 false。
+    #[test]
+    fn filters_array_skips_nulls() {
+        let (sql, _cnt, params) =
+            build_search_sql(&view(), &json!({"filters": {"code": ["C1", null]}}));
+        assert!(sql.contains("\"code\" IN ($1)"), "sql: {sql}");
+        assert_eq!(params.len(), 1);
+
+        let (sql2, _c2, params2) =
+            build_search_sql(&view(), &json!({"filters": {"code": [null]}}));
+        assert!(sql2.contains("WHERE false"), "sql: {sql2}");
+        assert!(params2.is_empty());
+    }
+}

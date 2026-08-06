@@ -32,6 +32,7 @@ impl SegmentResolver for RefResolver {
 
         // 取字段值：优先 refField（树形引用——钩子层把父记录的该字段值以 refField 名塞进 attrs）
         // 典型：{"field":"parent_id","refField":"code"} → 取 attrs["code"]（父记录的 code）
+        // refField 配了但 attrs 中取不到 → 回退取 field（注：model 层不依赖 tracing，日志由调用方处理）
         let ref_field = seg.get_str("refField");
         let raw = ref_field
             .and_then(|rf| ctx.attr_str(rf))

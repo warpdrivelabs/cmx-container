@@ -2,10 +2,12 @@
 //!
 //! 对应方案 §05。默认关闭——只有连号域（凭证号/发票号）才启用。
 
-use cmx_code_model::error::{CodeError, Result};
+use cmx_code_model::error::Result;
 use cmx_core::model::cell::DataValue;
 use cmx_database_pg::get_default_pg_db_manager;
 use cmx_utils::next_pk_id;
+
+use super::rule_store::db_err;
 
 /// 取最小断号（enable_gap=true 时优先填补断号）。
 ///
@@ -25,7 +27,7 @@ pub async fn take_gap(prefix: &str, width: usize, db_id: &str) -> Result<Option<
             "code_gap",
         )
         .await
-        .map_err(|e| CodeError::Database(format!("查询断号失败：{e}")))?;
+        .map_err(|e| db_err("查询断号", e))?;
 
     let Some(row) = ds.rows.first() else {
         return Ok(None);
@@ -44,7 +46,7 @@ pub async fn take_gap(prefix: &str, width: usize, db_id: &str) -> Result<Option<
     let del_sql = "DELETE FROM cmx_code_gap WHERE id = $1";
     mm.execute_sql_with_datavalues(db_id, None, del_sql, vec![DataValue::Int(gap_id)])
         .await
-        .map_err(|e| CodeError::Database(format!("删除断号失败：{e}")))?;
+        .map_err(|e| db_err("删除断号", e))?;
 
     tracing::debug!(
         target: "cmx_code::gap",
@@ -76,7 +78,7 @@ pub async fn record_gap(
         ],
     )
     .await
-    .map_err(|e| CodeError::Database(format!("记录断号失败：{e}")))?;
+    .map_err(|e| db_err("记录断号", e))?;
     Ok(())
 }
 
@@ -96,7 +98,7 @@ pub async fn query_gaps(prefix: Option<&str>, db_id: &str) -> Result<Vec<serde_j
     let ds = mm
         .query_sql_with_datavalues(db_id, None, sql, params, "code_gaps")
         .await
-        .map_err(|e| CodeError::Database(format!("查询断号列表失败：{e}")))?;
+        .map_err(|e| db_err("查询断号列表", e))?;
 
     let mut result = Vec::new();
     for row in &ds.rows {

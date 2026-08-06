@@ -825,13 +825,17 @@ function whenRendered(host, sel, cb, t) {
   requestAnimationFrame(() => whenRendered(host, sel, cb, n - 1))
 }
 
-// 从 ctx.props 读取字典坐标四元组（参照 data-editor.js readDef），不写死默认值。
+// 从 workspace.context（框架 openNode 注入）或 ctx.props 读取字典坐标四元组，不写死默认值。
 // domain/application/module 缺任一返回 null（调用方据提示，不用兜底默认）。
 function readCoord(ctx) {
   const p = (ctx && ctx.props) || {}
+  const wctx = ctx && ctx.host && ctx.host.workspace && ctx.host.workspace.context
+  const get = (k) => (wctx && typeof wctx.get === 'function' ? wctx.get(k) : undefined)
   const c = {
-    domain: p.domain || '', application: p.application || '',
-    module: p.module || '', dbId: p.dbId || p.db_id || '',
+    domain: get('domain') || p.domain || '',
+    application: get('application') || p.application || '',
+    module: get('module') || p.module || '',
+    dbId: p.dbId || p.db_id || '',
   }
   return (c.domain && c.application && c.module) ? c : null
 }

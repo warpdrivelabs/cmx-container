@@ -48,6 +48,29 @@ impl CodeMinter for CodeEngine {
     }
 }
 
+/// 反序列化 codeRule + target + 查规则表 + 合并局部覆盖（mint_via_minter / _batch 共用）。
+///
+/// 返回 `(rule, target, advance)` 三元组，供后续单条/批量铸号使用。
+async fn load_rule_for_mint(
+    code_rule: &serde_json::Value,
+    target: &serde_json::Value,
+    db_id: &str,
+    txn_id: Option<&str>,
+) -> Result<(RuleSpec, Target, PgAdvance)> {
+    let cr: CodeRule = serde_json::from_value(code_rule.clone())
+        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("codeRule 反序列化失败：{e}")))?;
+    let tgt: Target = serde_json::from_value(target.clone())
+        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("target 反序列化失败：{e}")))?;
+    let rule_code = cr.rule_code.as_deref().ok_or_else(|| {
+        cmx_code_model::error::CodeError::NoMatchingRule("codeRule 缺 ruleCode".into())
+    })?;
+    // 铸号时不按 DAM 过滤——ruleCode 全局唯一
+    let rule_spec = rule_store::get_rule(rule_code, db_id, &crate::handlers::Dam::default()).await?;
+    let rule = cr.merge_with(rule_spec);
+    let advance = PgAdvance::new(db_id, txn_id);
+    Ok((rule, tgt, advance))
+}
+
 /// 内部铸号桥接：Value 参数 → 强类型 → engine.mint。
 async fn mint_via_minter(
     code_rule: &serde_json::Value,
@@ -56,29 +79,8 @@ async fn mint_via_minter(
     db_id: &str,
     txn_id: Option<&str>,
 ) -> Result<String> {
-    // 反序列化 codeRule 挂载点声明（失败直接报错，不静默兜底——避免「缺 ruleCode」误导）
-    let cr: CodeRule = serde_json::from_value(code_rule.clone())
-        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("codeRule 反序列化失败：{e}")))?;
-
-    // 反序列化 target（失败直接报错）
-    let tgt: Target = serde_json::from_value(target.clone())
-        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("target 反序列化失败：{e}")))?;
-
-    // 取 ruleCode，查规则表拿 RuleSpec
-    let rule_code = cr.rule_code.as_deref().ok_or_else(|| {
-        cmx_code_model::error::CodeError::NoMatchingRule(
-            "codeRule 缺 ruleCode".into(),
-        )
-    })?;
-
-    // 铸号时不按 DAM 过滤——字典/单据可引用任意模块的规则（ruleCode 全局唯一）
-    let rule_spec = rule_store::get_rule(rule_code, db_id, &crate::handlers::Dam::default()).await?;
-    // 应用挂载点局部覆盖
-    let rule = cr.merge_with(rule_spec);
-
+    let (rule, tgt, advance) = load_rule_for_mint(code_rule, target, db_id, txn_id).await?;
     let ctx = ResolveContext::new(db_id, txn_id).with(attrs.clone());
-    let advance = PgAdvance::new(db_id, txn_id);
-
     mint(&rule, &tgt, &ctx, &advance).await
 }
 
@@ -100,20 +102,8 @@ async fn mint_via_minter_batch(
     db_id: &str,
     txn_id: Option<&str>,
 ) -> Result<Vec<String>> {
-    // 反序列化 codeRule + target（失败直接报错，不静默兜底）
-    let cr: CodeRule = serde_json::from_value(code_rule.clone())
-        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("codeRule 反序列化失败：{e}")))?;
-    let tgt: Target = serde_json::from_value(target.clone())
-        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("target 反序列化失败：{e}")))?;
-
-    let rule_code = cr.rule_code.as_deref().ok_or_else(|| {
-        cmx_code_model::error::CodeError::NoMatchingRule("codeRule 缺 ruleCode".into())
-    })?;
-
-    // 查规则表一次（不按 DAM 过滤，ruleCode 全局唯一）
-    let rule_spec = rule_store::get_rule(rule_code, db_id, &crate::handlers::Dam::default()).await?;
-    let rule = cr.merge_with(rule_spec);
-    let advance = PgAdvance::new(db_id, txn_id);
+    // 反序列化 codeRule + target + 查规则表（共用 load_rule_for_mint）
+    let (rule, tgt, advance) = load_rule_for_mint(code_rule, target, db_id, txn_id).await?;
 
     let mut results: Vec<Option<String>> = vec![None; rows.len()];
 
@@ -157,11 +147,13 @@ async fn mint_via_minter_batch(
         }
     }
 
-    // 收集结果：未铸到号的行（理论上不该发生）用空串占位
+    // 收集结果：所有行都应铸到号，出现 None 说明 prefix 分组逻辑有 bug
     let final_codes: Vec<String> = results
         .into_iter()
-        .map(|opt| opt.unwrap_or_default())
-        .collect();
+        .map(|opt| opt.ok_or_else(|| {
+            cmx_code_model::error::CodeError::Internal("批量铸号：某行未分配到号（prefix 分组异常）".into())
+        }))
+        .collect::<Result<Vec<_>>>()?;
     Ok(final_codes)
 }
 
@@ -187,6 +179,9 @@ pub async fn mint_batch(
     advance: &dyn Advance,
     count: usize,
 ) -> Result<Vec<String>> {
+    if count == 0 {
+        return Ok(Vec::new());
+    }
     let prefix = rule_algo::resolve_fixed_segments(rule, ctx)?;
     let width = rule.serial_width();
     let start = rule.serial_start();

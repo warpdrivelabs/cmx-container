@@ -334,8 +334,12 @@ export default {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
       const props = (ctx && ctx.props) || {}
+      // DAM 优先从 workspace.context 读（框架 openNode 时注入），fallback props
+      const wctx = ctx && ctx.host && ctx.host.workspace && ctx.host.workspace.context
+      const get = (k) => (wctx && typeof wctx.get === 'function' ? wctx.get(k) : undefined)
       state.dbId = props.dbId || props.db_id || ''
-      state.domain = props.domain || ''; state.application = props.application || ''
+      state.domain = get('domain') || props.domain || ''
+      state.application = get('application') || props.application || ''
       try { await Promise.all([load(), loadCounts()]) } catch (e) { console.error('[cr-todo] init fail', e) }
       if (host) whenRendered(host, '.pg', (r) => bind(r))
       return `<style>${styleCss()}</style>${viewHtml()}`
