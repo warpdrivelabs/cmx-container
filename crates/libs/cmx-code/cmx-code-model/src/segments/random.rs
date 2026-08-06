@@ -94,7 +94,7 @@ fn gen_range(seg: &SegmentSpec) -> Result<String> {
 /// `exclude_ambiguous=true` 时：
 /// - `alpha` / `alnum`：去除易混淆字符 0/O/1/I/l/Z/2/B/8（这些池默认已去部分，此处兜底全去）
 /// - `digit` / `hex`：**不过滤**（纯数字/16 进制无字母歧义，过滤会删 0/2 导致池缺失）
-/// - 用户自定义字符串（other）：按 alpha/alnum 同款过滤（保守，防用户池里混入歧义字符）
+/// - 用户自定义字符串（other / custom）：**不过滤**（尊重用户输入，用户自己保证池里无歧义字符）
 fn charset_pool(name: &str, exclude_ambiguous: bool) -> String {
     // digit / hex 是纯数字/16进制池，无字母歧义，exclude_ambiguous 对它们无效（方案 §6.2）
     let (pool, should_filter) = match name {

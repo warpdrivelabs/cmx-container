@@ -229,6 +229,7 @@ fn default_cascade_scope() -> Scope {
 
 /// 级联回填范围。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum Scope {
     /// 仅直接子表
     Children,

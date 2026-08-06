@@ -59,12 +59,16 @@ fn dam_from(headers: &HeaderMap) -> Dam {
     }
 }
 
-/// 错误转 ApiResp。
+/// 错误转 ApiResp（按错误类型分 status code：参数错 400 / 未找到 404 / 内部错 500）。
 fn err_resp(e: cmx_code_model::error::CodeError) -> Json<ApiResp<Value>> {
-    Json(ApiResp::fail(
-        500u16,
-        &e.to_string(),
-    ))
+    let status = match &e {
+        cmx_code_model::error::CodeError::InvalidSegment(_)
+        | cmx_code_model::error::CodeError::PatternMismatch { .. } => 400u16,
+        cmx_code_model::error::CodeError::NoMatchingRule(_)
+        | cmx_code_model::error::CodeError::RefFieldMissing(_) => 404u16,
+        _ => 500u16,
+    };
+    Json(ApiResp::fail(status, &e.to_string()))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -234,10 +238,38 @@ pub async fn preview(
     }
 }
 
+/// 批量铸号共用逻辑（preview_batch / generate_batch 复用）。
+async fn run_batch(
+    body: BatchBody,
+    db_id: &str,
+    label: &str,
+    with_warning: bool,
+) -> Json<ApiResp<Value>> {
+    let rule_code = match &body.rule_code {
+        Some(rc) => rc.clone(),
+        None => return Json(ApiResp::fail(400u16, &format!("批量{label}请求缺 ruleCode"))),
+    };
+    if body.rows.is_empty() {
+        return Json(ApiResp::ok(json!({ "codes": [], "warning": "rows 为空" })));
+    }
+    let code_rule = serde_json::json!({ "ruleCode": rule_code, "mode": "auto", "field": body.target.field });
+    let target_val = serde_json::to_value(&body.target).unwrap_or_default();
+    let minter = crate::engine::CodeEngine;
+    match <crate::engine::CodeEngine as cmx_traits::code::CodeMinter>::mint_batch(
+        &minter, &code_rule, &target_val, &body.rows, db_id, None,
+    ).await {
+        Ok(codes) => {
+            let mut data = json!({ "codes": codes, "ruleCode": rule_code });
+            if with_warning {
+                data["warning"] = json!("预览码非定稿，最终以保存时为准");
+            }
+            Json(ApiResp::ok(data))
+        }
+        Err(e) => Json(ApiResp::fail(500u16, &format!("批量{label}失败：{e}"))),
+    }
+}
+
 /// POST /api/code/preview/batch —— 批量预览（N 行同表，不落库不占号）。
-///
-/// 走 `CodeEngine::mint_batch`（engine 内按 prefix 分组 + buffer 推进，方案 §4.5）。
-/// 预览不落库——真正的号分配发生在 saver 落库事务内（§8.1）。
 pub async fn preview_batch(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -245,37 +277,7 @@ pub async fn preview_batch(
     Json(body): Json<BatchBody>,
 ) -> Json<ApiResp<Value>> {
     let db_id = db_id_from(&headers).await;
-    let rule_code = match &body.rule_code {
-        Some(rc) => rc.clone(),
-        None => return Json(ApiResp::fail(400u16, "批量预览请求缺 ruleCode")),
-    };
-
-    if body.rows.is_empty() {
-        return Json(ApiResp::ok(json!({ "codes": [], "warning": "rows 为空" })));
-    }
-
-    // 构造 codeRule Value（mint_batch trait 接收 Value）
-    let code_rule = serde_json::json!({ "ruleCode": rule_code, "mode": "auto", "field": body.target.field });
-    let target_val = serde_json::to_value(&body.target).unwrap_or_default();
-
-    let minter = crate::engine::CodeEngine;
-    match <crate::engine::CodeEngine as cmx_traits::code::CodeMinter>::mint_batch(
-        &minter,
-        &code_rule,
-        &target_val,
-        &body.rows,
-        &db_id,
-        None,
-    )
-    .await
-    {
-        Ok(codes) => Json(ApiResp::ok(json!({
-            "codes": codes,
-            "ruleCode": rule_code,
-            "warning": "预览码非定稿，最终以保存时为准"
-        }))),
-        Err(e) => Json(ApiResp::fail(500u16, &format!("批量预览失败：{e}"))),
-    }
+    run_batch(body, &db_id, "预览", true).await
 }
 
 /// POST /api/code/generate —— 权威生成（事务内铸号）。
@@ -321,35 +323,7 @@ pub async fn generate_batch(
     Json(body): Json<BatchBody>,
 ) -> Json<ApiResp<Value>> {
     let db_id = db_id_from(&headers).await;
-    let rule_code = match &body.rule_code {
-        Some(rc) => rc.clone(),
-        None => return Json(ApiResp::fail(400u16, "批量生成请求缺 ruleCode")),
-    };
-
-    if body.rows.is_empty() {
-        return Json(ApiResp::ok(json!({ "codes": [], "warning": "rows 为空" })));
-    }
-
-    let code_rule = serde_json::json!({ "ruleCode": rule_code, "mode": "auto", "field": body.target.field });
-    let target_val = serde_json::to_value(&body.target).unwrap_or_default();
-
-    let minter = crate::engine::CodeEngine;
-    match <crate::engine::CodeEngine as cmx_traits::code::CodeMinter>::mint_batch(
-        &minter,
-        &code_rule,
-        &target_val,
-        &body.rows,
-        &db_id,
-        None,
-    )
-    .await
-    {
-        Ok(codes) => Json(ApiResp::ok(json!({
-            "codes": codes,
-            "ruleCode": rule_code
-        }))),
-        Err(e) => Json(ApiResp::fail(500u16, &format!("批量生成失败：{e}"))),
-    }
+    run_batch(body, &db_id, "生成", false).await
 }
 
 #[derive(Deserialize)]
@@ -413,26 +387,30 @@ pub async fn gap_list(
     }
 }
 
+/// gap_take 请求体（强类型，替代 Json<Value> 手解析）。
+#[derive(Deserialize)]
+pub struct GapTakeBody {
+    #[serde(default)]
+    pub prefix: String,
+    #[serde(default = "default_gap_width")]
+    pub width: u64,
+}
+
+fn default_gap_width() -> u64 {
+    4
+}
+
 /// POST /api/code/gaps/take —— 手动取一个断号填补。
 pub async fn gap_take(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
     headers: HeaderMap,
-    Json(body): Json<Value>,
+    Json(body): Json<GapTakeBody>,
 ) -> Json<ApiResp<Value>> {
     let db_id = db_id_from(&headers).await;
-    let prefix = body
-        .get("prefix")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let width = body
-        .get("width")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(4) as usize;
-
-    match gap_store::take_gap(prefix, width, &db_id).await {
+    match gap_store::take_gap(&body.prefix, body.width as usize, &db_id).await {
         Ok(Some(serial)) => Json(ApiResp::ok(json!({
-            "prefix": prefix,
+            "prefix": body.prefix,
             "serial": serial,
             "taken": true,
         }))),

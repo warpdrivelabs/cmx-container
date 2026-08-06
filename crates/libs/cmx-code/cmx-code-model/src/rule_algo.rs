@@ -50,9 +50,16 @@ pub async fn evaluate_segments(
     let (prefix, serial_spec, random_segs) = build_prefix_and_specs(rule, ctx)?;
 
     // ② 无流水段但有随机段 → 随机段 UNIQUE 冲突重试（方案 §6.3，换种子重试）
+    // serial 与 random 互斥（设计文档 §12 的示例里两者从不混用）
+    if serial_spec.is_some() && !random_segs.is_empty() {
+        return Err(CodeError::InvalidSegment(
+            "规则不能同时包含流水段(serial/dateSerial)和随机段(random)".into(),
+        ));
+    }
+
     if serial_spec.is_none() {
         if !random_segs.is_empty() {
-            return mint_random_code(&prefix, &random_segs, target, advance).await;
+            return mint_random_code(&prefix, &random_segs, target, advance, ctx).await;
         }
         // 无流水无随机：纯固定码
         return Ok(prefix);
@@ -159,6 +166,7 @@ async fn mint_random_code(
     random_segs: &[SegmentSpec],
     target: &Target,
     advance: &dyn Advance,
+    ctx: &ResolveContext,
 ) -> Result<String> {
     const MAX_RETRY_RANDOM: u32 = 16;
     let registry = SegmentRegistry::new();
@@ -168,7 +176,7 @@ async fn mint_random_code(
         let mut random_parts: Vec<String> = Vec::new();
         for seg in random_segs {
             if let SegmentValue::NeedsUniqueCheck { candidate } =
-                registry.resolve(seg, &ResolveContext::for_test())?
+                registry.resolve(seg, ctx)?
             {
                 random_parts.push(candidate);
             }
@@ -337,5 +345,41 @@ mod tests {
         assert_eq!(prefix_batch, prefix_single, "单条与批量 prefix 必须一致");
         // const "V" + joiner "-"（serial 的 reset_key=_global_ 不进 prefix，但段间 joiner 保留）
         assert_eq!(prefix_batch, "V-");
+    }
+
+    /// random 段不进 prefix（只有 const/date/ref/custom + reset_key 进）。
+    #[test]
+    fn test_prefix_excludes_random() {
+        let rule: RuleSpec = serde_json::from_str(
+            r#"{
+                "segments": [
+                    {"type": "const", "value": "INV"},
+                    {"type": "random", "mode": "charset", "width": 6, "charset": "alnum"}
+                ]
+            }"#,
+        )
+        .unwrap();
+        let ctx = ResolveContext::for_test();
+        let prefix = resolve_fixed_segments(&rule, &ctx).unwrap();
+        assert_eq!(prefix, "INV"); // random 段不进 prefix
+    }
+
+    /// serial + random 混用应报错（互斥）。
+    #[tokio::test]
+    async fn test_serial_random_mutex() {
+        let rule: RuleSpec = serde_json::from_str(
+            r#"{
+                "segments": [
+                    {"type": "const", "value": "X"},
+                    {"type": "serial", "width": 4},
+                    {"type": "random", "mode": "charset", "width": 4}
+                ]
+            }"#,
+        )
+        .unwrap();
+        let target = Target::dct("t", "code");
+        let ctx = ResolveContext::for_test();
+        let result = evaluate_segments(&rule, &target, &ctx, &StubAdvance).await;
+        assert!(result.is_err(), "serial + random 混用必须报错");
     }
 }

@@ -532,4 +532,33 @@ mod tests {
         let r = make_rule("r", None, Some(r#"{"frob":["x","y"]}"#), 100);
         assert!(!cond_matches(&r, &json!({"x": "y"})));
     }
+
+    #[test]
+    fn test_cond_json_or() {
+        let r = make_rule("r", None, Some(r#"{"or":[{"eq":["t","SA"]},{"eq":["t","AR"]}]}"#), 100);
+        assert!(cond_matches(&r, &json!({"t":"SA"})));
+        assert!(cond_matches(&r, &json!({"t":"AR"})));
+        assert!(!cond_matches(&r, &json!({"t":"GL"})));
+    }
+
+    #[test]
+    fn test_cond_json_not() {
+        let r = make_rule("r", None, Some(r#"{"not":{"eq":["t","SA"]}}"#), 100);
+        assert!(!cond_matches(&r, &json!({"t":"SA"})));
+        assert!(cond_matches(&r, &json!({"t":"AR"})));
+    }
+
+    #[test]
+    fn test_cond_json_exists() {
+        let r = make_rule("r", None, Some(r#"{"exists":"ref_no"}"#), 100);
+        assert!(cond_matches(&r, &json!({"ref_no":"R1"})));
+        assert!(!cond_matches(&r, &json!({"other":"x"})));
+    }
+
+    #[test]
+    fn test_cond_json_ne() {
+        let r = make_rule("r", None, Some(r#"{"ne":["t","SA"]}"#), 100);
+        assert!(!cond_matches(&r, &json!({"t":"SA"})));
+        assert!(cond_matches(&r, &json!({"t":"AR"})));
+    }
 }

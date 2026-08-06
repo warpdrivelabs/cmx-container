@@ -1286,11 +1286,16 @@ async fn mint_codes_for_changeset(
                     }
                 }
                 Err(e) => {
+                    // 收集失败行的 id，便于后续 NOT NULL 校验报错时定位根因（铸号失败 → code 空 → NOT NULL 违反）
+                    let failed_ids: Vec<String> = pending.iter()
+                        .filter_map(|(_, a)| a.get("id").and_then(value_to_id_string))
+                        .collect();
                     tracing::warn!(
                         target: "cmx_doc::mint_code",
                         table = %layer.table_name, field = %field, error = %e,
                         row_count = pending.len(),
-                        "编码引擎批量铸号失败，跳过这些行（不阻断保存）"
+                        failed_row_ids = ?failed_ids,
+                        "编码引擎批量铸号失败，跳过这些行（不阻断保存，但后续 NOT NULL 校验可能报错）"
                     );
                 }
             }
