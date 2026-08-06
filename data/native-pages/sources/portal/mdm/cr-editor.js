@@ -84,8 +84,9 @@ function openTab(host, caption, nativePage, context, opts = {}) {
   const key = opts.single ? 'single' : (ctxKey || Date.now())
   app.openNode({
     id: `${nativePage}-${key}`, name: nativePage, caption, type: 'workspace-node',
-    // 带上域/应用（来自当前页 ctx.props，不写死）：F5 重建动态页时据此切换左侧菜单与右上角域
-    domain_code: (coord && coord.domain) || '', application_code: (coord && coord.application) || '',
+    // 带上域/应用（来自当前页 ctx.props，不写死）：F5 重建动态页时据此切换左侧菜单与右上角域。
+    // 用 camelCase（domainCode）与 menu-cache 标准化一致，openNode 注入 workspace.context 也用此名。
+    domainCode: (coord && coord.domain) || '', applicationCode: (coord && coord.application) || '',
     workspace: { content: { caption, views: [{ type: 'native_pages', native_page: nativePage, view: 'content' }] } },
   }, { initialContext: context })
 }
@@ -197,10 +198,18 @@ function whenRendered(host, sel, cb, t) {
   requestAnimationFrame(() => whenRendered(host, sel, cb, n - 1))
 }
 
-// 从 ctx.props 读取字典坐标四元组（不写死默认值）；缺 domain/application/module 返回 null。
+// 从 workspace.context（框架 openNode 注入）或 ctx.props 读取字典坐标四元组（不写死默认值）；
+// 缺 domain/application/module 返回 null。
 function readCoord(ctx) {
   const p = (ctx && ctx.props) || {}
-  const c = { domain: p.domain || '', application: p.application || '', module: p.module || '', dbId: p.dbId || p.db_id || '' }
+  const wctx = ctx && ctx.host && ctx.host.workspace && ctx.host.workspace.context
+  const get = (k) => (wctx && typeof wctx.get === 'function' ? wctx.get(k) : undefined)
+  const c = {
+    domain: get('domain') || p.domain || '',
+    application: get('application') || p.application || '',
+    module: get('module') || p.module || '',
+    dbId: p.dbId || p.db_id || '',
+  }
   return (c.domain && c.application && c.module) ? c : null
 }
 
