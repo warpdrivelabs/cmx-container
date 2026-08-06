@@ -648,17 +648,28 @@ async fn mint_inserted_codes_inplace(view: &DictView, bucket: &mut Value, db_id:
     let Some(ins) = bucket.get_mut("inserted").and_then(|v| v.as_array_mut()) else {
         return;
     };
-    // 提取每行的 fields Map（与 apply_inserts / validate_bucket 同款 row_fields）
+    // 提取每行的 fields Map（与 apply_inserts / validate_bucket 同款 row_fields）。
+    // 用保留索引的遍历（非 filter_map），确保 rows[i] 与 ins[i] 一一对应，
+    // 避免 row_fields 对异常行返回 None 时索引错位。
+    let rows_opt: Vec<Option<serde_json::Map<String, Value>>> =
+        ins.iter().map(row_fields).collect();
     let mut rows: Vec<serde_json::Map<String, Value>> =
-        ins.iter().filter_map(row_fields).collect();
+        rows_opt.iter().filter_map(|r| r.clone()).collect();
     if rows.is_empty() {
         return;
     }
     // 铸号（写回 rows 的 code_field）
     mint_codes_for_inserts(view, &mut rows, db_id).await;
-    // 把铸号结果写回 bucket 的 inserted 行（fields[code_field]）
+    // 把铸号结果写回 bucket 的 inserted 行（fields[code_field]）。
+    // rows 是 filter_map 后的紧凑数组，需用独立指针 j 遍历，跳过原本 None 的行。
     let code_field = &view.code_field;
-    for (i, row) in rows.iter().enumerate() {
+    let mut j = 0usize;
+    for (i, opt) in rows_opt.iter().enumerate() {
+        if opt.is_none() {
+            continue;
+        }
+        let row = &rows[j];
+        j += 1;
         if let Some(code_val) = row.get(code_field) {
             // code 非空才写回（铸号失败时 code 仍为空，不覆盖）
             if !code_val.is_null() && code_val.as_str().map(|s| !s.is_empty()).unwrap_or(false) {

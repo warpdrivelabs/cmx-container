@@ -415,7 +415,7 @@ pub async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
         columns,
         pk,
         spec,
-        code_rule: t.get("codeRule").cloned(),
+        code_rule: dm.get("codeRule").cloned(),
     })
 }
 
