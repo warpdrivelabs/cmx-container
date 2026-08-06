@@ -316,7 +316,12 @@
         "documentSourceFields",
         "documentLifecycleFields",
         "documentTechnicalFields"
-      ]
+      ],
+      "codeRule": {
+        "mode": "auto",
+        "field": "doc_no",
+        "ruleCode": "MDM_GYS"
+      }
     },
     {
       "level": "L2",
@@ -387,7 +392,8 @@
       "documentFieldSets": [
         "documentLevelFields",
         "documentTechnicalFields"
-      ]
+      ],
+      "parentTable": "cv_mdm_apply"
     }
   ],
   "voucherStatusFlow": {
@@ -469,5 +475,5 @@
       }
     ]
   },
-  "updatedAt": "2026-08-04T21:15:00.000Z"
+  "updatedAt": "2026-08-05T12:25:01.856Z"
 }
