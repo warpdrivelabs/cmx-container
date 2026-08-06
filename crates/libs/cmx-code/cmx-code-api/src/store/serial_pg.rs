@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use cmx_code_model::advance::Advance;
-use cmx_code_model::error::{CodeError, Result};
+use cmx_code_model::error::Result;
 use cmx_code_model::spec::Target;
 use cmx_core::model::cell::DataValue;
 use cmx_database_pg::get_default_pg_db_manager;
@@ -67,7 +67,7 @@ impl Advance for PgAdvance {
                 "code_max",
             )
             .await
-            .map_err(|e| CodeError::Database(format!("反查 max 失败：{e}")))?;
+            .map_err(|e| super::rule_store::db_err("反查 max", e))?;
 
         let db_max = ds
             .rows

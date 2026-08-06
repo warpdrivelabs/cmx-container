@@ -8,6 +8,46 @@ use cmx_utils::next_pk_id;
 
 use crate::handlers::Dam;
 
+/// 从 `cmx_database_pg::Error` 抽出 PostgreSQL 真实错误明细（message + DETAIL + 约束名）。
+///
+/// 背景：tokio-postgres 的 `Error` 顶层 `Display` 恒为无信息的 `db error`——真正的
+/// message / SQLSTATE / constraint 藏在 `as_db_error()` 里。若直接 `format!("{e}")`
+/// 会把「唯一键冲突」等可翻译错误塌缩成 `db error`，`err_resp` 无从识别 409。
+///
+/// 拼出含 `unique constraint "..."` 等稳定子串的完整串，交给 handler 层 `err_resp`
+/// 判别唯一冲突。对齐 `cmx-rpt-store-pg` / `cmx-dct-store-pg` 的 `pg_detail` 范本。
+pub(crate) fn pg_detail(e: &cmx_database_pg::Error) -> String {
+    if let cmx_database_pg::Error::Postgres(pg) = e
+        && let Some(db) = pg.as_db_error()
+    {
+        let mut s = db.message().to_string();
+        if let Some(d) = db.detail() {
+            s.push(' ');
+            s.push_str(d);
+        }
+        if let Some(c) = db.constraint() {
+            s.push_str(&format!(" constraint \"{c}\""));
+        }
+        return s;
+    }
+    e.to_string()
+}
+
+/// 把 PG 执行错误包成 `CodeError::Database`（带真实明细，而非塌缩的 `db error`）。
+///
+/// `label` 为操作名（如"创建规则"），拼进错误消息便于定位。
+pub(crate) fn db_err(label: &str, e: cmx_database_pg::Error) -> CodeError {
+    let detail = pg_detail(&e);
+    // 日志侧记录完整明细（排障用），响应侧由 handler `err_resp` 判别唯一冲突。
+    tracing::error!(
+        target: "cmx_code::store",
+        op = label,
+        pg_detail = %detail,
+        "规则库 DB 操作失败"
+    );
+    CodeError::Database(format!("{label}失败：{detail}"))
+}
+
 /// DAM 全为空 → 不按模块过滤（返回全部规则）；任一非空 → 按非空维度过滤。
 ///
 /// `start_idx` 是占位符起始编号（列表查询无前置参数 → 1；单条查询 rule_code 占 $1 → 2）。
@@ -66,7 +106,7 @@ pub async fn create_rule(rule: &RuleSpec, db_id: &str) -> Result<()> {
     ];
     mm.execute_sql_with_datavalues(db_id, None, sql, params)
         .await
-        .map_err(|e| CodeError::Database(format!("创建规则失败：{e}")))?;
+        .map_err(|e| db_err("创建规则", e))?;
     Ok(())
 }
 
@@ -84,7 +124,7 @@ pub async fn get_rule(rule_code: &str, db_id: &str, dam: &Dam) -> Result<RuleSpe
     let ds = mm
         .query_sql_with_datavalues(db_id, None, &sql, params, "code_rule")
         .await
-        .map_err(|e| CodeError::Database(format!("查询规则失败：{e}")))?;
+        .map_err(|e| db_err("查询规则", e))?;
 
     let row = ds.rows.first().ok_or_else(|| {
         CodeError::NoMatchingRule(format!("规则 {rule_code} 不存在"))
@@ -104,7 +144,7 @@ pub async fn list_rules(db_id: &str, dam: &Dam) -> Result<Vec<serde_json::Value>
     let ds = mm
         .query_sql_with_datavalues(db_id, None, &sql, dam_params, "code_rules")
         .await
-        .map_err(|e| CodeError::Database(format!("列出规则失败：{e}")))?;
+        .map_err(|e| db_err("列出规则", e))?;
 
     let mut result = Vec::new();
     for row in &ds.rows {
@@ -143,7 +183,7 @@ pub async fn update_rule(rule_code: &str, rule: &RuleSpec, db_id: &str) -> Resul
     ];
     mm.execute_sql_with_datavalues(db_id, None, sql, params)
         .await
-        .map_err(|e| CodeError::Database(format!("更新规则失败：{e}")))?;
+        .map_err(|e| db_err("更新规则", e))?;
     Ok(())
 }
 
@@ -159,7 +199,7 @@ pub async fn delete_rule(rule_code: &str, db_id: &str, dam: &Dam) -> Result<()> 
     params.extend(dam_params);
     mm.execute_sql_with_datavalues(db_id, None, &sql, params)
         .await
-        .map_err(|e| CodeError::Database(format!("删除规则失败：{e}")))?;
+        .map_err(|e| db_err("删除规则", e))?;
     Ok(())
 }
 
@@ -247,7 +287,7 @@ pub async fn query_rules(rule_code: &str, db_id: &str, dam: &Dam) -> Result<Vec<
     let ds = mm
         .query_sql_with_datavalues(db_id, None, &sql, params, "code_rules")
         .await
-        .map_err(|e| CodeError::Database(format!("查询规则候选失败：{e}")))?;
+        .map_err(|e| db_err("查询规则候选", e))?;
 
     let mut rules = Vec::new();
     for row in &ds.rows {

@@ -59,16 +59,59 @@ fn dam_from(headers: &HeaderMap) -> Dam {
     }
 }
 
-/// 错误转 ApiResp（按错误类型分 status code：参数错 400 / 未找到 404 / 内部错 500）。
+/// 错误转 ApiResp（按错误类型分 status code：参数错 400 / 未找到 404 / 唯一冲突 409 / 内部错 500）。
+///
+/// 唯一冲突识别：`CodeError::Database(msg)` 的 `msg` 经 store 层 `pg_detail` 已含
+/// `duplicate key value violates unique constraint` 等稳定子串（对齐
+/// `cmx_biz::errcode::classify_db_error` 逻辑），命中则返 409 + 中文友好提示，
+/// 并从 PG DETAIL `Key (rule_code)=(XXX) already exists` 抽出具体编码。
 fn err_resp(e: cmx_code_model::error::CodeError) -> Json<ApiResp<Value>> {
-    let status = match &e {
-        cmx_code_model::error::CodeError::InvalidSegment(_)
-        | cmx_code_model::error::CodeError::PatternMismatch { .. } => 400u16,
-        cmx_code_model::error::CodeError::NoMatchingRule(_)
-        | cmx_code_model::error::CodeError::RefFieldMissing(_) => 404u16,
-        _ => 500u16,
+    use cmx_code_model::error::CodeError;
+    let (status, msg) = match &e {
+        CodeError::InvalidSegment(_) | CodeError::PatternMismatch { .. } => {
+            (400u16, e.to_string())
+        }
+        CodeError::NoMatchingRule(_) | CodeError::RefFieldMissing(_) => {
+            (404u16, e.to_string())
+        }
+        CodeError::Database(detail) => {
+            let lower = detail.to_ascii_lowercase();
+            if lower.contains("duplicate key") || lower.contains("unique constraint") {
+                // 从 PG DETAIL「Key (rule_code)=(DOC_NO) already exists」抽 rule_code
+                let code = extract_duplicate_key(detail);
+                let friendly = match code {
+                    Some(c) => format!("规则编码「{c}」已存在，请更换后再试"),
+                    None => "规则编码已存在，请更换后再试".to_string(),
+                };
+                (409u16, friendly)
+            } else {
+                (500u16, e.to_string())
+            }
+        }
+        _ => (500u16, e.to_string()),
     };
-    Json(ApiResp::fail(status, &e.to_string()))
+    Json(ApiResp::fail(status, &msg))
+}
+
+/// 从 PG 唯一冲突 DETAIL 文本中抽取冲突列的值。
+///
+/// PG 典型形态：`Key (rule_code)=(DOC_NO) already exists.` → 返回 `Some("DOC_NO")`。
+/// 抽不到返回 None（调用方用通用提示）。
+fn extract_duplicate_key(detail: &str) -> Option<String> {
+    // 匹配 `Key (col)=(value) already exists` 中的 value
+    let marker = ") already exists";
+    let pos = detail.to_ascii_lowercase().find(marker)?;
+    let head = &detail[..pos];
+    // 末尾的 `(value)` —— 反向找最近一个 `=(`
+    let eq_pos = head.rfind("=(")?;
+    let val = &head[eq_pos + 2..];
+    let val = val.trim().trim_matches('(').trim_matches(')');
+    let val = val.trim();
+    if val.is_empty() {
+        None
+    } else {
+        Some(val.to_string())
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
