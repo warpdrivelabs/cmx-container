@@ -33,34 +33,7 @@ const GLOBAL_RESET: &str = "_global_";
 ///
 /// 这样反查 max 的 LIKE 子串天然覆盖 reset 维度分组（方案 §4.8.1 路径 A）。
 pub fn resolve_fixed_segments(rule: &RuleSpec, ctx: &ResolveContext) -> Result<String> {
-    let registry = SegmentRegistry::new();
-    let mut parts: Vec<String> = Vec::new();
-    let mut ctx = ctx.clone();
-
-    for (idx, seg) in rule.segments.iter().enumerate() {
-        let val = registry.resolve(seg, &ctx)?;
-        match val {
-            SegmentValue::Literal(s) => {
-                parts.push(s.clone());
-                ctx.resolved_so_far.push(s);
-            }
-            SegmentValue::NeedsSerial { reset_key, .. } => {
-                // reset_key 拼进前缀（非全局占位时）——使反查 max 按 reset 维度分组
-                if reset_key != GLOBAL_RESET {
-                    parts.push(reset_key);
-                }
-            }
-            SegmentValue::NeedsUniqueCheck { .. } => {
-                // 随机段不进前缀
-            }
-        }
-        // 段间连接符（除最后一段）
-        if idx + 1 < rule.segments.len() {
-            parts.push(rule.joiner.clone());
-        }
-    }
-
-    Ok(parts.join(""))
+    Ok(build_prefix_and_specs(rule, ctx)?.0)
 }
 
 /// 完整铸号：固定段 + 流水段（反查 max + UNIQUE 重试）。
@@ -74,34 +47,7 @@ pub async fn evaluate_segments(
     ctx: &ResolveContext,
     advance: &dyn Advance,
 ) -> Result<String> {
-    let registry = SegmentRegistry::new();
-    let mut fixed_parts: Vec<String> = Vec::new();
-    let mut serial_spec: Option<crate::spec::SegmentValue> = None;
-    let mut random_segs: Vec<SegmentSpec> = Vec::new(); // 规则里的随机段声明（换种子重试用）
-    let mut ctx = ctx.clone();
-
-    // ① 求固定段，找流水段/随机段
-    for seg in &rule.segments {
-        let val = registry.resolve(seg, &ctx)?;
-        match val {
-            SegmentValue::Literal(s) => {
-                fixed_parts.push(s.clone());
-                ctx.resolved_so_far.push(s);
-            }
-            SegmentValue::NeedsSerial { ref reset_key, .. } => {
-                // reset_key 拼进前缀（非全局占位时）——使反查 max 按 reset 维度分组
-                if reset_key != GLOBAL_RESET {
-                    fixed_parts.push(reset_key.clone());
-                }
-                serial_spec = Some(val);
-            }
-            SegmentValue::NeedsUniqueCheck { .. } => {
-                random_segs.push(seg.clone());
-            }
-        }
-    }
-
-    let prefix = fixed_parts.join("");
+    let (prefix, serial_spec, random_segs) = build_prefix_and_specs(rule, ctx)?;
 
     // ② 无流水段但有随机段 → 随机段 UNIQUE 冲突重试（方案 §6.3，换种子重试）
     if serial_spec.is_none() {
@@ -159,6 +105,50 @@ pub async fn evaluate_segments(
         }
     }
     Err(CodeError::MaxRetryExceeded(MAX_RETRY))
+}
+
+/// 构造前缀 + 收集 serial/random 段（resolve_fixed_segments 和 evaluate_segments 的共用逻辑）。
+///
+/// 返回 `(prefix, serial_spec, random_segs)`：
+/// - prefix：固定段 + reset_key + 段间 joiner 拼接（单条/批量/预览共用，保证格式一致）
+/// - serial_spec：第一个 serial/dateSerial 段的求值结果（None=无流水段）
+/// - random_segs：所有 random 段的声明（换种子重试用）
+fn build_prefix_and_specs(
+    rule: &RuleSpec,
+    ctx: &ResolveContext,
+) -> Result<(String, Option<SegmentValue>, Vec<SegmentSpec>)> {
+    let registry = SegmentRegistry::new();
+    let mut parts: Vec<String> = Vec::new();
+    let mut serial_spec: Option<SegmentValue> = None;
+    let mut random_segs: Vec<SegmentSpec> = Vec::new();
+    let mut ctx = ctx.clone();
+
+    for (idx, seg) in rule.segments.iter().enumerate() {
+        let val = registry.resolve(seg, &ctx)?;
+        match val {
+            SegmentValue::Literal(s) => {
+                parts.push(s.clone());
+                ctx.resolved_so_far.push(s);
+            }
+            SegmentValue::NeedsSerial { ref reset_key, .. } => {
+                if reset_key != GLOBAL_RESET {
+                    parts.push(reset_key.clone());
+                }
+                if serial_spec.is_none() {
+                    serial_spec = Some(val);
+                }
+            }
+            SegmentValue::NeedsUniqueCheck { .. } => {
+                random_segs.push(seg.clone());
+            }
+        }
+        // 段间连接符（除最后一段）
+        if idx + 1 < rule.segments.len() {
+            parts.push(rule.joiner.clone());
+        }
+    }
+
+    Ok((parts.join(""), serial_spec, random_segs))
 }
 
 /// 随机段铸号：固定段前缀 + 随机候选，UNIQUE 冲突重试（方案 §6.3）。
@@ -325,5 +315,27 @@ mod tests {
         let code = evaluate_segments(&rule, &target, &ctx, &StubAdvance).await.unwrap();
         let today = ctx.now.format("%Y%m%d").to_string();
         assert_eq!(code, format!("FV{today}0001")); // 日期 + 首号 0001
+    }
+
+    /// 回归：单条铸号（evaluate_segments）与批量铸号前缀（resolve_fixed_segments）格式必须一致。
+    /// 修复 P0 bug：evaluate_segments 曾漏拼 joiner，导致同一规则产出两种码格式。
+    #[test]
+    fn test_prefix_consistency_single_vs_batch() {
+        let rule: RuleSpec = serde_json::from_str(
+            r#"{
+                "joiner": "-",
+                "segments": [
+                    {"type": "const", "value": "V"},
+                    {"type": "serial", "width": 4}
+                ]
+            }"#,
+        )
+        .unwrap();
+        let ctx = ResolveContext::for_test();
+        let prefix_batch = resolve_fixed_segments(&rule, &ctx).unwrap();
+        let (prefix_single, _, _) = build_prefix_and_specs(&rule, &ctx).unwrap();
+        assert_eq!(prefix_batch, prefix_single, "单条与批量 prefix 必须一致");
+        // const "V" + joiner "-"（serial 的 reset_key=_global_ 不进 prefix，但段间 joiner 保留）
+        assert_eq!(prefix_batch, "V-");
     }
 }

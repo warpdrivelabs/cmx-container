@@ -56,21 +56,13 @@ async fn mint_via_minter(
     db_id: &str,
     txn_id: Option<&str>,
 ) -> Result<String> {
-    // 反序列化 codeRule 挂载点声明
-    let cr: CodeRule = serde_json::from_value(code_rule.clone()).unwrap_or(CodeRule {
-        rule_code: None,
-        field: "code".into(),
-        mode: "manual".into(),
-        enable_gap: None,
-        pattern: None,
-        unique_check: None,
-        cascade: None,
-    });
+    // 反序列化 codeRule 挂载点声明（失败直接报错，不静默兜底——避免「缺 ruleCode」误导）
+    let cr: CodeRule = serde_json::from_value(code_rule.clone())
+        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("codeRule 反序列化失败：{e}")))?;
 
-    // 反序列化 target
-    let tgt: Target = serde_json::from_value(target.clone()).unwrap_or_else(|_| {
-        Target::dct("unknown", "code")
-    });
+    // 反序列化 target（失败直接报错）
+    let tgt: Target = serde_json::from_value(target.clone())
+        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("target 反序列化失败：{e}")))?;
 
     // 取 ruleCode，查规则表拿 RuleSpec
     let rule_code = cr.rule_code.as_deref().ok_or_else(|| {
@@ -108,19 +100,11 @@ async fn mint_via_minter_batch(
     db_id: &str,
     txn_id: Option<&str>,
 ) -> Result<Vec<String>> {
-    // 反序列化 codeRule 挂载点声明（与 mint_via_minter 同款）
-    let cr: CodeRule = serde_json::from_value(code_rule.clone()).unwrap_or(CodeRule {
-        rule_code: None,
-        field: "code".into(),
-        mode: "manual".into(),
-        enable_gap: None,
-        pattern: None,
-        unique_check: None,
-        cascade: None,
-    });
-
+    // 反序列化 codeRule + target（失败直接报错，不静默兜底）
+    let cr: CodeRule = serde_json::from_value(code_rule.clone())
+        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("codeRule 反序列化失败：{e}")))?;
     let tgt: Target = serde_json::from_value(target.clone())
-        .unwrap_or_else(|_| Target::dct("unknown", "code"));
+        .map_err(|e| cmx_code_model::error::CodeError::Internal(format!("target 反序列化失败：{e}")))?;
 
     let rule_code = cr.rule_code.as_deref().ok_or_else(|| {
         cmx_code_model::error::CodeError::NoMatchingRule("codeRule 缺 ruleCode".into())

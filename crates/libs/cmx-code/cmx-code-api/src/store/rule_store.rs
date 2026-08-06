@@ -260,7 +260,7 @@ pub async fn query_rules(rule_code: &str, db_id: &str, dam: &Dam) -> Result<Vec<
 
 /// 规则选优：orgScope 命中 + condition 匹配 + priority 取大（方案 §3.4.3）。
 ///
-/// priority 相同时取候选列表中**第一个**（稳定，建议用不同 priority 显式排序）。
+/// priority 相同时取候选列表中**最后一个**（Rust `max_by_key` 语义，建议用不同 priority 显式排序避免歧义）。
 /// - `org_code`：当前组织码（None 视为全局，匹配 org_scope=None 的规则）
 /// - `attrs`：行属性（condition 表达式求值用）
 pub fn select_best<'a>(

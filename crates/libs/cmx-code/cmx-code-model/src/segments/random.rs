@@ -58,8 +58,9 @@ fn gen_charset(seg: &SegmentSpec) -> Result<String> {
     }
 
     let mut rng = rand::thread_rng();
+    let pool_vec: Vec<char> = pool.chars().collect();
     let s: String = (0..width)
-        .map(|_| pool.chars().nth(rng.gen_range(0..pool.len())).unwrap_or('?'))
+        .map(|_| pool_vec[rng.gen_range(0..pool_vec.len())])
         .collect();
     Ok(s)
 }
@@ -101,8 +102,7 @@ fn charset_pool(name: &str, exclude_ambiguous: bool) -> String {
         "alpha" => ("ABCDEFGHJKLMNPQRSTUVWXYZ", true),
         "alnum" => ("23456789ABCDEFGHJKLMNPQRSTUVWXYZ", true),
         "hex" => ("0123456789abcdef", false),
-        "custom" => (seg_custom_chars(), true),
-        other => return other.to_string(), // 用户直接传字符池字符串，不过滤（尊重用户输入）
+        other => return other.to_string(), // 用户直接传字符池字符串（含 "custom"），不过滤
     };
     if should_filter && exclude_ambiguous {
         // 去除全部 9 个易混淆字符：0/O/1/I/l/Z/2/B/8（方案 §6.2）
@@ -112,11 +112,6 @@ fn charset_pool(name: &str, exclude_ambiguous: bool) -> String {
     } else {
         pool.to_string()
     }
-}
-
-/// custom 字符池占位（实际从 seg.params.chars 取，这里返回空让调用方用 custom 字符串）。
-fn seg_custom_chars() -> &'static str {
-    ""
 }
 
 #[cfg(test)]
