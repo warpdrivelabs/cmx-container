@@ -38,7 +38,12 @@
         "codeField": "code",
         "labelField": "name",
         "remark": "SAP Client/MANDT,跨组织数据隔离维度",
-        "codeLength": 3
+        "codeLength": 3,
+        "codeRule": {
+          "mode": "auto",
+          "field": "code",
+          "ruleCode": "CLINENT_RULE"
+        }
       },
       "fields": [
         {
@@ -4552,5 +4557,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-07-24T03:17:38.397Z"
+  "updatedAt": "2026-08-06T05:31:33.954Z"
 }

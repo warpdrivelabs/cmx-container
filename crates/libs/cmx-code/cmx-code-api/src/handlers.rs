@@ -451,7 +451,7 @@ pub async fn gap_take(
     Json(body): Json<GapTakeBody>,
 ) -> Json<ApiResp<Value>> {
     let db_id = db_id_from(&headers).await;
-    match gap_store::take_gap(&body.prefix, body.width as usize, &db_id).await {
+    match gap_store::take_gap(&body.prefix, body.width as usize, &db_id, None).await {
         Ok(Some(serial)) => Json(ApiResp::ok(json!({
             "prefix": body.prefix,
             "serial": serial,

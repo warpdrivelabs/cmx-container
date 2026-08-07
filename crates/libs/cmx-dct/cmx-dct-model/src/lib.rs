@@ -474,12 +474,33 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Da
         format!(" WHERE {}", wheres.join(" AND "))
     };
 
-    // 排序：sort_no（若有）→ pk。
-    let order = if valid_col(view, "sort_no") {
-        format!(" ORDER BY \"sort_no\", \"{}\"", view.pk)
-    } else {
-        format!(" ORDER BY \"{}\"", view.pk)
-    };
+    // 排序：前端 sort:{field,order} 优先（field 经列白名单校验 + 双引号防注入；
+    // order 仅认 "desc"，其余按升序）；未传 sort 时回退 sort_no（若有）→ pk。
+    let order = raw
+        .get("sort")
+        .and_then(|s| s.get("field"))
+        .and_then(|v| v.as_str())
+        .filter(|f| valid_col(view, f))
+        .map(|f| {
+            let dir = if raw
+                .get("sort")
+                .and_then(|s| s.get("order"))
+                .and_then(|v| v.as_str())
+                == Some("desc")
+            {
+                "DESC"
+            } else {
+                "ASC"
+            };
+            format!(" ORDER BY \"{}\" {}", f, dir)
+        })
+        .unwrap_or_else(|| {
+            if valid_col(view, "sort_no") {
+                format!(" ORDER BY \"sort_no\", \"{}\"", view.pk)
+            } else {
+                format!(" ORDER BY \"{}\"", view.pk)
+            }
+        });
 
     let (page, page_size) = parse_paging(raw);
     let offset = (page - 1) * page_size;

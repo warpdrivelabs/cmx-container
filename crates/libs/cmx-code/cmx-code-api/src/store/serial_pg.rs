@@ -94,21 +94,27 @@ impl Advance for PgAdvance {
 
     async fn take_gap(&self, prefix: &str, width: usize) -> Result<Option<i64>> {
         // C6：从 stub 升级为真实断号表查询（gap_store::take_gap）
-        crate::store::gap_store::take_gap(prefix, width, &self.db_id).await
+        // 透传 PgAdvance 的 txn_id，使 FOR UPDATE SKIP LOCKED 行锁与落库形成原子段
+        crate::store::gap_store::take_gap(prefix, width, &self.db_id, self.txn_id.as_deref())
+            .await
     }
 
     async fn try_insert(&self, _target: &Target, _code: &str) -> Result<()> {
-        // 铸号阶段不做真实 INSERT —— 这是设计决策，非占位：
+        // 铸号阶段不做真实 INSERT —— 设计决策：铸号函数只算号，不落库。
         //
-        // DCT/DOC saver 的铸号发生在 apply_merge 之前（钩子算出 code 写回 changeset），
-        // 真正的 INSERT 由 saver 的 apply_merge / write 完成，业务表的 UNIQUE 约束在那里兜底。
-        // 若 saver 落库时 UNIQUE 冲突，由 saver 捕获后重新调 mint 取下一个号（C3 钩子接入）。
+        // 唯一性保证分两层：
+        // 1. use_sequence=true：发号序列表（cmx_code_seq）的 FOR UPDATE 行锁保证取号原子，
+        //    同 prefix 不会分发出重号（集群安全）。
+        // 2. use_sequence=false（默认反查 max）：minted_buffer 推进保证同事务多行不重，
+        //    跨事务并发靠业务表 UNIQUE 约束兜底。
         //
-        // 因此 evaluate_segments 的重试循环在铸号阶段恒不触发（try_insert 恒 Ok），
-        // 重试责任上移到 saver 层。这是有意为之 —— 铸号函数只算号，不落库。
+        // saver 层（DCT write.rs apply_inserts/upsert、DOC saver.rs exec）在落库时捕获
+        // UNIQUE 冲突，清空 code 重新调 mint_codes_for_inserts 取下一个号重试（上限 3 次）。
         //
-        // 如果未来需要在铸号阶段预检（如 SELECT EXISTS 查重），在此实现，
-        // 返回 Err(CodeError::UniqueViolation) 触发 evaluate_segments 的重试循环。
+        // 因此 evaluate_segments 的 MAX_RETRY 重试循环在铸号阶段恒不触发（本函数恒 Ok），
+        // 重试责任由 saver 层承担（已实现，见 is_unique_violation 判定 + 重铸重试）。
+        //
+        // 如未来需在铸号阶段预检（SELECT EXISTS 查重），在此返回 Err 触发重试循环。
         Ok(())
     }
 }

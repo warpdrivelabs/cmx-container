@@ -11,49 +11,56 @@ use super::rule_store::db_err;
 
 /// 取最小断号（enable_gap=true 时优先填补断号）。
 ///
-/// 返回 None 表示无断号。取走后从表删除（避免重复填补）。
-pub async fn take_gap(prefix: &str, width: usize, db_id: &str) -> Result<Option<i64>> {
+/// 用单条 `DELETE ... RETURNING` 原子取走最小断号（集群安全，避免两步查询+删除的并发竞争）。
+/// 返回 None 表示无断号。必须在事务内调用（txn_id 非 None），使行锁与落库形成原子段。
+pub async fn take_gap(
+    prefix: &str,
+    width: usize,
+    db_id: &str,
+    txn_id: Option<&str>,
+) -> Result<Option<i64>> {
     let mm = get_default_pg_db_manager();
 
-    // ① 查最小断号
-    let sql = r#"SELECT id, serial_val FROM cmx_code_gap
-        WHERE prefix = $1 ORDER BY serial_val ASC LIMIT 1"#;
+    // 原子取走最小断号：CTE 先 FOR UPDATE SKIP LOCKED 锁定最小断号行，外层 DELETE 取走。
+    // 并发节点同时取时，SKIP LOCKED 跳过被锁行取下一个，不会重复取同一断号。
+    let sql = r#"WITH candidate AS (
+        SELECT id FROM cmx_code_gap
+        WHERE prefix = $1
+        ORDER BY serial_val ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+    )
+    DELETE FROM cmx_code_gap WHERE id IN (SELECT id FROM candidate)
+    RETURNING serial_val"#;
+
     let ds = mm
         .query_sql_with_datavalues(
             db_id,
-            None,
+            txn_id,
             sql,
             vec![DataValue::String(prefix.into())],
             "code_gap",
         )
         .await
-        .map_err(|e| db_err("查询断号", e))?;
+        .map_err(|e| db_err("取走断号", e))?;
 
-    let Some(row) = ds.rows.first() else {
-        return Ok(None);
-    };
+    let serial_val = ds
+        .rows
+        .first()
+        .and_then(|r| r.get(0))
+        .and_then(|dv| match dv {
+            DataValue::Int(n) => Some(*n),
+            _ => None,
+        });
 
-    let gap_id = match row.get(0) {
-        Some(DataValue::Int(n)) => *n,
-        _ => return Ok(None),
-    };
-    let serial_val = match row.get(1) {
-        Some(DataValue::Int(n)) => *n,
-        _ => return Ok(None),
-    };
-
-    // ② 删除该断号（取走）
-    let del_sql = "DELETE FROM cmx_code_gap WHERE id = $1";
-    mm.execute_sql_with_datavalues(db_id, None, del_sql, vec![DataValue::Int(gap_id)])
-        .await
-        .map_err(|e| db_err("删除断号", e))?;
-
-    tracing::debug!(
-        target: "cmx_code::gap",
-        prefix = %prefix, serial = serial_val, width,
-        "取走断号填补"
-    );
-    Ok(Some(serial_val))
+    if let Some(sv) = serial_val {
+        tracing::debug!(
+            target: "cmx_code::gap",
+            prefix = %prefix, serial = sv, width,
+            "取走断号填补"
+        );
+    }
+    Ok(serial_val)
 }
 
 /// 记录断号（事务回滚时调，把未落库的号记为断号供后续填补）。

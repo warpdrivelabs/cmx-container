@@ -105,8 +105,21 @@ async fn activate_inner(
     // 3. 头处理（create / update）
     let (record_id, new_version) = match cr_type {
         "create" => {
-            let code = codegen.generate(&cfg.target_dict, cfg.code_rule_code.as_deref());
-            let plan = plan_create(&cfg, &cr_head, &code);
+            // 占位 code（编码引擎未配置/失败时的兜底，保证 NOT NULL）
+            let fallback_code = codegen.generate(&cfg.target_dict, cfg.code_rule_code.as_deref());
+            let mut plan = plan_create(&cfg, &cr_head, &fallback_code);
+            // 按激活映射配的 code_rule_code 走编码引擎铸号（与 dct/doc 保存同源）。
+            // 铸号用独立连接（txn_id=None——CodeEngine 跨 async trait 边界，主事务 holder 不可用）。
+            if let Some(real_code) = mint_activation_code(
+                cfg.code_rule_code.as_deref(),
+                &cfg.target_table,
+                &plan.header_row,
+                db_id,
+            )
+            .await
+            {
+                plan.header_row.insert("code".into(), Value::String(real_code));
+            }
             let id = dct_accessor::insert_header(
                 mm,
                 db_id,
@@ -537,4 +550,37 @@ fn lifecycle_of(r: &cmx_mdm_model::match_algo::MatchRecord) -> &str {
 fn master_record(row: &serde_json::Map<String, Value>) -> cmx_mdm_model::match_algo::MatchRecord {
     let id = row.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
     cmx_mdm_model::match_algo::MatchRecord { id, fields: row.clone() }
+}
+
+/// 按激活映射配的 code_rule_code 走编码引擎铸号（create 分支）。
+///
+/// 与 dct write.rs `mint_codes_for_inserts` / doc saver `mint_codes_for_changeset` 同源：
+/// 构造挂载点声明 `{mode:"auto", field:"code", ruleCode}` + target，调 `GlobalCodeMinter::mint`。
+/// 铸号用独立连接（`txn_id=None`——CodeEngine 跨 async trait 边界，主事务 holder 不可用，
+/// 与 dct/doc 铸号一致）。引擎未注入、未配 ruleCode 或铸号失败时返回 None，由调用方回退占位 code。
+async fn mint_activation_code(
+    rule_code: Option<&str>,
+    target_table: &str,
+    header_row: &serde_json::Map<String, Value>,
+    db_id: &str,
+) -> Option<String> {
+    // 编码引擎未注入 → 跳过（现状零影响）
+    let minter = cmx_traits::code::GlobalCodeMinter::get()?;
+    // 激活映射未配 ruleCode → 跳过（回退 RandomCodeGenerator 占位）
+    let rule_code = rule_code?;
+    let code_rule = json!({ "mode": "auto", "field": "code", "ruleCode": rule_code });
+    let target = json!({ "kind": "dct", "code": target_table, "field": "code" });
+    // 行字段作 attrs（供 ref 段取字段值 + condition 求值）
+    let attrs = Value::Object(header_row.clone());
+    match minter.mint(&code_rule, &target, &attrs, db_id, None).await {
+        Ok(code) => Some(code),
+        Err(e) => {
+            tracing::warn!(
+                target: "cmx_mdm::activation",
+                rule_code = rule_code, table = target_table, error = %e,
+                "编码引擎铸号失败，回退占位 code（不阻断激活）"
+            );
+            None
+        }
+    }
 }

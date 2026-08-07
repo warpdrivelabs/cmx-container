@@ -41,6 +41,25 @@ pub trait CodeMinter: Send + Sync {
         db_id: &str,
         txn_id: Option<&str>,
     ) -> Result<Vec<String>, String>;
+
+    /// 删行记断号：把被删行的编码解析成断号记录到 cmx_code_gap 表。
+    ///
+    /// 仅 enable_gap=true（连号域）的规则才记录；其他规则静默跳过（删了不产生可填补断号）。
+    /// 内部查规则表拿 merge 后的 RuleSpec（含 segments），用 `parse_code_serial` 反解 prefix + serial_val。
+    ///
+    /// - `code_rule`：挂载点声明（含 ruleCode + enableGap）
+    /// - `code`：被删行的编码值
+    /// - `attrs`：被删行的字段属性（供 ref/resetBy 段求 prefix）
+    /// - `db_id`：数据库 ID
+    ///
+    /// 返回是否成功记录（false=无需记录/解析失败/规则未开断号）。
+    async fn record_gap_for_code(
+        &self,
+        code_rule: &serde_json::Value,
+        code: &str,
+        attrs: &serde_json::Value,
+        db_id: &str,
+    ) -> bool;
 }
 
 /// 全局编码引擎存储器。

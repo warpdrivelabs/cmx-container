@@ -46,6 +46,16 @@ impl CodeMinter for CodeEngine {
             .await
             .map_err(|e| e.to_string())
     }
+
+    async fn record_gap_for_code(
+        &self,
+        code_rule: &serde_json::Value,
+        code: &str,
+        attrs: &serde_json::Value,
+        db_id: &str,
+    ) -> bool {
+        record_gap_for_code_impl(code_rule, code, attrs, db_id).await
+    }
 }
 
 /// 反序列化 codeRule + target + 查规则表 + 合并局部覆盖（mint_via_minter / _batch 共用）。
@@ -69,6 +79,63 @@ async fn load_rule_for_mint(
     let rule = cr.merge_with(rule_spec);
     let advance = PgAdvance::new(db_id, txn_id);
     Ok((rule, tgt, advance))
+}
+
+/// 删行记断号实现：查规则表 → merge → 判 enable_gap → parse_code_serial → record_gap。
+///
+/// 返回 true=已记录，false=无需记录（非连号域/无流水段/解析失败）。
+/// 失败记 warn 日志不阻断删行主流程。
+async fn record_gap_for_code_impl(
+    code_rule: &serde_json::Value,
+    code: &str,
+    attrs: &serde_json::Value,
+    db_id: &str,
+) -> bool {
+    // 反序列化挂载点声明
+    let cr: CodeRule = match serde_json::from_value(code_rule.clone()) {
+        Ok(cr) => cr,
+        Err(e) => {
+            tracing::warn!(target: "cmx_code::gap", error = %e, "record_gap: codeRule 反序列化失败");
+            return false;
+        }
+    };
+    // 查规则表拿 merge 后的 RuleSpec（含 segments）
+    let Some(rule_code) = cr.rule_code.as_deref() else {
+        return false;
+    };
+    let rule_spec = match rule_store::get_rule(rule_code, db_id, &crate::handlers::Dam::default()).await {
+        Ok(rs) => rs,
+        Err(e) => {
+            tracing::warn!(target: "cmx_code::gap", rule_code = rule_code, error = %e, "record_gap: 查规则表失败");
+            return false;
+        }
+    };
+    let rule = cr.merge_with(rule_spec);
+    // 仅连号域（enable_gap 生效）才记断号
+    let effective_gap = attrs
+        .get("enableGap")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(rule.enable_gap);
+    if !effective_gap {
+        return false;
+    }
+    // 反解析 code → (prefix, serial_val, width)
+    let Some((prefix, serial_val, width)) = rule_algo::parse_code_serial(code, &rule, attrs) else {
+        return false;
+    };
+    // 记录断号（失败不阻断删行）
+    if let Err(e) = crate::store::gap_store::record_gap(&prefix, serial_val, width, db_id).await {
+        tracing::warn!(
+            target: "cmx_code::gap", prefix = %prefix, serial = serial_val, error = %e,
+            "record_gap: 写断号表失败（不阻断删行）"
+        );
+        return false;
+    }
+    tracing::debug!(
+        target: "cmx_code::gap", prefix = %prefix, serial = serial_val, width = width,
+        code = code, "record_gap: 删行记断号"
+    );
+    true
 }
 
 /// 内部铸号桥接：Value 参数 → 强类型 → engine.mint。
@@ -110,19 +177,22 @@ async fn mint_via_minter_batch(
     // 按 prefix 分组：同 prefix 的行索引归一组，保留行序用于结果对齐
     let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
     let mut group_order: Vec<String> = Vec::new(); // 保持首次出现顺序（确定性）
-    let mut prefixes: Vec<String> = Vec::with_capacity(rows.len());
 
     for (idx, attrs) in rows.iter().enumerate() {
         let ctx = ResolveContext::new(db_id, txn_id).with(attrs.clone());
         let prefix = rule_algo::resolve_fixed_segments(&rule, &ctx)?;
-        prefixes.push(prefix.clone());
         if !groups.contains_key(&prefix) {
             group_order.push(prefix.clone());
         }
         groups.entry(prefix).or_default().push(idx);
     }
 
-    // 每个 prefix 组：一次反查 max 取 N 个连续号，buffer 推进
+    // H1 修复：跨 prefix 组推进 minted_buffer。
+    // use_sequence=false 路径需要 buffer 推进（不同 prefix 组的尾部数字段可能碰撞）；
+    // use_sequence=true 路径走序列表取号，天然原子不依赖 buffer，但维护也无害。
+    let mut all_minted: Vec<String> = Vec::new();
+
+    // 每个 prefix 组：一次取 N 个连续号
     for prefix in &group_order {
         let indices = &groups[prefix];
         let count = indices.len();
@@ -134,15 +204,18 @@ async fn mint_via_minter_batch(
         // 但既然 prefix 相同，固定段求值结果一致，取任一行的 attrs 都可以）
         let first_idx = indices[0];
         let first_attrs = &rows[first_idx];
-        let ctx = ResolveContext::new(db_id, txn_id).with(first_attrs.clone());
+        let ctx = ResolveContext::new(db_id, txn_id)
+            .with(first_attrs.clone())
+            .with_minted(&all_minted);
 
-        // 批量取号（engine::mint_batch 会反查 max + buffer union，一次取 count 个连续号）
-        let codes = mint_batch(&rule, &tgt, &ctx, &advance, count).await?;
+        // 批量取号：use_sequence=true 走 seq_store 原子取号段；false 走反查 max + buffer union
+        let codes = mint_batch(&rule, &tgt, &ctx, &advance, count, txn_id).await?;
 
-        // 把号写回结果（按 indices 顺序对齐）
+        // 把号写回结果（按 indices 顺序对齐）+ 推进 buffer（供下一组用）
         for (i, &row_idx) in indices.iter().enumerate() {
             if let Some(code) = codes.get(i) {
                 results[row_idx] = Some(code.clone());
+                all_minted.push(code.clone());
             }
         }
     }
@@ -169,7 +242,12 @@ pub async fn mint(
 
 /// 批量取号（方案 §4.5 batch_generate）。
 ///
-/// 一次反查 max 取一段连续号，本地分配，整批返回。
+/// 取号路径由 `rule.use_sequence` 决定：
+/// - **`use_sequence=true`**（集群安全）：走 `cmx_code_seq` 发号序列表，`FOR UPDATE` 行锁
+///   取连续号段，集群并发不重。首启（current_val=0）从业务表探测真实 max 作基线。
+///   必须在事务内调用（`txn_id` 非 None），使行锁与落库形成原子段。
+/// - **`use_sequence=false`**（默认）：走反查业务表 max + minted_buffer union（老路径，向后兼容）。
+///
 /// 补位 / 步长 / 起始值 / reset_key 进 prefix 全部与单条铸号（`evaluate_segments`）一致，
 /// 保证批量取号与逐条铸号语义统一（方案附录 C.2.3 修复）。
 pub async fn mint_batch(
@@ -178,11 +256,14 @@ pub async fn mint_batch(
     ctx: &ResolveContext,
     advance: &dyn Advance,
     count: usize,
+    txn_id: Option<&str>,
 ) -> Result<Vec<String>> {
     if count == 0 {
         return Ok(Vec::new());
     }
-    let prefix = rule_algo::resolve_fixed_segments(rule, ctx)?;
+    // 用 build_prefix_and_specs 一次性拿到 prefix + serial_spec + random_segs，
+    // 以区分「纯固定码」「serial 流水」「random-only」三种场景。
+    let (prefix, serial_spec, random_segs) = rule_algo::build_prefix_and_specs(rule, ctx)?;
     let width = rule.serial_width();
     let start = rule.serial_start();
     let step = rule.serial_step();
@@ -190,10 +271,47 @@ pub async fn mint_batch(
     let pad_side = rule.serial_pad_side();
 
     if width == 0 {
-        // 无流水段：纯固定码重复 count 份（罕见场景）
+        if !random_segs.is_empty() {
+            // random-only 规则：逐条铸号（每条 resolve 换种子），不做 UNIQUE 查重
+            // （DCT try_insert 是 no-op，靠 DB UNIQUE 约束兜底）。
+            let mut codes = Vec::with_capacity(count);
+            for _ in 0..count {
+                codes.push(rule_algo::evaluate_segments(rule, target, ctx, advance).await?);
+            }
+            return Ok(codes);
+        }
+        // 无流水段也无随机段：纯固定码重复 count 份（罕见场景）
         return Ok(vec![prefix; count]);
     }
 
+    let _ = serial_spec; // 已通过 width 判断确认存在，下文直接用 prefix+width 取号
+
+    // ── use_sequence=true：发号序列表原子取号段（集群安全） ──
+    if rule.use_sequence() {
+        // 首启基线探测：先反查业务表真实 max，传给 seq_store 作为 current_val=0 时的起点。
+        let probed_max = advance
+            .query_max_serial(target, &prefix, width, ctx.minted_buffer())
+            .await?;
+        let serials = crate::store::seq_store::alloc_serial_segment(
+            &rule.rule_code,
+            &prefix,
+            count,
+            start,
+            step,
+            probed_max,
+            width,
+            &ctx.db_id,
+            txn_id,
+        )
+        .await?;
+        let codes = serials
+            .iter()
+            .map(|n| format!("{prefix}{}", pad::format_serial(*n, width, pad_char, pad_side)))
+            .collect();
+        return Ok(codes);
+    }
+
+    // ── use_sequence=false（默认）：反查业务表 max + minted_buffer union ──
     let max = advance
         .query_max_serial(target, &prefix, width, ctx.minted_buffer())
         .await?;
@@ -221,7 +339,7 @@ pub async fn preview(
     ctx: &ResolveContext,
     advance: &dyn Advance,
 ) -> Result<String> {
-    let prefix = rule_algo::resolve_fixed_segments(rule, ctx)?;
+    let (prefix, _serial_spec, random_segs) = rule_algo::build_prefix_and_specs(rule, ctx)?;
     let width = rule.serial_width();
     let start = rule.serial_start();
     let step = rule.serial_step();
@@ -229,6 +347,10 @@ pub async fn preview(
     let pad_side = rule.serial_pad_side();
 
     if width == 0 {
+        if !random_segs.is_empty() {
+            // random-only 规则：走 evaluate_segments 生成一条预览码（不落库不占号）
+            return rule_algo::evaluate_segments(rule, target, ctx, advance).await;
+        }
         return Ok(prefix);
     }
 

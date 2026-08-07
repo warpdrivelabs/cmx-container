@@ -96,6 +96,7 @@ pub async fn dct_meta(
         "parentField": view.parent_field,
         "selfHierarchy": view.self_hierarchy,
         "pk": view.pk,
+        "codeRule": view.code_rule,
         "columns": cols,
     }))))
 }

@@ -82,6 +82,9 @@ pub async fn evaluate_segments(
 
     for attempt in 1..=MAX_RETRY {
         // 优先取断号（enable_gap=true 且断号表有货）
+        // 注：take_gap 已改为原子 DELETE...RETURNING（FOR UPDATE SKIP LOCKED），取走即占用。
+        // try_insert 恒 Ok（铸号阶段不落库），此处直接返回；断号被占用后若落库 UNIQUE 冲突，
+        // 由 saver 层兜底重试（见 DCT write.rs apply_inserts 的 is_unique_violation 重铸）。
         if effective_enable_gap {
             if let Some(gap) = advance.take_gap(&prefix, width).await? {
                 let code = format!(
@@ -120,7 +123,7 @@ pub async fn evaluate_segments(
 /// - prefix：固定段 + reset_key + 段间 joiner 拼接（单条/批量/预览共用，保证格式一致）
 /// - serial_spec：第一个 serial/dateSerial 段的求值结果（None=无流水段）
 /// - random_segs：所有 random 段的声明（换种子重试用）
-fn build_prefix_and_specs(
+pub fn build_prefix_and_specs(
     rule: &RuleSpec,
     ctx: &ResolveContext,
 ) -> Result<(String, Option<SegmentValue>, Vec<SegmentSpec>)> {
@@ -205,6 +208,41 @@ pub fn next_after(max: i64, start: i64, step: i64) -> i64 {
     start + (steps + 1) * step
 }
 
+/// 从已铸编码字符串反解析出 (prefix, serial_val, width)，供删行记断号用。
+///
+/// 与铸号对称：铸号时 `code = prefix + format_serial(serial_val, width)`，
+/// 删行时反解 `serial_val = code[prefix.len()..].parse()`。
+///
+/// # 参数
+/// - `code`：被删行的编码值（如 `FV202608040002`）
+/// - `rule`：merge 后的规则（含 segments，用于求 prefix）
+/// - `attrs`：被删行的字段属性（供 ref/resetBy 段求 prefix，与铸号时一致）
+///
+/// # 返回
+/// - `Some((prefix, serial_val, width))`：成功反解（仅 serial/dateSerial 段规则）
+/// - `None`：无流水段（纯固定码/纯随机码，无需记断号）、prefix 不匹配、尾部非数字
+pub fn parse_code_serial(
+    code: &str,
+    rule: &RuleSpec,
+    attrs: &serde_json::Value,
+) -> Option<(String, i64, usize)> {
+    let width = rule.serial_width();
+    if width == 0 {
+        // 无流水段（纯固定码/纯随机码）：删了不产生可填补的断号
+        return None;
+    }
+    let ctx = ResolveContext::new("", None).with(attrs.clone());
+    let (prefix, _, _) = build_prefix_and_specs(rule, &ctx).ok()?;
+    if !code.starts_with(&prefix) {
+        return None;
+    }
+    let tail = &code[prefix.len()..];
+    // 尾部可能含 joiner + 后续段（如校验位），只取前 width 位数字
+    let serial_str = tail.get(..width).filter(|s| s.chars().all(|c| c.is_ascii_digit()))?;
+    let serial_val = serial_str.parse::<i64>().ok()?;
+    Some((prefix, serial_val, width))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,6 +254,56 @@ mod tests {
         assert_eq!(next_after(7, 1, 1), 8);
         assert_eq!(next_after(6, 1, 2), 7); // step=2: 1,3,5,7 → max=6 下一个是 7
         assert_eq!(next_after(0, 100, 1), 100); // start=100
+    }
+
+    /// parse_code_serial 反解析：const + serial 规则。
+    #[test]
+    fn test_parse_code_serial_simple() {
+        let rule: RuleSpec = serde_json::from_str(
+            r#"{"segments": [{"type": "const", "value": "V"}, {"type": "serial", "width": 4}]}"#,
+        )
+        .unwrap();
+        let attrs = serde_json::json!({});
+        // V + 0003 → prefix="V", serial=3, width=4
+        let parsed = parse_code_serial("V0003", &rule, &attrs).unwrap();
+        assert_eq!(parsed, ("V".to_string(), 3, 4));
+    }
+
+    /// parse_code_serial：resetBy=字段时 prefix 含字段值。
+    #[test]
+    fn test_parse_code_serial_with_reset_by() {
+        let rule: RuleSpec = serde_json::from_str(
+            r#"{"segments": [
+                {"type": "const", "value": "V"},
+                {"type": "serial", "width": 4, "resetBy": "category"}
+            ]}"#,
+        )
+        .unwrap();
+        let attrs = serde_json::json!({"category": "raw"});
+        // prefix = "Vraw"（const + reset_key），serial 尾部 0005
+        let parsed = parse_code_serial("Vraw0005", &rule, &attrs).unwrap();
+        assert_eq!(parsed, ("Vraw".to_string(), 5, 4));
+    }
+
+    /// parse_code_serial：无流水段（纯固定码）返回 None。
+    #[test]
+    fn test_parse_code_serial_no_serial() {
+        let rule: RuleSpec =
+            serde_json::from_str(r#"{"segments": [{"type": "const", "value": "PREFIX"}]}"#).unwrap();
+        let attrs = serde_json::json!({});
+        assert!(parse_code_serial("PREFIX", &rule, &attrs).is_none());
+    }
+
+    /// parse_code_serial：prefix 不匹配返回 None。
+    #[test]
+    fn test_parse_code_serial_prefix_mismatch() {
+        let rule: RuleSpec = serde_json::from_str(
+            r#"{"segments": [{"type": "const", "value": "V"}, {"type": "serial", "width": 4}]}"#,
+        )
+        .unwrap();
+        let attrs = serde_json::json!({});
+        // code 以 X 开头，不匹配 prefix "V"
+        assert!(parse_code_serial("X0003", &rule, &attrs).is_none());
     }
 
     #[tokio::test]

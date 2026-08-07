@@ -89,3 +89,12 @@ pub(crate) fn map_db_err(
     );
     api_err_db(&detail)
 }
+
+/// 判断 DB 错误是否为 UNIQUE（唯一约束）冲突。
+///
+/// 用于 saver 层编码兜底重试：落库 UNIQUE 冲突时，清空该行 code 重新铸号后重试 INSERT
+/// （防御发号序列表与业务表不一致的极端并发情况）。判定口径与 `classify_db_error` 一致。
+pub(crate) fn is_unique_violation(e: &DbError) -> bool {
+    let detail = pg_detail(e).to_ascii_lowercase();
+    detail.contains("duplicate key") || detail.contains("unique constraint")
+}
