@@ -4445,6 +4445,11 @@ function ensureSpreadElementRegistered () {
       return true
     } catch {}
   }
+  // 组件走懒加载：cmx-data-comp 的 index.js 用 MutationObserver 监听 document 首次出现 sheet 标签
+  // 才动态 import 注册。但那个 observer 用 document.querySelector——穿不透 Shadow DOM。本设计器的
+  // <cmx-spreadjs-sheet> 挂在 native-page 的 shadowRoot 里，observer 永远看不到 → 永不注册 → 空白网格。
+  // 故此处主动调 barrel 暴露的 preloadSheetComponents() 触发懒加载（约 26ms 内完成注册）。
+  try { C.preloadSheetComponents?.() } catch {}
   return false
 }
 
@@ -4701,11 +4706,13 @@ function initSpreadComponent (root, st) {
     return
   }
   customElements.whenDefined('cmx-spreadjs-sheet').then(applyModel)
+  // 兜底提示：preloadSheetComponents() 已在 ensureSpreadElementRegistered 里触发，正常应在 ~30ms 内注册。
+  // 放宽到 8s 才提示，避免懒加载首帧未完成就误报（原 1200ms 过急，观察窗口内 whenDefined 尚未 resolve）。
   setTimeout(() => {
     if (!customElements.get('cmx-spreadjs-sheet')) {
       sheet.insertAdjacentHTML('afterend', '<div class="rd-note" style="margin:10px">cmx-spreadjs-sheet 组件尚未注册，请确认 cmx-data-comp 已在宿主中预加载。</div>')
     }
-  }, 1200)
+  }, 8000)
 }
 
 function mount (ctx, view) {

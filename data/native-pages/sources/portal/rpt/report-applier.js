@@ -1145,6 +1145,9 @@ function ensureSpreadElementRegistered () {
   if (C.CmxSpreadjsSheet) {
     try { customElements.define('cmx-spreadjs-sheet', C.CmxSpreadjsSheet); return true } catch {}
   }
+  // 懒加载靠 index.js 的 MutationObserver（document.querySelector，穿不透 Shadow DOM）监听 sheet 标签首现。
+  // 本页 <cmx-spreadjs-sheet> 挂在 native-page shadowRoot 内 → observer 看不到 → 永不注册。主动触发 preload。
+  try { C.preloadSheetComponents?.() } catch {}
   return false
 }
 
