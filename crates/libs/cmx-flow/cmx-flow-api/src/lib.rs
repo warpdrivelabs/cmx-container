@@ -1,123 +1,28 @@
-//! cmx-flow-api —— 流程引擎的 HTTP 层。
+//! cmx-flow-api —— 流程引擎的**平台适配薄壳**（抽核后仅剩装配）。
 //!
-//! 薄 axum handler（handlers.rs）+ 视图组装（views.rs）+ 引擎单例（engine.rs）。
-//! `FlowModule` 实现 cmx-api 的 `ModuleRoutes`，聚合流程设计态 + 运行态 20 条路由。
-//! 由 web-server（而非 cmx-api）合并 `FlowModule.routes()`，故 cmx-api 不反向依赖本 crate（无环）。
-//! 端点前缀 `/flow/*`（`/api` 前缀由 web-server nest 加），避开 /api/definitions、/api/users 等既有命名。
-
-pub mod biz_link;
-pub mod engine;
-pub mod handlers;
-pub mod views;
+//! 业务全部在平台中立核 [`cmx_flow_app`]（引擎单例 + handler + 路由 + 信封）。本 crate 只把
+//! core 的 [`cmx_flow_app::flow_routes`] 包成 `FlowModule`（impl cmx-api 的 `ModuleRoutes`），
+//! 由 web-server 合并进主路由；并 re-export [`spawn_timer_poller`] 供 main 启动。
+//! cmx-api 不反向依赖本 crate（无环）。端点前缀 `/flow/*`（`/api` 前缀由 web-server nest 加）。
+//!
+//! 独立部署形态见 `../../cmx-flowengine` 的 `cmx-flow-server`——同一个 core，另一层壳。
 
 use axum::Router;
-use axum::routing::{get, post};
 
 use cmx_api::CmxAppState;
 use cmx_api::routes::traits::ModuleRoutes;
 
-pub use engine::{FlowRuntime, flow, spawn_timer_poller};
+// 引擎定时器 poller 由 core 提供；main.rs 直接调 cmx_flow_api::spawn_timer_poller()。
+pub use cmx_flow_app::spawn_timer_poller;
 
 /// 流程模块路由聚合（实现 cmx-api 的 ModuleRoutes，由 web-server 合并进主路由）。
+///
+/// 路由表 + handler 全来自 core 的 [`cmx_flow_app::flow_routes`]，对 `CmxAppState` 泛型实例化。
 pub struct FlowModule;
 
 impl ModuleRoutes for FlowModule {
     fn routes(self) -> Router<CmxAppState> {
-        Router::new()
-            // —— 定义（设计器：草稿/发布/装载） ——
-            .route("/flow/definitions", get(handlers::get_definitions))
-            .route(
-                "/flow/design/definitions",
-                get(handlers::list_design_definitions),
-            )
-            .route(
-                "/flow/definitions/draft",
-                post(handlers::save_definition_draft),
-            )
-            .route(
-                "/flow/definitions/{key}",
-                get(handlers::get_definition_detail),
-            )
-            .route(
-                "/flow/definitions/{key}/publish",
-                post(handlers::publish_definition),
-            )
-            // —— 版本管理（对标报表版本：列表/激活/删除） ——
-            .route(
-                "/flow/definitions/{key}/versions",
-                get(handlers::list_definition_versions),
-            )
-            .route(
-                "/flow/definitions/{key}/versions/{version}/activate",
-                post(handlers::activate_definition_version),
-            )
-            .route(
-                "/flow/definitions/{key}/versions/{version}",
-                axum::routing::delete(handlers::delete_definition_version),
-            )
-            // —— 实例 ——
-            .route(
-                "/flow/instances",
-                get(handlers::list_instances).post(handlers::start_instance),
-            )
-            .route("/flow/instances/{id}", get(handlers::get_instance))
-            .route("/flow/instances/{id}/children", get(handlers::get_children))
-            .route(
-                "/flow/instances/{id}/cancel",
-                post(handlers::cancel_instance),
-            )
-            // —— F1/F3：变量 / 单据关联 / 意见 ——
-            .route(
-                "/flow/instances/{id}/variables",
-                get(handlers::get_instance_variables),
-            )
-            .route("/flow/instances/{id}/biz", get(handlers::get_instance_biz))
-            .route(
-                "/flow/instances/{id}/comments",
-                get(handlers::get_instance_comments),
-            )
-            .route(
-                "/flow/biz/{table}/{bizId}/instances",
-                get(handlers::get_biz_instances),
-            )
-            // —— F4：表单注册表 + 发起态 ——
-            .route(
-                "/flow/forms",
-                get(handlers::list_form_bindings).post(handlers::save_form_binding),
-            )
-            .route("/flow/forms/{key}", get(handlers::get_form_binding))
-            .route("/flow/startable", get(handlers::list_startable_definitions))
-            // —— 任务 ——
-            .route("/flow/tasks/my", get(handlers::get_my_tasks))
-            // —— 待办中心分页列表 ——
-            .route("/flow/todos/initiated", get(handlers::get_initiated))
-            .route("/flow/todos/cc", get(handlers::get_cc_todos))
-            .route("/flow/todos/done", get(handlers::get_done_todos))
-            .route("/flow/todos/filters", get(handlers::get_todo_filters))
-            .route("/flow/tasks/{id}/complete", post(handlers::complete_task))
-            .route("/flow/tasks/{id}/claim", post(handlers::claim_task))
-            .route("/flow/tasks/{id}/transfer", post(handlers::transfer_task))
-            .route("/flow/tasks/{id}/delegate", post(handlers::delegate_task))
-            .route("/flow/tasks/{id}/addsign", post(handlers::add_sign_task))
-            // —— 抄送 / 定时器 / 用户 ——
-            .route("/flow/users", get(handlers::list_users))
-            .route("/flow/cc", get(handlers::list_cc))
-            .route("/flow/cc/{id}/read", post(handlers::mark_cc_read))
-            .route("/flow/timers/trigger", post(handlers::trigger_timers))
-            // —— 子流程组织路由（绑定管理 + 组织树） ——
-            .route("/flow/orgs", get(handlers::list_orgs))
-            .route(
-                "/flow/subflow-bindings",
-                post(handlers::upsert_subflow_binding),
-            )
-            .route(
-                "/flow/subflow-bindings/{key}",
-                get(handlers::list_subflow_bindings),
-            )
-            .route(
-                "/flow/subflow-bindings/id/{id}",
-                axum::routing::delete(handlers::delete_subflow_binding),
-            )
+        cmx_flow_app::flow_routes::<CmxAppState>()
     }
 
     fn prefix() -> &'static str {
