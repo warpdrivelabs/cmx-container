@@ -35,7 +35,12 @@
         "codeField": "code",
         "labelField": "name",
         "remark": "供应商主数据头表(激活区,只 published)",
-        "codeLength": 32
+        "codeLength": 32,
+        "codeRule": {
+          "mode": "auto",
+          "field": "code",
+          "ruleCode": "MDM_GYS"
+        }
       },
       "fields": [
         {
@@ -44,10 +49,18 @@
           "nullable": false,
           "id": "name",
           "name": "name",
-          "caption": { "zh_CN": "供应商名称" },
+          "caption": {
+            "zh_CN": "供应商名称"
+          },
           "dimType": "attribute",
-          "edit": { "mode": "cmx-text-input", "required": true },
-          "display": { "mode": "text", "align": "left" },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
           "width": "200px",
           "required": true,
           "align": "left"
@@ -58,10 +71,17 @@
           "nullable": true,
           "id": "short_name",
           "name": "short_name",
-          "caption": { "zh_CN": "简称" },
+          "caption": {
+            "zh_CN": "简称"
+          },
           "dimType": "attribute",
-          "edit": { "mode": "cmx-text-input" },
-          "display": { "mode": "text", "align": "left" },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
           "width": "140px",
           "align": "left"
         },
@@ -71,10 +91,17 @@
           "nullable": true,
           "id": "tax_no",
           "name": "tax_no",
-          "caption": { "zh_CN": "税号" },
+          "caption": {
+            "zh_CN": "税号"
+          },
           "dimType": "attribute",
-          "edit": { "mode": "cmx-text-input" },
-          "display": { "mode": "text", "align": "left" },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
           "width": "140px",
           "align": "left"
         },
@@ -84,10 +111,17 @@
           "nullable": true,
           "id": "credit_code",
           "name": "credit_code",
-          "caption": { "zh_CN": "统一社会信用代码" },
+          "caption": {
+            "zh_CN": "统一社会信用代码"
+          },
           "dimType": "attribute",
-          "edit": { "mode": "cmx-text-input" },
-          "display": { "mode": "text", "align": "left" },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
           "width": "180px",
           "align": "left"
         },
@@ -97,10 +131,17 @@
           "nullable": true,
           "id": "phone",
           "name": "phone",
-          "caption": { "zh_CN": "电话" },
+          "caption": {
+            "zh_CN": "电话"
+          },
           "dimType": "attribute",
-          "edit": { "mode": "cmx-text-input" },
-          "display": { "mode": "text", "align": "left" },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
           "width": "120px",
           "align": "left"
         }
@@ -115,7 +156,9 @@
         "uniqueCheck": true
       },
       "uniqueKeys": [
-        [ "code" ]
+        [
+          "code"
+        ]
       ]
     },
     {
@@ -140,10 +183,17 @@
           "decimalDigits": 0,
           "id": "supplier_id",
           "name": "supplier_id",
-          "caption": { "zh_CN": "所属供应商ID" },
+          "caption": {
+            "zh_CN": "所属供应商ID"
+          },
           "dimType": "attribute",
-          "edit": { "mode": "readonly" },
-          "display": { "mode": "text", "align": "left" },
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
           "width": "120px",
           "required": false,
           "visible": false,
@@ -155,10 +205,18 @@
           "nullable": false,
           "id": "account_no",
           "name": "account_no",
-          "caption": { "zh_CN": "银行账号" },
+          "caption": {
+            "zh_CN": "银行账号"
+          },
           "dimType": "attribute",
-          "edit": { "mode": "cmx-text-input", "required": true },
-          "display": { "mode": "text", "align": "left" },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
           "width": "180px",
           "required": true,
           "align": "left"
@@ -169,10 +227,17 @@
           "nullable": true,
           "id": "bank_name",
           "name": "bank_name",
-          "caption": { "zh_CN": "开户行" },
+          "caption": {
+            "zh_CN": "开户行"
+          },
           "dimType": "attribute",
-          "edit": { "mode": "cmx-text-input" },
-          "display": { "mode": "text", "align": "left" },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
           "width": "160px",
           "align": "left"
         }
@@ -187,9 +252,12 @@
         "uniqueCheck": true
       },
       "uniqueKeys": [
-        [ "supplier_id", "account_no" ]
+        [
+          "supplier_id",
+          "account_no"
+        ]
       ]
     }
   ],
-  "updatedAt": "2026-08-04T18:30:00.000Z"
+  "updatedAt": "2026-08-07T03:25:02.561Z"
 }
