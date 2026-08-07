@@ -519,3 +519,23 @@ fn load_auth_config() -> AuthConfig {
 
     auth_config
 }
+
+/// 初始化全局系统身份。
+///
+/// 供后台任务通过 `system_auth()` 获取，避免 task_local 跨 spawn 丢失。system 身份用一个固定的
+/// 系统级 `AuthContext`，标记 `auth_method=system`。重复初始化只 `warn`（幂等）。
+///
+/// 必须在 `finalize_iam_state` 之前调用——与抽取前 `main` 内联顺序一致。
+pub fn init_system_identity() {
+    let mut system_ctx = cmx_core::AuthContext::new("system", "system");
+    system_ctx.auth_method = Some("system".to_string());
+    let snap = cmx_traits::auth::RequestAuth {
+        auth_context: Some(system_ctx),
+        original_user_token: None,
+        request_id: "system".to_string(),
+        caller: None,
+    };
+    if let Err(e) = cmx_traits::auth::context_scope::init_system_auth(snap) {
+        warn!(error = %e, "全局系统身份已初始化，跳过");
+    }
+}

@@ -2,9 +2,16 @@
 //!
 //! 该模块是应用程序的入口点，负责初始化各种组件、配置路由并启动 HTTP 服务器。
 
+// macOS Apple 链接器（ld-1267+）对超大 debug 二进制会报 `__eh_frame section too large
+// (max 16MB)`：本 workspace 体量大 + 完整 debuginfo 使 DWARF 栈展开段超 16MB，compact unwind
+// 表偏移量装不下。后果仅为「panic 展开性能*可能*下降」，不影响正确性/运行。Rust 1.97 起
+// `linker_messages` lint 把链接器 stderr 抬成告警才使其显现（代码未变差）。此处按其良性静音。
+#![allow(linker_messages)]
+
+mod app_state;
 mod config;
 mod error;
-mod format;
+mod router;
 mod routes;
 
 pub use self::error::{Error, Result};
@@ -13,29 +20,18 @@ use config::web_config;
 /// 启动字符画 Logo（编译期嵌入二进制，无运行时文件路径依赖）
 const BANNER: &str = include_str!("banner.txt");
 
+use crate::app_state::build_app_state;
 use crate::config::{
-    build_audit_logger, finalize_iam_state, init_auth_service, init_cache, init_datasources,
-    init_iam_services, init_infra, init_plugins, init_rpc, init_runtime, init_service_invoker,
-    init_services, init_storage, init_web_config, shutdown_infra,
+    build_audit_logger, build_function_invoker, finalize_iam_state, init_auth_service, init_cache,
+    init_code_engine, init_datasources, init_infra, init_iam_services, init_job_center,
+    init_plugins, init_rpc, init_runtime, init_service_invoker, init_services, init_storage,
+    init_system_identity, init_web_config, run_permission_check, shutdown_infra,
 };
-use axum::extract::DefaultBodyLimit;
-use axum::{Router, middleware};
-use cmx_api::CmxAppState;
-use cmx_api::middleware::{cors_layer, mw_auth, mw_context_resolver, mw_permission, trace_layer};
-use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
+use crate::router::build_router;
 use cmx_utils::ConfigManager;
-use format::CompactFormatter;
-use std::future::IntoFuture;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tower_cookies::CookieManagerLayer;
-use tower_http::compression::CompressionLayer;
-use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
-use tower_http::limit::RequestBodyLimitLayer;
 use tracing::{info, warn};
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, registry, util::SubscriberInitExt};
 
 /// 应用程序主函数
 ///
@@ -64,51 +60,18 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, registry, util::S
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
 
-    let log_dir = "logs";
-    let file_appender = RollingFileAppender::new(Rotation::DAILY, log_dir, "cmx-server.log");
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    // 分层日志初始化下沉到通用骨架 cmx-web-chassis（控制台 CompactFormatter + 滚动文件 JSON），
+    // 与 flow-server / report-server / mdm-server 完全一致。日志目录 logs、文件名 cmx-server.log
+    // （沿用原值，行为不变）。_guard 必须持有到 main 结束，确保文件日志后台线程 flush。
+    let log_cfg = cmx_web_chassis::ChassisConfig {
+        log_dir: "logs".to_string(),
+        log_file: "cmx-server.log".to_string(),
+        log_level: "info".to_string(),
+        ..cmx_web_chassis::ChassisConfig::defaults("cmx-server")
+    };
+    let _guard = cmx_web_chassis::init_tracing(&log_cfg);
 
-    // 文件日志层：JSON 格式，不带 ANSI 颜色码，便于日志收集系统解析
-    let file_layer = fmt::layer()
-        .with_writer(non_blocking)
-        .with_ansi(false)
-        .with_target(true)
-        .with_thread_ids(true)
-        .with_file(true)
-        .with_line_number(true)
-        .with_thread_names(true)
-        .with_thread_ids(true)
-        .json();
-
-    // 控制台日志层：使用自定义格式化器，优化颜色和间距
-    let console_layer = fmt::layer()
-        .event_format(CompactFormatter)
-        .with_writer(std::io::stdout)
-        .with_ansi(true);
-
-    // // 控制台日志层：简洁格式，带颜色，便于开发调试
-    // let console_layer = fmt::layer()
-    //     .compact()
-    //     .with_writer(std::io::stdout)
-    //     .with_ansi(true)
-    //     .with_target(false)
-    //     .with_file(true)
-    //     .with_line_number(true)
-    //     .with_thread_names(true)
-    //     .with_thread_ids(true)
-    //     .compact();
-
-    // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-
-    registry()
-        .with(env_filter)
-        .with(console_layer)
-        .with(file_layer)
-        .init();
-
-    // 保持 guard 活跃直至 main 结束，确保日志后台线程正常 flush。
-
+    // ── 基础设施（顺序敏感：审计依赖数据源、IAM 依赖审计、系统身份在 finalize 之前）──
     init_infra().await?;
     cmx_utils::crypto::CryptoService::init_from_env();
     info!("加密服务初始化完成");
@@ -140,253 +103,57 @@ async fn main() -> Result<()> {
     init_plugins().await?;
     init_service_invoker().await?;
 
-    // 初始化编码引擎全局注入（供 DCT/DOC 钩子调用，未注入则钩子跳过=现状零影响）。
-    {
-        let engine = std::sync::Arc::new(cmx_code_api::engine::CodeEngine);
-        if let Err(e) = cmx_traits::code::GlobalCodeMinter::set(engine) {
-            tracing::warn!("编码引擎全局注入失败（可能重复初始化）：{e}");
-        }
-    }
+    // 编码引擎全局注入（供 DCT/DOC 钩子调用，未注入则钩子跳过=现状零影响）。
+    init_code_engine();
 
-    // 初始化审计日志器（依赖 DatabaseManager，必须在 init_datasources 之后）
+    // ── IAM + 认证（审计→IAM→认证→系统身份→finalize→权限校验）──
+    // 审计日志器依赖 DatabaseManager，必须在 init_datasources 之后。
     let audit_logger = build_audit_logger().await?;
 
-    // 初始化 IAM 基础服务（创建 UserAuthQueryImpl 供 AuthService 共享）
-    // 同时产出 ResourceDataImporter 和 DefinitionImporterBundle，
-    // 供 HTTP 端点/gRPC 服务端统一调用权限导入逻辑，以及模块导入/导出复用统一导入器。
+    // init_iam_services 产出 ResourceDataImporter 和 DefinitionImporterBundle，供 HTTP/gRPC 统一
+    // 调用权限导入逻辑，以及模块导入/导出复用统一导入器。
     let (iam_state, user_auth_query, iam_config, resource_data_importer, definition_importers) =
         init_iam_services(audit_logger.clone()).await?;
 
-    // 初始化认证服务（使用 IAM 创建的 UserAuthQueryImpl）
     let auth_service = init_auth_service(user_auth_query, audit_logger.clone()).await?;
 
-    // 初始化全局系统身份（供后台任务通过 system_auth() 获取，避免 task_local 跨 spawn 丢失）。
-    // system 身份用一个固定的系统级 AuthContext，标记 auth_method=system。
-    {
-        let mut system_ctx = cmx_core::AuthContext::new("system", "system");
-        system_ctx.auth_method = Some("system".to_string());
-        let snap = cmx_traits::auth::RequestAuth {
-            auth_context: Some(system_ctx),
-            original_user_token: None,
-            request_id: "system".to_string(),
-            caller: None,
-        };
-        if let Err(e) = cmx_traits::auth::context_scope::init_system_auth(snap) {
-            tracing::warn!(error = %e, "全局系统身份已初始化，跳过");
-        }
-    }
+    // 全局系统身份（供后台任务经 system_auth() 获取），必须在 finalize_iam_state 之前。
+    init_system_identity();
 
-    // 用 auth_service 完成 IamState 的最终组装（注入 UserServiceImpl）
+    // 用 auth_service 完成 IamState 的最终组装（注入 UserServiceImpl）。
     let iam_state =
         finalize_iam_state(&iam_state, auth_service.clone(), iam_config, audit_logger).await?;
 
-    // 权限一致性校验 + 权限列表日志(不写 DB,仅校验代码声明权限与 DB 是否一致)
-    {
-        let mm = cmx_database::get_default_db_manager();
-        let db_id = mm.get_default_db_id().await;
-        let mode = cmx_utils::ConfigManager::global()
-            .get_string("iam.permission_consistency_mode")
-            .unwrap_or_else(|_| "warn".to_string());
-        if let Err(e) = cmx_iam::permission::run_consistency_check(mm, &db_id, &mode).await {
-            return Err(Error::ServerSetup(format!("权限一致性校验失败: {e}")));
-        }
-        cmx_iam::permission::log_registered_permissions();
-        cmx_iam::permission::warn_handler_annotation_status();
-    }
+    // 权限一致性校验 + 权限列表日志（不写 DB，仅校验代码声明权限与 DB 是否一致）。
+    run_permission_check().await?;
 
-    // 初始化 RPC 子系统（默认关闭，需配置 [rpc] enabled = true 启用）。
-    // 将 ResourceDataImporter 透传给 gRPC 服务端，启用 CmxResourceDataService。
-    // 组装层构造 cmx-biz 的 BizFunctionInvoker（封装 RuntimeInvoker + PluginQuery）注入 cmx-rpc，
+    // ── RPC + AppState + 后台子系统 ──
+    // RPC 默认关闭（需 [rpc] enabled = true）。BizFunctionInvoker 在组装层构造后注入 cmx-rpc，
     // 使基础设施层 cmx-rpc 无需直接依赖业务层 cmx-biz。
-    let function_invoker: Arc<dyn cmx_traits::function_invoker::FunctionInvoker> =
-        Arc::new(cmx_biz::function_invoker::BizFunctionInvoker::new(
-            cmx_runtime::GlobalExtismEngine::get_as_invoker(),
-            cmx_plugin::GlobalPluginManager::get_as_plugin_query(),
-        ));
     let grpc_port = init_rpc(
         cmx_traits::service::GlobalServiceInvoker::get().clone(),
-        function_invoker,
+        build_function_invoker(),
         resource_data_importer.clone(),
         Some(auth_service.clone()),
     )
     .await?;
 
-    // 构建完整的 AppState，注入各子系统的 trait 实例
-    let app_state = CmxAppState::new()
-        .with_plugin_query(cmx_plugin::GlobalPluginManager::get_as_plugin_query())
-        .with_runtime_invoker(cmx_runtime::GlobalExtismEngine::get_as_invoker())
-        .with_service_query(GlobalServiceQuery::get().clone())
-        .with_service_storage(GlobalServiceStorage::get().clone())
-        .with_storage_service(
-            cmx_storage::global::GlobalStorageService::get()
-                .service()
-                .clone(),
-        )
-        .with_auth_service(auth_service)
-        .with_iam(iam_state);
+    let app_state = build_app_state(
+        auth_service,
+        iam_state,
+        resource_data_importer,
+        definition_importers,
+    );
 
-    // 注入 ResourceDataImporter（HTTP 端点 /iam/permissions/import 和 /cleanup 使用）
-    let app_state = if let Some(importer) = resource_data_importer {
-        app_state.with_resource_data_importer(importer)
-    } else {
-        app_state
-    };
-
-    // 注入 DefinitionImporterBundle（模块导入/导出复用统一导入器集合）
-    let app_state = if let Some(importers) = definition_importers {
-        app_state.with_definition_importers(importers)
-    } else {
-        app_state
-    };
-
-    // 初始化 AI 子系统（薄代理）：加载 OpenCode 配置、构建全局客户端、拉起后台 SSE relay task。
+    // AI 子系统（薄代理）：加载 OpenCode 配置、构建全局客户端、拉起后台 SSE relay task。
     // 幂等；配置缺失时以默认值（http://127.0.0.1:4096）启动，/api/ai/* 接口仍可调用。
     cmx_ai::init_ai_subsystem().await;
 
-    // 初始化异步任务中心（M3 分布式态）：注入 PG 持久化后端（cmx_job_* 三表，主库 primary）+
-    // 终态回调（失败告警→GlobalEventBus）。distributed=true 时启动 claim/heartbeat+reaper/control
-    // 三循环：多实例经 UPDATE...SKIP LOCKED 抢占 pending 作业本地执行（不重跑），失联属主由 reaper 回收。
-    // node_id 取环境变量 CMX_JOB_NODE_ID（多实例须各异）；未设则用 "node-<pid>"。distributed 取
-    // JOB_DISTRIBUTED（默认 true；单机也安全——一个节点独占抢占）。
-    {
-        let node_id = std::env::var("CMX_JOB_NODE_ID")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| format!("node-{}", std::process::id()));
-        let distributed = std::env::var("JOB_DISTRIBUTED")
-            .map(|v| v != "false" && v != "0")
-            .unwrap_or(true);
-        let job_cfg = cmx_job_core::JobConfig {
-            max_concurrency: 4,
-            distributed,
-            node_id,
-            owner_timeout_ms: 30_000,
-        };
-        // 终态回调：失败作业发 GlobalEventBus（job.failed），供告警/通知消费者订阅。
-        let hook: cmx_job_core::manager::TerminalHook = std::sync::Arc::new(|job: &cmx_job_core::Job| {
-            if job.status == cmx_job_core::JobStatus::Failed {
-                let jid = job.id;
-                let payload = serde_json::json!({
-                    "id": job.id.to_string(),
-                    "kind": job.kind,
-                    "title": job.title,
-                    "error": job.error,
-                });
-                tracing::warn!(job_id = jid, "作业失败告警 → GlobalEventBus(job.failed)");
-                tokio::spawn(async move {
-                    if cmx_traits::event_bus::GlobalEventBus::is_initialized() {
-                        cmx_traits::event_bus::GlobalEventBus::get()
-                            .publish("job.failed", payload)
-                            .await;
-                    }
-                });
-            }
-        });
-        cmx_job_core::init_job_subsystem_full(
-            job_cfg,
-            std::sync::Arc::new(cmx_job_store_pg::PgJobStore::default_db()),
-            Some(hook),
-        )
-        .await;
-    }
+    // 异步任务中心（M3 分布式态）：PG 持久化 + 终态告警 + claim/heartbeat/reaper 三循环。
+    init_job_center().await;
 
-    let api_routes = routes::routes().with_state(app_state);
-
-    // 构建路由树，中间件顺序（从外到内）：
-    // 1. CookieManager - 处理 cookies
-    // 2. mw_context_resolver - 解析请求上下文
-    // 3. mw_auth - 认证（Token 校验 + AuthContext 注入）
-    // 4. mw_permission - 权限校验（路由→权限码映射 + system:all 短路）
-    // 5. mw_trace - 请求追踪
-    // 6. RequestBodyLimitLayer - 请求体大小限制（100MB）
-    // 7. cors_layer - 跨域支持
-    let routes_all = Router::new()
-        .nest("/api", api_routes)
-        .merge(routes::get_swagger_routes())
-        .layer(CookieManagerLayer::new())
-        .layer(middleware::from_fn(mw_permission))
-        .layer(middleware::from_fn(mw_auth))
-        .layer(middleware::from_fn(mw_context_resolver))
-        .layer(middleware::from_fn(trace_layer))
-        .layer(RequestBodyLimitLayer::new(100 * 1024 * 1024))
-        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
-        .layer(cors_layer())
-        // 响应压缩（gzip/br）：对列式 JSON 单据包压缩比高（方案 §8 四级小包）。
-        // 例外 application/octet-stream：单据流式端点(/api/doc/data/tokio-zmc-stream)用
-        // chunked 分帧边算边发（O(单行)内存），压缩层会缓冲整流并可能截断 gzip 尾（丢 trailer
-        // → 浏览器 net::ERR_*），故排除二进制流，保持真流式。
-        .layer(CompressionLayer::new().compress_when(
-            DefaultPredicate::new().and(NotForContentType::const_new("application/octet-stream")),
-        ));
-
-    // 添加静态文件服务作为 fallback
-    let routes_all = routes_all.fallback_service(axum::routing::get_service(
-        tower_http::services::ServeDir::new(&web_config.web_folder),
-    ));
-
-    // 注册本地存储的静态文件访问路由（path_patterns → storage_path）
-    let routes_all = {
-        let mut router = routes_all;
-        for (pattern, storage_path) in
-            cmx_storage::global::GlobalStorageService::local_access_configs()
-        {
-            // 从 pattern（如 "/file/**"）提取路由前缀（如 "/file"）
-            let prefix = pattern.split_once('*').map(|(p, _)| p).unwrap_or(pattern);
-            let prefix = prefix.trim_end_matches('/');
-            if prefix.is_empty() {
-                continue;
-            }
-            info!("挂载本地存储静态文件路由: {} -> {}", prefix, storage_path);
-            let serve_dir: axum::Router<()> = axum::Router::new().fallback_service(
-                axum::routing::get_service(tower_http::services::ServeDir::new(storage_path)),
-            );
-            router = router.nest(prefix, serve_dir);
-        }
-        router
-    };
-
-    // 同源托管两个迁移前端的生产构建（dist）+ 共享 UI5 运行时（/shared）：
-    //   /portal -> CMXPortalManager/dist（base=/portal/），/html -> CMXHTMLDesigner/dist（base=/html/），
-    //   /shared -> cmx-ui5-runtime/dist（UI5/Tabler 运行时，前端用 import("/shared/assets/...") 动态加载）。
-    // 路径由配置 portal.web_portal_dist / portal.web_html_dist / portal.web_shared_dist 给出；
-    // 未配置则跳过（开发时走 vite 代理）。spa=true 的前端未命中文件回退到 index.html（支持 history 路由）；
-    // /shared 是纯静态资源（spa=false），缺文件即 404，绝不能回退到某个 index.html。
-    let routes_all = {
-        let mut router = routes_all;
-        for (key, prefix, spa) in [
-            ("portal.web_portal_dist", "/portal", true),
-            ("portal.web_html_dist", "/html", true),
-            ("portal.web_shared_dist", "/shared", false),
-        ] {
-            let dist = ConfigManager::global().get_string(key).unwrap_or_default();
-            let dist = dist.trim();
-            if dist.is_empty() {
-                continue;
-            }
-            if !std::path::Path::new(dist).exists() {
-                info!("前端 dist 未找到，跳过静态托管: {} -> {}", prefix, dist);
-                continue;
-            }
-            info!("挂载前端静态托管: {} -> {}", prefix, dist);
-            // 用 nest_service 直接挂 ServeDir（而非包一层 Router），使 /portal 与 /portal/ 都正确命中。
-            let serve = if spa {
-                // SPA fallback：未命中文件回退到该 dist 的 index.html，支持前端 history 路由（如 /portal/login）。
-                let index = format!("{}/index.html", dist.trim_end_matches('/'));
-                tower_http::services::ServeDir::new(dist)
-                    .fallback(tower_http::services::ServeFile::new(index))
-            } else {
-                tower_http::services::ServeDir::new(dist).fallback(
-                    // 纯静态：占位 fallback 永不命中存在的文件，缺失即由 ServeDir 返回 404。
-                    tower_http::services::ServeFile::new(format!(
-                        "{}/__nonexistent__",
-                        dist.trim_end_matches('/')
-                    )),
-                )
-            };
-            router = router.nest_service(prefix, serve);
-        }
-        router
-    };
+    // ── 路由 + 监听 + 服务 ──
+    let routes_all = build_router(app_state, web_config);
 
     let server_host = ConfigManager::global()
         .get_string("server.host")
@@ -409,7 +176,7 @@ async fn main() -> Result<()> {
     info!("   监听地址：{}:{}", server_host, actual_port);
     info!("   (配置端口：{})", server_port);
     info!("   静态文件目录：{}", web_config.web_folder);
-    info!("   日志目录：{}", log_dir);
+    info!("   日志目录：{}", "logs");
     if let Some(port) = grpc_port {
         info!("   gRPC 端口：{}", port);
     }
@@ -419,31 +186,18 @@ async fn main() -> Result<()> {
     // 仿照 Redis 启动时的 ASCII 艺术字效果）。放在所有启动日志之后，作为最后输出。
     print_banner();
 
-    let graceful_shutdown_timeout = graceful_shutdown_timeout();
-    let (shutdown_started_tx, shutdown_started_rx) = tokio::sync::oneshot::channel();
-    let server =
-        axum::serve(listener, routes_all.into_make_service()).with_graceful_shutdown(async move {
-            shutdown_signal().await;
-            let _ = shutdown_started_tx.send(());
-        });
-    let server = server.into_future();
+    // serve + 优雅关闭（SIGINT/SIGTERM + 超时兜底）下沉到通用骨架 cmx-web-chassis，
+    // 与 flow-server 完全一致的关闭语义。平台的 routes_all（含平台中间件/静态托管/fallback）
+    // 与 listener 已在上面组装好，此处只把「serve 循环」交给骨架。
+    cmx_web_chassis::serve_with_shutdown(
+        listener,
+        routes_all,
+        graceful_shutdown_timeout().as_secs(),
+    )
+    .await
+    .map_err(|e| Error::ServerSetup(e.to_string()))?;
 
-    tokio::pin!(server);
-    tokio::select! {
-        result = &mut server => {
-            result.map_err(|e| Error::ServerSetup(format!("服务器运行失败: {}", e)))?;
-        }
-        _ = async {
-            let _ = shutdown_started_rx.await;
-            tokio::time::sleep(graceful_shutdown_timeout).await;
-        } => {
-            warn!(
-                "HTTP 优雅关闭等待超过 {} 秒，仍有活动连接，继续执行退出清理",
-                graceful_shutdown_timeout.as_secs()
-            );
-        }
-    }
-
+    // serve 返回即已收到关闭信号（或服务器自然结束）：执行平台侧退出清理。
     info!("开始优雅关闭...");
     shutdown_infra().await;
     info!("服务已优雅关闭");
@@ -536,37 +290,4 @@ fn graceful_shutdown_timeout() -> Duration {
         .unwrap_or(DEFAULT_SECS);
 
     Duration::from_secs(secs)
-}
-
-/// 监听优雅关闭信号
-///
-/// 监听 Ctrl+C (SIGINT) 和 SIGTERM 信号，收到信号后触发 graceful shutdown。
-///
-/// 在 Unix 系统上同时监听两个信号，在 Windows 上只监听 Ctrl+C。
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {
-            info!("收到 Ctrl+C 信号，开始优雅关闭...");
-        },
-        _ = terminate => {
-            info!("收到 SIGTERM 信号，开始优雅关闭...");
-        },
-    }
 }

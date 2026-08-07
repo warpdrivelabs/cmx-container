@@ -18,6 +18,7 @@ members = [
     "crates/libs/cmx-infra/cmx-storage",
     "crates/libs/cmx-infra/cmx-audit",
     "crates/libs/cmx-infra/cmx-auth",
+    "crates/libs/cmx-web-chassis",
     "crates/web/web-server",
     "crates/libs/cmx-api",
     "crates/libs/cmx-api-types",
@@ -127,6 +128,8 @@ cmx-storage = { path = "crates/libs/cmx-infra/cmx-storage", version = "0.1.12", 
 # 内部依赖 - 审计日志
 cmx-audit = { path = "crates/libs/cmx-infra/cmx-audit", version = "0.1.12", registry = "nora" }
 cmx-auth = { path = "crates/libs/cmx-infra/cmx-auth", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 通用 HTTP 服务骨架（chassis）：flow/report/mdm-server 共用的启动/日志/中间件/优雅关闭骨架，零 cmx-api
+cmx-web-chassis = { path = "crates/libs/cmx-web-chassis", version = "0.1.12", registry = "nora" }
 # 内部依赖 - IAM 用户权限角色管理
 cmx-iam = { path = "crates/libs/cmx-iam", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 门户/设计器业务（迁移自 CMXPortalManager / CMXHTMLDesigner 的 Node 后端）
@@ -150,6 +153,8 @@ cmx-flow-engine = { path = "../cmx-flowengine/crates/cmx-flow-engine", version =
 cmx-flow-store-pg = { path = "../cmx-flowengine/crates/cmx-flow-store-pg", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 流程定义持久化（设计器 ⇄ 引擎：BPMN XML + 版本 + 草稿/发布）
 cmx-flow-def = { path = "../cmx-flowengine/crates/cmx-flow-def", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 流程引擎平台中立应用层（引擎单例 + handler + flow_routes + 信封）。抽核后 cmx-flow-api 只调它。
+cmx-flow-app = { path = "../cmx-flowengine/crates/cmx-flow-app", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 流程引擎 HTTP 层（FlowModule 路由，web-server 合并，避免 cmx-api⇄cmx-flow 环）
 cmx-flow-api = { path = "crates/libs/cmx-flow/cmx-flow-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 报表模块中立模型（常量 + 请求 DTO，无 DB/HTTP 依赖）

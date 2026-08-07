@@ -1341,21 +1341,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-flow-adapters"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "cmx-flow-engine",
+ "hex",
+ "hmac 0.12.1",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "cmx-flow-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api",
+ "cmx-flow-app",
+]
+
+[[package]]
+name = "cmx-flow-app"
 version = "0.1.12"
 dependencies = [
  "async-trait",
  "axum",
  "chrono",
- "cmx-api",
- "cmx-biz",
  "cmx-core",
  "cmx-database-pg",
+ "cmx-flow-adapters",
  "cmx-flow-bpmn",
  "cmx-flow-def",
  "cmx-flow-engine",
  "cmx-flow-model",
  "cmx-flow-store-pg",
+ "jsonwebtoken",
  "serde",
  "serde_json",
  "tokio",
@@ -1994,6 +2019,24 @@ dependencies = [
  "uuid",
  "walkdir",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "cmx-web-chassis"
+version = "0.1.12"
+dependencies = [
+ "anyhow",
+ "axum",
+ "chrono",
+ "dotenvy",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.23",
+ "tower-http",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -8910,6 +8953,7 @@ dependencies = [
  "cmx-storage",
  "cmx-traits",
  "cmx-utils",
+ "cmx-web-chassis",
  "derive_more",
  "dotenvy",
  "local-ip-address",

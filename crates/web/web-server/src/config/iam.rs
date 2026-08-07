@@ -491,3 +491,25 @@ fn load_permission_map() -> HashMap<String, String> {
         })
         .unwrap_or_default()
 }
+
+/// 权限一致性校验 + 权限列表日志。
+///
+/// 不写 DB，仅校验代码声明权限与 DB 是否一致（模式由 `iam.permission_consistency_mode` 配置，
+/// 默认 `warn`）。校验失败返回 `Error::ServerSetup`。随后记录已注册权限与 handler 注解状态。
+///
+/// 必须在 `finalize_iam_state` 之后调用——与抽取前 `main` 内联顺序一致。
+pub async fn run_permission_check() -> Result<()> {
+    let mm = get_default_db_manager();
+    let db_id = mm.get_default_db_id().await;
+    let mode = cmx_utils::ConfigManager::global()
+        .get_string("iam.permission_consistency_mode")
+        .unwrap_or_else(|_| "warn".to_string());
+    if let Err(e) = cmx_iam::permission::run_consistency_check(mm, &db_id, &mode).await {
+        return Err(crate::error::Error::ServerSetup(format!(
+            "权限一致性校验失败: {e}"
+        )));
+    }
+    cmx_iam::permission::log_registered_permissions();
+    cmx_iam::permission::warn_handler_annotation_status();
+    Ok(())
+}

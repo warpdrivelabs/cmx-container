@@ -1,0 +1,36 @@
+[package]
+name = "cmx-web-chassis"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 通用 HTTP 服务骨架（chassis）：把「起一个 axum 微服务」的框架无关部分收成一份可复用代码——
+# 分层日志（控制台紧凑 + 滚动文件 JSON）、配置（env + 可选 toml）、中间件栈（trace/CORS/
+# body-limit/compression）、有序启动钩子、优雅关闭（SIGINT/SIGTERM + timeout）、启动 banner。
+#
+# 泛型 over 应用状态 S：各服务提供自己的 Router<S> + state + 启动钩子，chassis::run(spec) 统一装配。
+# 零 cmx-api / 零平台依赖——flow-server / report-server / mdm-server（乃至平台 web-server）各自
+# 填 ServiceSpec 即得同构的启动/日志/中间件/优雅关闭。抽自 web-server 的 main.rs 框架无关切片。
+
+[dependencies]
+# Web 框架 + 中间件
+axum = { workspace = true }
+tower-http = { workspace = true }
+# 异步运行时（signal/net/time）
+tokio = { workspace = true }
+# 日志
+tracing = { workspace = true }
+# 需要 json（滚动文件层）+ fmt + env-filter（控制台）
+tracing-subscriber = { workspace = true, features = ["env-filter", "json", "fmt", "tracing-log"] }
+# 滚动文件 appender（按天切割 + 非阻塞写）
+tracing-appender = { workspace = true }
+# 配置：可选 toml + 时间戳格式化
+toml = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+# .env 加载
+dotenvy = { workspace = true }
+# 错误
+thiserror = { workspace = true }
+# 启动钩子的通用错误通道（服务钩子返回任意错误）
+anyhow = { workspace = true }

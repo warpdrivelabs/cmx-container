@@ -190,3 +190,14 @@ pub(crate) fn load_outgoing_credential() -> Option<cmx_plugin::service::remote_i
         })
     }
 }
+
+/// 构造 cmx-biz 的 `BizFunctionInvoker`（封装 `RuntimeInvoker` + `PluginQuery`）。
+///
+/// 组装层在此构造并注入 cmx-rpc，使基础设施层 cmx-rpc 无需直接依赖业务层 cmx-biz。
+/// 返回值透传给 [`init_rpc`] 的 `function_invoker` 参数。
+pub fn build_function_invoker() -> Arc<dyn FunctionInvoker> {
+    Arc::new(cmx_biz::function_invoker::BizFunctionInvoker::new(
+        cmx_runtime::GlobalExtismEngine::get_as_invoker(),
+        cmx_plugin::GlobalPluginManager::get_as_plugin_query(),
+    ))
+}
