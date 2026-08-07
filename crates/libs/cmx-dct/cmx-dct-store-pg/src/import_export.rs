@@ -445,14 +445,15 @@ async fn push_row(
     // 编码引擎铸号：若字典配置了 auto codeRule 且 code 为空，先铸号再校验
     // （与 write.rs save 路径一致：铸号在 NOT NULL 校验之前）。
     //
-    // 性能限制：此处逐行铸号（单行 slice），serial 段每行单独反查 max。
-    // 若导入大量同 prefix 行（如 1000 行），可能因前一行未落库导致取到同一 max 号。
-    // random 段无此问题（每次 resolve 换种子）。导入场景通常 CSV 自带 code，留空行少。
-    // TODO: 若需大批量导入 auto 铸号，应在 batch 级别批量铸号（攒满 batch 后一次 mint_batch）。
+    // 逐行铸号（单行 slice）：
+    // - use_sequence=true：每次走发号序列表 FOR UPDATE 取号，原子安全，逐行无重号风险。
+    // - use_sequence=false（默认反查 max）：serial 段每行单独反查 max，若导入大量同 prefix 行
+    //   可能因前一行未落库取到同一 max 号。random 段无此问题（每次 resolve 换种子）。
+    //   导入场景通常 CSV 自带 code，留空行少；若需大批量导入 auto 铸号，建议开启 use_sequence=true。
     let mut row = row;
     if needs_mint_code(view, &row) {
-        let mut rows_slice = std::slice::from_mut(&mut row);
-        crate::write::mint_codes_for_inserts(view, rows_slice, db_id).await;
+        let rows_slice = std::slice::from_mut(&mut row);
+        crate::write::mint_codes_for_inserts(view, rows_slice, db_id, None).await;
     }
     // 列校验：通过才入 batch；否则记录 skipped + error
     if let Some(violation) = validate_row(view, &row) {

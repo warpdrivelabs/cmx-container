@@ -134,6 +134,11 @@ impl RuleSpec {
             .map(|s| s.pad_side())
             .unwrap_or(PadSide::Left)
     }
+
+    /// 是否走发号序列表（集群安全发号源，默认 false 走反查 max 老路径）。
+    pub fn use_sequence(&self) -> bool {
+        self.use_sequence
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -838,7 +838,7 @@ impl DocSaver {
         Self::exec(mm, db_id, txn_id, &sql, vec![DataValue::Array(dv_ids)]).await
     }
 
-    /// DELETE WHERE id = ANY($1)。
+    /// DELETE WHERE id = ANY($1)。删前对挂了 code_rule(auto+enableGap) 的层记断号。
     async fn delete_ids(
         mm: &DatabaseManager,
         db_id: &str,
@@ -846,12 +846,76 @@ impl DocSaver {
         layer: &LayerView,
         ids: &[Value],
     ) -> Result<u64> {
+        // 删行记断号：有 code_rule + 引擎注入时，先批量 SELECT 旧 code + 整行，解析记断号
+        if let Some(minter) = cmx_traits::code::GlobalCodeMinter::get() {
+            if let Some(code_rule) = &layer.code_rule {
+                let field = code_rule
+                    .get("field")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("doc_no");
+                // 批量 SELECT 旧 code + 整行（事务内，删前）
+                if let Ok(old_rows) =
+                    Self::select_rows_for_gap(mm, db_id, txn_id, layer, field, ids).await
+                {
+                    for row in &old_rows {
+                        if let Some(code) = row.get(field).and_then(|v| v.as_str()) {
+                            if !code.is_empty() {
+                                minter.record_gap_for_code(code_rule, code, row, db_id).await;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         let dv_ids: Vec<DataValue> = ids.iter().map(|v| dv_for_col(v, layer, "id")).collect();
         let sql = format!(
             "DELETE FROM {} WHERE id = ANY($1)",
             quote_ident(&layer.table_name)
         );
         Self::exec(mm, db_id, txn_id, &sql, vec![DataValue::Array(dv_ids)]).await
+    }
+
+    /// 删行前批量 SELECT 被删行整行（事务内），供记断号用。
+    async fn select_rows_for_gap(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: &str,
+        layer: &LayerView,
+        field: &str,
+        ids: &[Value],
+    ) -> Result<Vec<Value>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let sql = format!(
+            "SELECT * FROM {} WHERE id = ANY($1)",
+            quote_ident(&layer.table_name)
+        );
+        let dv_ids: Vec<DataValue> = ids.iter().map(|v| dv_for_col(v, layer, "id")).collect();
+        let ds = mm
+            .query_sql_with_datavalues(
+                db_id,
+                Some(txn_id),
+                &sql,
+                vec![DataValue::Array(dv_ids)],
+                "del_rows",
+            )
+            .await
+            .map_err(|e| {
+                tracing::warn!(
+                    target: "cmx_doc::saver",
+                    table = %layer.table_name, field = field, error = %e,
+                    "select_rows_for_gap 失败（不阻断删行）"
+                );
+                BizError::from_db_error(&e.to_string())
+            })?;
+        let ds_val = serde_json::to_value(&ds).unwrap_or_default();
+        let rows = ds_val
+            .get("rows")
+            .and_then(|r| r.as_array())
+            .cloned()
+            .unwrap_or_default();
+        Ok(rows)
     }
 
     /// 从 row {id, upper_id, fields} 拼列名+值（只取定义里的列）。
@@ -891,12 +955,24 @@ impl DocSaver {
             // 落库失败：把 PG 原始错误翻译成优雅提示 + 稳定错误码（唯一键/外键/非空等），
             // 不再暴露英文原文 + SQL。前置列校验已拦大部分，此为兜底。
             .map_err(|e| {
-                tracing::error!(
-                    target: "cmx_doc::saver::exec",
-                    error = %e,
-                    "落库失败（PG 原文见此日志，handler 返回优雅文案）"
-                );
-                BizError::from_db_error(&e.to_string())
+                let raw = e.to_string();
+                let biz = BizError::from_db_error(&raw);
+                // UNIQUE 冲突时补充提示（DOC 批量 INSERT 不逐行重试：
+                // use_sequence=true 时发号序列表保证唯一；use_sequence=false 时建议开启）
+                if matches!(biz, BizError::DbConstraint { code: cmx_biz::errcode::CmxErrCode::UniqueViolation, .. }) {
+                    tracing::warn!(
+                        target: "cmx_doc::saver::exec",
+                        error = %e,
+                        "落库 UNIQUE 冲突（建议规则开启 use_sequence=true 规避并发冲突）"
+                    );
+                } else {
+                    tracing::error!(
+                        target: "cmx_doc::saver::exec",
+                        error = %e,
+                        "落库失败（PG 原文见此日志，handler 返回优雅文案）"
+                    );
+                }
+                biz
             })
     }
 
@@ -1257,7 +1333,9 @@ async fn mint_codes_for_changeset(
 
             if pending.is_empty() { continue; }
 
-            // 批量铸号（txn_id=None：反查 max 是只读 SELECT，用独立连接避免跨 async 线程的事务上下文丢失）
+            // 批量铸号（txn_id=None：CodeEngine 的 async 调用链跨越线程边界，主事务 holder
+            // 在铸号时刻不可用（"没有活跃事务"），故反查 max 用独立连接。use_sequence=true 时
+            // seq_store 内部用独立短事务保证取号原子，无需主事务上下文。）
             let attrs_list: Vec<Value> = pending.iter().map(|(_, a)| a.clone()).collect();
             match minter
                 .mint_batch(code_rule, &target, &attrs_list, db_id, None)

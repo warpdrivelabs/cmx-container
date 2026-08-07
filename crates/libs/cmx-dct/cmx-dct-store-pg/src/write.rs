@@ -17,7 +17,7 @@ use cmx_dct_model::{
 };
 use serde_json::{Value, json};
 
-use crate::error::{api_err, map_db_err};
+use crate::error::{api_err, is_unique_violation, map_db_err};
 use crate::hierarchy::{
     hierarchy_parent_field, non_empty_id_str, recompute_hierarchy_subtree, select_parent_id,
 };
@@ -60,7 +60,9 @@ pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertO
 
     // 编码引擎铸号：若字典配置了 codeRule(mode=auto)，为 code_field 为空的行铸业务编码。
     // 未配置编码引擎（code_rule=None 或 GlobalCodeMinter 未注入）→ 跳过（现状零影响）。
-    mint_codes_for_inserts(view, &mut rows, db_id).await;
+    // upsert 非事务路径，传 None：use_sequence=true 时 seq_store 内部保证取号原子，
+    // use_sequence=false 时走反查 max（单行低并发场景）。
+    mint_codes_for_inserts(view, &mut rows, db_id, None).await;
 
     // 落库前列级校验：类型/长度/精度/非空（NOT NULL 跳过服务端 backfill 列）。一次回报全部。
     let vopts = cmx_biz::validation::ValidateOptions::insert(SERVER_FILLED_COLS, SERVER_REPLACED_COLS);
@@ -79,14 +81,33 @@ pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertO
 
     let mm = get_default_pg_db_manager();
     let mut affected = 0u64;
-    for (i, obj) in rows.iter().enumerate() {
-        if let Some((sql, params)) = build_upsert_sql_dv(view, obj) {
-            let n = mm
+    for (i, obj) in rows.iter_mut().enumerate() {
+        // 落库：UNIQUE 冲突时（编码并发碰撞），清空 code 重新铸号重试（上限 3 次）。
+        let mut attempt = 0u32;
+        let n = loop {
+            attempt += 1;
+            let (sql, params) = match build_upsert_sql_dv(view, obj) {
+                Some(sp) => sp,
+                None => break 0,
+            };
+            match mm
                 .execute_sql_with_datavalues(db_id, None, &sql, params)
                 .await
-                .map_err(|e| map_db_err(e, "upsert", view, Some(i), &sql))?;
-            affected += n;
-        }
+            {
+                Ok(n) => break n,
+                Err(e) if attempt <= 3 && is_unique_violation(&e) && view.code_rule.is_some() => {
+                    tracing::warn!(
+                        target: "cmx_dct::upsert",
+                        dict_code = %view.dict_code, row_index = i, attempt = attempt,
+                        "upsert_unique_conflict_re-minting"
+                    );
+                    obj.insert(view.code_field.clone(), Value::Null);
+                    mint_codes_for_inserts(view, std::slice::from_mut(obj), db_id, None).await;
+                }
+                Err(e) => return Err(map_db_err(e, "upsert", view, Some(i), &sql)),
+            }
+        };
+        affected += n;
     }
 
     Ok(UpsertOutcome::Ok { affected, id_map })
@@ -98,11 +119,23 @@ pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertO
 
 /// 删除一行（按 pk）。返回 `{ok, deleted}`。
 pub async fn delete(view: &DictView, id: &str, db_id: &str) -> Result<Value> {
+    let mm = get_default_pg_db_manager();
+    // 删之前 SELECT 旧 code + 行属性，供记断号（连号域 enable_gap 才记）。
+    if let (Some(minter), Some(code_rule)) =
+        (cmx_traits::code::GlobalCodeMinter::get(), view.code_rule.as_ref())
+    {
+        if let Ok(Some(row)) = select_row_attrs(&mm, db_id, "", view, &json!(id)).await {
+            if let Some(code) = row.get(&view.code_field).and_then(|v| v.as_str()) {
+                if !code.is_empty() {
+                    let attrs = Value::Object(row.clone());
+                    minter.record_gap_for_code(code_rule, code, &attrs, db_id).await;
+                }
+            }
+        }
+    }
     let sql = cmx_dct_model::build_delete_sql(view);
     // 按 pk 列类型构造 DataValue（整型列的字符串 id 转 Int），走 datavalues 绑定。
     let params = vec![to_dv_by_col(view, &view.pk, &json!(id))];
-
-    let mm = get_default_pg_db_manager();
     let n = mm
         .execute_sql_with_datavalues(db_id, None, &sql, params)
         .await
@@ -182,12 +215,17 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
     );
 
     // 编码引擎铸号：若字典配置了 codeRule(mode=auto)，为 inserted 中 code 为空的行铸业务编码。
-    // 必须在 validate_bucket 之前执行--否则空 code 会被 NOT NULL 校验拦下（返 422）。
+    // 必须在 validate_bucket 之前执行——否则空 code 会被 NOT NULL 校验拦下（返 422）。
     // bucket 是不可变 &Value，有 code_rule 时 clone 一份铸号写回，无 code_rule 时零开销透传。
-    let mut bucket_owned;
-    let effective_bucket: &Value = if view.code_rule.is_some() {
+    //
+    // 铸号传 txn_id=None：CodeEngine 通过 GlobalCodeMinter trait（Arc<dyn>）调用，async 调用链
+    // 跨越线程边界，主事务 holder 在铸号时刻不可用（报"没有活跃事务"）。use_sequence=true 时
+    // seq_store 内部用独立短事务保证取号原子，无需主事务上下文。
+    let has_code_rule = view.code_rule.is_some();
+    let mut bucket_owned: Value;
+    let effective_bucket: &Value = if has_code_rule {
         bucket_owned = bucket.clone();
-        mint_inserted_codes_inplace(view, &mut bucket_owned, db_id).await;
+        mint_inserted_codes_inplace(view, &mut bucket_owned, db_id, None).await;
         &bucket_owned
     } else {
         bucket
@@ -322,15 +360,34 @@ async fn apply_deletes(
     let mut affected = 0u64;
     let mut touched_parents: Vec<String> = Vec::new();
     let pf = hierarchy_parent_field(view); // 分级字典的 parent 列名；非分级返回 None
+    // 编码引擎实例（用于删行记断号；未注入或无 code_rule 时跳过）
+    let minter = cmx_traits::code::GlobalCodeMinter::get();
+    let code_rule = view.code_rule.as_ref();
     if let Some(dels) = bucket.get("deleted").and_then(|v| v.as_array()) {
         for (i, id) in dels.iter().enumerate() {
-            // 分级字典：删之前先记下被删行的 parent（删完就查不到了），用于后续旧父重算。
-            // select_parent_id 内部已用 map_db_err 翻译 DB 错误为 cmx_api_types::Error，
-            // 此处直接 ? 冒泡，避免二次包装。
+            // 删之前先 SELECT 整行（删完就查不到了）：
+            // ① 分级字典记旧 parent（重算 is_leaf 用）
+            // ② 有 code_rule + 引擎注入时，拿 code + attrs 记断号（连号域 enable_gap 才记）
+            let old_row = if minter.is_some() && code_rule.is_some() {
+                select_row_attrs(mm, db_id, txn_id, view, id).await.ok().flatten()
+            } else {
+                None
+            };
             if let Some(dpf) = pf.as_deref()
                 && let Some(pid) = select_parent_id(mm, db_id, txn_id, view, dpf, id).await?
             {
                 touched_parents.push(pid);
+            }
+            // 删行记断号：从 old_row 取 code + attrs，通过 CodeMinter 解析 + 记录
+            if let (Some(minter), Some(code_rule), Some(row)) = (minter, code_rule, &old_row) {
+                if let Some(code) = row.get(&view.code_field).and_then(|v| v.as_str()) {
+                    if !code.is_empty() {
+                        let attrs = Value::Object(row.clone());
+                        minter
+                            .record_gap_for_code(code_rule, code, &attrs, db_id)
+                            .await;
+                    }
+                }
             }
             let sql = cmx_dct_model::build_delete_sql(view);
             let params = vec![to_dv_by_col(view, &view.pk, id)];
@@ -342,6 +399,38 @@ async fn apply_deletes(
         }
     }
     Ok((affected, touched_parents))
+}
+
+/// 删行前 SELECT 被删行的全部字段（事务内），供记断号用（ref/resetBy 段求 prefix 需要行属性）。
+///
+/// 返回 None 表示行不存在（可能已被并发删）或 code_field 为空。
+async fn select_row_attrs(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: &str,
+    view: &DictView,
+    id: &Value,
+) -> Result<Option<serde_json::Map<String, Value>>> {
+    if view.code_field.is_empty() {
+        return Ok(None);
+    }
+    let sql = format!(
+        "SELECT * FROM \"{}\" WHERE \"{}\" = $1",
+        view.table_name, view.pk
+    );
+    let params = vec![to_dv_by_col(view, &view.pk, id)];
+    let ds = mm
+        .query_sql_with_datavalues(db_id, Some(txn_id), &sql, params, "del_row")
+        .await
+        .map_err(|e| map_db_err(e, "select_row_attrs", view, None, &sql))?;
+    let ds_val = serde_json::to_value(&ds).ok();
+    let row = ds_val
+        .as_ref()
+        .and_then(|v| v.get("rows"))
+        .and_then(|r| r.as_array())
+        .and_then(|a| a.first())
+        .and_then(|r| r.as_object().cloned());
+    Ok(row)
 }
 
 /// 在事务内执行 inserted 分支：铺平 → 铸号（服务端生成列）→ upsert。
@@ -372,14 +461,35 @@ async fn apply_inserts(
         if pk_is_generated(view) {
             id_map = mint_ids_for_inserts(view, &mut rows);
         }
-        for (i, o) in rows.iter().enumerate() {
-            if let Some((sql, params)) = build_upsert_sql_dv(view, o) {
-                let n = mm
+        for (i, o) in rows.iter_mut().enumerate() {
+            // 落库：UNIQUE 冲突时（编码并发碰撞），清空 code 重新铸号重试（上限 3 次）。
+            // 兑现 serial_pg.rs try_insert 注释承诺的「saver 层 UNIQUE 兜底重试」。
+            let mut attempt = 0u32;
+            let n = loop {
+                attempt += 1;
+                let (sql, params) = match build_upsert_sql_dv(view, o) {
+                    Some(sp) => sp,
+                    None => break 0,
+                };
+                match mm
                     .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
                     .await
-                    .map_err(|e| map_db_err(e, "insert", view, Some(i), &sql))?;
-                affected += n;
-            }
+                {
+                    Ok(n) => break n,
+                    Err(e) if attempt <= 3 && is_unique_violation(&e) && view.code_rule.is_some() => {
+                        tracing::warn!(
+                            target: "cmx_dct::save",
+                            dict_code = %view.dict_code, row_index = i, attempt = attempt,
+                            "insert_unique_conflict_re-minting"
+                        );
+                        // 清空 code → 重新铸号 → loop 下一轮重建 SQL 重试
+                        o.insert(view.code_field.clone(), Value::Null);
+                        mint_codes_for_inserts(view, std::slice::from_mut(o), db_id, Some(txn_id)).await;
+                    }
+                    Err(e) => return Err(map_db_err(e, "insert", view, Some(i), &sql)),
+                }
+            };
+            affected += n;
         }
         // 分级字典：收集「行自身 + 父 id」。
         // - 行自身：重算 level_no/full_path（is_leaf 默认 backfill=1，若无子则保持正确）
@@ -644,7 +754,12 @@ async fn save_apply(
 /// 先被铸号再过 NOT NULL 校验（与 `upsert` 路径 write.rs:63 对齐）。
 ///
 /// 无 codeRule / 非 auto mode / 引擎未注入时 `mint_codes_for_inserts` 内部静默跳过。
-async fn mint_inserted_codes_inplace(view: &DictView, bucket: &mut Value, db_id: &str) {
+async fn mint_inserted_codes_inplace(
+    view: &DictView,
+    bucket: &mut Value,
+    db_id: &str,
+    txn_id: Option<&str>,
+) {
     let Some(ins) = bucket.get_mut("inserted").and_then(|v| v.as_array_mut()) else {
         return;
     };
@@ -659,7 +774,7 @@ async fn mint_inserted_codes_inplace(view: &DictView, bucket: &mut Value, db_id:
         return;
     }
     // 铸号（写回 rows 的 code_field）
-    mint_codes_for_inserts(view, &mut rows, db_id).await;
+    mint_codes_for_inserts(view, &mut rows, db_id, txn_id).await;
     // 把铸号结果写回 bucket 的 inserted 行（fields[code_field]）。
     // rows 是 filter_map 后的紧凑数组，需用独立指针 j 遍历，跳过原本 None 的行。
     let code_field = &view.code_field;
@@ -697,6 +812,7 @@ pub(crate) async fn mint_codes_for_inserts(
     view: &DictView,
     rows: &mut [serde_json::Map<String, Value>],
     db_id: &str,
+    txn_id: Option<&str>,
 ) {
     // 无 codeRule → 跳过
     let Some(code_rule) = &view.code_rule else {
@@ -742,7 +858,7 @@ pub(crate) async fn mint_codes_for_inserts(
     // 批量铸号：一次调 mint_batch，engine 内按 prefix 分组 + buffer 推进
     let attrs_list: Vec<Value> = pending.iter().map(|(_, a)| a.clone()).collect();
     match minter
-        .mint_batch(code_rule, &target, &attrs_list, db_id, None)
+        .mint_batch(code_rule, &target, &attrs_list, db_id, txn_id)
         .await
     {
         Ok(codes) => {
