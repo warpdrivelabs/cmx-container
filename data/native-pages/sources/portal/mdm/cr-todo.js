@@ -50,8 +50,8 @@ function styleCss() {
   /* 列表卡片撑满剩余高度，仅表格内部滚动 */
   .list-card { display:flex; flex-direction:column; flex:1; min-height:0;
     background:var(--sapList_Background); border:1px solid var(--sapList_BorderColor); border-radius:8px; padding:12px 14px; }
-  .tbl-wrap { flex:1; min-height:0; overflow:hidden; }
-  .tbl-wrap cmx-revo-grid { display:block; width:100%; height:100%; }
+  .tbl-wrap { flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column; margin-top:10px; }
+  .tbl-wrap cmx-revo-grid { display:flex; width:100%; flex:1 1 0%; min-width:0; min-height:0; flex-direction:column; }
   .tbl th { position:sticky; top:0; }
   .crumb { display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:10px; color:var(--sapContent_LabelColor); }
   .crumb a { color:var(--sapLinkColor,#0a6ed1); cursor:pointer; }
@@ -185,7 +185,11 @@ function buildListGrid() {
   const C = cmx(); const wrap = rootEl && rootEl.querySelector('.tbl-wrap'); if (!wrap) return
   const old = wrap.querySelector('cmx-revo-grid'); if (old) old.remove()
   const grid = document.createElement('cmx-revo-grid')
-  grid.setAttribute('data-cmx-embed', '')
+  // 主内容区列表页：套 Neo 皮肤（cmx-grid-neo）+ 声明式 fill-height，与设计器列表页风格一致。
+  // 不用 data-cmx-embed（那是 combo/dict 弹层内嵌场景，会跳过 Neo 皮肤导致朴素灰白外观）。
+  grid.setAttribute('data-cmx-fill-height', '')
+  grid.setAttribute('data-cmx-options', '{"editable":false,"showTotals":false,"showRequiredMark":false}')
+  grid.classList.add('cmx-grid-neo')
   wrap.appendChild(grid)
   const is = (s) => (m) => m.doc_status === s
   if (C.CmxColumnModel && C.CmxColumn) {
@@ -199,7 +203,7 @@ function buildListGrid() {
       new C.CmxColumn({ id: 'create_time', caption: '创建时间', dataType: 'VARCHAR', width: '150px', display: {
         mode: 'text', format: 'datetime:YYYY-MM-DD HH:mm:ss', align: 'center',
       } }),
-      new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '200px', edit: { mode: 'readonly' },
+      new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '200px', frozen: 'right', edit: { mode: 'readonly' },
         display: { mode: 'actions', actions: [
           { text: '详情', actionRef: 'view', icon: 'detail-view' },
           { text: '提交',   actionRef: 'submit',  visible: is('draft') },

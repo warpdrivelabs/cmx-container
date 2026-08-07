@@ -26,32 +26,34 @@ async function apiPost(url, payload, dbId) {
 }
 
 const BIZ_FIELDS = ['name', 'tax_no', 'credit_code', 'short_name']
-const state = { dbId: '', mode: 'create', supplier: null, bankLines: [] }
+const state = { dbId: '', mode: 'create', supplier: null, bankLines: [], savedCrId: null, savedLineIdMap: {} }
 let rootEl = null
 const q = (id) => rootEl && rootEl.querySelector('#' + id)
 const val = (id) => { const el = q(id); return el ? (el.value || '').trim() : '' }
 
 function styleCss() {
   return `
-  .pg { height:100%; display:flex; flex-direction:column; box-sizing:border-box; padding:12px 20px 16px;
-    background:var(--sapBackgroundColor); color:var(--sapTextColor);
+  .pg { height:100%; display:flex; flex-direction:column; gap:6px; box-sizing:border-box; padding:8px;
+    background:var(--sapBackgroundColor); color:var(--sapTextColor); overflow:auto;
     font-family:var(--sapFontFamily,'72','Segoe UI',Arial,sans-serif); }
-  .card { display:flex; flex-direction:column; flex:1; min-height:0;
-    background:var(--sapList_Background); border:1px solid var(--sapList_BorderColor); border-radius:8px; padding:12px 14px; }
-  .card-title { font-size:15px; font-weight:600; color:var(--sapTitleColor); margin-bottom:10px; }
-  .form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px 18px; padding:4px 2px 12px; }
-  .f-item { display:flex; flex-direction:column; gap:6px; min-width:0; }
-  .f-item > label { font-size:12px; color:var(--sapContent_LabelColor); }
-  .req::after { content:' *'; color:var(--sapNegativeColor,#e90b0b); }
-  .bank-fill { flex:1; min-height:200px; overflow:hidden; border:1px solid var(--sapList_BorderColor); border-radius:6px; }
-  .bank-fill cmx-revo-grid { display:block; width:100%; height:100%; min-height:200px; }
-  .tbl { width:100%; border-collapse:collapse; font-size:13px; }
-  .tbl th { position:sticky; top:0; text-align:left; padding:8px 10px; font-size:12px; font-weight:600; color:var(--sapContent_LabelColor);
-    border-bottom:1px solid var(--sapList_BorderColor); background:var(--sapList_Background); }
-  .tbl td { padding:8px 10px; border-bottom:1px solid var(--sapList_BorderColor); }
-  .tbl input { width:100%; box-sizing:border-box; padding:6px 8px; font-size:13px; border-radius:4px;
-    border:1px solid var(--sapField_BorderColor); background:var(--sapField_Background); color:var(--sapField_TextColor); }
-  .foot { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+  /* 分区卡片（对齐设计器 voucher-detail 范式） */
+  .sec { border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); border-radius:6px; overflow:hidden;
+    background:var(--sapList_Background,#fff); }
+  .sec-hd { display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:6px 10px; border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0);
+    background:var(--sapGroup_TitleBackground,transparent); }
+  .sec-hd-l { display:flex; align-items:center; gap:6px; }
+  .sec-hd-r { display:flex; gap:4px; align-items:center; }
+  .sec-hd ui5-icon { color:var(--sapInformativeTextColor,var(--sapHighlightColor)); font-size:1rem; }
+  .sec-t { margin:0; font-weight:700; color:var(--sapTitleColor); font-size:0.95rem; }
+  .sec-bd { padding:8px 10px; box-sizing:border-box; }
+  /* 表头表单卡片：自适应高度 */
+  .sec-head { flex:0 0 auto; }
+  /* 明细表格卡片：撑满剩余，内部 grid 滚动 */
+  .sec-grid { flex:1 1 0; display:flex; flex-direction:column; min-height:120px; }
+  .sec-grid .sec-bd { flex:1; min-height:0; padding:0; display:flex; flex-direction:column; }
+  .tbl-wrap { flex:1; min-height:0; display:flex; flex-direction:column; }
+  .tbl-wrap cmx-revo-grid { display:flex; width:100%; flex:1 1 0%; min-width:0; min-height:0; flex-direction:column; }
   cmx-toolbar { display:block; }
   `
 }
@@ -59,16 +61,35 @@ function styleCss() {
 function viewHtml() {
   const o = state.supplier || {}
   const isEdit = state.mode === 'update'
-  return `<div class="pg"><div class="card">
-    <div class="card-title">${isEdit ? '变更供应商' : '新增供应商'}</div>
-    <div id="fForm"></div>
-    <div class="card-title" style="font-size:13px">银行账户</div>
-    <cmx-toolbar><ui5-button design="Default" icon="add" id="fAddRow">增行</ui5-button><ui5-button design="Transparent" icon="delete" id="fDelRow">删选中</ui5-button></cmx-toolbar>
-    <div class="bank-fill" id="fGrid"></div>
-    <div class="foot">
-      <ui5-button design="Default" icon="save" id="fSave">保存草稿</ui5-button>
-      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit">保存并提交</ui5-button>
-    </div></div></div>`
+  return `<div class="pg">
+    <ui5-bar design="Header" accessible-role="Toolbar">
+      <ui5-label wrapping-type="Normal" style="font-weight:800;font-size:1.05rem;color:var(--sapShellTitleColor,var(--sapTitleColor));">${isEdit ? '变更供应商' : '新增供应商'}</ui5-label>
+      <div slot="endContent" style="display:flex;gap:4px;">
+        <ui5-button design="Default" icon="save" id="fSave">保存草稿</ui5-button>
+        <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit">保存并提交</ui5-button>
+      </div>
+    </ui5-bar>
+    <div class="sec sec-head">
+      <div class="sec-hd"><div class="sec-hd-l">
+        <ui5-icon name="add-document" design="Default" mode="Decorative"></ui5-icon>
+        <ui5-title level="H6" size="H6" wrapping-type="Normal" class="sec-t">基本信息</ui5-title>
+      </div></div>
+      <div class="sec-bd" id="fForm"></div>
+    </div>
+    <div class="sec sec-grid">
+      <div class="sec-hd">
+        <div class="sec-hd-l">
+          <ui5-icon name="accounting-document-verification" design="Default" mode="Decorative"></ui5-icon>
+          <ui5-title level="H6" size="H6" wrapping-type="Normal" class="sec-t">银行账户</ui5-title>
+        </div>
+        <div class="sec-hd-r">
+          <ui5-button design="Default" icon="add" id="fAddRow">增行</ui5-button>
+          <ui5-button design="Transparent" icon="delete" id="fDelRow">删选中</ui5-button>
+        </div>
+      </div>
+      <div class="sec-bd"><div class="tbl-wrap" id="fGrid"></div></div>
+    </div>
+  </div>`
 }
 
 // 银行行用组件库 cmx-revo-grid（可编辑）。增行用 CmxDataSet.addRow（触发 _refreshSource）+
@@ -83,6 +104,7 @@ function buildForm() {
   const C = cmx(); const wrap = q('fForm'); if (!wrap) return
   wrap.innerHTML = ''
   const form = document.createElement('cmx-ui5-form')
+  form.classList.add('cmx-form-neo')
   if (C.CmxColumnModel && C.CmxColumn) {
     const cm = new C.CmxColumnModel({ datasetId: 'supplierHead' })
     cm.setMembers([
@@ -104,7 +126,10 @@ function bindBankGrid() {
   const C = cmx(); const wrap = q('fGrid'); if (!wrap) return
   wrap.innerHTML = ''
   const grid = document.createElement('cmx-revo-grid')
-  grid.setAttribute('data-cmx-embed', '')
+  // 主内容区可编辑表格：套 Neo 皮肤 + 声明式 fill-height（与设计器详情页一致）。
+  grid.setAttribute('data-cmx-fill-height', '')
+  grid.setAttribute('data-cmx-options', '{"editable":true,"showTotals":false,"showRequiredMark":false}')
+  grid.classList.add('cmx-grid-neo')
   wrap.appendChild(grid); bankGrid = grid
   if (C.CmxColumnModel && C.CmxColumn) {
     const cm = new C.CmxColumnModel({ datasetId: 'bankLines' })
@@ -130,21 +155,31 @@ const HEAD_TID = 't1' // 头行临时 id；后端 mint_ids 铸真号后经 idMap
 // 当天日期串（doc_date NOT NULL 占位）。YYYY-MM-DD。
 function todayStr() { const d = new Date(); const z = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}` }
 
-// 收集银行账户明细为标准 changeset inserted 行。
+// 收集银行账户明细为标准 changeset 行。
+// 首次保存的行（无 _savedId）→ inserted（用临时 id，后端铸号后 idMap 回传）；
+// 已落库的行（有 _savedId，来自上次保存的 idMap）→ updated（带真实 id）。
 // line_payload 传对象（不序列化）——JSONB 列经 json_to_dv_loose 绑成 DataValue::Json；
 // 传字符串会绑成 Text 被 PG jsonb 列拒收。line_no NOT NULL，按序填。
 function collectLines() {
   const ds = bankGrid?.getDataSet?.()
   const rows = ds ? (ds.toPlainRows ? ds.toPlainRows() : (ds.getRows ? ds.getRows() : [])) : []
-  return rows
-    .filter((r) => (r.account_no || r.bank_name))
-    .map((r, i) => ({
-      id: `l${i + 1}`, upper_id: HEAD_TID, line_no: i + 1,
-      fields: {
-        line_type: 'bank_account', line_action: 'insert',
-        line_payload: { account_no: r.account_no || '', bank_name: r.bank_name || '' },
-      },
-    }))
+  const filled = rows.filter((r) => (r.account_no || r.bank_name))
+  const inserted = []
+  const updated = []
+  filled.forEach((r, i) => {
+    const payload = { account_no: r.account_no || '', bank_name: r.bank_name || '' }
+    const upperId = state.savedCrId != null ? state.savedCrId : HEAD_TID
+    if (r._savedId != null) {
+      // 已落库行 → updated（行 id 为上次保存回传的真实 id）
+      updated.push({ id: r._savedId, fields: { line_no: i + 1, line_payload: payload } })
+    } else {
+      // 新行 → inserted（临时 id 用于本次 idMap 回传）
+      inserted.push({ id: r.id, upper_id: upperId, line_no: i + 1, fields: {
+        line_type: 'bank_account', line_action: 'insert', line_payload: payload,
+      } })
+    }
+  })
+  return { inserted, updated }
 }
 
 // 构造头表 fields。NOT NULL 列必须带齐（doc_status/line_no/doc_type_id/doc_date/entity_id），
@@ -173,20 +208,36 @@ async function doSave(submit) {
   if (!(headRow.name || '').trim()) { C.cmxWarn?.('供应商名称不能为空'); return }
   // 组件库未加载直接报错（不降级裸 fetch）——加载失败属异常配置，应显式暴露。
   if (typeof C.saveDocData !== 'function') { C.cmxError?.('组件库未加载，无法保存'); return }
-  // 构造标准 merge changeset：头 inserted[0] + 行 inserted[]
-  const changes = { cv_mdm_apply: { inserted: [{ id: HEAD_TID, fields: buildHead() }] } }
-  const lines = collectLines()
-  if (lines.length) changes[TABLE_NAMES[1]] = { inserted: lines }
+  // 构造标准 merge changeset。头表：首次 inserted（临时 id），二次起 updated（真实 id）。
+  const changes = {}
+  if (state.savedCrId != null) {
+    changes.cv_mdm_apply = { updated: [{ id: state.savedCrId, fields: buildHead() }] }
+  } else {
+    changes.cv_mdm_apply = { inserted: [{ id: HEAD_TID, fields: buildHead() }] }
+  }
+  // 明细行：collectLines 按是否已落库区分 inserted/updated
+  const { inserted: lineIns, updated: lineUpd } = collectLines()
+  const lineChanges = {}
+  if (lineIns.length) lineChanges.inserted = lineIns
+  if (lineUpd.length) lineChanges.updated = lineUpd
+  if (lineIns.length || lineUpd.length) changes[TABLE_NAMES[1]] = lineChanges
   try {
     const data = await C.saveDocData(null,
       { ...DOC_DEF, dbId: state.dbId },
       { saveMode: 'merge', changes, tableNames: TABLE_NAMES })
-    // idMap[HEAD_TID] = 落库真 id（Pk52 在 JS 安全区，可直接用；String() 仅作软约定）
-    const crId = data && data.idMap ? data.idMap[HEAD_TID] : null
+    const idMap = (data && data.idMap) || {}
+    // 头表：首次保存拿到真实 crId 后存入 state（二次起走 updated，避免重复新增）
+    const isFirstSave = state.savedCrId == null
+    if (isFirstSave && idMap[HEAD_TID] != null) {
+      state.savedCrId = idMap[HEAD_TID]
+    }
+    // 明细行：把每行临时 id → 真实 id 回写到 DataSet 行的 _savedId（下次保存识别为 updated）
+    if (lineIns.length) syncSavedLineIds(idMap)
+    const crId = state.savedCrId
     if (submit && crId != null) {
       await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId)
     }
-    C.cmxInfo?.(submit ? `变更申请 ${crId} 已提交审批` : `已创建变更申请 ${crId}（草稿）`)
+    C.cmxInfo?.(submit ? `变更申请 ${crId} 已提交审批` : (isFirstSave ? `已创建变更申请 ${crId}（草稿）` : `变更申请 ${crId} 已更新`))
   } catch (e) {
     // 422 列级校验失败：e.violations 经 formatViolations 多行中文展示
     if (e && e.violations && typeof C.formatViolations === 'function') {
@@ -195,6 +246,19 @@ async function doSave(submit) {
       C.cmxError?.(`保存失败：${e.message}`)
     }
   }
+}
+
+// 把本次 inserted 明细行的临时 id → 真实 id（来自 idMap）回写到 bankGrid 的 DataSet 行 _savedId。
+// 这样下次保存时 collectLines 能识别这些行为「已落库」走 updated，避免重复 insert。
+function syncSavedLineIds(idMap) {
+  if (!idMap || !bankGrid) return
+  const ds = bankGrid.getDataSet?.()
+  if (!ds || !ds.rows) return
+  ds.rows.forEach((r) => {
+    if (r._savedId == null && r.id != null && idMap[r.id] != null) {
+      r._savedId = idMap[r.id]
+    }
+  })
 }
 
 function bind(root) {

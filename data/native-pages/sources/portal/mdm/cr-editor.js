@@ -51,8 +51,8 @@ function styleCss() {
     background:var(--sapList_Background); border:1px solid var(--sapList_BorderColor); border-radius:8px; padding:12px 14px; }
   .card-hd { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; }
   .card-title { font-size:15px; font-weight:600; color:var(--sapTitleColor); }
-  .tbl-wrap { flex:1; min-height:0; overflow:hidden; }
-  .tbl-wrap cmx-revo-grid { display:block; width:100%; height:100%; }
+  .tbl-wrap { flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column; margin-top:10px; }
+  .tbl-wrap cmx-revo-grid { display:flex; width:100%; flex:1 1 0%; min-width:0; min-height:0; flex-direction:column; }
   .tbl { width:100%; border-collapse:collapse; font-size:13px; }
   .tbl th { position:sticky; top:0; text-align:left; padding:9px 12px; font-size:12px; font-weight:600; color:var(--sapContent_LabelColor);
     border-bottom:1px solid var(--sapList_BorderColor); background:var(--sapList_Background); }
@@ -96,6 +96,7 @@ async function loadSuppliers() {
   if (!coord) { state.suppliers = []; state.total = 0; return }
   const d = (await apiPost(`/api/dct/data/search?${coordQs({ dict: 'supplier' })}`, {
     page: state.page, pageSize: state.pageSize, q: state.kw || '',
+    sort: { field: 'create_time', order: 'desc' },
   }, coord.dbId)) || {}
   state.suppliers = d.rows || []
   state.total = Number(d.total) || 0
@@ -119,7 +120,11 @@ function buildListGrid() {
   const C = cmx(); const wrap = rootEl && rootEl.querySelector('.tbl-wrap'); if (!wrap) return
   const old = wrap.querySelector('cmx-revo-grid'); if (old) old.remove()
   const grid = document.createElement('cmx-revo-grid')
-  grid.setAttribute('data-cmx-embed', '')
+  // 主内容区列表页：套 Neo 皮肤（cmx-grid-neo）+ 声明式 fill-height，与设计器列表页风格一致。
+  // 不用 data-cmx-embed（那是 combo/dict 弹层内嵌场景，会跳过 Neo 皮肤导致朴素灰白外观）。
+  grid.setAttribute('data-cmx-fill-height', '')
+  grid.setAttribute('data-cmx-options', '{"editable":false,"showTotals":false,"showRequiredMark":false}')
+  grid.classList.add('cmx-grid-neo')
   wrap.appendChild(grid)
   if (C.CmxColumnModel && C.CmxColumn) {
     const cm = new C.CmxColumnModel({ datasetId: 'suppliers' })
@@ -130,7 +135,7 @@ function buildListGrid() {
       new C.CmxColumn({ id: 'credit_code', caption: '信用代码', dataType: 'VARCHAR', width: '180px' }),
       new C.CmxColumn({ id: 'short_name', caption: '简称', dataType: 'VARCHAR', width: '120px' }),
       new C.CmxColumn({ id: 'published_version', caption: '版本', dataType: 'INT', width: '70px' }),
-      new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '150px', edit: { mode: 'readonly' },
+      new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '150px', frozen: 'right', edit: { mode: 'readonly' },
         display: { mode: 'actions', actions: [
           { text: '查看详情', actionRef: 'view', icon: 'show' },
           { text: '变更', actionRef: 'edit', icon: 'edit' },
