@@ -1384,7 +1384,10 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tokio-stream",
  "tracing",
+ "utoipa",
+ "utoipa-swagger-ui",
  "uuid",
 ]
 
@@ -7617,6 +7620,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
