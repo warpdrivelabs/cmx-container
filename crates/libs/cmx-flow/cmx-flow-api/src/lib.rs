@@ -15,6 +15,10 @@ use cmx_api::routes::traits::ModuleRoutes;
 // 引擎定时器 poller 由 core 提供；main.rs 直接调 cmx_flow_api::spawn_timer_poller()。
 pub use cmx_flow_app::spawn_timer_poller;
 
+// S6：反代壳（引擎在远程独立 flow-server 时用；见 proxy.rs）。
+mod proxy;
+pub use proxy::FlowProxyModule;
+
 /// 流程模块路由聚合（实现 cmx-api 的 ModuleRoutes，由 web-server 合并进主路由）。
 ///
 /// 路由表 + handler 全来自 core 的 [`cmx_flow_app::flow_routes`]，对 `CmxAppState` 泛型实例化。

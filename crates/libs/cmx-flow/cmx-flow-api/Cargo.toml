@@ -20,3 +20,13 @@ cmx-api = { workspace = true }
 
 # Web 框架（Router 类型；路由体由 core 提供）
 axum = { workspace = true }
+
+# —— S6 反代壳（FlowProxyModule：平台→远程 flow-server 转发 + 三层出站鉴权）——
+# 平台服务凭证/委托用户令牌/请求 ID（context_scope 出站透传）
+cmx-traits = { workspace = true }
+# 出站 HTTP（转发到远程 flow-server；流式请求/响应体，SSE 透传）
+reqwest = { workspace = true }
+# 错误信封 JSON（502 等）
+serde_json = { workspace = true }
+# 日志
+tracing = { workspace = true }
