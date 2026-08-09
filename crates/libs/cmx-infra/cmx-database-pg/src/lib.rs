@@ -19,7 +19,7 @@ pub mod zmcdataset;
 pub use error::{Error, Result};
 
 pub use cmx_core::model::data::dataset::DataSet;
-pub use config::{DbConfig, DbType, PoolConfig};
+pub use config::{DbConfig, DbType, PoolConfig, PoolStatus};
 pub use connection::DbPool;
 pub use executor::{ParamValue, PgResultConverter};
 pub use zmcdataset::{ZmcChildGroup, ZmcDataSet, ZmcSchema};

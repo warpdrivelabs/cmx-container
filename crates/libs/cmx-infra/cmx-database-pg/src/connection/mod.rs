@@ -38,6 +38,11 @@ impl std::fmt::Debug for DbPool {
 }
 
 impl DbPool {
+    /// 连接池实时状态（deadpool `Status`：max_size/size/available/waiting）。供监控读取，零查询开销。
+    pub fn pool_status(&self) -> deadpool_postgres::Status {
+        self.pool.status()
+    }
+
     /// 在连接池上执行无参数 SQL，返回受影响行数。
     pub async fn execute(&self, sql: &str) -> crate::Result<u64> {
         let client = self.pool.get().await?;

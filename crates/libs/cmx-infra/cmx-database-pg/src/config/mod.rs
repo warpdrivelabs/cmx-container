@@ -53,6 +53,25 @@ pub struct PoolConfig {
     pub max_lifetime: u64,
 }
 
+/// 连接池实时状态（对齐 deadpool `Status`），供监控端点读取。
+///
+/// `db_id` 标识数据源；其余四项来自 deadpool：`max_size` 池容量上限、`size` 当前连接总数
+/// （在用+空闲）、`available` 可立即取用的空闲连接、`waiting` 正在排队等待连接的任务数。
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoolStatus {
+    /// 数据源标识
+    pub db_id: String,
+    /// 池容量上限
+    pub max_size: usize,
+    /// 当前连接总数（在用 + 空闲）
+    pub size: usize,
+    /// 可立即取用的空闲连接数
+    pub available: usize,
+    /// 正在排队等待连接的任务数
+    pub waiting: usize,
+}
+
 fn default_max_connections() -> usize {
     if cfg!(test) { 1 } else { 10 }
 }

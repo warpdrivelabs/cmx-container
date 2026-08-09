@@ -169,6 +169,25 @@ impl DatabaseManager {
         self.pool_manager.list().await
     }
 
+    /// 所有数据源的连接池实时状态（供监控端点）。遍历 `list_data_sources` + `get_db`，
+    /// 读每个 `DbPool::pool_status()`，映射成中性 `PoolStatus`。零查询开销。
+    pub async fn pool_statuses(&self) -> Vec<crate::config::PoolStatus> {
+        let mut out = Vec::new();
+        for db_id in self.list_data_sources().await {
+            if let Ok((dbx, _cfg)) = self.get_db(&db_id).await {
+                let s = dbx.db().pool_status();
+                out.push(crate::config::PoolStatus {
+                    db_id,
+                    max_size: s.max_size,
+                    size: s.size,
+                    available: s.available,
+                    waiting: s.waiting,
+                });
+            }
+        }
+        out
+    }
+
     /// 健康检查
     pub async fn health_check(&self, db_id: &str) -> Result<bool> {
         self.pool_manager.health_check(db_id).await
