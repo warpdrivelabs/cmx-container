@@ -219,6 +219,13 @@
       "relPath": "portal/system/registry-editor.js"
     },
     {
+      "id": "portal.system.service-topology",
+      "name": "系统集成状态",
+      "details": "服务依赖 / 集成拓扑（native_pages, portal.system）：门户各功能后端来源可视化——某能力是进程内内嵌还是反代到独立微服务、目标 URL、以及对 proxy 目标的活体探测（可达/延迟/对端服务名/在线时长）。数据源 GET /_mon/deps（平台通用监控 cmx-web-monitor 提供，同源，与 /_mon 技术页、各独立服务 /_mon 同一真相）。今天 flow 唯一可 embedded/proxy 切换（读 center_client.urls.flow），其余模块进程内嵌。每 5s 轮询。",
+      "sourceType": "js",
+      "relPath": "portal/system/service-topology.js"
+    },
+    {
       "id": "portal.job.monitor",
       "name": "任务中心",
       "details": "native_pages 异步任务管理与监控三区工作台（异步任务中心 M1+M2+M3 全能力）：explorer 集群概览(按状态计数+活跃数,点击卡片过滤)+新建作业(job.demo/rpt.compute/rpt.verify 动态表单+优先级+整体失败开关+未知种类原始JSON)+过滤器(种类/状态/关键字)；content 活跃/历史双 tab——活跃作业列表(实时进度条+状态徽标+归属节点+优先级+时间,活跃优先排序)+选中作业监控详情(大进度条+阶段+ETA+明细流+实时日志+全控制条 暂停/恢复/停止/重启/归档)，历史作业列表(已归档只读)+历史详情；property 作业完整属性(含归档时间)。归档=RU/HI 分离(DELETE 转移到 cmx_job_hi 历史表,非真删),历史查询 GET /api/jobs/history。控制走 POST /api/jobs/*+DELETE归档，进度走 SSE /api/jobs/{id}/events+/api/jobs/events汇总流；后端 cmx-job-api(JobModule)+JobManager(PgJobStore持久化+分布式SKIP LOCKED抢占HA+历史归档)。",

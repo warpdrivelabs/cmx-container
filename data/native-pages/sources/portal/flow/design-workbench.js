@@ -14,9 +14,21 @@
  * auto-layout（内置无坐标 BPMN）：内置分层布局 layoutXml（BFS 分层排坐标+补 BPMNEdge），零远程依赖。
  */
 
-// bpmn-js 本地资产（打包进 CMXPortalManager：public/vendor/bpmn-js → dist/vendor/bpmn-js，
-// 由 web-server 经 /portal/ 静态托管）。不访问任何远程 CDN。
-const BPMN_CDN = '/portal/vendor/bpmn-js'
+// —— S4 抽核：配置接缝 ——（详见 todo-center.js 同名 CFG 注释）
+// 设计器无门户 Tab 链，耦合只两处：apiBase（/api/* 前缀）+ bpmnBase（bpmn-js 静态资产根）。
+// 门户壳默认：同源 fetch + 资产走门户 /portal/vendor/bpmn-js（打包进 CMXPortalManager，不访问远程 CDN）。
+// 组件壳/headless 壳 configure({ apiBase, authHeaders, bpmnBase })：资产可指向自建 CDN 或组件包内路径。
+const CFG = {
+  apiBase: '',
+  fetchInit: { credentials: 'same-origin' },
+  authHeaders: () => ({}),
+  bpmnBase: '/portal/vendor/bpmn-js',        // bpmn-js UMD + 字体/CSS 资产根
+}
+function configure (o) { Object.assign(CFG, o || {}); return CFG }
+
+// bpmn-js 本地资产根（每次读 CFG.bpmnBase，故 configure() 覆盖对后续加载即时生效；门户默认
+// 打包进 CMXPortalManager 经 /portal/ 静态托管，无远程 CDN）。
+function bpmnBase () { return CFG.bpmnBase }
 
 const state = {
   definitions: [],
@@ -67,10 +79,12 @@ const esc = (s) => String(s ?? '')
 const enc = encodeURIComponent
 
 async function apiJson (url, options = {}) {
-  const res = await fetch(url, {
+  // S4：apiBase 前缀（门户空串=同源）+ CFG.authHeaders/fetchInit。
+  const full = (CFG.apiBase && url.charAt(0) === '/') ? CFG.apiBase + url : url
+  const res = await fetch(full, {
+    ...CFG.fetchInit,
     ...options,
-    headers: { Accept: 'application/json', ...(options.headers || {}) },
-    credentials: 'same-origin',
+    headers: { Accept: 'application/json', ...CFG.authHeaders(), ...(options.headers || {}) },
   })
   let j = null
   try { j = await res.json() } catch {}
@@ -916,7 +930,7 @@ function ensureBpmnJs () {
   if (_bpmnLoad) return _bpmnLoad
   _bpmnLoad = new Promise((resolve, reject) => {
     const s = document.createElement('script')
-    s.src = `${BPMN_CDN}/bpmn-modeler.production.min.js`
+    s.src = `${bpmnBase()}/bpmn-modeler.production.min.js`
     s.onload = resolve
     s.onerror = () => reject(new Error('bpmn-js 加载失败（检查网络/CDN）'))
     document.head.appendChild(s)
@@ -929,17 +943,18 @@ function injectBpmnCss (root) {
   if (!document.head.querySelector('style[data-bpmn-font]')) {
     const st = document.createElement('style')
     st.setAttribute('data-bpmn-font', '1')
+    const bb = bpmnBase()
     st.textContent = `@font-face{font-family:'bpmn';font-style:normal;font-weight:normal;
-      src:url('${BPMN_CDN}/assets/bpmn-font/font/bpmn.woff2') format('woff2'),
-          url('${BPMN_CDN}/assets/bpmn-font/font/bpmn.woff') format('woff'),
-          url('${BPMN_CDN}/assets/bpmn-font/font/bpmn.ttf') format('truetype');}`
+      src:url('${bb}/assets/bpmn-font/font/bpmn.woff2') format('woff2'),
+          url('${bb}/assets/bpmn-font/font/bpmn.woff') format('woff'),
+          url('${bb}/assets/bpmn-font/font/bpmn.ttf') format('truetype');}`
     document.head.appendChild(st)
   }
   if (root.querySelector('link[data-bpmn-css]')) return
   for (const f of ['assets/diagram-js.css', 'assets/bpmn-js.css', 'assets/bpmn-font/css/bpmn.css']) {
     const l = document.createElement('link')
     l.rel = 'stylesheet'
-    l.href = `${BPMN_CDN}/${f}`
+    l.href = `${bpmnBase()}/${f}`
     l.setAttribute('data-bpmn-css', '1')
     root.appendChild(l)
   }
@@ -1392,6 +1407,9 @@ function styleCss () {
   `
 }
 
+// 门户壳 export default（CFG 默认值=今天：同源 fetch + /portal/vendor/bpmn-js 资产）；
+// S5 组件壳 import { configure, mount } 覆盖 apiBase/authHeaders/bpmnBase 后自挂 shadowRoot。
+export { configure, mount }
 export default {
   defaultView: 'content',
   views: {

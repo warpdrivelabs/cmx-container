@@ -13,13 +13,27 @@
  *          作为 workspace.params/props 传给 task-form 页。
  */
 
-// 当前用户：F3 先从 localStorage 兜底取（登录态注入），拿不到用 admin 便于验证。
-function currentUser () {
-  try {
-    return window.localStorage.getItem('cmx_user_id') ||
-           window.localStorage.getItem('cmx_username') || 'admin'
-  } catch { return 'admin' }
-}
+// —— S4 抽核：配置接缝 ——
+// 门户壳（export default）用 CFG 默认值 = 今天行为，逐字节零回归；可嵌组件壳 / headless 壳（S5）
+// 调 configure({...}) 覆盖：apiBase 指向远程 flow-server、authHeaders 注入 Bearer、getUser 取宿主
+// 登录态、onOpenTask 派发 CustomEvent 交宿主决定怎么开。核心逻辑（loadTodos/openTaskForm/…）全部
+// 只经 CFG 触达外部，不再直接摸 localStorage / 同源 fetch / 门户 Tab 链。
+const CFG = {
+  apiBase: '',                                // 前缀所有 /api/* 请求；门户空串 = 同源相对路径（今天）
+  fetchInit: { credentials: 'same-origin' },  // 门户带同源 cookie；组件壳可换 { credentials:'omit' }
+  authHeaders: () => ({}),                    // 附加请求头；组件壳返回 { Authorization:'Bearer …' }
+  getUser: () => {                            // 当前用户；门户从 localStorage 兜底，组件壳由宿主注入
+    try {
+      return window.localStorage.getItem('cmx_user_id') ||
+             window.localStorage.getItem('cmx_username') || 'admin'
+    } catch { return 'admin' }
+  },
+  onOpenTask: null,                           // 打开任务工作台；null = 门户默认 openWorkNode 链，
+}                                             //   组件壳设为回调（派发事件让宿主开 Tab/路由）
+function configure (o) { Object.assign(CFG, o || {}); return CFG }
+
+// 当前用户（走 CFG，门户默认从 localStorage 兜底）。
+function currentUser () { return CFG.getUser() }
 
 // formKey → 表单页坐标。F4：优先查后端注册表 /api/flow/forms/{key}（接新表单只需配一行，
 // 不改前端）；查不到再退回内置 FORM_MAP 兜底（离线/未种子时仍可用）。缓存解析结果。
@@ -77,10 +91,12 @@ const enc = encodeURIComponent
 const slug = (s) => String(s || '').replace(/[^A-Za-z0-9_-]+/g, '_') || 'x'
 
 async function apiJson (url, options = {}) {
-  const res = await fetch(url, {
+  // S4：apiBase 前缀（门户空串=同源）+ CFG.authHeaders/fetchInit（门户 same-origin cookie，组件壳 Bearer）。
+  const full = (CFG.apiBase && url.charAt(0) === '/') ? CFG.apiBase + url : url
+  const res = await fetch(full, {
+    ...CFG.fetchInit,
     ...options,
-    headers: { Accept: 'application/json', ...(options.headers || {}) },
-    credentials: 'same-origin',
+    headers: { Accept: 'application/json', ...CFG.authHeaders(), ...(options.headers || {}) },
   })
   let j = null
   try { j = await res.json() } catch {}
@@ -683,6 +699,13 @@ function injectTaskProps (workspace, taskCtx) {
 // 最后 POST /api/workspace-nodes 兜底。sourceEl 必须是门户 DOM 内的元素，事件才能 bubble 到 portal-app。
 // initialContext（可选）：html_pages 表单的动态跳转传参（portal 在 hydrate 前 ws.context.set 逐键写入）。
 async function openWorkNode (workNode, sourceEl, initialContext) {
+  // S4：抽核接缝。组件壳/headless 壳设 CFG.onOpenTask → 把门户特有的开 Tab 链塌缩成一个回调
+  // （宿主自决怎么开：派发 CustomEvent / 路由跳转 / 渲染到某容器）。门户壳 onOpenTask=null → 走下方
+  // 原有 portal-help-action/inlineNode 真实链路，逐字节等价今天。
+  if (typeof CFG.onOpenTask === 'function') {
+    try { CFG.onOpenTask({ workNode, initialContext: initialContext || null }); return true }
+    catch (e) { console.error('onOpenTask 回调失败', e); return false }
+  }
   const candidates = [window, window.parent, window.top, globalThis].filter(Boolean)
   for (const target of candidates) {
     try {
@@ -889,6 +912,10 @@ function styleCss () {
   `
 }
 
+// 门户壳：export default 的 views 用 CFG 默认值（同源 fetch + localStorage 用户 + openWorkNode Tab 链），
+// 等价今天。S5 可嵌组件壳 import { configure, mount } 后先 configure({apiBase,authHeaders,getUser,onOpenTask})
+// 再自行 mount 到 shadowRoot——同一份核，两种壳。
+export { configure, mount }
 export default {
   defaultView: 'content',
   views: {

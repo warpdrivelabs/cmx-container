@@ -22,11 +22,43 @@ const esc = (s) => String(s ?? '')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 const enc = encodeURIComponent
 
+// —— S4 抽核：配置接缝 ——（详见 todo-center.js 同名 CFG 注释）
+// 门户壳用默认值 = 今天行为；组件壳/headless 壳 configure({...}) 覆盖 apiBase/authHeaders/getUser +
+// onTaskDone（办结后通知，门户=派发 cmx-flow-task-done 让待办中心刷新）+ onClose（关闭当前视图，
+// 门户=探测 closeTab 关工作区 Tab，组件壳=派发事件让宿主收起面板）。
+const CFG = {
+  apiBase: '',
+  fetchInit: { credentials: 'same-origin' },
+  authHeaders: () => ({}),
+  onTaskDone: (detail) => {                   // 办结/发起成功后广播；门户默认派发全局事件
+    try {
+      const ev = new CustomEvent('cmx-flow-task-done', { detail: detail || {} })
+      window.dispatchEvent(ev); window.top?.dispatchEvent?.(ev)
+    } catch {}
+  },
+  onClose: (nodeId) => {                       // 关闭当前任务视图；门户默认探测工作区 Tab 关闭链
+    const targets = [window, window.parent, window.top, globalThis].filter(Boolean)
+    for (const t of targets) {
+      try {
+        if (typeof t.closeTab === 'function') { t.closeTab(nodeId); return }
+        if (typeof t.closeWorkspaceNode === 'function') { t.closeWorkspaceNode(nodeId); return }
+      } catch {}
+    }
+    try {
+      window.top?.postMessage({ type: 'closeTab', payload: { id: nodeId } }, '*')
+      document.dispatchEvent(new CustomEvent('cmx-close-workspace-node', { detail: { id: nodeId }, bubbles: true, composed: true }))
+    } catch {}
+  },
+}
+function configure (o) { Object.assign(CFG, o || {}); return CFG }
+
 async function apiJson (url, options = {}) {
-  const res = await fetch(url, {
+  // S4：apiBase 前缀（门户空串=同源）+ CFG.authHeaders/fetchInit。
+  const full = (CFG.apiBase && url.charAt(0) === '/') ? CFG.apiBase + url : url
+  const res = await fetch(full, {
+    ...CFG.fetchInit,
     ...options,
-    headers: { Accept: 'application/json', ...(options.headers || {}) },
-    credentials: 'same-origin',
+    headers: { Accept: 'application/json', ...CFG.authHeaders(), ...(options.headers || {}) },
   })
   let j = null
   try { j = await res.json() } catch {}
@@ -206,10 +238,7 @@ async function submitStart (st, host) {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     toast(st, '已发起流程实例 ' + (r.id ? String(r.id).slice(0, 8) : ''))
-    try {
-      const ev = new CustomEvent('cmx-flow-task-done', { detail: { started: true, definitionKey: p.definitionKey } })
-      window.dispatchEvent(ev); window.top?.dispatchEvent?.(ev)
-    } catch {}
+    CFG.onTaskDone({ started: true, definitionKey: p.definitionKey })
     setTimeout(() => closeSelf({ instanceId: 'start', taskId: p.definitionKey }), 600)
   } catch (e) {
     st.busy = false
@@ -352,12 +381,9 @@ async function complete (st, decision, host) {
       body: JSON.stringify({ instanceId: p.instanceId, decision, comment: comment || null }),
     })
     toast(st, decision === 'approve' ? '已同意办结' : '已驳回')
-    // 广播 → 待办中心刷新
-    try {
-      const ev = new CustomEvent('cmx-flow-task-done', { detail: { taskId: p.taskId, instanceId: p.instanceId } })
-      window.dispatchEvent(ev); window.top?.dispatchEvent?.(ev)
-    } catch {}
-    // 尝试关闭本 tab
+    // 广播 → 待办中心刷新（门户默认派发 cmx-flow-task-done；组件壳由 CFG.onTaskDone 接管）
+    CFG.onTaskDone({ taskId: p.taskId, instanceId: p.instanceId })
+    // 尝试关闭本视图
     setTimeout(() => closeSelf(p), 600)
   } catch (e) {
     st.busy = false
@@ -365,20 +391,11 @@ async function complete (st, decision, host) {
   }
 }
 
-// 尝试关闭当前工作区 tab（多入口探测；关不掉则仅刷新轨迹）。
+// 关闭当前任务视图。nodeId 派生不变（门户工作区 Tab 命名规则），关闭动作委托 CFG.onClose：
+// 门户壳默认探测 closeTab/closeWorkspaceNode/postMessage 关工作区 Tab；组件壳派发事件让宿主收面板。
 function closeSelf (p) {
   const nodeId = `flow-task-${String(p.instanceId + '-' + p.taskId).replace(/[^A-Za-z0-9_-]+/g, '_')}`
-  const targets = [window, window.parent, window.top, globalThis].filter(Boolean)
-  for (const t of targets) {
-    try {
-      if (typeof t.closeTab === 'function') { t.closeTab(nodeId); return }
-      if (typeof t.closeWorkspaceNode === 'function') { t.closeWorkspaceNode(nodeId); return }
-    } catch {}
-  }
-  try {
-    window.top?.postMessage({ type: 'closeTab', payload: { id: nodeId } }, '*')
-    document.dispatchEvent(new CustomEvent('cmx-close-workspace-node', { detail: { id: nodeId }, bubbles: true, composed: true }))
-  } catch {}
+  CFG.onClose(nodeId)
 }
 
 // ————————————————————— 样式 —————————————————————
@@ -428,6 +445,8 @@ function styleCss () {
   `
 }
 
+// 门户壳 export default（CFG 默认值=今天）；S5 组件壳 import { configure, mount } 覆盖后自挂。
+export { configure, mount }
 export default {
   defaultView: 'content',
   views: {
