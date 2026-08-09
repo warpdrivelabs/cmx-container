@@ -40,6 +40,9 @@ pub fn build_router(app_state: CmxAppState, web_config: &WebConfig) -> Router {
         .merge(routes::get_swagger_routes())
         .layer(CookieManagerLayer::new())
         .layer(middleware::from_fn(mw_permission))
+        // 通用技术监控遥测（夹在权限之外、认证之内层）：next.run 时 context_scope 已建（身份可读），
+        // 且能采集到 403（权限拒绝）。喂 cmx-web-monitor 进程级环形缓冲，供 /_mon 技术页展示。
+        .layer(middleware::from_fn(cmx_web_monitor::observe))
         .layer(middleware::from_fn(mw_auth))
         .layer(middleware::from_fn(mw_context_resolver))
         .layer(middleware::from_fn(trace_layer))
@@ -53,6 +56,10 @@ pub fn build_router(app_state: CmxAppState, web_config: &WebConfig) -> Router {
         .layer(CompressionLayer::new().compress_when(
             DefaultPredicate::new().and(NotForContentType::const_new("application/octet-stream")),
         ));
+
+    // 通用技术监控页（/_mon + /_mon/tech-stats）：根级、免认证、在 fallback 之前 merge，
+    // 显式路由优先于 ServeDir 兜底。与 flow-server 由 chassis 自动挂的 /_mon 同一 crate、同一 UI。
+    let routes_all = routes_all.merge(cmx_web_monitor::monitor_routes::<()>());
 
     // 添加静态文件服务作为 fallback
     let routes_all = routes_all.fallback_service(axum::routing::get_service(

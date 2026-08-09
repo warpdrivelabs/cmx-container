@@ -19,6 +19,7 @@ members = [
     "crates/libs/cmx-infra/cmx-audit",
     "crates/libs/cmx-infra/cmx-auth",
     "crates/libs/cmx-web-chassis",
+    "crates/libs/cmx-web-monitor",
     "crates/web/web-server",
     "crates/libs/cmx-api",
     "crates/libs/cmx-api-types",
@@ -130,6 +131,7 @@ cmx-audit = { path = "crates/libs/cmx-infra/cmx-audit", version = "0.1.12", regi
 cmx-auth = { path = "crates/libs/cmx-infra/cmx-auth", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 通用 HTTP 服务骨架（chassis）：flow/report/mdm-server 共用的启动/日志/中间件/优雅关闭骨架，零 cmx-api
 cmx-web-chassis = { path = "crates/libs/cmx-web-chassis", version = "0.1.12", registry = "nora" }
+cmx-web-monitor = { path = "crates/libs/cmx-web-monitor", version = "0.1.12", registry = "nora" }
 # 内部依赖 - IAM 用户权限角色管理
 cmx-iam = { path = "crates/libs/cmx-iam", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 门户/设计器业务（迁移自 CMXPortalManager / CMXHTMLDesigner 的 Node 后端）
@@ -264,6 +266,8 @@ sqlx = { version = "0.9.0", features = ["macros", "runtime-tokio", "postgres", "
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-uuid-1", "with-serde_json-1"] }
 # 数据库 - tokio-postgres 连接池
 deadpool-postgres = "0.14"
+# 系统技术指标采集（CPU/内存/网络/磁盘）——通用监控 cmx-web-monitor 用；支持 darwin/linux/windows
+sysinfo = "0.33"
 # 数据库 - postgres 类型系统（ToSql/FromSql + Type OID 常量）
 postgres-types = "0.2"
 # 数据库 - SQL 查询构建器

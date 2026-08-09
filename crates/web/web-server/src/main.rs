@@ -80,9 +80,24 @@ async fn main() -> Result<()> {
     init_datasources().await?;
     init_storage().await?;
 
+    // 通用技术监控（/_mon）：注册平台身份读取器（把 AuthContext 映射为 monitor 中性 Identity，
+    // 供 observe 遥测记录租户/用户/角色）+ 起系统采样器（CPU/内存/网络/磁盘，3s 一采）。
+    // 数据源已就绪，故 DB 连接池状态可被 /_mon/tech-stats 聚合。与 flow/report/mdm-server 同一 crate。
+    cmx_web_monitor::set_service_name("cmx-server 平台");
+    cmx_web_monitor::set_identity_provider(web_identity);
+    cmx_web_monitor::spawn_system_sampler();
+    // 服务依赖拓扑：各能力 embedded/proxy 真源来自 routes 装配决策（flow 读 center_client 配置）。
+    cmx_web_monitor::set_topology_provider(crate::routes::service_topology);
+    // 活体探测器：对 proxy 目标（如独立 flow-server）周期打 /_mon/tech-stats 判可达/延迟/版本。
+    cmx_web_monitor::spawn_topology_prober();
+
     // 流程引擎就绪：装载已发布定义 + 启动定时器 poller（依赖数据源，故在 init_datasources 之后）。
     // 非致命：流程 DB/schema 不可用时只 warn，不阻塞 web-server 启动。
-    if let Err(e) = cmx_flow_api::spawn_timer_poller().await {
+    // S6：独立微服务模式（配了 [center_client.urls].flow）时引擎在远程，本进程不起引擎/poller，
+    // /api/flow/* 由 FlowProxyModule 转发（见 routes.rs）。
+    if routes::flow_is_proxied() {
+        info!("流程引擎：独立微服务模式，本进程不启动内嵌引擎 poller（转发到远程 flow-server）");
+    } else if let Err(e) = cmx_flow_api::spawn_timer_poller().await {
         warn!("流程引擎初始化失败（流程功能不可用，其余服务照常）: {}", e);
     }
 
@@ -203,6 +218,22 @@ async fn main() -> Result<()> {
     info!("服务已优雅关闭");
 
     Ok(())
+}
+
+/// 平台身份读取器：把平台请求级 [`AuthContext`]（context_scope task_local）映射为
+/// cmx-web-monitor 的中性 `Identity`，供 observe 遥测记录租户/用户/角色。
+/// 无认证上下文（未登录 / 静态资源）时返回 None → 记为匿名。
+/// 租户：平台 `AuthContext` 无单一租户串，取最接近的 `org_id`（缺省 default）。
+fn web_identity() -> Option<cmx_web_monitor::Identity> {
+    cmx_traits::auth::context_scope::current_auth().map(|a| cmx_web_monitor::Identity {
+        tenant: a.org_id.clone().unwrap_or_else(|| "default".to_string()),
+        user: Some(if a.username.is_empty() {
+            a.user_id.clone()
+        } else {
+            a.username.clone()
+        }),
+        roles: a.roles.clone(),
+    })
 }
 
 /// 打印带渐变色的启动 Logo。
