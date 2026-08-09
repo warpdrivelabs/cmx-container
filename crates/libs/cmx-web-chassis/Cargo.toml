@@ -34,3 +34,6 @@ dotenvy = { workspace = true }
 thiserror = { workspace = true }
 # 启动钩子的通用错误通道（服务钩子返回任意错误）
 anyhow = { workspace = true }
+# 通用技术监控（observe 中间件 + 系统采样器 + /_mon 页与 /_mon/tech-stats）。默认开，
+# ServiceSpec.monitor(false) 可关。chassis 依赖它、它不依赖 chassis（无环）。
+cmx-web-monitor = { workspace = true }

@@ -71,6 +71,8 @@ pub struct ServiceSpec<S = ()> {
     state: S,
     /// 是否把 router nest 到 `/api` 前缀下（默认 true，对齐平台 `/api/*`）。
     nest_api: bool,
+    /// 是否启用通用技术监控（默认 true）：observe 遥测中间件 + 系统采样器 + `/_mon` 页。
+    monitor: bool,
     /// 自定义 banner（字符画/标语/渐变配色；None 用默认）。
     banner: Option<BannerSpec>,
     init_hooks: Vec<(String, InitHook)>,
@@ -91,6 +93,7 @@ where
             router: Router::new(),
             state: S::default(),
             nest_api: true,
+            monitor: true,
             banner: None,
             init_hooks: Vec::new(),
         }
@@ -111,6 +114,21 @@ where
     /// 是否 nest 到 `/api`（默认 true）。设 false 则路由挂在根。
     pub fn nest_api(mut self, yes: bool) -> Self {
         self.nest_api = yes;
+        self
+    }
+
+    /// 是否启用通用技术监控（默认 true）。设 false 完全不挂 `/_mon`、不加 observe 层、不起采样器。
+    ///
+    /// 开启后（所有 chassis 服务默认）：
+    /// - `GET /_mon` 技术监控页（系统 CPU/内存/网络/磁盘 + DB 连接池 + 请求遥测），免认证、挂根（逃 `/api`）；
+    /// - `GET /_mon/tech-stats` 该页轮询的聚合 JSON；
+    /// - observe 遥测中间件裹在服务路由外层（采集每请求 method/path/协议/身份/状态/耗时）；
+    /// - 后台系统采样器（sysinfo，每 3s 刷新一次快照）。
+    ///
+    /// 身份维度需各服务在起服前 `cmx_web_monitor::set_identity_provider(..)` 注入；未注入则遥测里
+    /// 身份列为匿名。服务名取自 `ServiceSpec.name`（用于页标题）。
+    pub fn monitor(mut self, yes: bool) -> Self {
+        self.monitor = yes;
         self
     }
 
@@ -163,6 +181,21 @@ where
         Router::new().nest("/api", spec.router)
     } else {
         spec.router
+    };
+    // 3b) 通用技术监控（默认开）：`/_mon` 页 + `/_mon/tech-stats` 挂在根（逃 `/api`）、免认证；
+    //     后台起系统采样器（sysinfo：CPU/内存/网络/磁盘，每 3s）。系统 + DB 连接池维度对所有
+    //     chassis 服务（flow/report/mdm/…）零配置生效——这是「通用监控」的地基。请求遥测（observe
+    //     中间件 + 身份）由各服务按其鉴权顺序自行 `.layer(cmx_web_monitor::observe)` 接入，喂同一
+    //     进程级环形缓冲；未接入则监控页请求面板留空、系统/DB 面板照常。
+    let app_router = if spec.monitor {
+        cmx_web_monitor::set_service_name(spec.name.clone());
+        cmx_web_monitor::spawn_system_sampler();
+        // 服务依赖拓扑活体探测器（对 proxy 目标周期性打 /_mon/tech-stats）。拓扑来源由各服务
+        // 经 set_topology_provider 注入；未注入则探测器空转（廉价）、拓扑面板显「无依赖」。
+        cmx_web_monitor::spawn_topology_prober();
+        app_router.merge(cmx_web_monitor::monitor_routes())
+    } else {
+        app_router
     };
     let app = default_layers(app_router.with_state(spec.state));
 

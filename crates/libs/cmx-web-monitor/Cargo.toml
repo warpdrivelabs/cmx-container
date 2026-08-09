@@ -1,0 +1,30 @@
+[package]
+name = "cmx-web-monitor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 通用技术监控（对标 cmx-web-chassis 的通用性）：任何基于 chassis 的服务都能挂载
+# 统一的「技术监控」页——请求遥测（连接/协议/身份/耗时）+ 系统指标（CPU/内存/网络/磁盘）
+# + 数据库连接池状态。与「业务监控」正交：业务盘由各服务自持（如 flow 的流程盘），
+# 技术盘由本 crate 提供，一处实现处处可用。
+#
+# 依赖刻意保持轻：不依赖 cmx-web-chassis（避免环）、不依赖 cmx-api/平台。服务在自己的
+# main 里把 chassis 与本 crate 并列组装。身份读取经注入钩子解耦（各服务的 scope 不同）。
+
+[dependencies]
+# Web 框架（Router/中间件/SSE 计数；服务栈由各服务提供）
+axum = { workspace = true }
+# 异步运行时（后台采样器 tokio::spawn + interval）
+tokio = { workspace = true }
+# JSON 信封 + 指标序列化
+serde = { workspace = true }
+serde_json = { workspace = true }
+# 日志
+tracing = { workspace = true }
+# 系统技术指标（CPU/内存/网络/磁盘）
+sysinfo = { workspace = true }
+# 数据库连接池状态（复用平台 PG 单例 get_default_pg_db_manager().pool_statuses()）
+cmx-database-pg = { workspace = true }
+# 出站活体探测（打下游服务 /_mon/tech-stats 判可达/延迟/版本）；rustls，禁默认 features
+reqwest = { workspace = true }
