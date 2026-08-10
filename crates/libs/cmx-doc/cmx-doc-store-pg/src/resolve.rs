@@ -9,13 +9,63 @@
 
 use std::sync::Arc;
 
-use cmx_api_types::Result;
+use cmx_api_types::{Error, Result};
 use cmx_doc_model::DocMetaView;
+use cmx_model_meta::definitions::coord::{self, DamPartial};
 use cmx_model_meta::definitions::resolve::resolve_doc_file;
 use cmx_model_meta::definitions::store::{get_definition, DefRef};
 use serde_json::Value;
 
+/// DocMetaView 缓存代数守卫：定义树代数变化（进程内写 bump / 带外手动改文件）时
+/// 清空整个 DocMetaView 缓存，强制下次重读重解析——手动改定义无需重启。
+async fn doc_cache_guard() {
+    static LAST_SEEN: std::sync::OnceLock<std::sync::atomic::AtomicU64> =
+        std::sync::OnceLock::new();
+    // 注意：Rust 2024 中 `gen` 是保留关键字，按编译器建议加 `r#` 转义。
+    let r#gen = coord::definitions_generation().await;
+    let last = LAST_SEEN.get_or_init(|| std::sync::atomic::AtomicU64::new(0));
+    if last.swap(r#gen, std::sync::atomic::Ordering::SeqCst) != r#gen {
+        crate::cache::clear();
+    }
+}
+
+/// DAM 坐标归一化：三段齐全 → 原样返回；缺失/部分 → 按 doc(moduleCode) > file 全局反查补全。
+///
+/// 三者全缺（DAM 不全且无 doc/file）→ 400：跨模块盲选默认不安全。
+async fn normalize_coord(
+    domain: Option<&str>,
+    app: Option<&str>,
+    module: Option<&str>,
+    file: Option<&str>,
+    doc: Option<&str>,
+) -> Result<(String, String, String)> {
+    let domain = coord::clean_str(domain);
+    let app = coord::clean_str(app);
+    let module = coord::clean_str(module);
+    if let (Some(d), Some(a), Some(m)) = (domain, app, module) {
+        return Ok((d.to_string(), a.to_string(), m.to_string()));
+    }
+    let partial = DamPartial {
+        domain: domain.map(str::to_string),
+        application: app.map(str::to_string),
+        module: module.map(str::to_string),
+    };
+    let c = match (coord::clean_str(doc), coord::clean_str(file)) {
+        (Some(dc), _) => coord::resolve_dam_by_code("DOC", dc, &partial).await?,
+        (None, Some(f)) => coord::resolve_dam_by_file("DOC", f, &partial).await?,
+        (None, None) => {
+            return Err(Error::bad_request(
+                "无法定位单据定义：请至少提供 doc(moduleCode)、file 或完整 DAM 坐标",
+            ))
+        }
+    };
+    Ok((c.domain, c.application, c.module))
+}
+
 /// 智能定位 DOC 定义文件名。
+///
+/// 调用方约定：DAM 三段坐标已在 [`resolve_doc_meta`] 层归一化为齐全 `&str` 后再传入本函数；
+/// 本函数不再处理 DAM 缺失/部分，只负责 file/doc 的定位与脏值归一。
 ///
 /// 定位优先级（对齐 dct 的 resolve_dict：前端只传 code，file 由后端解析）：
 ///   1. `doc`（moduleCode）有值 -> [`resolve_doc_file`] 精确定位（读 moduleMeta.moduleCode 匹配）
@@ -45,21 +95,29 @@ pub async fn resolve_doc_file_smart(
 
 /// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
 ///
-/// 定位优先级（对齐 dct 的 resolve_dict：前端只传 code，file 由后端解析）：
+/// **DAM 咽喉点归一化**：`domain`/`app`/`module` 三段可选，缺失/部分时按
+/// `doc`(moduleCode) > `file` 全局反查补全（详见 [`normalize_coord`]）；三者全缺返回 400。
+/// 归一化后坐标齐全，再交由 [`resolve_doc_file_smart`] 落定 file。
+///
+/// 定位优先级（file 层；对齐 dct 的 resolve_dict：前端只传 code，file 由后端解析）：
 ///   1. `doc`（moduleCode）有值 -> [`resolve_doc_file`] 精确定位
 ///   2. `file` 显式指定且干净 -> 直接用
 ///   3. 都缺失 -> [`resolve_doc_file`] 盲选默认/最高版本
 ///
 /// 返回 `(meta, file)`：file 是最终落定的定义文件名，供版本台账等需 file 的场景复用。
 pub async fn resolve_doc_meta(
-    domain: &str,
-    app: &str,
-    module: &str,
+    domain: Option<&str>,
+    app: Option<&str>,
+    module: Option<&str>,
     file: Option<&str>,
     doc: Option<&str>,
 ) -> Result<(Arc<DocMetaView>, String)> {
-    let file = resolve_doc_file_smart(domain, app, module, file, doc).await?;
-    let key = crate::cache::doc_key(domain, app, module, &file);
+    // 代数守卫：带外定义变更自动逐出缓存（手动改文件无需重启）。
+    doc_cache_guard().await;
+    // 坐标归一化：DAM 缺失/部分 → 全局反查补全（doc > file）。
+    let (domain, app, module) = normalize_coord(domain, app, module, file, doc).await?;
+    let file = resolve_doc_file_smart(&domain, &app, &module, file, doc).await?;
+    let key = crate::cache::doc_key(&domain, &app, &module, &file);
     if let Some(hit) = crate::cache::get(&key) {
         return Ok((hit, file));
     }

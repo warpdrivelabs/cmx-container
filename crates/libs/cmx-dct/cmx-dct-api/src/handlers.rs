@@ -73,7 +73,7 @@ pub async fn dct_meta(
     Query(q): Query<DctQuery>,
     _headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
-    debug!("{:<12} - dct_meta {}/{}", "HANDLER", q.module, q.dict);
+    debug!("{:<12} - dct_meta {}/{}", "HANDLER", q.module.as_deref().unwrap_or("(auto)"), q.dict);
     // dct_meta 是唯一需要字段完整属性（width/visible/pattern/enumValues 等）的场景：
     // 供前端字典维护页构建列模型（编辑/校验/布局）。按 ?with_props=true 按需下发扁平键，
     // 避免基本场景 payload 膨胀。
@@ -162,7 +162,7 @@ pub async fn dct_upsert(
         "HANDLER", q.dict, view.table_name
     );
 
-    match store::upsert(&view, body, &db_id).await? {
+    match store::upsert(&view, body, &db_id, None).await? {
         store::UpsertOutcome::Invalid(violations) => Ok(Json(validation_fail_resp(&violations))),
         store::UpsertOutcome::Ok { affected, id_map } => Ok(Json(ApiResp::ok(
             json!({ "count": affected, "idMap": id_map }),
@@ -184,7 +184,7 @@ pub async fn dct_delete(
     let db_id = resolve_db_id_from_headers(&headers).await;
     let view = store::resolve_dict(&q, false).await?;
     debug!("{:<12} - dct_delete {} id={}", "HANDLER", q.dict, id);
-    let data = store::delete(&view, &id, &db_id).await?;
+    let data = store::delete(&view, &id, &db_id, None).await?;
     Ok(Json(ApiResp::ok(data)))
 }
 
@@ -216,7 +216,7 @@ pub async fn dct_save(
         "HANDLER", q.dict, view.table_name, save_mode
     );
 
-    match store::save(&view, &body, &db_id).await? {
+    match store::save(&view, &body, &db_id, None).await? {
         store::SaveOutcome::Invalid(violations) => {
             Ok(Json(validation_fail_resp(&violations)).into_response())
         }

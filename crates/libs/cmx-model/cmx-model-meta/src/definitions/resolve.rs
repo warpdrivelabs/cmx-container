@@ -41,6 +41,21 @@ fn base_file_cache() -> &'static RwLock<HashMap<String, String>> {
     BASE_FILE_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
+/// 代数守卫：定义树代数变化（进程内写 bump 或带外文件变更）时清空三个 file cache。
+///
+/// 返回当前代数。各 resolve_*_file 的缓存读取前先调用本函数。
+async fn file_caches_guard() -> u64 {
+    static LAST_SEEN: OnceLock<std::sync::atomic::AtomicU64> = OnceLock::new();
+    let current = super::coord::definitions_generation().await;
+    let last = LAST_SEEN.get_or_init(|| std::sync::atomic::AtomicU64::new(0));
+    if last.swap(current, std::sync::atomic::Ordering::SeqCst) != current {
+        doc_file_cache().write().await.clear();
+        dict_file_cache().write().await.clear();
+        base_file_cache().write().await.clear();
+    }
+    current
+}
+
 fn not_found(msg: String) -> Error {
     Error::business_error(msg)
 }
@@ -148,6 +163,8 @@ pub async fn resolve_doc_file(
     module: &str,
     doc: Option<&str>,
 ) -> Result<String> {
+    // 代数守卫：带外变更自动清空缓存（手动改定义文件无需重启）。
+    file_caches_guard().await;
     // 缓存键：doc 有值时四段（精确定位），缺失时三段（盲选默认）。
     let cache_key = match doc {
         Some(d) if !d.is_empty() => format!("{domain}/{app}/{module}/{d}"),
@@ -305,6 +322,8 @@ pub async fn resolve_dict_file(
     module: &str,
     dict: &str,
 ) -> Result<String> {
+    // 代数守卫：带外变更自动清空缓存（手动改定义文件无需重启）。
+    file_caches_guard().await;
     let cache_key = format!("{domain}/{app}/{module}/{dict}");
     if let Some(f) = dict_file_cache().read().await.get(&cache_key).cloned() {
         return Ok(f);
@@ -412,6 +431,8 @@ pub async fn resolve_dict_file(
 ///
 /// `code` 形如 `base_dct_meta`（无 `.json` 后缀），由前端 `_inferBaseId` 以 stem 形式发出。
 pub async fn resolve_base_file(domain: &str, code: &str) -> Result<String> {
+    // 代数守卫：带外变更自动清空缓存（手动改定义文件无需重启）。
+    file_caches_guard().await;
     let cache_key = format!("{domain}/{code}");
     if let Some(f) = base_file_cache().read().await.get(&cache_key).cloned() {
         return Ok(f);

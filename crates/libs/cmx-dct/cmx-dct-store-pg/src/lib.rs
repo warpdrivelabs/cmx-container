@@ -23,6 +23,6 @@ mod write;
 pub use error::{api_err, api_err_db};
 pub use hier_service::DctHierService;
 pub use import_export::*;
-pub use query::{search, search_zmc};
+pub use query::{search, search_zmc, search_zmc_raw};
 pub use resolve::resolve_dict;
 pub use write::{UpsertOutcome, SaveOutcome, delete, save, upsert};

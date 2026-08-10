@@ -20,10 +20,13 @@ use crate::saver::{SaveCtx, SaveMode};
 use crate::{DocSaver, ZmcDocLoader};
 
 /// DOC 业务单据的层级服务实现。持有定位坐标 + 数据源 id；每次调用解析 DocMetaView。
+///
+/// DAM 三段（domain/application/module）可选：缺失时由 [`resolve_doc_meta`] 按
+/// `doc`(moduleCode) > `file` 全局反查补全（与 `/doc/*` HTTP 端点同一咽喉点）。
 pub struct DocHierService {
-    pub domain: String,
-    pub application: String,
-    pub module: String,
+    pub domain: Option<String>,
+    pub application: Option<String>,
+    pub module: Option<String>,
     pub file: Option<String>,
     /// 单据模块编码（moduleMeta.moduleCode）；前端走 code 定位时传，优先于 file。
     pub doc: Option<String>,
@@ -32,15 +35,15 @@ pub struct DocHierService {
 
 impl DocHierService {
     pub fn new(
-        domain: impl Into<String>,
-        application: impl Into<String>,
-        module: impl Into<String>,
+        domain: Option<String>,
+        application: Option<String>,
+        module: Option<String>,
         db_id: impl Into<String>,
     ) -> Self {
         Self {
-            domain: domain.into(),
-            application: application.into(),
-            module: module.into(),
+            domain,
+            application,
+            module,
             file: None,
             doc: None,
             db_id: db_id.into(),
@@ -58,9 +61,9 @@ impl HierService for DocHierService {
         query_in: &LoadQuery,
     ) -> Result<ZmcDataSet<Self::Row>, String> {
         let (meta, _file) = crate::resolve::resolve_doc_meta(
-            &self.domain,
-            &self.application,
-            &self.module,
+            self.domain.as_deref(),
+            self.application.as_deref(),
+            self.module.as_deref(),
             self.file.as_deref(),
             self.doc.as_deref(),
         )
@@ -85,9 +88,9 @@ impl HierService for DocHierService {
         parent_ids: &[String],
     ) -> Result<ZmcDataSet<Self::Row>, String> {
         let (meta, _file) = crate::resolve::resolve_doc_meta(
-            &self.domain,
-            &self.application,
-            &self.module,
+            self.domain.as_deref(),
+            self.application.as_deref(),
+            self.module.as_deref(),
             self.file.as_deref(),
             self.doc.as_deref(),
         )
@@ -109,9 +112,9 @@ impl HierService for DocHierService {
         changes: &ChangeSet,
     ) -> Result<SaveOutcome, String> {
         let (meta, _file) = crate::resolve::resolve_doc_meta(
-            &self.domain,
-            &self.application,
-            &self.module,
+            self.domain.as_deref(),
+            self.application.as_deref(),
+            self.module.as_deref(),
             self.file.as_deref(),
             self.doc.as_deref(),
         )

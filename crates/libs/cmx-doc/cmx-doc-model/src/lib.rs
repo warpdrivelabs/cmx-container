@@ -26,7 +26,7 @@ pub use codec::{dv_to_json, json_to_dv_loose, json_to_dv_typed};
 pub use datetime_util::{parse_datetime_utc, parse_naive_date};
 pub use error::{FormulaError, ModelError};
 pub use formula::{FValue, Scope, eval_bool, eval_formula, scope_from_json};
-pub use meta::{ColumnView, DocMetaView, LayerView, LevelGroup, RelationView, SummaryView};
+pub use meta::{ColumnView, DocMetaView, LayerView, LevelGroup, RelationView, SummaryView, project_doc_meta};
 pub use query::{Cond, Cursor, DocQuery, Filter, LayerQuery, Op, OrderBy, json_to_datavalue};
 pub use rule::{ValidateResult, Violation, validate};
 pub use sql_builder::build_layer_select;

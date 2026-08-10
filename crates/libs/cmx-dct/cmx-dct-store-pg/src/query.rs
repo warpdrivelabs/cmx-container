@@ -90,7 +90,26 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
 /// 与 [`search`] 对齐：跑一次 COUNT(*) 把总条数挂到 `zmc.total`，编码进列式包的 `total` 字段，
 /// 供前端分页工具栏算总页数（前端 `pkg.total` 读取，缺省 null）。COUNT 与主 SELECT 共用同一份
 /// filter 下推（同一 where_sql + params），看到的行集一致。
+///
+/// 内部委托 [`search_zmc_raw`] 取原始 `ZmcDataSet` 后再编码为列式二进制；需要原始 ZmcDataSet
+/// （做进一步列式处理 / 喂给协调器）的调用方直接用 `search_zmc_raw`。
 pub async fn search_zmc(view: &DictView, raw: &Value, db_id: &str) -> Result<Vec<u8>> {
+    let zmc = search_zmc_raw(view, raw, db_id).await?;
+    let mut buf = Vec::new();
+    zmc.encode_columnar_binary(&mut buf);
+    Ok(buf)
+}
+
+/// 零拷贝装载的原始 `ZmcDataSet`（未编码），供其他 crate 复用 DCT 的列式查询结果。
+///
+/// 与 [`search_zmc`] 共用同一份 SQL + COUNT 构造（[`build_search`]），区别仅在返回原始 ZmcDataSet
+/// 而非已编码的列式二进制——调用方可自行决定序列化方式（msgpack / JSON / 喂给协调器）。
+/// 与 DOC 侧的 `ZmcDocLoader::load`（返回原始 ZmcDataSet）对称。
+pub async fn search_zmc_raw(
+    view: &DictView,
+    raw: &Value,
+    db_id: &str,
+) -> Result<cmx_database_pg::zmcdataset::ZmcDataSet> {
     let (sql, count_sql, params) = build_search(view, raw);
 
     let mm = get_default_pg_db_manager();
@@ -126,8 +145,5 @@ pub async fn search_zmc(view: &DictView, raw: &Value, db_id: &str) -> Result<Vec
     {
         zmc.total = Some(n);
     }
-
-    let mut buf = Vec::new();
-    zmc.encode_columnar_binary(&mut buf);
-    Ok(buf)
+    Ok(zmc)
 }

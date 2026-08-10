@@ -717,6 +717,123 @@ fn map_field_type(data_type: &str) -> FieldType {
     }
 }
 
+// ============================================================================
+// 前端元数据投影（DocMetaView → JSON）
+// ============================================================================
+
+/// 把强类型 [`DocMetaView`] 投影成前端通用单据页要用的 JSON。
+///
+/// `layers` 输出**全部表**（含同层并列表，如 L4 的 cv_aux_line + cv_cyzb_line），每层带
+/// `id/tableName/level/levelName/columns/summaries/aggFields`；每列带
+/// `name/caption/dataType/dimType/agg/nullable/isPrimaryKey`；`summaries` 是本表汇总表（sum 表）。
+/// 附 `layerGroups`（同层全部表分组）+ `relations`（父子键）+ `layerOrder`（主链路）。
+///
+/// 与 DCT 侧的 `cmx_dct_model::project_meta_column` 对称：把强类型视图投影成前端 JSON，
+/// 供 handler（`/doc/meta`）与其他需要"投影后元数据"的 crate 共用。
+pub fn project_doc_meta(meta: &DocMetaView) -> serde_json::Value {
+    use serde_json::json;
+    let layers: Vec<serde_json::Value> = meta
+        .layers
+        .iter()
+        .map(|l| {
+            let cols: Vec<serde_json::Value> = l.columns.iter().map(column_to_json).collect();
+            let summaries: Vec<serde_json::Value> = l
+                .summaries
+                .iter()
+                .map(|s| {
+                    let scols: Vec<serde_json::Value> =
+                        s.columns.iter().map(column_to_json).collect();
+                    json!({
+                        "id": s.id,
+                        "name": s.name,
+                        "caption": s.caption,
+                        "sourceTable": s.source_table,
+                        "columns": scols,
+                    })
+                })
+                .collect();
+            json!({
+                "id": l.id,
+                "tableName": l.table_name,
+                "level": l.level,
+                "levelName": l.level_name,
+                "columns": cols,
+                "summaries": summaries,
+                "aggFields": l.agg_fields,
+            })
+        })
+        .collect();
+
+    let layer_groups: Vec<serde_json::Value> = meta
+        .layer_groups
+        .iter()
+        .map(|g| {
+            json!({
+                "level": g.level,
+                "levelName": g.level_name,
+                "tableIds": g.table_ids,
+            })
+        })
+        .collect();
+
+    let relations: Vec<serde_json::Value> = meta
+        .relations
+        .iter()
+        .map(|r| {
+            json!({
+                "parent": r.parent,
+                "child": r.child,
+                "parentKey": r.parent_key,
+                "childKey": r.child_key,
+            })
+        })
+        .collect();
+
+    json!({
+        "moduleCode": meta.module_code,
+        "version": meta.version,
+        "layerOrder": meta.layer_order,
+        "layers": layers,
+        "layerGroups": layer_groups,
+        "relations": relations,
+    })
+}
+
+/// 单列 → 前端 JSON（层列与汇总表列共用）。
+fn column_to_json(c: &ColumnView) -> serde_json::Value {
+    use serde_json::json;
+    let mut obj = json!({
+        "name": c.name,
+        "caption": c.caption,
+        "dataType": c.data_type,
+        "dimType": c.dim_type,
+        "agg": c.agg,
+        "nullable": c.nullable,
+        "isPrimaryKey": c.is_primary_key,
+    });
+    // 字典/录入控件配置：有值才输出，避免前端列对象携带大量空键。
+    if !c.ref_dict.is_empty() {
+        obj["refDict"] = serde_json::Value::String(c.ref_dict.clone());
+    }
+    if !c.display_field.is_empty() {
+        obj["displayField"] = serde_json::Value::String(c.display_field.clone());
+    }
+    if !c.ref_field.is_empty() {
+        obj["refField"] = serde_json::Value::String(c.ref_field.clone());
+    }
+    if let Some(edit) = &c.edit {
+        obj["edit"] = edit.clone();
+    }
+    if let Some(es) = &c.edit_settings {
+        obj["editSettings"] = es.clone();
+    }
+    // 显示属性（表现交互层）：有值才输出，供前端动态列模型格式化/对齐/显示精度。
+    if let Some(d) = &c.display {
+        obj["display"] = d.clone();
+    }
+    obj
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

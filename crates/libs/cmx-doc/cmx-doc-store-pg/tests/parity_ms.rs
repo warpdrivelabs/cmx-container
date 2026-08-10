@@ -262,7 +262,7 @@ async fn cross_engine_parity_db_write() {
         .collect();
 
     // ── 各经 DocHierService 真写库 ──
-    let svc = DocHierService::new("fi", "cmxfico", "gl", &db_id);
+    let svc = DocHierService::new(Some("fi".into()), Some("cmxfico".into()), Some("gl".into()), &db_id);
     let out_a = svc_save(&svc, &aggregations, flat_to_doc_changeset(&js_flat, "JS")).await;
     let out_b = svc_save(&svc, &aggregations, flat_to_doc_changeset(&rust_flat, "RS")).await;
     eprintln!("写库回执：A(JS) affected={}, B(Rust) affected={}", out_a, out_b);

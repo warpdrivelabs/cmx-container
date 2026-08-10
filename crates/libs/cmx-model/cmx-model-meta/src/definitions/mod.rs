@@ -10,3 +10,6 @@ pub mod store;
 
 // 业务编码 → 定义文件解析（DOC/DCT 共享，供 cmx-api/cmx-doc-api/cmx-dct-api 三方共用，避免环）。
 pub mod resolve;
+
+// DAM 坐标全局反查与定义树代数（DAM 可选化基础设施，供 cmx-dct/cmx-doc 咽喉点共用）。
+pub mod coord;

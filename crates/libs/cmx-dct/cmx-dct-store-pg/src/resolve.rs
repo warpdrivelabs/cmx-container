@@ -16,26 +16,25 @@ use crate::error::api_err;
 ///
 /// file 缺失时由 `resolve_dict_file` 在 domain/app/module 下扫描含 dictCode 的 DCT 文件
 /// （前端运行时只持 dictCode + domain/app/module，无 file 坐标）。返回 (doc, base, file)。
-async fn resolve_doc(q: &DctQuery) -> Result<(Value, Value, String)> {
-    // file 缺失时自动解析：在该 domain/app/module 下扫描含 dictCode 的 DCT 文件。
-    // 前端运行时只持有 dictCode + domain/app/module（host 无 file 坐标），故 file 由后端兜底。
-    let file = match &q.file {
-        Some(f) if !f.is_empty() => f.clone(),
+async fn resolve_doc(
+    domain: &str,
+    app: &str,
+    module: &str,
+    file: Option<&str>,
+    dict: &str,
+) -> Result<(Value, Value, String)> {
+    let file = match file {
+        Some(f) if !f.is_empty() => f.to_string(),
         _ => {
-            cmx_model_meta::definitions::resolve::resolve_dict_file(
-                &q.domain,
-                &q.application,
-                &q.module,
-                &q.dict,
-            )
-            .await?
+            cmx_model_meta::definitions::resolve::resolve_dict_file(domain, app, module, dict)
+                .await?
         }
     };
     let doc_ref = cmx_model_meta::definitions::store::DefRef {
-        domain: Some(q.domain.clone()),
-        application: Some(q.application.clone()),
-        app: Some(q.application.clone()),
-        module: Some(q.module.clone()),
+        domain: Some(domain.to_string()),
+        application: Some(app.to_string()),
+        app: Some(app.to_string()),
+        module: Some(module.to_string()),
         file: Some(file.clone()),
         id: None,
         kind: None,
@@ -293,22 +292,24 @@ fn resolve_pk(dm: &Value, columns: &mut [DictColumn]) -> (String, String, String
 /// 落库前列级校验规范：查缓存，未命中则从 raw_fields 构建并缓存。
 ///
 /// 缓存键含 version，定义改版本即换键，旧条目自然作废（免主动失效）。
+#[allow(clippy::too_many_arguments)]
 fn resolve_or_build_spec(
-    q: &DctQuery,
+    domain: &str,
+    app: &str,
+    module: &str,
+    generation: u64,
     file: &str,
     table_name: &str,
     pk: &str,
     raw_fields: &[Value],
     version: u64,
 ) -> std::sync::Arc<cmx_biz::validation::TableSpec> {
-    // 落库前列级校验规范：从合并后的原始字段构建 TableSpec，进程内缓存（键含版本，免失效）。
-    let spec_key = cmx_biz::validation::spec_key(
-        &q.domain,
-        &q.application,
-        &q.module,
-        file,
-        table_name,
-        version,
+    // 落库前列级校验规范：进程内缓存（键含版本 + 定义树代数）。
+    // 拼代数：手动改定义字段但不升 version 的带外变更也会让 spec 陈旧，随代数收敛。
+    let spec_key = format!(
+        "{}#g{}",
+        cmx_biz::validation::spec_key(domain, app, module, file, table_name, version),
+        generation
     );
     match cmx_biz::validation::get_spec(&spec_key) {
         Some(s) => s,
@@ -330,8 +331,29 @@ fn resolve_or_build_spec(
 /// intDigits/decimalDigits 等）收集到 `DictColumn.extra`。仅 `/dct/meta` 在 `with_props=true`
 /// 时需要（供前端字典维护页构建完整列模型）；数据装载/回存场景传 false，保持 payload 精简。
 pub async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
+    // 0) 坐标归一化：DAM 缺失/部分时按 dict 全局反查补全（三段齐全 → 快路径直通）。
+    use cmx_model_meta::definitions::coord;
+    let partial = coord::DamPartial {
+        domain: coord::clean_opt(q.domain.clone()),
+        application: coord::clean_opt(q.application.clone()),
+        module: coord::clean_opt(q.module.clone()),
+    };
+    let (domain, application, module) = if let (Some(d), Some(a), Some(m)) = (
+        partial.domain.clone(),
+        partial.application.clone(),
+        partial.module.clone(),
+    ) {
+        (d, a, m)
+    } else {
+        let c = coord::resolve_dam_by_code("DCT", &q.dict, &partial).await?;
+        (c.domain, c.application, c.module)
+    };
+    // 定义树代数：spec 缓存键用（带外变更感知）。
+    let generation = coord::definitions_generation().await;
+
     // 1) file 解析 + doc/base 加载。
-    let (doc, base, file) = resolve_doc(q).await?;
+    let (doc, base, file) =
+        resolve_doc(&domain, &application, &module, q.file.as_deref(), &q.dict).await?;
 
     // 2) 定位目标字典表定义。
     let tables = doc
@@ -362,7 +384,9 @@ pub async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
         .and_then(|v| v.as_u64())
         .or_else(|| doc.get("version").and_then(|v| v.as_u64()))
         .unwrap_or(0);
-    let spec = resolve_or_build_spec(q, &file, &table_name, &pk, &raw_fields, version);
+    let spec = resolve_or_build_spec(
+        &domain, &application, &module, generation, &file, &table_name, &pk, &raw_fields, version,
+    );
 
     // 6) 组装 DictView。
     Ok(DictView {

@@ -669,6 +669,8 @@ pub async fn save_definition(
     // 全局写锁，保证原子写不被并发覆盖
     let _guard = write_lock().lock().await;
     write_json_atomic(&abs_path(&rel), &merged, true).await?;
+    // 定义变更 → 代数 +1，让全部定义派生缓存（含带外感知通道）即时失效。
+    super::coord::bump_generation().await;
     Ok(merged)
 }
 
@@ -755,6 +757,9 @@ pub async fn set_default_version(r: &DefRef) -> PortalResult<serde_json::Value> 
             changed.push(fname);
         }
     }
+    if !changed.is_empty() {
+        super::coord::bump_generation().await;
+    }
     Ok(json!({ "ok": true, "default": target_file, "changed": changed }))
 }
 
@@ -775,7 +780,10 @@ pub async fn delete_definition(r: &DefRef) -> PortalResult<serde_json::Value> {
     let rel = resolve_rel(r)?;
     let _guard = write_lock().lock().await;
     match tokio::fs::remove_file(abs_path(&rel)).await {
-        Ok(()) => Ok(json!({ "ok": true })),
+        Ok(()) => {
+            super::coord::bump_generation().await;
+            Ok(json!({ "ok": true }))
+        }
         // 文件缺失：转语义化 NotFound
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(PortalError::not_found(format!(
             "定义文件不存在：{}/{}/{}/{}",

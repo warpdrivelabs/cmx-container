@@ -56,9 +56,9 @@ impl DctHierService {
             .map(|l| l.table.clone())
             .ok_or_else(|| "schema 无根层".to_string())?;
         Ok(DctQuery {
-            domain: self.domain.clone(),
-            application: self.application.clone(),
-            module: self.module.clone(),
+            domain: Some(self.domain.clone()),
+            application: Some(self.application.clone()),
+            module: Some(self.module.clone()),
             file: self.file.clone(),
             dict,
             with_props: false,
@@ -118,7 +118,7 @@ impl HierService for DctHierService {
         // 中立 ChangeSet → DCT saver 的 body：{ saveMode:"merge", changes:{ <dictCode>: {...} } }
         // 协调器已做写时上卷，承接字段在 changes 里就绪。
         let body = json!({ "saveMode": "merge", "changes": changes.to_json() });
-        let outcome = write::save(&view, &body, &self.db_id)
+        let outcome = write::save(&view, &body, &self.db_id, None)
             .await
             .map_err(|e| e.to_string())?;
 

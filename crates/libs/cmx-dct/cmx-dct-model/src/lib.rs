@@ -19,14 +19,21 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 
 /// `/api/dct/*` 共用坐标：定位定义文件 + 其中哪张字典表。
 ///
-/// `file` 可选：缺失时由 `resolve_dict_file`（cmx-dct-store-pg）在 domain/app/module 下自动
-/// 扫描含该 dictCode 的 DCT 文件（优先 isDefault、回退 version 最大）。这样前端运行时只需传
-/// domain/app/module/dict 四元（运行时 host 无 file 坐标）。
+/// DAM 三段（domain/application/module）**可选**：缺失/部分时由后端按 `dict`（dictCode）
+/// 全局反查补全（唯一命中即用；多 DAM 冲突返回 HTTP 409 + 候选列表；零命中报错）。
+/// `file` 可选：缺失时由 `resolve_dict_file` 在 DAM 下自动扫描含该 dictCode 的 DCT 文件
+/// （优先 isDefault、回退 version 最大）。
 #[derive(Debug, Deserialize)]
 pub struct DctQuery {
-    pub domain: String,
-    pub application: String,
-    pub module: String,
+    /// 域（如 basic/fi）；可选，缺失自动反查。
+    #[serde(default)]
+    pub domain: Option<String>,
+    /// 应用（如 dataplatform/cmxfico）；可选，缺失自动反查。
+    #[serde(default)]
+    pub application: Option<String>,
+    /// 模块（如 mdm/gl）；可选，缺失自动反查。
+    #[serde(default)]
+    pub module: Option<String>,
     /// 定义文件名（如 cmxfico_dct_meta_v1.json）；可选，缺失时自动解析。
     pub file: Option<String>,
     /// 字典表 dictCode（如 currency / gl_account / bus_partner）
