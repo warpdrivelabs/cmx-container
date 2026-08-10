@@ -25,6 +25,8 @@ pub struct DocHierService {
     pub application: String,
     pub module: String,
     pub file: Option<String>,
+    /// 单据模块编码（moduleMeta.moduleCode）；前端走 code 定位时传，优先于 file。
+    pub doc: Option<String>,
     pub db_id: String,
 }
 
@@ -40,18 +42,28 @@ impl DocHierService {
             application: application.into(),
             module: module.into(),
             file: None,
+            doc: None,
             db_id: db_id.into(),
         }
     }
 
     /// 解析 DocMetaView（复刻 doc-api resolve_doc_meta：读定义 + base + parse；不带缓存）。
+    /// 定位优先级：doc(moduleCode) 精确定位 > file 显式指定 > 盲选默认。
     async fn resolve_meta(&self) -> Result<DocMetaView, String> {
         use cmx_model_meta::definitions::{resolve::resolve_doc_file, store};
-        let file = match &self.file {
-            Some(f) if !f.is_empty() => f.clone(),
-            _ => resolve_doc_file(&self.domain, &self.application, &self.module, None)
+        // 脏值视为缺失
+        let clean_file = self.file.as_deref().filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
+        let clean_doc = self.doc.as_deref().filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
+        let file = match clean_doc {
+            Some(d) => resolve_doc_file(&self.domain, &self.application, &self.module, Some(d))
                 .await
                 .map_err(|e| e.to_string())?,
+            _ => match clean_file {
+                Some(f) => f.to_string(),
+                None => resolve_doc_file(&self.domain, &self.application, &self.module, None)
+                    .await
+                    .map_err(|e| e.to_string())?,
+            },
         };
         let doc_ref = store::DefRef {
             domain: Some(self.domain.clone()),

@@ -174,7 +174,7 @@ async fn doc_load_entry(
     body: Option<Value>,
 ) -> Result<axum::response::Response> {
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let meta = resolve_doc_meta(
+    let (meta, _file) = resolve_doc_meta(
         &q.domain,
         &q.application,
         &q.module,
@@ -320,6 +320,9 @@ pub struct DocChildrenReq {
     /// 单据定义文件名；缺失/空时由后端按坐标自动解析默认 DOC 文件（与装载接口一致）。
     #[serde(default)]
     pub file: Option<String>,
+    /// 单据模块编码（moduleMeta.moduleCode）；前端走 code 定位时传，后端据此精确定义文件。
+    #[serde(default)]
+    pub doc: Option<String>,
     /// 要下钻装载的层 id。
     pub layer: String,
     /// 上层选中的父 id 列表（该层 childKey 匹配）。
@@ -358,12 +361,12 @@ pub async fn doc_children(
         "handler invoked"
     );
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let meta = resolve_doc_meta(
+    let (meta, _file) = resolve_doc_meta(
         &req.domain,
         &req.application,
         &req.module,
         req.file.as_deref(),
-        None,
+        req.doc.as_deref(),
     )
     .await?;
 
@@ -429,7 +432,7 @@ pub async fn doc_data_stream(
         "handler invoked"
     );
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let meta = resolve_doc_meta(
+    let (meta, _file) = resolve_doc_meta(
         &q.domain,
         &q.application,
         &q.module,
@@ -533,7 +536,7 @@ pub async fn doc_meta(
         "handler invoked"
     );
 
-    let meta = resolve_doc_meta(
+    let (meta, _file) = resolve_doc_meta(
         &q.domain,
         &q.application,
         &q.module,
@@ -675,6 +678,9 @@ pub struct DocSaveQuery {
     /// 单据定义文件名；缺失/空时由后端按坐标自动解析默认 DOC 文件（与装载接口一致）。
     #[serde(default)]
     pub file: Option<String>,
+    /// 单据模块编码（moduleMeta.moduleCode）；前端走 code 定位时传，后端据此精确定义文件。
+    #[serde(default)]
+    pub doc: Option<String>,
 }
 
 /// `POST /api/doc/save` —— 回存单据数据（merge/replace 双模式）。
@@ -697,18 +703,13 @@ pub async fn doc_save(
     let mm = get_default_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
 
-    // file 兜底：query 未带 file（前端不传时）→ 按 moduleCode/doc 自动解析默认 DOC 文件，
-    // 与装载接口 doc_load_entry 的「file 缺省自动解析」语义一致。
-    let file = match &q.file {
-        Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.clone(),
-        _ => resolve_doc_file(&q.domain, &q.application, &q.module, None).await?,
-    };
-    let meta = resolve_doc_meta(
+    // 前端走 doc(moduleCode) 定位，file 由 resolve_doc_meta 内部兜底（对齐 dct_save 的 resolve_dict）。
+    let (meta, file) = resolve_doc_meta(
         &q.domain,
         &q.application,
         &q.module,
-        Some(file.as_str()),
-        None,
+        q.file.as_deref(),
+        q.doc.as_deref(),
     )
     .await?;
     let (mode, changes) = saver::parse_save_body(&body);
@@ -814,14 +815,11 @@ pub async fn doc_save_batch(
         let get = |k: &str| d.get(k).and_then(|v| v.as_str()).unwrap_or("");
         let (domain, app, module) = (get("domain"), get("application"), get("module"));
         let raw_file = get("file");
-        // file 兜底：每单 file 缺失/空/脏值时按各自坐标自动解析默认 DOC 文件
-        // （与单单路径 /doc/save 的「file 缺省自动解析」契约一致）。
-        let file = if !raw_file.is_empty() && raw_file != "undefined" && raw_file != "null" {
-            raw_file.to_string()
-        } else {
-            resolve_doc_file(domain, app, module, None).await?
-        };
-        let meta = resolve_doc_meta(domain, app, module, Some(file.as_str()), None).await?;
+        let raw_doc = get("doc");
+        // 前端走 doc(moduleCode) 定位，file 由 resolve_doc_meta 内部兜底（同单单 /doc/save）。
+        let f = (!raw_file.is_empty()).then_some(raw_file);
+        let dc = (!raw_doc.is_empty()).then_some(raw_doc);
+        let (meta, file) = resolve_doc_meta(domain, app, module, f, dc).await?;
         let (mode, changes) = saver::parse_save_body(d);
         // 后端二次校验（同单单路径）：有 error 违规即整批拒（atomic）/该单在 save 阶段无从表达，故这里统一先拒。
         if !meta.validation_rules.is_empty()
@@ -968,11 +966,15 @@ pub async fn doc_restore(
         .ok_or_else(|| cmx_biz::BizError::business("restore 缺少 rootId"))?;
     let rev = body.get("rev").and_then(|v| v.as_i64()).map(|n| n as i32);
 
-    // file 兜底：query 未带 file → 自动解析默认 DOC 文件（与 doc_save 一致）。
-    let file = match &q.file {
-        Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.clone(),
-        _ => resolve_doc_file(&q.domain, &q.application, &q.module, None).await?,
-    };
+    // 前端走 doc(moduleCode) 定位，file 由 resolve_doc_meta 内部兜底（同 doc_save）。
+    let (meta, file) = resolve_doc_meta(
+        &q.domain,
+        &q.application,
+        &q.module,
+        q.file.as_deref(),
+        q.doc.as_deref(),
+    )
+    .await?;
 
     // 取历史版快照（列式包）
     let snapshot = DocRevision::get_snapshot(mm, &db_id, &file, root_id, rev).await?;
@@ -981,14 +983,6 @@ pub async fn doc_restore(
     }
 
     // 用 replace 模式把快照写回（DocSaver 内部单事务）
-    let meta = resolve_doc_meta(
-        &q.domain,
-        &q.application,
-        &q.module,
-        Some(file.as_str()),
-        None,
-    )
-    .await?;
     // 快照是列式包 { datasetId, columns, rows, childRows }；replace 期望 { table:{rows:[{id,upper_id,fields}]} }
     // 这里把列式包转成 replace 输入（简化：交给 DocSaver 前先归一）
     let replace_input = columnar_to_replace_input(&snapshot);
@@ -1074,22 +1068,54 @@ use cmx_model_meta::definitions::resolve::resolve_doc_file;
 
 /// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
 ///
-/// `file` 为 `None` 或空串时，自动调 [`resolve_doc_file`] 选默认/最高版本。
+/// 定位优先级（对齐 dct 的 resolve_dict：前端只传 code，file 由后端解析）：
+///   1. `doc`（moduleCode）有值 → [`resolve_doc_file`] 精确定位（读 moduleMeta.moduleCode 匹配）
+///   2. `file` 显式指定且干净 → 直接用（覆盖场景，如版本台账 restore 指定历史文件）
+///   3. 都缺失 → [`resolve_doc_file`] 盲选默认/最高版本
+///
+/// `file`/`doc` 的脏值（空串 / "undefined" / "null"）一律视为缺失。
+/// 解析定位用的 file 名（对齐 dct resolve_dict：前端走 code，file 由后端兜底）。
+///
+/// 优先级：`doc`(moduleCode) 精确定位 > `file` 显式指定 > 盲选默认/最高版本。
+/// 脏值（空串 / "undefined" / "null"）一律视为缺失。返回最终落定的 file 名。
+async fn resolve_doc_file_smart(
+    domain: &str,
+    app: &str,
+    module: &str,
+    file: Option<&str>,
+    doc: Option<&str>,
+) -> Result<String> {
+    // 脏值（空串 / "undefined" / "null"）一律视为缺失
+    let doc = doc.filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
+    let file = file.filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
+    match doc {
+        Some(d) => resolve_doc_file(domain, app, module, Some(d)).await,
+        _ => match file {
+            Some(f) => Ok(f.to_string()),
+            None => resolve_doc_file(domain, app, module, None).await,
+        },
+    }
+}
+
+/// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
+///
+/// 定位优先级（对齐 dct 的 resolve_dict：前端只传 code，file 由后端解析）：
+///   1. `doc`（moduleCode）有值 → [`resolve_doc_file`] 精确定位
+///   2. `file` 显式指定且干净 → 直接用
+///   3. 都缺失 → [`resolve_doc_file`] 盲选默认/最高版本
+///
+/// 返回 `(meta, file)`：file 是最终落定的定义文件名，供版本台账等需 file 的场景复用。
 async fn resolve_doc_meta(
     domain: &str,
     app: &str,
     module: &str,
     file: Option<&str>,
     doc: Option<&str>,
-) -> Result<Arc<DocMetaView>> {
-    // file 兜底：缺失/空/脏值（"undefined"/"null" 等）时自动解析（按 doc 盲选或 moduleCode 精确定位）。
-    let file = match file {
-        Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.to_string(),
-        _ => resolve_doc_file(domain, app, module, doc).await?,
-    };
+) -> Result<(Arc<DocMetaView>, String)> {
+    let file = resolve_doc_file_smart(domain, app, module, file, doc).await?;
     let key = cache::doc_key(domain, app, module, &file);
     if let Some(hit) = cache::get(&key) {
-        return Ok(hit);
+        return Ok((hit, file));
     }
 
     // 读主定义
@@ -1109,7 +1135,7 @@ async fn resolve_doc_meta(
 
     let view = Arc::new(DocMetaView::parse(&doc, &base)?);
     cache::put(key, view.clone());
-    Ok(view)
+    Ok((view, file))
 }
 
 /// 从定义的 baseDocMetaRef.file 读 base 字段集（域=base）；失败返回 Null。
