@@ -31,7 +31,7 @@ async function apiPost(url, payload, dbId) {
   return unwrap(r, await r.json().catch(() => null))
 }
 
-const state = { crFields: [], cmFields: [], crLineFields: [], list: [], current: null, headerRows: [] }
+const state = { crFields: [], cmFields: [], crLineFields: [], list: [], current: null, headerRows: [], payloadFields: [] }
 
 // 字典坐标四元组（domain/application/module/dbId），全部来自 ctx.props，代码中不写死。
 let coord = null
@@ -52,9 +52,12 @@ async function loadMeta() {
   state.crLineFields = (layers.find((l) => l.tableName === 'cv_mdm_apply_line') || {}).columns || []
 }
 async function loadTargetMeta(dictCode) {
-  if (!dictCode || !coord) { state.cmFields = []; return }
+  if (!dictCode || !coord) { state.cmFields = []; state.payloadFields = []; return }
   const m = await apiGet(`/api/dct/meta?${coordQs({ dict: dictCode })}`, coord.dbId)
   state.cmFields = (m && m.columns) || []
+  // V3.2 payload 化：DCT columns 的业务字段（非主键/非审计）作为 payload 候选源
+  // 下拉显示 payload.xxx（供用户识别），落库 strip 前缀用裸名
+  state.payloadFields = state.cmFields.filter((f) => !f.isPk && !['id', 'code', 'name', 'create_by', 'create_time', 'update_by', 'update_time', 'delete_flag', 'lifecycle_status', 'published_version', 'effective_date'].includes(f.name))
 }
 async function loadList() { state.list = (await apiGet('/api/mdm/activations', coord && coord.dbId)) || [] }
 
@@ -66,7 +69,17 @@ const capOf = (f) => {
   return c.zh_CN || c.zh || c.label || ''
 }
 const disp = (f) => { const c = capOf(f); return (c && c !== f.name ? `${c}（${f.name}）` : f.name) }
-const crOptions = () => state.crFields.map((f) => ({ value: f.name, label: disp(f) }))
+// V3.2 payload 化：CR 源字段 = 公共列（subject_name/subject_code）+ payload 内字段（裸名 value，payload.xxx 显示）
+// payload.xxx 仅显示用，落库 strip 前缀用裸名（方案 §5.5）
+const crOptions = () => {
+  // 公共列（骨架里的非业务字段）
+  const common = state.crFields
+    .filter((f) => ['subject_name', 'subject_code'].includes(f.name))
+    .map((f) => ({ value: f.name, label: disp(f) }))
+  // payload 字段（从 DCT target columns 派生，带 payload. 前缀显示，裸名 value）
+  const payload = state.payloadFields.map((f) => ({ value: f.name, label: `payload.${disp(f)}` }))
+  return [...common, ...payload]
+}
 const cmOptions = () => state.cmFields.map((f) => ({ value: f.name, label: disp(f) }))
 
 function styleCss() {
@@ -136,6 +149,8 @@ function formHtml() {
       <div class="f-item"><label>目标字典 target_dict</label><ui5-input id="amTd" value="${c.target_dict || ''}" placeholder="如 supplier"></ui5-input></div>
       <div class="f-item"><label>目标表 target_table</label><ui5-input id="amTt" value="${c.target_table || ''}" placeholder="如 cm_supplier"></ui5-input></div>
       <div class="f-item"><label>编码规则 code_rule_code</label><ui5-input id="amCrc" value="${c.code_rule_code || ''}"></ui5-input></div>
+      <div class="f-item"><label>主体名字段 subject_name_field</label><ui5-input id="amSnf" value="${c.subject_name_field || ''}" placeholder="payload 内字段名（如 name）"></ui5-input></div>
+      <div class="f-item"><label>主体编码字段 subject_code_field</label><ui5-input id="amScf" value="${c.subject_code_field || ''}" placeholder="为空则由 codeRule 铸号"></ui5-input></div>
     </div>
   </cmx-panel>
   <cmx-panel title="头映射 header_mapping" icon="mapping">
@@ -209,6 +224,7 @@ function collectForm() {
   const c = state.current
   c.activation_code = val('amCode'); c.source_doc_type = val('amSdt'); c.cr_type = val('amCrt')
   c.target_dict = val('amTd'); c.target_table = val('amTt'); c.code_rule_code = val('amCrc') || null
+  c.subject_name_field = val('amSnf') || null; c.subject_code_field = val('amScf') || null
   c.header_mapping = headerRowsToMapping()
   return c
 }
@@ -222,7 +238,7 @@ async function save() {
   } catch (e) { M.cmxError?.(`保存失败：${e.message}`) }
 }
 function newMapping() {
-  state.current = { activation_code: '', source_doc_type: '', cr_type: 'create', target_dict: '', target_table: '', header_mapping: {}, line_mappings: [], code_rule_code: null }
+  state.current = { activation_code: '', source_doc_type: '', cr_type: 'create', target_dict: '', target_table: '', header_mapping: {}, line_mappings: [], code_rule_code: null, subject_name_field: null, subject_code_field: null }
   syncHeaderRowsFromMapping(); refresh()
 }
 function selectByCode(code) {

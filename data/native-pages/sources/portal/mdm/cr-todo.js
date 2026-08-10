@@ -122,7 +122,7 @@ function tableHtml() {
   const trs = rows.map((r) => {
     const m = STATUS_META[r.doc_status] || { name: r.doc_status, tone: 'neutral' }
     return `<tr>
-      <td class="muted">${r.id}</td><td>${r.doc_no || ''}</td><td>${r.name || ''}</td><td>${r.cr_type || ''}</td>
+      <td class="muted">${r.id}</td><td>${r.doc_no || ''}</td><td>${r.subject_name || ''}</td><td>${r.cr_type || ''}</td>
       <td><cmx-status-tag tone="${m.tone}" variant="subtle" dot size="sm">${m.name}</cmx-status-tag></td>
       <td class="muted">${fmtTime(r.create_time)}</td><td>${actionsHtml(r)}</td></tr>`
   }).join('')
@@ -146,7 +146,7 @@ function detailHtml() {
         ${kv('单据号', h.doc_no)}${kv('状态', (STATUS_META[h.doc_status] || {}).name || h.doc_status)}
         ${kv('单据类型', h.doc_type)}${kv('变更类型', h.cr_type)}
         ${kv('目标字典', h.target_dict_code)}${kv('目标记录ID', h.target_record_id)}
-        ${kv('供应商名称', h.name)}${kv('税号', h.tax_no)}${kv('信用代码', h.credit_code)}
+        ${kv('供应商名称', h.subject_name)}${kv('税号', (h.payload || {}).tax_no)}${kv('信用代码', (h.payload || {}).credit_code)}
       </cmx-desc-list></div>
     <div class="card"><div class="card-title">明细行</div>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>类型</th><th>操作</th><th>账号</th><th>开户行</th></tr></thead><tbody>${lineRows}</tbody></table></div></div>
@@ -197,7 +197,7 @@ function buildListGrid() {
     cm.setMembers([
       new C.CmxColumn({ id: 'id', caption: 'ID', dataType: 'VARCHAR', width: '110px' }),
       new C.CmxColumn({ id: 'doc_no', caption: '单据号', dataType: 'VARCHAR', width: '150px' }),
-      new C.CmxColumn({ id: 'name', caption: '名称', dataType: 'VARCHAR', width: '180px' }),
+      new C.CmxColumn({ id: 'subject_name', caption: '名称', dataType: 'VARCHAR', width: '180px' }),
       new C.CmxColumn({ id: 'doc_type', caption: '类型', dataType: 'VARCHAR', width: '150px' }),
       new C.CmxColumn({ id: 'status_name', caption: '状态', dataType: 'VARCHAR', width: '90px' }),
       new C.CmxColumn({ id: 'create_time', caption: '创建时间', dataType: 'VARCHAR', width: '150px', display: {

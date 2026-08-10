@@ -6,7 +6,7 @@
     "metaKind": "DOC",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
-    "remark": "MDM 变更请求(CR)复用 DOC 单据:头存主体关键字段(逐列)+ ext_attrs 扩展,行存明细提议值。审批前 cm_* 不动,审批后激活器落字典。",
+    "remark": "MDM 变更请求(CR)复用 DOC 单据:V3.2 payload 化——头表骨架+公共搜索列+payload JSONB,行表骨架+line_payload JSONB。审批前 cm_* 不动,审批后激活器落字典。",
     "documentTypeDict": "doc_type",
     "versionName": "",
     "isDefault": true,
@@ -189,34 +189,12 @@
         },
         {
           "dataType": "VARCHAR",
-          "fieldLength": 64,
+          "fieldLength": 200,
           "nullable": true,
-          "id": "name",
-          "name": "name",
+          "id": "subject_name",
+          "name": "subject_name",
           "caption": {
-            "zh_CN": "供应商名称(关键字段,逐列)"
-          },
-          "dimType": "attribute",
-          "edit": {
-            "mode": "cmx-text-input",
-            "required": true
-          },
-          "display": {
-            "mode": "text",
-            "align": "left"
-          },
-          "width": "180px",
-          "required": true,
-          "align": "left"
-        },
-        {
-          "dataType": "VARCHAR",
-          "fieldLength": 32,
-          "nullable": true,
-          "id": "tax_no",
-          "name": "tax_no",
-          "caption": {
-            "zh_CN": "税号(逐列)"
+            "zh_CN": "主体名称(跨主数据通用公共搜索列)"
           },
           "dimType": "attribute",
           "edit": {
@@ -226,37 +204,17 @@
             "mode": "text",
             "align": "left"
           },
-          "width": "140px",
+          "width": "200px",
           "align": "left"
         },
         {
           "dataType": "VARCHAR",
           "fieldLength": 64,
           "nullable": true,
-          "id": "credit_code",
-          "name": "credit_code",
+          "id": "subject_code",
+          "name": "subject_code",
           "caption": {
-            "zh_CN": "统一社会信用代码(逐列)"
-          },
-          "dimType": "attribute",
-          "edit": {
-            "mode": "cmx-text-input"
-          },
-          "display": {
-            "mode": "text",
-            "align": "left"
-          },
-          "width": "180px",
-          "align": "left"
-        },
-        {
-          "dataType": "VARCHAR",
-          "fieldLength": 64,
-          "nullable": true,
-          "id": "short_name",
-          "name": "short_name",
-          "caption": {
-            "zh_CN": "简称(关键字段示例,逐列)"
+            "zh_CN": "主体编码(列表跳转/展示用)"
           },
           "dimType": "attribute",
           "edit": {
@@ -272,11 +230,11 @@
         {
           "dataType": "JSONB",
           "fieldLength": 0,
-          "nullable": true,
-          "id": "ext_attrs",
-          "name": "ext_attrs",
+          "nullable": false,
+          "id": "payload",
+          "name": "payload",
           "caption": {
-            "zh_CN": "扩展属性(非关键/动态/低频字段留 jsonb)"
+            "zh_CN": "业务字段(JSONB,按主数据种类而异,不参与 WHERE)"
           },
           "dimType": "attribute",
           "edit": {
@@ -376,6 +334,48 @@
           "name": "line_payload",
           "caption": {
             "zh_CN": "明细提议值"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "200px",
+          "align": "left"
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "line_target_id",
+          "name": "line_target_id",
+          "caption": {
+            "zh_CN": "明细目标记录ID(update/delete时指向 cm_*.id)"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "align": "left"
+        },
+        {
+          "dataType": "JSONB",
+          "fieldLength": 0,
+          "nullable": true,
+          "id": "line_deltas",
+          "name": "line_deltas",
+          "caption": {
+            "zh_CN": "明细变更 diff {field:{old,new}}"
           },
           "dimType": "attribute",
           "edit": {

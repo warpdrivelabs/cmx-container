@@ -43,6 +43,7 @@ pub async fn list_cr(
     doc_status: Option<&str>,
     page: i64,
     page_size: i64,
+    with_payload: bool,
 ) -> Result<(Vec<Value>, i64), cmx_api_types::Error> {
     let (where_sql, mut params): (String, Vec<DataValue>) = if let Some(st) = doc_status {
         ("doc_status = $1 AND delete_flag = 0".to_string(), vec![DataValue::String(st.into())])
@@ -65,8 +66,9 @@ pub async fn list_cr(
     let n = params.len() as i64;
     params.push(DataValue::Int(ps));
     params.push(DataValue::Int(off));
+    let payload_col = if with_payload { ", payload" } else { "" };
     let sql = format!(
-        "SELECT id, doc_no, name, cr_type, doc_status, create_time \
+        "SELECT id, doc_no, subject_name, cr_type, doc_status, create_time{payload_col} \
          FROM cv_mdm_apply WHERE {where_sql} ORDER BY create_time DESC \
          LIMIT ${} OFFSET ${}", n + 1, n + 2);
     let ds = mm
@@ -136,14 +138,14 @@ async fn clone_revise_inner(
     // 铸号在事务内做（传 txn_id），反查 max 的 SELECT 与本事务可见性一致。
     let doc_no = mint_cr_doc_no(db_id, Some(txn_id)).await?;
 
-    // 头:INSERT...SELECT 复制(28 列严格对齐,含 doc_type_id)
+    // 头:INSERT...SELECT 复制(26 列,payload 化后:删 5 旧业务列,加 subject_name/subject_code/payload 3 列)
     let sql = r#"INSERT INTO cv_mdm_apply
         (id, upper_id, line_no, doc_no, doc_type_id, doc_type, target_dict_code, target_record_id,
-         source_cr_id, cr_type, effective_date, name, tax_no, credit_code, short_name, ext_attrs,
+         source_cr_id, cr_type, effective_date, subject_name, subject_code, payload,
          field_deltas, doc_status, business_status, entity_id, doc_date, attach_count, remark,
          create_by, create_time, update_by, update_time, delete_flag)
       SELECT $1, upper_id, line_no, $2, doc_type_id, doc_type, target_dict_code, target_record_id,
-         $3, cr_type, effective_date, name, tax_no, credit_code, short_name, ext_attrs,
+         $3, cr_type, effective_date, subject_name, subject_code, payload,
          field_deltas, 'draft', business_status, entity_id, CURRENT_DATE,
          COALESCE(attach_count, 0), remark,
          $4, now(), $4, now(), delete_flag
@@ -169,10 +171,16 @@ async fn clone_revise_inner(
         let line_id = cmx_utils::next_pk_id();
         let lo = line.as_object().ok_or_else(|| api_err("旧 CR line 非对象"))?;
         let sql_l = r#"INSERT INTO cv_mdm_apply_line
-            (id, upper_id, line_no, line_type, line_action, line_payload,
+            (id, upper_id, line_no, line_type, line_action, line_payload, line_target_id, line_deltas,
              create_by, create_time, update_by, update_time, delete_flag)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $7, now(), 0)"#;
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $9, now(), 0)"#;
         let payload = lo.get("line_payload").map(|v| v.to_string()).unwrap_or_else(|| "{}".into());
+        let line_target_id = lo
+            .get("line_target_id")
+            .and_then(|v| v.as_i64())
+            .map(DataValue::Int)
+            .unwrap_or(DataValue::Null);
+        let line_deltas = lo.get("line_deltas").map(|v| v.to_string()).unwrap_or_else(|| "null".into());
         mm.execute_sql_with_datavalues(
             db_id,
             Some(txn_id),
@@ -188,6 +196,8 @@ async fn clone_revise_inner(
                     lo.get("line_action").and_then(|v| v.as_str()).unwrap_or("insert").into()
                 ),
                 DataValue::Json(payload),
+                line_target_id,
+                DataValue::Json(line_deltas),
                 DataValue::Int(operated_by),
             ],
         )

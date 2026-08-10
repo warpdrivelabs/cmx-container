@@ -21,7 +21,7 @@ pub async fn find_by_doc_type(
     cr_type: &str,
 ) -> Result<Option<ActivationConfig>, cmx_api_types::Error> {
     let sql = r#"SELECT activation_code, source_doc_type, cr_type, target_dict, target_table,
-                        header_mapping, line_mappings, code_rule_code
+                        header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field
                  FROM cmx_mdm_activation
                  WHERE source_doc_type = $1 AND cr_type = $2 AND is_active = TRUE
                  LIMIT 1"#;
@@ -72,7 +72,7 @@ pub async fn list(
     }
     let sql = format!(
         r#"SELECT id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                  header_mapping, line_mappings, code_rule_code, is_active
+                  header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field, is_active
            FROM cmx_mdm_activation WHERE {} ORDER BY sort_order_of_none(), activation_code"#,
         where_clauses.join(" AND ")
     );
@@ -106,18 +106,20 @@ pub async fn upsert(
         .map_err(|e| api_err(&format!("line_mappings 序列化失败: {e}")))?;
     let sql = r#"INSERT INTO cmx_mdm_activation
                    (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                    header_mapping, line_mappings, code_rule_code, is_active)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE)
+                    header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field, is_active)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)
                  ON CONFLICT (activation_code) DO UPDATE SET
-                   source_doc_type = EXCLUDED.source_doc_type,
-                   cr_type         = EXCLUDED.cr_type,
-                   target_dict     = EXCLUDED.target_dict,
-                   target_table    = EXCLUDED.target_table,
-                   header_mapping  = EXCLUDED.header_mapping,
-                   line_mappings   = EXCLUDED.line_mappings,
-                   code_rule_code  = EXCLUDED.code_rule_code,
-                   is_active       = TRUE,
-                   updated_at      = now()"#;
+                   source_doc_type     = EXCLUDED.source_doc_type,
+                   cr_type             = EXCLUDED.cr_type,
+                   target_dict         = EXCLUDED.target_dict,
+                   target_table        = EXCLUDED.target_table,
+                   header_mapping      = EXCLUDED.header_mapping,
+                   line_mappings       = EXCLUDED.line_mappings,
+                   code_rule_code      = EXCLUDED.code_rule_code,
+                   subject_name_field  = EXCLUDED.subject_name_field,
+                   subject_code_field  = EXCLUDED.subject_code_field,
+                   is_active           = TRUE,
+                   updated_at          = now()"#;
     let params = dv![
         DataValue::String(id),
         DataValue::String(cfg.activation_code.clone()),
@@ -128,6 +130,8 @@ pub async fn upsert(
         DataValue::Json(header_json),
         DataValue::Json(line_json),
         cfg.code_rule_code.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+        cfg.subject_name_field.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+        cfg.subject_code_field.clone().map(DataValue::String).unwrap_or(DataValue::Null),
     ];
     mm.execute_sql_with_datavalues(db_id, None, sql, params)
         .await

@@ -182,7 +182,7 @@ pub async fn mdm_cr_abort(
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "aborted" }))))
 }
 
-/// CR 列表(query: ?docStatus=)
+/// CR 列表(query: ?docStatus=&withPayload=)
 pub async fn mdm_cr_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -191,7 +191,9 @@ pub async fn mdm_cr_list(
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let (list, total) = store::list_cr(mm, &db_id, q.doc_status.as_deref(), q.page, q.page_size).await?;
+    let (list, total) =
+        store::list_cr(mm, &db_id, q.doc_status.as_deref(), q.page, q.page_size, q.with_payload)
+            .await?;
     Ok(Json(ApiResp::ok(json!({
         "list": list, "total": total, "page": q.page, "pageSize": q.page_size,
     }))))
@@ -237,6 +239,9 @@ pub struct CrListQuery {
     pub page: i64,
     #[serde(default = "default_page_size", alias = "pageSize")]
     pub page_size: i64,
+    /// 是否返回 payload（列表默认 false 不查 payload，影响效率）
+    #[serde(default, alias = "withPayload")]
+    pub with_payload: bool,
 }
 fn default_page() -> i64 { 1 }
 fn default_page_size() -> i64 { 20 }
@@ -329,7 +334,104 @@ pub async fn mdm_find_duplicates(
     }))))
 }
 
-/// 合并请求列表。GET ?dictCode=&status=&excludePending=&page=&pageSize=。
+/// 关键信息查重（V3.2 步骤条预校验：新建场景，无 recordId）。
+///
+/// 与 `mdm_find_duplicates` 的区别：find-duplicates 需 recordId（从已发布记录查重）；
+/// check-key 是**新建场景**，用前端提交的关键信息构造虚拟 target（id=0），与激活区已发布记录比对。
+/// 命中（score ≥ 80）即视为重复，前端弹框阻断，不允许进入步骤2。
+///
+/// body: { dictCode, targetTable, keyValue, specs, clusterKeys }
+/// 返回: { exists: false } 或 { exists: true, id, code, message }
+pub async fn mdm_check_key(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(body): Json<CheckKeyBody>,
+) -> Result<Json<ApiResp<Value>>> {
+    let mm = get_default_pg_db_manager();
+    let db_id = resolve_db_id_from_headers(&headers).await;
+
+    // specs → MatchFieldSpec（校验 kind 合法）
+    let specs: Vec<MatchFieldSpec> = body
+        .specs
+        .iter()
+        .map(|s| s.to_match_spec())
+        .collect::<Result<Vec<_>>>()?;
+    if specs.is_empty() {
+        return Err(store::api_err("查重字段（specs）不能为空"));
+    }
+    let cluster_keys: Vec<&str> = body.cluster_keys.iter().map(|s| s.as_str()).collect();
+
+    // 装载列 = id ∪ specs 字段 ∪ {code, name, update_time}（code/name 用于返回给前端展示）
+    let mut col_set: Vec<String> = vec!["id".into(), "code".into(), "name".into(), "update_time".into()];
+    for s in &body.specs {
+        col_set.push(s.field.clone());
+    }
+    col_set.sort();
+    col_set.dedup();
+    let columns: Vec<&str> = col_set.iter().map(|s| s.as_str()).collect();
+
+    // 拉激活区全量已发布记录
+    let all = store::load_published(mm, &db_id, &body.target_table, &columns).await?;
+
+    // 构造虚拟 target：id=0（表示未落库），fields = keyValue
+    use cmx_mdm_model::match_algo::MatchRecord;
+    let target = MatchRecord {
+        id: 0,
+        fields: body.key_value.clone(),
+    };
+
+    let candidates = find_candidates(&target, &all, &specs, &cluster_keys);
+
+    // 命中即阻断（score ≥ 80 = Review 阈值）
+    if let Some(first) = candidates.first() {
+        // 找到匹配记录，取 id/code 用于返回
+        let rec = all.iter().find(|r| r.id == first.record_id);
+        let code = rec
+            .and_then(|r| r.fields.get("code"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let name = rec
+            .and_then(|r| r.fields.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        // 拼展示消息：已存在相同记录：SUP001（A公司）
+        let display = match (code, name) {
+            (c, n) if !c.is_empty() && !n.is_empty() => format!("{}（{}）", c, n),
+            (c, "") if !c.is_empty() => c.to_string(),
+            ("", n) if !n.is_empty() => n.to_string(),
+            _ => format!("id={}", first.record_id),
+        };
+        return Ok(Json(ApiResp::ok(json!({
+            "exists": true,
+            "id": first.record_id,
+            "code": code,
+            "message": format!("已存在相同记录：{}", display),
+        }))));
+    }
+
+    Ok(Json(ApiResp::ok(json!({ "exists": false }))))
+}
+
+/// check-key 请求体（V3.2 步骤条预校验）。
+#[derive(serde::Deserialize)]
+pub struct CheckKeyBody {
+    #[serde(alias = "dictCode")]
+    pub dict_code: String,
+    #[serde(alias = "targetTable")]
+    pub target_table: String,
+    /// 关键信息字段值（虚拟 target 的 fields），如 { "name": "A公司", "tax_no": "911..." }
+    #[serde(alias = "keyValue")]
+    pub key_value: serde_json::Map<String, Value>,
+    /// 比较字段规则（同 FindDupBody.specs）
+    #[serde(default)]
+    pub specs: Vec<SpecDto>,
+    /// 分块簇键（同 FindDupBody.cluster_keys）
+    #[serde(default, alias = "clusterKeys")]
+    pub cluster_keys: Vec<String>,
+}
+
+
 /// 默认排除 pending（查重预览不再落 pending；历史区只看真正合并过的）。
 pub async fn mdm_merge_requests_list(
     State(_s): State<CmxAppState>,
