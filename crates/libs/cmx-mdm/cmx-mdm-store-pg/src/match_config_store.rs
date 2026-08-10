@@ -25,7 +25,7 @@ pub async fn list_match_config(
     let mut where_clauses = vec!["is_active = TRUE".to_string()];
     let mut params: Vec<DataValue> = Vec::new();
     if let Some(dc) = dict_code {
-        where_clauses.push(format!("dict_code = $1"));
+        where_clauses.push("dict_code = $1".to_string());
         params.push(DataValue::String(dc.into()));
     }
     let sql = format!(
@@ -159,6 +159,11 @@ pub async fn upsert_match_config(
     Ok(id)
 }
 
+/// upsert 后反查规则 id（`RETURNING id` 缺失时的兜底，按 (dict_code, rule_name) 唯一键定位）。
+///
+/// # Errors
+///
+/// 保存后反查为空（数据异常）时返回错误。
 async fn resolve_id(
     mm: &DatabaseManager,
     db_id: &str,

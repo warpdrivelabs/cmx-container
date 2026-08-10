@@ -125,6 +125,11 @@ pub async fn clone_revise(
     }
 }
 
+/// 克隆复活编排（事务内执行，由 [`clone_revise`] 开事务后调用）。
+///
+/// 三步：① 铸新 doc_no（走 cmx-code MDM_GYS 规则）→ ② INSERT...SELECT 复制头表
+/// （26 列，`source_cr_id` 指向旧 CR，`doc_status='draft'`）→ ③ 读旧行逐行铸号插入
+/// （`upper_id=new_id`）。
 async fn clone_revise_inner(
     mm: &DatabaseManager,
     db_id: &str,

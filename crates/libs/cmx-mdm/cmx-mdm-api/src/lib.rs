@@ -8,6 +8,7 @@
 //!
 //! M0 仅一个健康检查端点；M1+ 追加激活映射配置、变更请求激活等治理端点。
 
+/// MDM 模块全部 axum handler 的实现集合（按业务域分文件组织）。
 pub mod handlers;
 
 use axum::Router;

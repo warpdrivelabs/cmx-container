@@ -15,9 +15,7 @@ pub(crate) fn parse_jsonb_field(v: &mut Value, field: &str) {
     if let Some(obj) = v.as_object()
         && let Some(s) = obj.get(field).and_then(|x| x.as_str())
         && let Ok(parsed) = serde_json::from_str::<Value>(s)
-    {
-        if let Some(obj) = v.as_object_mut() {
+        && let Some(obj) = v.as_object_mut() {
             obj.insert(field.to_string(), parsed);
         }
-    }
 }
