@@ -819,17 +819,6 @@ pub(crate) async fn mint_codes_for_inserts(
         return;
     };
 
-    // 非 auto mode（manual）→ 跳过（用户手敲）
-    let mode = code_rule.get("mode").and_then(|v| v.as_str()).unwrap_or("manual");
-    if mode != "auto" {
-        return;
-    }
-
-    // 编码引擎未注入 → 跳过（现状零影响）
-    let Some(minter) = cmx_traits::code::GlobalCodeMinter::get() else {
-        return;
-    };
-
     let code_field = &view.code_field;
     let target = serde_json::json!({
         "kind": "dct",
@@ -837,42 +826,29 @@ pub(crate) async fn mint_codes_for_inserts(
         "field": code_field,
     });
 
-    // 收集待铸号行的索引 + attrs（跳过已有 code 的行）
-    let mut pending: Vec<(usize, Value)> = Vec::new();
-    for (idx, row) in rows.iter().enumerate() {
-        // 已有 code 值 → 跳过（前端手填或预览传的）
-        if let Some(existing) = row.get(code_field) {
-            if !existing.is_null() && existing.as_str().map(|s| !s.is_empty()).unwrap_or(false) {
-                continue;
-            }
-        }
-        // 行属性（供 ref 段取字段值 + condition 求值）
-        let attrs = Value::Object(row.clone());
-        pending.push((idx, attrs));
-    }
+    // 收集待铸号行的 attrs（跳过已有 code 的行——前端手填或预览传的不覆盖）
+    let pending: Vec<(usize, Value)> = rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| {
+            // 已有非空 code 值 → 跳过
+            let existing = row.get(code_field);
+            !matches!(existing, Some(v) if !v.is_null() && v.as_str().map(|s| !s.is_empty()).unwrap_or(false))
+        })
+        .map(|(idx, row)| (idx, Value::Object(row.clone())))
+        .collect();
 
     if pending.is_empty() {
         return;
     }
 
-    // 批量铸号：一次调 mint_batch，engine 内按 prefix 分组 + buffer 推进
+    // 公共铸号流水线（cmx-traits）：mode 校验 + 引擎取号 + warn，返回 (attrs索引, code)
     let attrs_list: Vec<Value> = pending.iter().map(|(_, a)| a.clone()).collect();
-    match minter
-        .mint_batch(code_rule, &target, &attrs_list, db_id, txn_id)
-        .await
-    {
-        Ok(codes) => {
-            for ((row_idx, _), code) in pending.iter().zip(codes.iter()) {
-                rows[*row_idx].insert(code_field.clone(), Value::String(code.clone()));
-            }
-        }
-        Err(e) => {
-            tracing::warn!(
-                target: "cmx_dct::mint_code",
-                dict = %view.dict_code, field = %code_field, error = %e,
-                row_count = pending.len(),
-                "编码引擎批量铸号失败，跳过这些行（不阻断保存）"
-            );
-        }
+    let minted = cmx_traits::code::mint_codes_batch(code_rule, &target, &attrs_list, db_id, txn_id).await;
+
+    // 写回：rows[原行索引][code_field] = code
+    for (attrs_idx, code) in minted {
+        let row_idx = pending[attrs_idx].0;
+        rows[row_idx].insert(code_field.clone(), Value::String(code));
     }
 }

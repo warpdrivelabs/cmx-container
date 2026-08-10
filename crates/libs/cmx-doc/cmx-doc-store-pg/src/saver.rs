@@ -1261,11 +1261,6 @@ async fn mint_codes_for_changeset(
     db_id: &str,
     _txn_id: &str,
 ) {
-    // 编码引擎未注入 → 跳过（现状零影响）
-    let Some(minter) = cmx_traits::code::GlobalCodeMinter::get() else {
-        return;
-    };
-
     // 遍历每层，找挂了 codeRule(auto) 的层
     for layer in &meta.layers {
         let Some(code_rule) = &layer.code_rule else {
@@ -1333,49 +1328,33 @@ async fn mint_codes_for_changeset(
 
             if pending.is_empty() { continue; }
 
-            // 批量铸号（txn_id=None：CodeEngine 的 async 调用链跨越线程边界，主事务 holder
-            // 在铸号时刻不可用（"没有活跃事务"），故反查 max 用独立连接。use_sequence=true 时
-            // seq_store 内部用独立短事务保证取号原子，无需主事务上下文。）
+            // 公共铸号流水线（cmx-traits）：mode 校验 + 引擎取号 + warn，返回 (attrs索引, code)。
+            // txn_id=None：CodeEngine async 调用链跨线程，主事务 holder 不可用，反查 max 用独立连接。
             let attrs_list: Vec<Value> = pending.iter().map(|(_, a)| a.clone()).collect();
-            match minter
-                .mint_batch(code_rule, &target, &attrs_list, db_id, None)
-                .await
-            {
-                Ok(codes) => {
-                    // 写回每行：code 同时写顶层（供校验读）和 fields（供落库 row_cols_vals 读）
-                    let mut code_by_id: Vec<(String, String)> = Vec::new();
-                    for ((row_idx, _), code) in pending.iter().zip(codes.iter()) {
-                        if let Some(row) = inserted.get_mut(*row_idx).and_then(|v| v.as_object_mut()) {
-                            row.insert(field.clone(), Value::String(code.clone()));
-                            if let Some(fields) = row.get_mut("fields").and_then(|v| v.as_object_mut()) {
-                                fields.insert(field.clone(), Value::String(code.clone()));
-                            }
-                            // id 可能是字符串（前端临时 id）或数字（mint_ids 后的雪花 id），统一转字符串
-                            if let Some(id) = row.get("id").and_then(value_to_id_string) {
-                                code_by_id.push((id, code.clone()));
-                            }
-                        }
+            let minted = cmx_traits::code::mint_codes_batch(code_rule, &target, &attrs_list, db_id, None).await;
+
+            if minted.is_empty() { continue; }
+
+            // 写回每行：code 同时写顶层（供校验读）和 fields（供落库 row_cols_vals 读）
+            let mut code_by_id: Vec<(String, String)> = Vec::new();
+            for (attrs_idx, code) in &minted {
+                let row_idx = pending[*attrs_idx].0;
+                if let Some(row) = inserted.get_mut(row_idx).and_then(|v| v.as_object_mut()) {
+                    row.insert(field.clone(), Value::String(code.clone()));
+                    if let Some(fields) = row.get_mut("fields").and_then(|v| v.as_object_mut()) {
+                        fields.insert(field.clone(), Value::String(code.clone()));
                     }
-                    // inserted 借用到此结束 → 可安全借 obj 做 cascade
-                    let _ = inserted;
-                    // cascade 回填：父层铸号后，把同值 code 回填到子层同名字段为空的行
-                    if !code_by_id.is_empty() {
-                        cascade_code_to_children(obj, &field, &code_by_id);
+                    // id 可能是字符串（前端临时 id）或数字（mint_ids 后的雪花 id），统一转字符串
+                    if let Some(id) = row.get("id").and_then(value_to_id_string) {
+                        code_by_id.push((id, code.clone()));
                     }
                 }
-                Err(e) => {
-                    // 收集失败行的 id，便于后续 NOT NULL 校验报错时定位根因（铸号失败 → code 空 → NOT NULL 违反）
-                    let failed_ids: Vec<String> = pending.iter()
-                        .filter_map(|(_, a)| a.get("id").and_then(value_to_id_string))
-                        .collect();
-                    tracing::warn!(
-                        target: "cmx_doc::mint_code",
-                        table = %layer.table_name, field = %field, error = %e,
-                        row_count = pending.len(),
-                        failed_row_ids = ?failed_ids,
-                        "编码引擎批量铸号失败，跳过这些行（不阻断保存，但后续 NOT NULL 校验可能报错）"
-                    );
-                }
+            }
+            // inserted 借用到此结束 → 可安全借 obj 做 cascade
+            let _ = inserted;
+            // cascade 回填：父层铸号后，把同值 code 回填到子层同名字段为空的行
+            if !code_by_id.is_empty() {
+                cascade_code_to_children(obj, &field, &code_by_id);
             }
         }
     }

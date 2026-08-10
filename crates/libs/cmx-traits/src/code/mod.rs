@@ -83,3 +83,59 @@ impl GlobalCodeMinter {
         CODE_MINTER.get()
     }
 }
+
+/// 铸号流水线公共核心：为待铸号行批量铸业务编码。
+///
+/// dct/doc 铸号钩子共用，消除两份重复的「判 mode → 取引擎 → mint_batch → warn」流水线。
+/// 调用方负责收集 `rows_attrs`（跳过已有 code 的行）和拿到结果后写回各自容器。
+///
+/// 内部步骤：
+/// 1. `code_rule.mode != "auto"` → 返回空（manual 模式用户手填，不铸号）
+/// 2. `GlobalCodeMinter::get()` 未注入 → 返回空（现状零影响）
+/// 3. `mint_batch(code_rule, target, rows_attrs, db_id, txn_id)` 批量取号
+/// 4. 成功 → 返回 `Vec<(行索引, 铸出的 code)>`；失败 → `tracing::warn!` 不阻断，返回空
+///
+/// - `txn_id` 应传 `None`：CodeEngine 通过 `GlobalCodeMinter` trait（`Arc<dyn>`）调用，
+///   async 调用链跨越线程边界，主事务 holder 不可用。
+/// - 未配置引擎 / 非 auto / 入参为空 → 返回空 Vec（静默，零影响）。
+pub async fn mint_codes_batch(
+    code_rule: &serde_json::Value,
+    target: &serde_json::Value,
+    rows_attrs: &[serde_json::Value],
+    db_id: &str,
+    txn_id: Option<&str>,
+) -> Vec<(usize, String)> {
+    // 非 auto mode（manual）→ 跳过（用户手敲）
+    let mode = code_rule
+        .get("mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("manual");
+    if mode != "auto" {
+        return Vec::new();
+    }
+    // 编码引擎未注入 → 跳过（现状零影响）
+    let Some(minter) = GlobalCodeMinter::get() else {
+        return Vec::new();
+    };
+    if rows_attrs.is_empty() {
+        return Vec::new();
+    }
+    // 批量铸号
+    match minter.mint_batch(code_rule, target, rows_attrs, db_id, txn_id).await {
+        Ok(codes) => codes
+            .into_iter()
+            .enumerate()
+            .collect(),
+        Err(e) => {
+            tracing::warn!(
+                target: "cmx_code::mint_batch",
+                target_code = %target.get("code").and_then(|v| v.as_str()).unwrap_or(""),
+                field = %target.get("field").and_then(|v| v.as_str()).unwrap_or(""),
+                error = %e,
+                row_count = rows_attrs.len(),
+                "编码引擎批量铸号失败，跳过这些行（不阻断主流程）"
+            );
+            Vec::new()
+        }
+    }
+}
