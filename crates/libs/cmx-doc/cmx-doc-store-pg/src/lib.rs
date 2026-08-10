@@ -12,6 +12,7 @@
 pub mod cache;
 pub mod hier_service;
 pub mod loader;
+pub mod resolve;
 pub mod revision;
 pub mod saver;
 pub mod zmc_loader;
@@ -19,6 +20,7 @@ pub mod zmc_util;
 
 pub use hier_service::DocHierService;
 pub use loader::DocLoader;
+pub use resolve::{load_base, resolve_doc_file_smart, resolve_doc_meta};
 pub use revision::{DocRevision, RevisionRecord};
 pub use saver::{BatchItem, BatchOutcome, DocSaver, SaveCtx, SaveMode, SaveResult};
 pub use zmc_loader::ZmcDocLoader;

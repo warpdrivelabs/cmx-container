@@ -1322,6 +1322,7 @@ version = "0.1.12"
 dependencies = [
  "async-trait",
  "chrono",
+ "cmx-api-types",
  "cmx-biz",
  "cmx-core",
  "cmx-database",

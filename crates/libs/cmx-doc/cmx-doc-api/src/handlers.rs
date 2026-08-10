@@ -16,8 +16,6 @@
 //! 分层：handler 层负责「读单据定义 + 解析 DocMetaView(带缓存)」，
 //! 再把强类型 meta 传给 cmx-biz 的 DocLoader/DocSaver（cmx-biz 不依赖 definitions store）。
 
-use std::sync::Arc;
-
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
@@ -27,7 +25,7 @@ use tracing::debug;
 
 use cmx_core::model::data::dataset::ColumnarCodec;
 use cmx_database::get_default_db_manager;
-use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, cache, saver};
+use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, saver};
 
 use cmx_api::actor::{actor_id_i64, actor_name};
 use cmx_api::CmxAppState;
@@ -1032,100 +1030,7 @@ fn flatten_columnar(pkg: &Value, out: &mut serde_json::Map<String, Value>) {
 
 // DOC 定义文件解析（resolve_doc_file / doc_matches）+ 文件解析缓存已抽到
 // cmx-model-meta::definitions::resolve（DOC/DCT 共享，供 cmx-api 的业务编码定位复用，避免
-// cmx-api ⇄ cmx-doc 环）。此处经 use 别名转发，保持本文件内旧调用点不变。
-use cmx_model_meta::definitions::resolve::resolve_doc_file;
+// cmx-api ⇄ cmx-doc 环）。读定义链路（resolve_doc_file_smart / resolve_doc_meta / load_base）
+// 已下沉至 cmx-doc-store-pg::resolve（对齐 dct 的 resolve_dict 在 store-pg 层），本文件经 use 引用。
+use cmx_doc_store_pg::resolve_doc_meta;
 
-/// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
-///
-/// 定位优先级（对齐 dct 的 resolve_dict：前端只传 code，file 由后端解析）：
-///   1. `doc`（moduleCode）有值 → [`resolve_doc_file`] 精确定位（读 moduleMeta.moduleCode 匹配）
-///   2. `file` 显式指定且干净 → 直接用（覆盖场景，如版本台账 restore 指定历史文件）
-///   3. 都缺失 → [`resolve_doc_file`] 盲选默认/最高版本
-///
-/// `file`/`doc` 的脏值（空串 / "undefined" / "null"）一律视为缺失。
-/// 解析定位用的 file 名（对齐 dct resolve_dict：前端走 code，file 由后端兜底）。
-///
-/// 优先级：`doc`(moduleCode) 精确定位 > `file` 显式指定 > 盲选默认/最高版本。
-/// 脏值（空串 / "undefined" / "null"）一律视为缺失。返回最终落定的 file 名。
-async fn resolve_doc_file_smart(
-    domain: &str,
-    app: &str,
-    module: &str,
-    file: Option<&str>,
-    doc: Option<&str>,
-) -> Result<String> {
-    // 脏值（空串 / "undefined" / "null"）一律视为缺失
-    let doc = doc.filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
-    let file = file.filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
-    match doc {
-        Some(d) => resolve_doc_file(domain, app, module, Some(d)).await,
-        _ => match file {
-            Some(f) => Ok(f.to_string()),
-            None => resolve_doc_file(domain, app, module, None).await,
-        },
-    }
-}
-
-/// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
-///
-/// 定位优先级（对齐 dct 的 resolve_dict：前端只传 code，file 由后端解析）：
-///   1. `doc`（moduleCode）有值 → [`resolve_doc_file`] 精确定位
-///   2. `file` 显式指定且干净 → 直接用
-///   3. 都缺失 → [`resolve_doc_file`] 盲选默认/最高版本
-///
-/// 返回 `(meta, file)`：file 是最终落定的定义文件名，供版本台账等需 file 的场景复用。
-async fn resolve_doc_meta(
-    domain: &str,
-    app: &str,
-    module: &str,
-    file: Option<&str>,
-    doc: Option<&str>,
-) -> Result<(Arc<DocMetaView>, String)> {
-    let file = resolve_doc_file_smart(domain, app, module, file, doc).await?;
-    let key = cache::doc_key(domain, app, module, &file);
-    if let Some(hit) = cache::get(&key) {
-        return Ok((hit, file));
-    }
-
-    // 读主定义
-    let doc_ref = cmx_model_meta::definitions::store::DefRef {
-        domain: Some(domain.to_string()),
-        application: Some(app.to_string()),
-        app: Some(app.to_string()),
-        module: Some(module.to_string()),
-        file: Some(file.to_string()),
-        id: None,
-        kind: None,
-    };
-    let doc = cmx_model_meta::definitions::store::get_definition(&doc_ref).await?;
-
-    // 读 base 字段集（从 baseDocMetaRef.file 推断；无则空）
-    let base = load_base(&doc).await;
-
-    let view = Arc::new(DocMetaView::parse(&doc, &base)?);
-    cache::put(key, view.clone());
-    Ok((view, file))
-}
-
-/// 从定义的 baseDocMetaRef.file 读 base 字段集（域=base）；失败返回 Null。
-async fn load_base(doc: &Value) -> Value {
-    let base_file = doc
-        .get("baseDocMetaRef")
-        .and_then(|r| r.get("file"))
-        .and_then(|v| v.as_str());
-    let Some(base_file) = base_file else {
-        return Value::Null;
-    };
-    let base_ref = cmx_model_meta::definitions::store::DefRef {
-        domain: Some("base".to_string()),
-        application: None,
-        app: None,
-        module: None,
-        file: Some(base_file.to_string()),
-        id: None,
-        kind: None,
-    };
-    cmx_model_meta::definitions::store::get_definition(&base_ref)
-        .await
-        .unwrap_or(Value::Null)
-}
