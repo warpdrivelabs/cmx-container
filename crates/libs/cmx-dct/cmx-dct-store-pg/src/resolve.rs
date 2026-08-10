@@ -1,34 +1,14 @@
 //! cmx-dct-store-pg 元数据解析——从定义 JSON 找到目标字典表 + 合并列 + 主键 + 校验规范。
 //!
-//! 对外入口：[`resolve_db_id`]（db_id 路由）+ [`resolve_dict`]（DctQuery → DictView）。
+//! 对外入口：[`resolve_dict`]（DctQuery → DictView）。
 //! 其余函数均为 `resolve_dict` 的纯重构子步骤，模块内私有。
+//! （db_id 路由已上提到 `cmx_api::db_id`，供所有 API crate 共用。）
 
 use cmx_api_types::Result;
 use cmx_dct_model::{DctQuery, DictColumn, DictView, base_fieldset};
-use cmx_database_pg::get_default_pg_db_manager;
 use serde_json::{Value, json};
 
 use crate::error::api_err;
-
-// ============================================================================
-// db_id 路由
-// ============================================================================
-
-/// 解析字典操作的 db_id：前端显式传 `db_id` header 时用它，缺失时回退到业务库（source_type=biz）。
-/// 字典数据通常建在业务库（如 fico-db），而非默认的主控库（primary）。
-/// 前端字典兜底数据源（cmx-dict-select 的 createRestDictDataSource）不带 db_id，
-/// 这里经 get_biz_db_id() 自动路由到业务库，免去前端手填。
-pub async fn resolve_db_id(db_id_header: Option<&str>) -> String {
-    if let Some(v) = db_id_header {
-        let s = v.trim();
-        if !s.is_empty() {
-            return s.to_string();
-        }
-    }
-    get_default_pg_db_manager().get_biz_db_id().await
-}
-
-// ============================================================================
 // 元数据解析：从定义 JSON 找到目标字典表 + 合并列
 // ============================================================================
 

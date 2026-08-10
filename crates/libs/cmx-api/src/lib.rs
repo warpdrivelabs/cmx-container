@@ -34,6 +34,9 @@ pub mod app_state;
 /// OpenAPI 文档模块
 pub mod openapi;
 
+/// 请求库路由：db_id 解析（doc/dct/code/mdm 等 API crate 共用）。
+pub mod db_id;
+
 pub use app_state::CmxAppState;
 pub use openapi::ApiDoc;
 pub use rest::handler::{create, create_many, delete, get_by_id, list, page, update, update_many};

@@ -19,6 +19,7 @@ use std::task::{Context, Poll};
 use tracing::debug;
 
 use cmx_api::CmxAppState;
+use cmx_api::db_id::resolve_db_id_from_headers;
 use cmx_api::middleware::CmxSvrContext;
 use cmx_api::{ApiResp, Result};
 
@@ -58,12 +59,6 @@ impl futures::Stream for SafeReceiverStream {
             }
         }
     }
-}
-
-/// 从请求头取 db_id（字符串），交给 store::resolve_db_id 路由（缺失回退业务库）。
-async fn db_id_from(headers: &HeaderMap) -> String {
-    let hv = headers.get("db_id").and_then(|h| h.to_str().ok());
-    store::resolve_db_id(hv).await
 }
 
 // ============================================================================
@@ -112,7 +107,7 @@ pub async fn dct_search(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<Json<ApiResp<Value>>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let view = store::resolve_dict(&q, false).await?;
     let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
     debug!(
@@ -136,7 +131,7 @@ pub async fn dct_search_zmc_msgpack(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let view = store::resolve_dict(&q, false).await?;
     let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
     debug!(
@@ -181,7 +176,7 @@ pub async fn dct_upsert(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let view = store::resolve_dict(&q, false).await?;
     debug!(
         "{:<12} - dct_upsert {} table={}",
@@ -216,7 +211,7 @@ pub async fn dct_delete(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let view = store::resolve_dict(&q, false).await?;
     debug!("{:<12} - dct_delete {} id={}", "HANDLER", q.dict, id);
     let data = store::delete(&view, &id, &db_id).await?;
@@ -239,7 +234,7 @@ pub async fn dct_save(
     Json(body): Json<Value>,
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let view = store::resolve_dict(&q, false).await?;
     let save_mode = body
         .get("saveMode")
@@ -309,7 +304,7 @@ pub async fn dct_export(
     use axum::body::Body;
     use axum::response::IntoResponse;
 
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let view = store::resolve_dict(&q, false).await?;
     let fmt = match params.format.to_lowercase().as_str() {
         "csv" => store::ImportFormat::Csv,
@@ -415,7 +410,7 @@ pub async fn dct_import(
     Query(params): Query<ImportParams>,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResp<Value>>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let view = store::resolve_dict(&q, false).await?;
 
     let mut mode = match params.mode.as_str() {

@@ -8,32 +8,17 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use cmx_api::db_id::resolve_db_id_from_headers;
 use cmx_api::middleware::CmxSvrContext;
 use cmx_api::{ApiResp, CmxAppState};
 use cmx_code_model::context::ResolveContext;
 use cmx_code_model::spec::{RuleSpec, Target};
-// db_id 兜底（header 优先 → 否则第一个 biz 库 → 再退 default）
-use cmx_database_pg::get_default_pg_db_manager;
 
 use crate::{engine, store::{gap_store, rule_store}};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 辅助
 // ═══════════════════════════════════════════════════════════════════════════════
-
-/// 从请求头取 db_id（与 DCT resolve_db_id 同款兜底）。
-///
-/// 优先级：`db_id` 请求头 → 第一个 `source_type="biz"` 的业务库 → 默认库。
-/// 这样前端不带 db_id 时，规则自动落到业务库（如 fico-db），与字典数据同库。
-async fn db_id_from(headers: &HeaderMap) -> String {
-    if let Some(v) = headers.get("db_id").and_then(|h| h.to_str().ok()) {
-        let s = v.trim();
-        if !s.is_empty() {
-            return s.to_string();
-        }
-    }
-    get_default_pg_db_manager().get_biz_db_id().await
-}
 
 /// 域/应用/模块三维标识（从请求头取，前端规则管理页会带）。
 #[derive(Debug, Clone, Default)]
@@ -133,7 +118,7 @@ pub async fn rule_list(
     headers: HeaderMap,
     Query(_q): Query<RuleListQuery>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let dam = dam_from(&headers);
     match rule_store::list_rules(&db_id, &dam).await {
         Ok(rules) => Json(ApiResp::ok(json!({ "rules": rules }))),
@@ -148,7 +133,7 @@ pub async fn rule_create(
     headers: HeaderMap,
     mut rule: Json<RuleSpec>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     // 请求头 DAM 补进 rule（前端 body 未带时，以请求头所在模块为准）
     let dam = dam_from(&headers);
     if rule.domain_code.is_empty() {
@@ -173,7 +158,7 @@ pub async fn rule_get(
     headers: HeaderMap,
     Path(rule_code): Path<String>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let dam = dam_from(&headers);
     match rule_store::get_rule(&rule_code, &db_id, &dam).await {
         Ok(rule) => Json(ApiResp::ok(json!(rule))),
@@ -189,7 +174,7 @@ pub async fn rule_update(
     Path(rule_code): Path<String>,
     mut rule: Json<RuleSpec>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     // 请求头 DAM 补进 rule（防止前端漏传导致规则脱离模块）
     let dam = dam_from(&headers);
     if rule.domain_code.is_empty() {
@@ -214,7 +199,7 @@ pub async fn rule_delete(
     headers: HeaderMap,
     Path(rule_code): Path<String>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let dam = dam_from(&headers);
     match rule_store::delete_rule(&rule_code, &db_id, &dam).await {
         Ok(_) => Json(ApiResp::ok(json!({ "ruleCode": rule_code, "deleted": true }))),
@@ -252,7 +237,7 @@ pub async fn preview(
     headers: HeaderMap,
     Json(body): Json<PreviewBody>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let rule_code = match &body.rule_code {
         Some(rc) => rc.clone(),
         None => {
@@ -319,7 +304,7 @@ pub async fn preview_batch(
     headers: HeaderMap,
     Json(body): Json<BatchBody>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     run_batch(body, &db_id, "预览", true).await
 }
 
@@ -330,7 +315,7 @@ pub async fn generate(
     headers: HeaderMap,
     Json(body): Json<PreviewBody>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let rule_code = match &body.rule_code {
         Some(rc) => rc.clone(),
         None => {
@@ -365,7 +350,7 @@ pub async fn generate_batch(
     headers: HeaderMap,
     Json(body): Json<BatchBody>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     run_batch(body, &db_id, "生成", false).await
 }
 
@@ -423,7 +408,7 @@ pub async fn gap_list(
     headers: HeaderMap,
     Query(q): Query<GapQuery>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     match gap_store::query_gaps(q.prefix.as_deref(), &db_id).await {
         Ok(gaps) => Json(ApiResp::ok(json!({ "gaps": gaps }))),
         Err(e) => err_resp(e),
@@ -450,7 +435,7 @@ pub async fn gap_take(
     headers: HeaderMap,
     Json(body): Json<GapTakeBody>,
 ) -> Json<ApiResp<Value>> {
-    let db_id = db_id_from(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     match gap_store::take_gap(&body.prefix, body.width as usize, &db_id, None).await {
         Ok(Some(serial)) => Json(ApiResp::ok(json!({
             "prefix": body.prefix,

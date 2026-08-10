@@ -12,11 +12,11 @@ use axum::http::HeaderMap;
 use serde_json::{json, Value};
 
 use cmx_api::CmxAppState;
+use cmx_api::db_id::resolve_db_id_from_headers;
 use cmx_api::middleware::CmxSvrContext;
 use cmx_api::{ApiResp, Result};
 
 use cmx_database_pg::{get_default_pg_db_manager, DatabaseManager};
-use cmx_dct_store_pg::resolve_db_id;
 use cmx_mdm_model::activation::ActivationConfig;
 use cmx_mdm_model::codegen::RandomCodeGenerator;
 use cmx_mdm_store_pg as store;
@@ -29,14 +29,6 @@ pub async fn mdm_health(
     Ok(Json(ApiResp::ok(json!({ "module": "mdm", "status": "ok" }))))
 }
 
-/// 从 headers 取 db_id（对齐 cmx-dct-api 的 resolve_db_id 用法）。
-fn db_id_from_headers(headers: &HeaderMap) -> Option<String> {
-    headers
-        .get("db_id")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-}
-
 /// 激活映射列表（配置器 UI 用）。
 pub async fn mdm_activations_list(
     State(_s): State<CmxAppState>,
@@ -45,7 +37,7 @@ pub async fn mdm_activations_list(
     Query(q): Query<ActivationListQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let list = store::list(
         mm,
         &db_id,
@@ -64,7 +56,7 @@ pub async fn mdm_activations_save(
     Json(body): Json<ActivationConfig>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let code = store::upsert(mm, &db_id, &body).await?;
     Ok(Json(ApiResp::ok(json!({ "activationCode": code }))))
 }
@@ -77,7 +69,7 @@ pub async fn mdm_cr_activate(
     Json(body): Json<ActivateBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let operated_by = svr_ctx
         .auth_context
         .as_ref()
@@ -114,7 +106,7 @@ pub async fn mdm_cr_submit(
     Json(body): Json<CrIdBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     store::check_status(mm, &db_id, None, body.cr_id, "draft").await?;
     store::set_cr_status_pub(mm, &db_id, None, body.cr_id, "approving").await?;
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "approving" }))))
@@ -129,7 +121,7 @@ pub async fn mdm_cr_approve(
     Json(body): Json<CrIdBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     store::check_status(mm, &db_id, None, body.cr_id, "approving").await?;
     let operated_by = svr_ctx
         .auth_context
@@ -151,7 +143,7 @@ pub async fn mdm_cr_reject(
     Json(body): Json<RejectBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     store::check_status(mm, &db_id, None, body.cr_id, "approving").await?;
     store::set_cr_status_pub(mm, &db_id, None, body.cr_id, "rejected").await?;
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "rejected" }))))
@@ -165,7 +157,7 @@ pub async fn mdm_cr_clone_revise(
     Json(body): Json<CrIdBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let operated_by = svr_ctx
         .auth_context
         .as_ref()
@@ -185,7 +177,7 @@ pub async fn mdm_cr_abort(
     Json(body): Json<CrIdBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     store::abort_cr(mm, &db_id, body.cr_id).await?;
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "aborted" }))))
 }
@@ -198,7 +190,7 @@ pub async fn mdm_cr_list(
     Query(q): Query<CrListQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let (list, total) = store::list_cr(mm, &db_id, q.doc_status.as_deref(), q.page, q.page_size).await?;
     Ok(Json(ApiResp::ok(json!({
         "list": list, "total": total, "page": q.page, "pageSize": q.page_size,
@@ -213,7 +205,7 @@ pub async fn mdm_cr_detail(
     Query(q): Query<CrDetailQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let detail = store::get_cr_detail(mm, &db_id, q.cr_id).await?;
     Ok(Json(ApiResp::ok(detail)))
 }
@@ -291,7 +283,7 @@ pub async fn mdm_find_duplicates(
     Json(body): Json<FindDupBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
 
     // 把 DTO specs 转成 MatchFieldSpec（校验 kind 合法）
     let specs: Vec<MatchFieldSpec> = body.specs.iter()
@@ -346,7 +338,7 @@ pub async fn mdm_merge_requests_list(
     Query(q): Query<MergeListQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     // excludePending 默认 true（"1"/"true"）；显式传 false 关闭
     let exclude_pending = match q.exclude_pending.as_deref() {
         Some("0") | Some("false") | Some("False") => false,
@@ -444,7 +436,7 @@ pub async fn mdm_merge_requests_create(
     Json(body): Json<MergeBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     // 头表名由 body.targetTable 传入（来自查重规则，替代硬编码 dict_tables 头表）；
     // line_tables（明细表 reparent）仍由 dict_tables 解析，未知字典给空明细。
     let head_table = body.target_table.clone();
@@ -510,7 +502,7 @@ pub async fn mdm_merge_request_detail(
     Query(q): Query<UndoBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let mut group = store::get_match_group(mm, &db_id, q.merge_id)
         .await?
         .ok_or_else(|| store::api_err(&format!("合并请求 {} 不存在", q.merge_id)))?;
@@ -553,7 +545,7 @@ pub async fn mdm_merge_request_reject(
     Json(body): Json<RejectMergeBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let operated_by = svr_ctx
         .auth_context
         .as_ref()
@@ -584,7 +576,7 @@ pub async fn mdm_merge_requests_undo(
     Json(body): Json<UndoBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let group = store::get_match_group(mm, &db_id, body.merge_id)
         .await?
         .ok_or_else(|| store::api_err(&format!("合并请求 {} 不存在", body.merge_id)))?;
@@ -747,7 +739,7 @@ pub async fn mdm_audit_list(
     Query(q): Query<GovListQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let (list, total) = store::list_audit(
         mm, &db_id, q.dict_code.as_deref(), q.record_id, q.page, q.page_size).await?;
     Ok(Json(ApiResp::ok(json!({ "list": list, "total": total, "page": q.page, "pageSize": q.page_size }))))
@@ -761,7 +753,7 @@ pub async fn mdm_events_list(
     Query(q): Query<GovListQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let (list, total) = store::list_events(
         mm, &db_id, q.dict_code.as_deref(), q.since, q.page, q.page_size).await?;
     Ok(Json(ApiResp::ok(json!({ "list": list, "total": total, "page": q.page, "pageSize": q.page_size }))))
@@ -775,7 +767,7 @@ pub async fn mdm_subscriptions_list(
     Query(q): Query<GovListQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let (list, total) = store::list_subscriptions(mm, &db_id, q.page, q.page_size).await?;
     Ok(Json(ApiResp::ok(json!({ "list": list, "total": total, "page": q.page, "pageSize": q.page_size }))))
 }
@@ -788,7 +780,7 @@ pub async fn mdm_subscriptions_save(
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let id = store::upsert_subscription(mm, &db_id, &body).await?;
     Ok(Json(ApiResp::ok(json!({ "id": id }))))
 }
@@ -818,7 +810,7 @@ pub async fn mdm_match_configs_list(
     Query(q): Query<MatchConfigQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let list = store::list_match_config(mm, &db_id, q.dict_code.as_deref()).await?;
     Ok(Json(ApiResp::ok(json!(list))))
 }
@@ -832,7 +824,7 @@ pub async fn mdm_match_configs_save(
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let id = store::upsert_match_config(mm, &db_id, &body).await?;
     Ok(Json(ApiResp::ok(json!({ "id": id }))))
 }
@@ -845,7 +837,7 @@ pub async fn mdm_match_configs_delete(
     Json(body): Json<MatchConfigDeleteBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id(db_id_from_headers(&headers).as_deref()).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let n = store::delete_match_config(mm, &db_id, body.config_id).await?;
     Ok(Json(ApiResp::ok(json!({ "configId": body.config_id, "affected": n }))))
 }
