@@ -9,7 +9,7 @@ use cmx_core::model::cell::DataValue;
 use cmx_database_pg::DatabaseManager;
 use serde_json::{Map, Value};
 
-use crate::error::api_err;
+use crate::error::{api_err, parse_jsonb_field};
 
 /// 读 CR 头（cv_mdm_apply 一行，按 id）。返回字段名→值。
 ///
@@ -62,18 +62,3 @@ pub async fn load_cr_lines(
     Ok(out)
 }
 
-/// 把 Value 里某个字符串字段尝试 parse 成 JSON 对象/数组（JSONB 列在 DB 是 text，序列化为转义字符串）。
-///
-/// 外层 let-chain 做验证（不可变借用），内层 `as_object_mut` 做写入（可变借用）——
-/// 借用规则要求分两步，不能合并成一个 let-chain，故 allow collapsible_if。
-#[allow(clippy::collapsible_if)]
-fn parse_jsonb_field(v: &mut Value, field: &str) {
-    if let Some(obj) = v.as_object()
-        && let Some(s) = obj.get(field).and_then(|x| x.as_str())
-        && let Ok(parsed) = serde_json::from_str::<Value>(s)
-    {
-        if let Some(obj) = v.as_object_mut() {
-            obj.insert(field.to_string(), parsed);
-        }
-    }
-}

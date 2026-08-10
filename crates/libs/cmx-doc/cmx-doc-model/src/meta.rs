@@ -20,6 +20,8 @@ use cmx_core::model::data::dataset::Schema;
 
 use cmx_biz::{BizError, Result};
 
+use cmx_utils::json::base_fieldset;
+
 /// 一层（一张物理表）的视图。
 #[derive(Debug, Clone)]
 pub struct LayerView {
@@ -698,15 +700,7 @@ fn parse_column(f: &Value) -> Option<ColumnView> {
     })
 }
 
-/// 从 base 的 `fieldSets` 里取某字段集的 fields 数组。
-fn base_fieldset<'a>(base: &'a Value, set_name: &str) -> Option<&'a Vec<Value>> {
-    base.get("fieldSets")?
-        .get(set_name)?
-        .get("fields")?
-        .as_array()
-}
-
-/// 业务单据 dataType 字符串 → cmx-core FieldType（对齐 model_center.rs 的映射）。
+/// 业务单据 dataType 字符串 -> cmx-core FieldType（对齐 model_center.rs 的映射）。
 fn map_field_type(data_type: &str) -> FieldType {
     match data_type.to_ascii_uppercase().as_str() {
         "VARCHAR" | "CHAR" | "TEXT" | "STRING" => FieldType::String,

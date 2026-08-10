@@ -119,7 +119,7 @@ async fn run_doc_load(
             let zmc = ZmcDocLoader::load(mm, db_id, meta, dq).await?;
             let mut buf = Vec::new();
             zmc.encode_columnar_binary(&mut buf);
-            Ok(msgpack_response(&buf))
+            Ok(msgpack_ok_response(&buf))
         }
         // sqlx + Zmc + msgpack
         (Driver::Sqlx, Exit::ZmcMsgpack) => {
@@ -127,7 +127,7 @@ async fn run_doc_load(
             let zmc = ZmcDocLoaderSqlx::load(mm, db_id, meta, dq).await?;
             let mut buf = Vec::new();
             zmc.encode_columnar_binary(&mut buf);
-            Ok(msgpack_response(&buf))
+            Ok(msgpack_ok_response(&buf))
         }
         // tokio + Zmc + JSON
         (Driver::Tokio, Exit::ZmcJson) => {
@@ -146,16 +146,6 @@ async fn run_doc_load(
             Err(cmx_biz::BizError::business("tokio 驱动无老 DataSet 通道").into())
         }
     }
-}
-
-fn msgpack_response(columnar: &[u8]) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    let body = encode_envelope_ok(columnar);
-    (
-        [(axum::http::header::CONTENT_TYPE, "application/x-msgpack")],
-        body,
-    )
-        .into_response()
 }
 
 /// GET 便捷 + POST 富查询共用的装载入口。
@@ -656,18 +646,8 @@ fn column_to_json(c: &cmx_doc_store_pg::ColumnView) -> Value {
 }
 
 /// 构造成功信封的 msgpack 字节:`{code:0, msg:"success", data:<已编码的 data 字节>}`。
-fn encode_envelope_ok(data_msgpack: &[u8]) -> Vec<u8> {
-    use rmp::encode as mp;
-    let mut buf = Vec::with_capacity(data_msgpack.len() + 32);
-    mp::write_map_len(&mut buf, 3).unwrap();
-    mp::write_str(&mut buf, "code").unwrap();
-    mp::write_uint(&mut buf, 0).unwrap();
-    mp::write_str(&mut buf, "msg").unwrap();
-    mp::write_str(&mut buf, "success").unwrap();
-    mp::write_str(&mut buf, "data").unwrap();
-    buf.extend_from_slice(data_msgpack); // data 值 = 列式包(自包含 msgpack value)
-    buf
-}
+// encode_envelope_ok / msgpack_response 已上提到 cmx_api::msgpack（与 dct 共用）。
+use cmx_api::msgpack::msgpack_ok_response;
 
 /// POST /api/doc/save 请求体。
 #[derive(Debug, Deserialize)]

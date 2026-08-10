@@ -156,12 +156,7 @@ pub fn project_meta_column(c: &DictColumn) -> Value {
 // ============================================================================
 
 /// 从 base 定义里取某个字段集的 `fields` 数组。
-pub fn base_fieldset<'a>(base: &'a Value, set_name: &str) -> Option<&'a Vec<Value>> {
-    base.get("fieldSets")?
-        .get(set_name)?
-        .get("fields")?
-        .as_array()
-}
+pub use cmx_utils::json::base_fieldset;
 
 // ============================================================================
 // SQL 辅助：列名白名单校验（防注入）
@@ -293,21 +288,8 @@ pub fn pk_is_generated(view: &DictView) -> bool {
         .unwrap_or(false)
 }
 
-/// 判断一个 JSON id 值是否为「前端临时 id」——即需要后端铸真号的占位。
-///
-/// 前端新增行的 id 可能是：① 缺失/null；② 字符串占位（CmxDataSet 的 `r{rand}`，或本方案约定的
-/// `t{n}` 关联键）；③ 客户端 `maxId+1` 小整数（历史做法）。前两类必然是临时值。
-/// 对整数：**不能**一律当真号，否则历史前端塞的 `maxId+1` 会绕过铸号又撞库——故整数一律视为需重铸，
-/// 由 `remap` 用生成的真号替换，同时把旧值登记进映射供子行 parent_id 重指向。
-pub fn is_temp_id(v: Option<&Value>) -> bool {
-    match v {
-        None => true,
-        Some(Value::Null) => true,
-        Some(Value::String(s)) => s.is_empty() || !s.chars().all(|c| c.is_ascii_digit()),
-        // 纯数字字符串 / 数字：交给调用方按「是否服务端生成列」决定，这里只判「明显的临时形态」。
-        _ => false,
-    }
-}
+// is_temp_id / id_to_key 已上提到 cmx_utils::id，此处 re-export 保持本 crate 调用点零改动。
+pub use cmx_utils::id::{id_to_key, is_temp_id};
 
 /// 为一批 inserted 行铸号并回填 parent_id 自引用（自分级字典）。
 ///
@@ -350,15 +332,6 @@ pub fn mint_ids_for_inserts(
         }
     }
     id_map
-}
-
-/// id 值 → 稳定字符串键（数字/字符串统一）。null/空 → None。
-pub fn id_to_key(v: Option<&Value>) -> Option<String> {
-    match v {
-        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
-        Some(Value::Number(n)) => Some(n.to_string()),
-        _ => None,
-    }
 }
 
 // ============================================================================

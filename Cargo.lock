@@ -1308,6 +1308,7 @@ dependencies = [
  "chrono",
  "cmx-biz",
  "cmx-core",
+ "cmx-utils",
  "rust_decimal",
  "serde",
  "serde_json",

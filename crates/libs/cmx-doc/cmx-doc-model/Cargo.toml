@@ -14,6 +14,8 @@ authors.workspace = true
 cmx-core = { workspace = true }
 # 内部依赖 - 业务错误 + 落库前列级校验规范（TableSpec，DOC/DCT 共享，留在 cmx-biz）
 cmx-biz = { workspace = true }
+# 内部依赖 - JSON 辅助（base_fieldset 等公共工具）
+cmx-utils = { workspace = true }
 
 # 序列化框架
 serde = { workspace = true }
