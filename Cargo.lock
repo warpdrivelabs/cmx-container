@@ -1064,6 +1064,7 @@ dependencies = [
  "axum",
  "cmx-api",
  "cmx-api-types",
+ "cmx-biz",
  "cmx-code-model",
  "cmx-core",
  "cmx-database-pg",
@@ -1307,6 +1308,7 @@ dependencies = [
  "chrono",
  "cmx-biz",
  "cmx-core",
+ "cmx-utils",
  "rust_decimal",
  "serde",
  "serde_json",
@@ -1320,6 +1322,7 @@ version = "0.1.12"
 dependencies = [
  "async-trait",
  "chrono",
+ "cmx-api-types",
  "cmx-biz",
  "cmx-core",
  "cmx-database",

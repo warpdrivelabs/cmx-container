@@ -8,6 +8,8 @@ use tracing::warn;
 
 use cmx_api_types::{Error, Result};
 
+use cmx_utils::json::base_fieldset;
+
 use crate::{db_err, VARCHAR_DEFAULT_LENGTH};
 
 // ════════════════════════════════════════════════════════════════════════
@@ -205,21 +207,6 @@ fn unique_indexes(t: &Value, table_name: &str) -> Vec<IndexDefine> {
         }
     }
     indexes
-}
-
-/// 从 base fieldSets 对象里取某字段集的 fields 数组。
-///
-/// 返回 `Some(&Vec<Value>)` 表示找到，`None` 表示 key 不存在或结构不匹配（容错）：
-/// - `fieldSets` 缺失 / 非对象 → `None`
-/// - `fieldSets[set_name]` 缺失 / 非对象 → `None`
-/// - `fields` 缺失 / 非数组 → `None`
-///
-/// 借用返回，零拷贝。
-fn base_fieldset<'a>(base: &'a Value, set_name: &str) -> Option<&'a Vec<Value>> {
-    base.get("fieldSets")?
-        .get(set_name)?
-        .get("fields")?
-        .as_array()
 }
 
 /// 将一组字段 JSON 数组追加到 columns（去重 + 自增 ordinal）。

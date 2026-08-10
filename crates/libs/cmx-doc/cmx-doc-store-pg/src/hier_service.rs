@@ -5,13 +5,13 @@
 //!
 //! DOC 是**形状 A**（异构 path-tree，childRows 嵌套）：装载返回嵌套 ZmcDataSet，协调器用
 //! `from_zmc` 建树。写时上卷已由协调器在 `save_via` 里完成，本层只把中立 ChangeSet 翻成 DOC saver
-//! 的 `changes` JSON 落库。DocMetaView 解析链复刻自 doc-api（经 cmx-model-meta 读定义 + parse），
+//! 的 `changes` JSON 落库。DocMetaView 解析链统一复用 [`crate::resolve`]（读定义 + base + parse + 缓存），
 //! 不依赖 cmx-api。
 
 use async_trait::async_trait;
 use cmx_database_pg::get_default_pg_db_manager;
 use cmx_database_pg::zmcdataset::TokioPgRowSource;
-use cmx_doc_model::{DocMetaView, DocQuery};
+use cmx_doc_model::DocQuery;
 use cmx_master_slave::{ChangeSet, HierSchema, HierService, LoadQuery, SaveOutcome};
 use cmx_rowsource::ZmcDataSet;
 use serde_json::{json, Value};
@@ -46,38 +46,6 @@ impl DocHierService {
             db_id: db_id.into(),
         }
     }
-
-    /// 解析 DocMetaView（复刻 doc-api resolve_doc_meta：读定义 + base + parse；不带缓存）。
-    /// 定位优先级：doc(moduleCode) 精确定位 > file 显式指定 > 盲选默认。
-    async fn resolve_meta(&self) -> Result<DocMetaView, String> {
-        use cmx_model_meta::definitions::{resolve::resolve_doc_file, store};
-        // 脏值视为缺失
-        let clean_file = self.file.as_deref().filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
-        let clean_doc = self.doc.as_deref().filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
-        let file = match clean_doc {
-            Some(d) => resolve_doc_file(&self.domain, &self.application, &self.module, Some(d))
-                .await
-                .map_err(|e| e.to_string())?,
-            _ => match clean_file {
-                Some(f) => f.to_string(),
-                None => resolve_doc_file(&self.domain, &self.application, &self.module, None)
-                    .await
-                    .map_err(|e| e.to_string())?,
-            },
-        };
-        let doc_ref = store::DefRef {
-            domain: Some(self.domain.clone()),
-            application: Some(self.application.clone()),
-            app: Some(self.application.clone()),
-            module: Some(self.module.clone()),
-            file: Some(file),
-            id: None,
-            kind: None,
-        };
-        let doc = store::get_definition(&doc_ref).await.map_err(|e| e.to_string())?;
-        let base = load_base(&doc).await;
-        DocMetaView::parse(&doc, &base).map_err(|e| e.to_string())
-    }
 }
 
 #[async_trait]
@@ -89,7 +57,15 @@ impl HierService for DocHierService {
         _schema: &HierSchema,
         query_in: &LoadQuery,
     ) -> Result<ZmcDataSet<Self::Row>, String> {
-        let meta = self.resolve_meta().await?;
+        let (meta, _file) = crate::resolve::resolve_doc_meta(
+            &self.domain,
+            &self.application,
+            &self.module,
+            self.file.as_deref(),
+            self.doc.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         let root_id = meta
             .root_layer()
             .map(|l| l.id.clone())
@@ -108,7 +84,15 @@ impl HierService for DocHierService {
         layer_path: &str,
         parent_ids: &[String],
     ) -> Result<ZmcDataSet<Self::Row>, String> {
-        let meta = self.resolve_meta().await?;
+        let (meta, _file) = crate::resolve::resolve_doc_meta(
+            &self.domain,
+            &self.application,
+            &self.module,
+            self.file.as_deref(),
+            self.doc.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         // layer_path 末段 = 目标层 id；懒下钻用 load_subtree。
         let layer_id = layer_path.rsplit('.').next().unwrap_or(layer_path);
         let pids: Vec<Value> = parent_ids.iter().map(|s| json!(s)).collect();
@@ -124,7 +108,15 @@ impl HierService for DocHierService {
         _schema: &HierSchema,
         changes: &ChangeSet,
     ) -> Result<SaveOutcome, String> {
-        let meta = self.resolve_meta().await?;
+        let (meta, _file) = crate::resolve::resolve_doc_meta(
+            &self.domain,
+            &self.application,
+            &self.module,
+            self.file.as_deref(),
+            self.doc.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         // DocSaver::save 走 sqlx 管理器（与 doc-api 一致；装载走 tokio-pg，保存走 sqlx）。
         let mm = cmx_database::get_default_db_manager();
         // 中立 ChangeSet → DOC saver 的 changes JSON（协调器已写时上卷，承接字段就绪）。
@@ -149,26 +141,4 @@ impl HierService for DocHierService {
             updated_at,
         })
     }
-}
-
-/// 读 base 字段集（复刻 doc-api load_base：从 baseDocMetaRef.file 读；无则 Null）。
-async fn load_base(doc: &Value) -> Value {
-    use cmx_model_meta::definitions::store;
-    let base_file = doc
-        .get("baseDocMetaRef")
-        .and_then(|r| r.get("file"))
-        .and_then(|v| v.as_str());
-    let Some(base_file) = base_file else {
-        return Value::Null;
-    };
-    let base_ref = store::DefRef {
-        domain: Some("base".to_string()),
-        application: None,
-        app: None,
-        module: None,
-        file: Some(base_file.to_string()),
-        id: None,
-        kind: None,
-    };
-    store::get_definition(&base_ref).await.unwrap_or(Value::Null)
 }

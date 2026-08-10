@@ -92,3 +92,29 @@ pub fn snowflake_id() -> i64 {
 pub fn next_pk_id() -> i64 {
     get_pk52_generator().next_id()
 }
+
+// ============================================================================
+// 临时 id 判定 + id→键转换（DCT/DOC changeset 处理共用）
+// ============================================================================
+
+/// 判断一个 JSON id 值是否为「前端临时 id」——即需要后端铸真号的占位。
+///
+/// 临时形态：① 缺失/null；② 空串或**非纯数字**字符串（如 CmxDataSet 的 `r{rand}`、
+/// 约定的 `t3`）。纯数字（字符串或数字）视为**真号**（既有行/导入带真号），不铸——
+/// 避免把已存在行误判为新增而写重。
+pub fn is_temp_id(v: Option<&serde_json::Value>) -> bool {
+    match v {
+        None | Some(serde_json::Value::Null) => true,
+        Some(serde_json::Value::String(s)) => s.is_empty() || !s.chars().all(|c| c.is_ascii_digit()),
+        _ => false,
+    }
+}
+
+/// id 值 → 稳定字符串键（数字/非空串统一）。null/空 → None。
+pub fn id_to_key(v: Option<&serde_json::Value>) -> Option<String> {
+    match v {
+        Some(serde_json::Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    }
+}

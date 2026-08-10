@@ -10,7 +10,7 @@ use cmx_mdm_model::activation::ActivationConfig;
 use cmx_utils::snowflake_id_str;
 use serde_json::Value;
 
-use crate::error::{api_err, api_err_db};
+use crate::error::{api_err, api_err_db, parse_jsonb_field};
 
 /// 按来源单据类型 + cr_type 查激活映射（激活器主用）。
 pub async fn find_by_doc_type(
@@ -137,17 +137,4 @@ pub async fn upsert(
         .await
         .map_err(|e| api_err_db(&format!("保存激活映射失败: {e}")))?;
     Ok(cfg.activation_code.clone())
-}
-
-/// 把 Value 里某个字符串字段尝试 parse 成 JSON 对象/数组（JSONB 列在 DB 是 text）。
-#[allow(clippy::collapsible_if)] // 外层验证(不可变借用)+内层写入(可变借用),借用规则要求分两步
-fn parse_jsonb_field(v: &mut Value, field: &str) {
-    if let Some(obj) = v.as_object()
-        && let Some(s) = obj.get(field).and_then(|x| x.as_str())
-        && let Ok(parsed) = serde_json::from_str::<Value>(s)
-    {
-        if let Some(obj) = v.as_object_mut() {
-            obj.insert(field.to_string(), parsed);
-        }
-    }
 }

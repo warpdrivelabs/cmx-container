@@ -16,8 +16,6 @@
 //! 分层：handler 层负责「读单据定义 + 解析 DocMetaView(带缓存)」，
 //! 再把强类型 meta 传给 cmx-biz 的 DocLoader/DocSaver（cmx-biz 不依赖 definitions store）。
 
-use std::sync::Arc;
-
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
@@ -27,11 +25,13 @@ use tracing::debug;
 
 use cmx_core::model::data::dataset::ColumnarCodec;
 use cmx_database::get_default_db_manager;
-use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, cache, saver};
+use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, saver};
 
+use cmx_api::actor::{actor_id_i64, actor_name};
 use cmx_api::CmxAppState;
 use cmx_api::db_id::resolve_db_id_from_headers;
 use cmx_api::middleware::CmxSvrContext;
+use cmx_api::validation::validation_fail_resp;
 use cmx_api::{ApiResp, Result};
 
 /// `/api/doc/data/*` 装载端点共用查询参数（GET 便捷路径：URL query）。
@@ -119,7 +119,7 @@ async fn run_doc_load(
             let zmc = ZmcDocLoader::load(mm, db_id, meta, dq).await?;
             let mut buf = Vec::new();
             zmc.encode_columnar_binary(&mut buf);
-            Ok(msgpack_response(&buf))
+            Ok(msgpack_ok_response(&buf))
         }
         // sqlx + Zmc + msgpack
         (Driver::Sqlx, Exit::ZmcMsgpack) => {
@@ -127,7 +127,7 @@ async fn run_doc_load(
             let zmc = ZmcDocLoaderSqlx::load(mm, db_id, meta, dq).await?;
             let mut buf = Vec::new();
             zmc.encode_columnar_binary(&mut buf);
-            Ok(msgpack_response(&buf))
+            Ok(msgpack_ok_response(&buf))
         }
         // tokio + Zmc + JSON
         (Driver::Tokio, Exit::ZmcJson) => {
@@ -146,16 +146,6 @@ async fn run_doc_load(
             Err(cmx_biz::BizError::business("tokio 驱动无老 DataSet 通道").into())
         }
     }
-}
-
-fn msgpack_response(columnar: &[u8]) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    let body = encode_envelope_ok(columnar);
-    (
-        [(axum::http::header::CONTENT_TYPE, "application/x-msgpack")],
-        body,
-    )
-        .into_response()
 }
 
 /// GET 便捷 + POST 富查询共用的装载入口。
@@ -656,18 +646,8 @@ fn column_to_json(c: &cmx_doc_store_pg::ColumnView) -> Value {
 }
 
 /// 构造成功信封的 msgpack 字节:`{code:0, msg:"success", data:<已编码的 data 字节>}`。
-fn encode_envelope_ok(data_msgpack: &[u8]) -> Vec<u8> {
-    use rmp::encode as mp;
-    let mut buf = Vec::with_capacity(data_msgpack.len() + 32);
-    mp::write_map_len(&mut buf, 3).unwrap();
-    mp::write_str(&mut buf, "code").unwrap();
-    mp::write_uint(&mut buf, 0).unwrap();
-    mp::write_str(&mut buf, "msg").unwrap();
-    mp::write_str(&mut buf, "success").unwrap();
-    mp::write_str(&mut buf, "data").unwrap();
-    buf.extend_from_slice(data_msgpack); // data 值 = 列式包(自包含 msgpack value)
-    buf
-}
+// encode_envelope_ok / msgpack_response 已上提到 cmx_api::msgpack（与 dct 共用）。
+use cmx_api::msgpack::msgpack_ok_response;
 
 /// POST /api/doc/save 请求体。
 #[derive(Debug, Deserialize)]
@@ -688,7 +668,7 @@ pub struct DocSaveQuery {
 /// body: `{ saveMode, changes | snapshot }`（§6.4）。单据坐标走 query 参数。
 pub async fn doc_save(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(ctx): CmxSvrContext,
+    ctx: CmxSvrContext,
     Query(q): Query<DocSaveQuery>,
     headers: HeaderMap,
     Json(body): Json<Value>,
@@ -735,11 +715,7 @@ pub async fn doc_save(
         // 列级校验失败：返回结构化 422（data.violations），前端逐行逐列高亮。
         Err(e) => {
             if let Some(vs) = e.violations() {
-                return Ok(Json(ApiResp::fail_with_data(
-                    422,
-                    format!("数据校验未通过（{} 处）", vs.len()),
-                    serde_json::json!({ "violations": vs }),
-                )));
+                return Ok(Json(validation_fail_resp(vs)));
             }
             return Err(e.into());
         }
@@ -758,21 +734,12 @@ pub async fn doc_save(
 /// - `doc_file`：单据定义文件名，版本台账定位「哪种单据」。
 /// - `op_override`：restore 等传 Some("restore")；None 时 saver 按 changeset 桶推断 create/update。
 fn save_ctx(
-    ctx: &cmx_core::model::service::context::SVRContext,
+    ctx: &CmxSvrContext,
     doc_file: &str,
     op_override: Option<&str>,
 ) -> cmx_doc_store_pg::SaveCtx {
-    let auth = ctx.auth_context.as_ref();
-    let actor_id = auth
-        .map(|a| a.user_id.trim())
-        .filter(|u| !u.is_empty())
-        .and_then(|u| u.parse::<i64>().ok())
-        .unwrap_or(0);
-    let actor_name = auth
-        .map(|a| a.username.trim())
-        .filter(|u| !u.is_empty())
-        .unwrap_or("系统")
-        .to_string();
+    let actor_id = actor_id_i64(ctx);
+    let actor_name = actor_name(ctx);
     cmx_doc_store_pg::SaveCtx {
         actor_id,
         actor_name,
@@ -788,7 +755,7 @@ fn save_ctx(
 /// 每单自动享 C（审计）/B1（版本快照）/B2（乐观锁）。
 pub async fn doc_save_batch(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(ctx): CmxSvrContext,
+    ctx: CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
@@ -952,7 +919,7 @@ pub async fn doc_revision(
 /// body: `{ docFile, rootId, rev }`。取该版快照 → replace 模式写回。
 pub async fn doc_restore(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(ctx): CmxSvrContext,
+    ctx: CmxSvrContext,
     Query(q): Query<DocSaveQuery>,
     headers: HeaderMap,
     Json(body): Json<Value>,
@@ -1063,100 +1030,7 @@ fn flatten_columnar(pkg: &Value, out: &mut serde_json::Map<String, Value>) {
 
 // DOC 定义文件解析（resolve_doc_file / doc_matches）+ 文件解析缓存已抽到
 // cmx-model-meta::definitions::resolve（DOC/DCT 共享，供 cmx-api 的业务编码定位复用，避免
-// cmx-api ⇄ cmx-doc 环）。此处经 use 别名转发，保持本文件内旧调用点不变。
-use cmx_model_meta::definitions::resolve::resolve_doc_file;
+// cmx-api ⇄ cmx-doc 环）。读定义链路（resolve_doc_file_smart / resolve_doc_meta / load_base）
+// 已下沉至 cmx-doc-store-pg::resolve（对齐 dct 的 resolve_dict 在 store-pg 层），本文件经 use 引用。
+use cmx_doc_store_pg::resolve_doc_meta;
 
-/// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
-///
-/// 定位优先级（对齐 dct 的 resolve_dict：前端只传 code，file 由后端解析）：
-///   1. `doc`（moduleCode）有值 → [`resolve_doc_file`] 精确定位（读 moduleMeta.moduleCode 匹配）
-///   2. `file` 显式指定且干净 → 直接用（覆盖场景，如版本台账 restore 指定历史文件）
-///   3. 都缺失 → [`resolve_doc_file`] 盲选默认/最高版本
-///
-/// `file`/`doc` 的脏值（空串 / "undefined" / "null"）一律视为缺失。
-/// 解析定位用的 file 名（对齐 dct resolve_dict：前端走 code，file 由后端兜底）。
-///
-/// 优先级：`doc`(moduleCode) 精确定位 > `file` 显式指定 > 盲选默认/最高版本。
-/// 脏值（空串 / "undefined" / "null"）一律视为缺失。返回最终落定的 file 名。
-async fn resolve_doc_file_smart(
-    domain: &str,
-    app: &str,
-    module: &str,
-    file: Option<&str>,
-    doc: Option<&str>,
-) -> Result<String> {
-    // 脏值（空串 / "undefined" / "null"）一律视为缺失
-    let doc = doc.filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
-    let file = file.filter(|v| !v.is_empty() && *v != "undefined" && *v != "null");
-    match doc {
-        Some(d) => resolve_doc_file(domain, app, module, Some(d)).await,
-        _ => match file {
-            Some(f) => Ok(f.to_string()),
-            None => resolve_doc_file(domain, app, module, None).await,
-        },
-    }
-}
-
-/// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
-///
-/// 定位优先级（对齐 dct 的 resolve_dict：前端只传 code，file 由后端解析）：
-///   1. `doc`（moduleCode）有值 → [`resolve_doc_file`] 精确定位
-///   2. `file` 显式指定且干净 → 直接用
-///   3. 都缺失 → [`resolve_doc_file`] 盲选默认/最高版本
-///
-/// 返回 `(meta, file)`：file 是最终落定的定义文件名，供版本台账等需 file 的场景复用。
-async fn resolve_doc_meta(
-    domain: &str,
-    app: &str,
-    module: &str,
-    file: Option<&str>,
-    doc: Option<&str>,
-) -> Result<(Arc<DocMetaView>, String)> {
-    let file = resolve_doc_file_smart(domain, app, module, file, doc).await?;
-    let key = cache::doc_key(domain, app, module, &file);
-    if let Some(hit) = cache::get(&key) {
-        return Ok((hit, file));
-    }
-
-    // 读主定义
-    let doc_ref = cmx_model_meta::definitions::store::DefRef {
-        domain: Some(domain.to_string()),
-        application: Some(app.to_string()),
-        app: Some(app.to_string()),
-        module: Some(module.to_string()),
-        file: Some(file.to_string()),
-        id: None,
-        kind: None,
-    };
-    let doc = cmx_model_meta::definitions::store::get_definition(&doc_ref).await?;
-
-    // 读 base 字段集（从 baseDocMetaRef.file 推断；无则空）
-    let base = load_base(&doc).await;
-
-    let view = Arc::new(DocMetaView::parse(&doc, &base)?);
-    cache::put(key, view.clone());
-    Ok((view, file))
-}
-
-/// 从定义的 baseDocMetaRef.file 读 base 字段集（域=base）；失败返回 Null。
-async fn load_base(doc: &Value) -> Value {
-    let base_file = doc
-        .get("baseDocMetaRef")
-        .and_then(|r| r.get("file"))
-        .and_then(|v| v.as_str());
-    let Some(base_file) = base_file else {
-        return Value::Null;
-    };
-    let base_ref = cmx_model_meta::definitions::store::DefRef {
-        domain: Some("base".to_string()),
-        application: None,
-        app: None,
-        module: None,
-        file: Some(base_file.to_string()),
-        id: None,
-        kind: None,
-    };
-    cmx_model_meta::definitions::store::get_definition(&base_ref)
-        .await
-        .unwrap_or(Value::Null)
-}

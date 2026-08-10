@@ -21,6 +21,8 @@ use tracing::debug;
 use cmx_api::CmxAppState;
 use cmx_api::db_id::resolve_db_id_from_headers;
 use cmx_api::middleware::CmxSvrContext;
+use cmx_api::msgpack::msgpack_ok_response;
+use cmx_api::validation::validation_fail_resp;
 use cmx_api::{ApiResp, Result};
 
 use cmx_dct_model::DctQuery;
@@ -130,7 +132,6 @@ pub async fn dct_search_zmc_msgpack(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    use axum::response::IntoResponse;
     let db_id = resolve_db_id_from_headers(&headers).await;
     let view = store::resolve_dict(&q, false).await?;
     let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
@@ -140,29 +141,7 @@ pub async fn dct_search_zmc_msgpack(
     );
 
     let buf = store::search_zmc(&view, &raw, &db_id).await?;
-    let envelope = encode_envelope_ok(&buf);
-    Ok((
-        [(axum::http::header::CONTENT_TYPE, "application/x-msgpack")],
-        envelope,
-    )
-        .into_response())
-}
-
-/// 成功信封的 msgpack 字节：`{code:0, msg:"success", data:<列式包字节>}`（对标 doc）。
-///
-/// `rmp::encode` 的写入方法只在 buf 写入失败时返回 Err（Vec 写入不会失败），
-/// 故用 expect 表达「固定结构写入不可能失败」的断言。
-fn encode_envelope_ok(data_msgpack: &[u8]) -> Vec<u8> {
-    use rmp::encode as mp;
-    let mut buf = Vec::with_capacity(data_msgpack.len() + 32);
-    mp::write_map_len(&mut buf, 3).expect("msgpack 写 map_len 不应失败");
-    mp::write_str(&mut buf, "code").expect("msgpack 写 str 不应失败");
-    mp::write_uint(&mut buf, 0).expect("msgpack 写 uint 不应失败");
-    mp::write_str(&mut buf, "msg").expect("msgpack 写 str 不应失败");
-    mp::write_str(&mut buf, "success").expect("msgpack 写 str 不应失败");
-    mp::write_str(&mut buf, "data").expect("msgpack 写 str 不应失败");
-    buf.extend_from_slice(data_msgpack);
-    buf
+    Ok(msgpack_ok_response(&buf))
 }
 
 // ============================================================================
@@ -189,15 +168,6 @@ pub async fn dct_upsert(
             json!({ "count": affected, "idMap": id_map }),
         ))),
     }
-}
-
-/// 构造校验失败响应：`{code:422, msg, data:{violations:[...]}}`（结构化，前端逐行逐列高亮）。
-fn validation_fail_resp(violations: &[cmx_biz::errcode::Violation]) -> ApiResp<Value> {
-    ApiResp::fail_with_data(
-        422,
-        format!("数据校验未通过（{} 处）", violations.len()),
-        json!({ "violations": violations }),
-    )
 }
 
 // ============================================================================
