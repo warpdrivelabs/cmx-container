@@ -29,9 +29,11 @@ use cmx_core::model::data::dataset::ColumnarCodec;
 use cmx_database::get_default_db_manager;
 use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, cache, saver};
 
+use cmx_api::actor::{actor_id_i64, actor_name};
 use cmx_api::CmxAppState;
 use cmx_api::db_id::resolve_db_id_from_headers;
 use cmx_api::middleware::CmxSvrContext;
+use cmx_api::validation::validation_fail_resp;
 use cmx_api::{ApiResp, Result};
 
 /// `/api/doc/data/*` 装载端点共用查询参数（GET 便捷路径：URL query）。
@@ -668,7 +670,7 @@ pub struct DocSaveQuery {
 /// body: `{ saveMode, changes | snapshot }`（§6.4）。单据坐标走 query 参数。
 pub async fn doc_save(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(ctx): CmxSvrContext,
+    ctx: CmxSvrContext,
     Query(q): Query<DocSaveQuery>,
     headers: HeaderMap,
     Json(body): Json<Value>,
@@ -715,11 +717,7 @@ pub async fn doc_save(
         // 列级校验失败：返回结构化 422（data.violations），前端逐行逐列高亮。
         Err(e) => {
             if let Some(vs) = e.violations() {
-                return Ok(Json(ApiResp::fail_with_data(
-                    422,
-                    format!("数据校验未通过（{} 处）", vs.len()),
-                    serde_json::json!({ "violations": vs }),
-                )));
+                return Ok(Json(validation_fail_resp(vs)));
             }
             return Err(e.into());
         }
@@ -738,21 +736,12 @@ pub async fn doc_save(
 /// - `doc_file`：单据定义文件名，版本台账定位「哪种单据」。
 /// - `op_override`：restore 等传 Some("restore")；None 时 saver 按 changeset 桶推断 create/update。
 fn save_ctx(
-    ctx: &cmx_core::model::service::context::SVRContext,
+    ctx: &CmxSvrContext,
     doc_file: &str,
     op_override: Option<&str>,
 ) -> cmx_doc_store_pg::SaveCtx {
-    let auth = ctx.auth_context.as_ref();
-    let actor_id = auth
-        .map(|a| a.user_id.trim())
-        .filter(|u| !u.is_empty())
-        .and_then(|u| u.parse::<i64>().ok())
-        .unwrap_or(0);
-    let actor_name = auth
-        .map(|a| a.username.trim())
-        .filter(|u| !u.is_empty())
-        .unwrap_or("系统")
-        .to_string();
+    let actor_id = actor_id_i64(ctx);
+    let actor_name = actor_name(ctx);
     cmx_doc_store_pg::SaveCtx {
         actor_id,
         actor_name,
@@ -768,7 +757,7 @@ fn save_ctx(
 /// 每单自动享 C（审计）/B1（版本快照）/B2（乐观锁）。
 pub async fn doc_save_batch(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(ctx): CmxSvrContext,
+    ctx: CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
@@ -932,7 +921,7 @@ pub async fn doc_revision(
 /// body: `{ docFile, rootId, rev }`。取该版快照 → replace 模式写回。
 pub async fn doc_restore(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(ctx): CmxSvrContext,
+    ctx: CmxSvrContext,
     Query(q): Query<DocSaveQuery>,
     headers: HeaderMap,
     Json(body): Json<Value>,

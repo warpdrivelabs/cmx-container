@@ -12,6 +12,7 @@ use axum::http::HeaderMap;
 use serde_json::{json, Value};
 
 use cmx_api::CmxAppState;
+use cmx_api::actor::actor_id_i64;
 use cmx_api::db_id::resolve_db_id_from_headers;
 use cmx_api::middleware::CmxSvrContext;
 use cmx_api::{ApiResp, Result};
@@ -64,17 +65,13 @@ pub async fn mdm_activations_save(
 /// 手动触发激活（审批型 CR 兜底入口 / 内部 CR 直接调）。
 pub async fn mdm_cr_activate(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    svr_ctx: CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<ActivateBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let operated_by = svr_ctx
-        .auth_context
-        .as_ref()
-        .and_then(|a| a.user_id.parse::<i64>().ok())
-        .unwrap_or(0);
+    let operated_by = actor_id_i64(&svr_ctx);
     let codegen = RandomCodeGenerator;
     let record_id = store::activate(mm, &db_id, body.cr_id, operated_by, &codegen).await?;
     Ok(Json(ApiResp::ok(json!({ "recordId": record_id }))))
@@ -116,18 +113,14 @@ pub async fn mdm_cr_submit(
 /// 方案 A:直接对 approving 的 CR 调激活器(激活器接受 approving),失败回滚到 approving。
 pub async fn mdm_cr_approve(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    svr_ctx: CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<CrIdBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
     store::check_status(mm, &db_id, None, body.cr_id, "approving").await?;
-    let operated_by = svr_ctx
-        .auth_context
-        .as_ref()
-        .and_then(|a| a.user_id.parse::<i64>().ok())
-        .unwrap_or(0);
+    let operated_by = actor_id_i64(&svr_ctx);
     let codegen = RandomCodeGenerator;
     let record_id = store::activate(mm, &db_id, body.cr_id, operated_by, &codegen).await?;
     Ok(Json(ApiResp::ok(
@@ -152,17 +145,13 @@ pub async fn mdm_cr_reject(
 /// 驳回复活:rejected → 克隆新 draft(source_cr_id 指向旧)
 pub async fn mdm_cr_clone_revise(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    svr_ctx: CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<CrIdBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let operated_by = svr_ctx
-        .auth_context
-        .as_ref()
-        .and_then(|a| a.user_id.parse::<i64>().ok())
-        .unwrap_or(0);
+    let operated_by = actor_id_i64(&svr_ctx);
     let new_id = store::clone_revise(mm, &db_id, body.cr_id, operated_by).await?;
     Ok(Json(ApiResp::ok(
         json!({ "newCrId": new_id, "sourceCrId": body.cr_id, "status": "draft" }),
@@ -431,7 +420,7 @@ async fn enrich_group_names(
 /// 确认合并。body { dictCode, masterId, victimIds, survivorship? }。
 pub async fn mdm_merge_requests_create(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    svr_ctx: CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<MergeBody>,
 ) -> Result<Json<ApiResp<Value>>> {
@@ -443,11 +432,7 @@ pub async fn mdm_merge_requests_create(
     let line_tables: Vec<(String, String)> = dict_tables(&body.dict_code)
         .map(|(_h, lines)| lines)
         .unwrap_or_default();
-    let operated_by = svr_ctx
-        .auth_context
-        .as_ref()
-        .and_then(|a| a.user_id.parse::<i64>().ok())
-        .unwrap_or(0);
+    let operated_by = actor_id_i64(&svr_ctx);
 
     // 审查 C1：管家路径带 mergeId 复用 group（不新插）；否则新插 pending
     let member_ids: Vec<i64> = std::iter::once(body.master_id)
@@ -540,17 +525,13 @@ pub async fn mdm_merge_request_detail(
 /// 驳回合并请求。body { mergeId, reason? }。CAS pending→rejected + 审计（审查 C3/C5）。
 pub async fn mdm_merge_request_reject(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    svr_ctx: CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<RejectMergeBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let operated_by = svr_ctx
-        .auth_context
-        .as_ref()
-        .and_then(|a| a.user_id.parse::<i64>().ok())
-        .unwrap_or(0);
+    let operated_by = actor_id_i64(&svr_ctx);
     let txn_ctx = mm.get_transaction_context();
     let guard = txn_ctx.begin_with_guard(&db_id).await
         .map_err(|e| store::api_err(&format!("开事务失败: {e}")))?;
@@ -571,7 +552,7 @@ pub async fn mdm_merge_request_reject(
 /// unmerge。body { mergeId }。
 pub async fn mdm_merge_requests_undo(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    svr_ctx: CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<UndoBody>,
 ) -> Result<Json<ApiResp<Value>>> {
@@ -594,11 +575,7 @@ pub async fn mdm_merge_requests_undo(
         .as_array()
         .and_then(|arr| arr.iter().find_map(|m| m.as_i64().filter(|id| *id != master_id)))
         .unwrap_or(0);
-    let operated_by = svr_ctx
-        .auth_context
-        .as_ref()
-        .and_then(|a| a.user_id.parse::<i64>().ok())
-        .unwrap_or(0);
+    let operated_by = actor_id_i64(&svr_ctx);
 
     store::unmerge(
         mm, &db_id, &dict_code, &head_table, master_id, victim_id, &line_tables,

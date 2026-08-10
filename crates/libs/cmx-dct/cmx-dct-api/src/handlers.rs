@@ -22,6 +22,7 @@ use cmx_api::CmxAppState;
 use cmx_api::db_id::resolve_db_id_from_headers;
 use cmx_api::middleware::CmxSvrContext;
 use cmx_api::msgpack::msgpack_ok_response;
+use cmx_api::validation::validation_fail_resp;
 use cmx_api::{ApiResp, Result};
 
 use cmx_dct_model::DctQuery;
@@ -167,15 +168,6 @@ pub async fn dct_upsert(
             json!({ "count": affected, "idMap": id_map }),
         ))),
     }
-}
-
-/// 构造校验失败响应：`{code:422, msg, data:{violations:[...]}}`（结构化，前端逐行逐列高亮）。
-fn validation_fail_resp(violations: &[cmx_biz::errcode::Violation]) -> ApiResp<Value> {
-    ApiResp::fail_with_data(
-        422,
-        format!("数据校验未通过（{} 处）", violations.len()),
-        json!({ "violations": violations }),
-    )
 }
 
 // ============================================================================
