@@ -35,42 +35,13 @@ pub use source_binding::{
 pub mod rpt_job;
 pub use rpt_job::{KIND_RPT_COMPUTE, KIND_RPT_VERIFY, RptComputeJob, RptVerifyJob};
 
-/// 构造报表业务错误（BizError → cmx_api_types::Error）。
-pub fn api_err(msg: &str) -> Error {
-    cmx_biz::BizError::business(msg.to_string()).into()
-}
-
-/// 从 `cmx_database_pg::Error` 里抽出 **PostgreSQL 真实错误明细**（SQLSTATE 文案 + DETAIL + 约束名）。
-///
-/// 背景：tokio-postgres 的 `Error` 顶层 `Display` 恒为无信息的 `db error`——真正的
-/// message/detail/constraint 藏在 `as_db_error()` 里。若直接 `format!("{e}")` 会把
-/// 「唯一键冲突」这类可翻译错误塌缩成 `db error`，前端无从判断。
-///
-/// 本函数把三段拼成一个完整串，交给 [`cmx_biz::BizError::from_db_error`] 归类成
-/// [`CmxErrCode`](cmx_biz::errcode::CmxErrCode) + 优雅中文（对齐 DOC/DCT 落库错误机制）。
-/// 拼接保证含 `unique constraint "..."` / `foreign key` 等稳定子串，令 `classify_db_error`
-/// 命中；`brief_db_detail` 再从中抽约束名脱敏展示。非 PG 错误（连接/池）回退顶层 Display。
-fn pg_detail(e: &cmx_database_pg::Error) -> String {
-    if let cmx_database_pg::Error::Postgres(pg) = e
-        && let Some(db) = pg.as_db_error()
-    {
-        let mut s = db.message().to_string();
-        if let Some(d) = db.detail() {
-            s.push(' ');
-            s.push_str(d);
-        }
-        if let Some(c) = db.constraint() {
-            s.push_str(&format!(" constraint \"{c}\""));
-        }
-        return s;
-    }
-    e.to_string()
-}
+// 公共错误助手重导出（api_err 对外暴露，向后兼容本 crate 调用点零改动）。
+pub use cmx_biz::api_err;
 
 /// 把 DB 执行错误翻译成优雅业务错误（PG 明细 → `CmxErrCode` 中文 + 稳定码），
-/// 绝不把 PG 英文原文/SQL 暴露给前端。与 DOC saver（`from_db_error`）机制一致。
+/// 绝不把 PG 英文原文/SQL 暴露给前端。
 fn db_err(e: cmx_database_pg::Error) -> Error {
-    cmx_biz::BizError::from_db_error(&pg_detail(&e)).into()
+    cmx_biz::BizError::from_db_error(&cmx_biz::pg_detail(&e)).into()
 }
 
 // ============================================================================
@@ -92,7 +63,7 @@ pub(crate) async fn query_rows(sql: &str, params: Vec<DataValue>, label: &str) -
                 rpt_db_id = RPT_DB_ID,
                 query_label = label,
                 query_sql = sql,
-                pg_detail = %pg_detail(&e),
+                pg_detail = %cmx_biz::pg_detail(&e),
                 "报表设计数据查询失败"
             );
             db_err(e)

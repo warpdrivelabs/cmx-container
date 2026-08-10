@@ -1064,6 +1064,7 @@ dependencies = [
  "axum",
  "cmx-api",
  "cmx-api-types",
+ "cmx-biz",
  "cmx-code-model",
  "cmx-core",
  "cmx-database-pg",

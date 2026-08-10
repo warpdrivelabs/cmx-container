@@ -25,7 +25,7 @@ pub mod function_invoker;
 pub mod service_executor;
 
 pub mod error;
-pub use error::{BizError, Result};
+pub use error::{api_err, api_err_db, pg_detail, BizError, Result};
 
 // 统一错误码 + 错误信息库（落库校验 / 约束翻译）
 pub mod errcode;
