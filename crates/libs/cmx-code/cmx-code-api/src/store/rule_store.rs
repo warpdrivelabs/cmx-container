@@ -8,36 +8,12 @@ use cmx_utils::next_pk_id;
 
 use crate::handlers::Dam;
 
-/// 从 `cmx_database_pg::Error` 抽出 PostgreSQL 真实错误明细（message + DETAIL + 约束名）。
-///
-/// 背景：tokio-postgres 的 `Error` 顶层 `Display` 恒为无信息的 `db error`——真正的
-/// message / SQLSTATE / constraint 藏在 `as_db_error()` 里。若直接 `format!("{e}")`
-/// 会把「唯一键冲突」等可翻译错误塌缩成 `db error`，`err_resp` 无从识别 409。
-///
-/// 拼出含 `unique constraint "..."` 等稳定子串的完整串，交给 handler 层 `err_resp`
-/// 判别唯一冲突。对齐 `cmx-rpt-store-pg` / `cmx-dct-store-pg` 的 `pg_detail` 范本。
-pub(crate) fn pg_detail(e: &cmx_database_pg::Error) -> String {
-    if let cmx_database_pg::Error::Postgres(pg) = e
-        && let Some(db) = pg.as_db_error()
-    {
-        let mut s = db.message().to_string();
-        if let Some(d) = db.detail() {
-            s.push(' ');
-            s.push_str(d);
-        }
-        if let Some(c) = db.constraint() {
-            s.push_str(&format!(" constraint \"{c}\""));
-        }
-        return s;
-    }
-    e.to_string()
-}
-
 /// 把 PG 执行错误包成 `CodeError::Database`（带真实明细，而非塌缩的 `db error`）。
 ///
 /// `label` 为操作名（如"创建规则"），拼进错误消息便于定位。
+/// PG 明细抽取用公共 `cmx_biz::pg_detail`（与 dct/doc/rpt/mdm 统一口径）。
 pub(crate) fn db_err(label: &str, e: cmx_database_pg::Error) -> CodeError {
-    let detail = pg_detail(&e);
+    let detail = cmx_biz::pg_detail(&e);
     // 日志侧记录完整明细（排障用），响应侧由 handler `err_resp` 判别唯一冲突。
     tracing::error!(
         target: "cmx_code::store",

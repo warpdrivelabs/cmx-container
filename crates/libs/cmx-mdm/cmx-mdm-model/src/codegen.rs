@@ -19,6 +19,7 @@ pub trait CodeGenerator: Send + Sync {
 /// 全局唯一)又免去引入 rand crate。唯一性兜底:cm_*.code 有 UNIQUE 约束,冲突时激活器重试。
 pub struct RandomCodeGenerator;
 
+/// [`CodeGenerator`] 的 M1 临时实现。
 impl CodeGenerator for RandomCodeGenerator {
     fn generate(&self, dict_code: &str, _rule_code: Option<&str>) -> String {
         let upper = dict_code.to_uppercase();

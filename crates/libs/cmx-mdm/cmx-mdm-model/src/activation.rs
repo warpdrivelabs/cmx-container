@@ -29,6 +29,12 @@ pub struct ActivationConfig {
     #[serde(default)]
     pub line_mappings: Vec<LineMapping>,
     pub code_rule_code: Option<String>,
+    /// 主体名字段来源（payload 内字段名，前端按此填 subject_name）。
+    #[serde(default)]
+    pub subject_name_field: Option<String>,
+    /// 主体编码字段来源（为空则由 codeRule 铸号）。
+    #[serde(default)]
+    pub subject_code_field: Option<String>,
 }
 
 /// 明细映射(一条 = 一类明细行,如 bank_account)。
@@ -66,11 +72,16 @@ pub struct ActivationPlan {
 /// - `new_code`:新建时由 [`crate::codegen::CodeGenerator`] 产出的 code
 pub fn plan_create(cfg: &ActivationConfig, cr_head: &Map<String, Value>, new_code: &str) -> ActivationPlan {
     let mut header_row = Map::new();
+    // 通用回退:先查 payload 内(业务字段),再查 cr_head 顶层(公共搜索列)
+    let payload_obj = cr_head.get("payload").and_then(|v| v.as_object());
     for (src_field, tgt_col) in &cfg.header_mapping {
+        let val = payload_obj
+            .and_then(|p| p.get(src_field))
+            .or_else(|| cr_head.get(src_field));
         if let Some(tgt) = tgt_col.as_str()
-            && let Some(val) = cr_head.get(src_field)
+            && let Some(v) = val
         {
-            header_row.insert(tgt.to_string(), val.clone());
+            header_row.insert(tgt.to_string(), v.clone());
         }
     }
     header_row.insert("code".into(), Value::String(new_code.to_string()));
@@ -181,7 +192,11 @@ mod tests {
     #[test]
     fn plan_create_carries_mapped_fields_and_forces_published() {
         let cfg = sample_cfg();
-        let cr_head = serde_json::from_value(json!({ "name": "B公司", "tax_no": "911", "extra": "忽略" })).unwrap();
+        // 业务字段（name/tax_no）走 payload；公共搜索列 subject_name 留顶层
+        let cr_head = serde_json::from_value(json!({
+            "subject_name": "B公司",
+            "payload": { "name": "B公司", "tax_no": "911", "extra": "忽略" }
+        })).unwrap();
         let plan = plan_create(&cfg, &cr_head, "SUPPLI-abc");
         assert_eq!(plan.header_row.get("name").and_then(|v| v.as_str()), Some("B公司"));
         assert_eq!(plan.header_row.get("tax_no").and_then(|v| v.as_str()), Some("911"));

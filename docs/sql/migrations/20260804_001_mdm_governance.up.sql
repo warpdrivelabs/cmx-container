@@ -32,6 +32,12 @@ COMMENT ON COLUMN cmx_mdm_activation.is_active       IS '是否启用';
 CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_mdm_activation_code     ON cmx_mdm_activation (activation_code);
 CREATE        INDEX IF NOT EXISTS idx_cmx_mdm_activation_doctype ON cmx_mdm_activation (source_doc_type, cr_type);
 
+-- 1.1 激活映射配置补充列（V3.2 payload 化：主体名/编码字段来源声明）
+ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS subject_name_field VARCHAR(64);
+ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS subject_code_field VARCHAR(64);
+COMMENT ON COLUMN cmx_mdm_activation.subject_name_field IS '主体名字段来源(payload 内字段名,前端按此填 subject_name)';
+COMMENT ON COLUMN cmx_mdm_activation.subject_code_field IS '主体编码字段来源(为空则由 codeRule 铸号)';
+
 -- 2. 主数据版本留痕(激活器写入)——md_ 治理表,主键 BIGINT(承接 cm_*.id)
 CREATE TABLE IF NOT EXISTS md_audit
 (
@@ -149,3 +155,8 @@ COMMENT ON COLUMN md_event_log.seq IS '有序拉取序列(DB 自增,非主键,�
 COMMENT ON COLUMN md_event_log.event_type IS 'created/updated/merged';
 CREATE UNIQUE INDEX IF NOT EXISTS uk_md_event_log_seq   ON md_event_log (seq);
 CREATE        INDEX IF NOT EXISTS idx_md_event_log_dict ON md_event_log (dict_code, seq);
+
+-- 注：cv_mdm_apply / cv_mdm_apply_line 是单据表（cv_*），列结构由单据元数据驱动
+-- （data/meta/definitions/basic/dataplatform/mdm/dataplatform_doc_meta_v1.json），
+-- 不在本迁移文件手写建表——后端 diff 引擎据元数据自动同步物理列（ADD/DROP/ALTER COLUMN）。
+-- V3.2 payload 化：json 定义已从「逐列展开」改为「骨架 + subject_name/subject_code + payload JSONB」。

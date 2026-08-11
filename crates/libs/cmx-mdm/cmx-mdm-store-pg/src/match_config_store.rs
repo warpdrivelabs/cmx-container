@@ -14,7 +14,7 @@ use cmx_database_pg::DatabaseManager;
 use cmx_utils::next_pk_id;
 use serde_json::Value;
 
-use crate::error::{api_err, api_err_db};
+use crate::error::{api_err, api_err_db, parse_jsonb_field};
 
 /// 按字典码列规则（查重界面下拉用）。dict_code 为 None 时列全部。
 pub async fn list_match_config(
@@ -25,7 +25,7 @@ pub async fn list_match_config(
     let mut where_clauses = vec!["is_active = TRUE".to_string()];
     let mut params: Vec<DataValue> = Vec::new();
     if let Some(dc) = dict_code {
-        where_clauses.push(format!("dict_code = $1"));
+        where_clauses.push("dict_code = $1".to_string());
         params.push(DataValue::String(dc.into()));
     }
     let sql = format!(
@@ -159,6 +159,11 @@ pub async fn upsert_match_config(
     Ok(id)
 }
 
+/// upsert 后反查规则 id（`RETURNING id` 缺失时的兜底，按 (dict_code, rule_name) 唯一键定位）。
+///
+/// # Errors
+///
+/// 保存后反查为空（数据异常）时返回错误。
 async fn resolve_id(
     mm: &DatabaseManager,
     db_id: &str,
@@ -199,17 +204,4 @@ pub async fn delete_match_config(
         .await
         .map_err(|e| api_err_db(&format!("删除查重规则失败: {e}")))?;
     Ok(n)
-}
-
-/// 把 Value 里某个字符串字段尝试 parse 成 JSON 对象/数组（JSONB 列在 DB 是 text）。
-#[allow(clippy::collapsible_if)]
-fn parse_jsonb_field(v: &mut Value, field: &str) {
-    if let Some(obj) = v.as_object()
-        && let Some(s) = obj.get(field).and_then(|x| x.as_str())
-        && let Ok(parsed) = serde_json::from_str::<Value>(s)
-    {
-        if let Some(obj) = v.as_object_mut() {
-            obj.insert(field.to_string(), parsed);
-        }
-    }
 }

@@ -19,10 +19,12 @@ use cmx_core::model::cell::DataValue;
 use cmx_database_pg::{DatabaseManager, get_default_pg_db_manager};
 
 use cmx_dct_model::{
-    BatchConflictMode, DictView, build_batch_insert_sql, build_truncate_sql, extract_pk,
+    BatchConflictMode, DctQuery, DictView, build_batch_insert_sql, build_truncate_sql, extract_pk,
 };
 
-use crate::error::{api_err, map_db_err, pg_detail};
+use crate::error::{api_err, map_db_err};
+use crate::resolve::resolve_dict;
+use cmx_biz::pg_detail;
 
 // ============================================================================
 // 公共类型
@@ -104,30 +106,30 @@ pub struct ImportError {
 
 /// 启动导出流。
 ///
-/// 内部 spawn tokio task：
+/// 内部 `resolve_dict` 解析字典视图，再 spawn tokio task：
 /// 1. keyset 分页查询（首批 `last_pk=None`，后续 `WHERE pk > $1`，每批 `batch_size` 行）
 /// 2. 按 `fmt` 序列化为 `Bytes`（JSON NDJSON 每行一个 JSON + `\n` / CSV 含表头）
 /// 3. 通过 `mpsc::Sender<Bytes>` 发送
 /// 4. 全部完成或出错时关闭 Sender
 ///
-/// **错误处理**：响应头由 handler 在调用前已发出（200 OK），流内错误无法回传 status code。
-/// 错误通过 `tracing::error!` 记录 + 流提前关闭（receiver 看到 stream end）。
-/// 表存在性 / dict 解析错误应在调用本函数前由 handler 校验。
+/// **错误处理**：`resolve_dict` 失败直接返回 `Err`（handler 可回 500）；流内错误无法回传
+/// status code（响应头已发出），通过 `tracing::error!` 记录 + 流提前关闭。
 ///
 /// # Arguments
 ///
-/// - `view`：字典表视图（Clone 廉价，Arc 内部共享）
+/// - `q`：字典定位（内部 resolve_dict 解析视图）
 /// - `db_id`：数据源 ID
 /// - `fmt`：导出格式
 /// - `batch_size`：每批行数（推荐 5000）
 /// - `buffer`：mpsc channel 容量（推荐 8，避免内存堆积）
-pub fn export_stream(
-    view: DictView,
+pub async fn export_stream(
+    q: &DctQuery,
     db_id: String,
     fmt: ImportFormat,
     batch_size: i64,
     buffer: usize,
-) -> mpsc::Receiver<Bytes> {
+) -> Result<mpsc::Receiver<Bytes>> {
+    let view = resolve_dict(q, false).await?;
     let (tx, rx) = mpsc::channel::<Bytes>(buffer);
     tokio::spawn(async move {
         match run_export(view.clone(), db_id, fmt, batch_size, tx.clone()).await {
@@ -150,7 +152,7 @@ pub fn export_stream(
         }
         // tx drop 自动关闭 channel
     });
-    rx
+    Ok(rx)
 }
 
 async fn run_export(
@@ -302,20 +304,21 @@ fn csv_escape(s: &str) -> String {
 ///
 /// # Arguments
 ///
-/// - `view`：字典表视图
+/// - `q`：字典定位（内部 resolve_dict 解析视图）
 /// - `db_id`：数据源 ID
 /// - `fmt`：文件格式
 /// - `mode`：冲突处理模式（upsert / insert_only / replace）
 /// - `batch_size`：每批行数（推荐 1000）
 /// - `data`：异步读取流（multipart 字段内容）
 pub async fn import_stream<R: tokio::io::AsyncRead + Unpin>(
-    view: DictView,
+    q: &DctQuery,
     db_id: String,
     fmt: ImportFormat,
     mode: BatchConflictMode,
     batch_size: usize,
     data: R,
 ) -> Result<ImportSummary> {
+    let view = resolve_dict(q, false).await?;
     // replace 模式前置 TRUNCATE（独立事务）
     if mode == BatchConflictMode::Replace {
         truncate_for_replace(&view, &db_id).await?;
@@ -591,7 +594,7 @@ async fn apply_import_batch(
 }
 
 /// TRUNCATE 目标表（replace 模式前置）。
-pub async fn truncate_for_replace(view: &DictView, db_id: &str) -> Result<()> {
+pub(crate) async fn truncate_for_replace(view: &DictView, db_id: &str) -> Result<()> {
     let sql = build_truncate_sql(view);
     let mm = get_default_pg_db_manager();
     let tx = mm.get_transaction_context();

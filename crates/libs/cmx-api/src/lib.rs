@@ -34,6 +34,18 @@ pub mod app_state;
 /// OpenAPI 文档模块
 pub mod openapi;
 
+/// 请求库路由：db_id 解析（doc/dct/code/mdm 等 API crate 共用）。
+pub mod db_id;
+
+/// msgpack 成功信封编码（doc/dct 列式二进制响应共用）。
+pub mod msgpack;
+
+/// 操作者身份提取（doc/mdm 等 API handler 共用）。
+pub mod actor;
+
+/// 校验失败响应构造（doc/dct 等 API handler 共用）。
+pub mod validation;
+
 pub use app_state::CmxAppState;
 pub use openapi::ApiDoc;
 pub use rest::handler::{create, create_many, delete, get_by_id, list, page, update, update_many};

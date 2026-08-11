@@ -16,8 +16,6 @@
 //! 分层：handler 层负责「读单据定义 + 解析 DocMetaView(带缓存)」，
 //! 再把强类型 meta 传给 cmx-biz 的 DocLoader/DocSaver（cmx-biz 不依赖 definitions store）。
 
-use std::sync::Arc;
-
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
@@ -27,18 +25,27 @@ use tracing::debug;
 
 use cmx_core::model::data::dataset::ColumnarCodec;
 use cmx_database::get_default_db_manager;
-use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, cache, saver};
+use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, saver};
 
+use cmx_api::actor::{actor_id_i64, actor_name};
 use cmx_api::CmxAppState;
+use cmx_api::db_id::resolve_db_id_from_headers;
 use cmx_api::middleware::CmxSvrContext;
+use cmx_api::validation::validation_fail_resp;
 use cmx_api::{ApiResp, Result};
 
 /// `/api/doc/data/*` 装载端点共用查询参数（GET 便捷路径：URL query）。
 #[derive(Debug, Deserialize)]
 pub struct DocDataQuery {
-    pub domain: String,
-    pub application: String,
-    pub module: String,
+    /// 域；可选：缺失时后端按 doc(moduleCode)/file 全局反查（多 DAM 冲突返回 409 + 候选列表）。
+    #[serde(default)]
+    pub domain: Option<String>,
+    /// 应用；可选：同 `domain`，缺失时全局反查补全。
+    #[serde(default)]
+    pub application: Option<String>,
+    /// 模块；可选：同 `domain`，缺失时全局反查补全。
+    #[serde(default)]
+    pub module: Option<String>,
     /// 单据定义文件名（如 cmxfico_doc_meta_v1.json）；缺失时由 [`resolve_doc_file`]
     /// 在 domain/app/module 下自动选默认/最高版本。
     #[serde(default)]
@@ -72,39 +79,6 @@ enum Exit {
     ZmcMsgpack,
     /// ZmcDataSet + 纯 JSON
     ZmcJson,
-}
-
-/// 从请求头中提取 `db_id`，如果不存在则返回业务库 ID。
-///
-/// # 参数
-/// - `header`: HTTP 请求头的引用（`HeaderMap`）。
-///
-/// # 返回值
-/// 返回一个 `String`，表示要使用的数据库 ID：
-/// - 如果请求头中包含有效的 `db_id`，则使用该值；
-/// - 否则，异步获取并返回业务库 ID（无业务库时由 `get_biz_db_id` 回退到默认库）。
-///
-/// # 错误处理
-/// 如果 `db_id` 头存在但包含非法字符（非 ASCII 或无效 UTF-8），
-/// 则会回退到业务库 ID（不会 panic）。
-async fn resolve_doc_db_id(header: &HeaderMap) -> String {
-    if let Some(db_id_header) = header.get("db_id") {
-        // 将 HeaderValue 转换为 &str（可能失败，例如包含非 UTF-8 字节）
-        match db_id_header.to_str() {
-            Ok(db_id_str) => {
-                // 成功解析，返回副本（转换为 String）
-                return db_id_str.to_owned();
-            }
-            Err(_) => {
-                // 记录警告日志（如使用 tracing 或 log crate）
-                tracing::error!("Invalid UTF-8 in 'db_id' header, falling back to biz db.");
-                return get_default_db_manager().get_biz_db_id().await;
-            }
-        }
-    }
-
-    // 如果头不存在或解析失败，则获取业务库 ID（无业务库时回退到默认库）
-    get_default_db_manager().get_biz_db_id().await
 }
 
 /// 从 GET query 构造简单 DocQuery（根层等值 + limit + depth）。
@@ -151,7 +125,7 @@ async fn run_doc_load(
             let zmc = ZmcDocLoader::load(mm, db_id, meta, dq).await?;
             let mut buf = Vec::new();
             zmc.encode_columnar_binary(&mut buf);
-            Ok(msgpack_response(&buf))
+            Ok(msgpack_ok_response(&buf))
         }
         // sqlx + Zmc + msgpack
         (Driver::Sqlx, Exit::ZmcMsgpack) => {
@@ -159,7 +133,7 @@ async fn run_doc_load(
             let zmc = ZmcDocLoaderSqlx::load(mm, db_id, meta, dq).await?;
             let mut buf = Vec::new();
             zmc.encode_columnar_binary(&mut buf);
-            Ok(msgpack_response(&buf))
+            Ok(msgpack_ok_response(&buf))
         }
         // tokio + Zmc + JSON
         (Driver::Tokio, Exit::ZmcJson) => {
@@ -180,16 +154,6 @@ async fn run_doc_load(
     }
 }
 
-fn msgpack_response(columnar: &[u8]) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    let body = encode_envelope_ok(columnar);
-    (
-        [(axum::http::header::CONTENT_TYPE, "application/x-msgpack")],
-        body,
-    )
-        .into_response()
-}
-
 /// GET 便捷 + POST 富查询共用的装载入口。
 /// - GET：URL query（简单等值/limit/depth）；
 /// - POST：body = 完整 [`DocQuery`] JSON（每层 filter/orderBy/分页/游标）。
@@ -205,11 +169,11 @@ async fn doc_load_entry(
     headers: HeaderMap,
     body: Option<Value>,
 ) -> Result<axum::response::Response> {
-    let db_id = resolve_doc_db_id(&headers).await;
-    let meta = resolve_doc_meta(
-        &q.domain,
-        &q.application,
-        &q.module,
+    let db_id = resolve_db_id_from_headers(&headers).await;
+    let (meta, _file) = resolve_doc_meta(
+        q.domain.as_deref(),
+        q.application.as_deref(),
+        q.module.as_deref(),
         q.file.as_deref(),
         q.doc.as_deref(),
     )
@@ -241,7 +205,7 @@ pub async fn doc_data_sqlx_dataset_json(
     debug!(
         target: "cmx_doc::api",
         handler = "doc_data_sqlx_dataset_json",
-        doc.module = %q.module,
+        doc.module = %q.module.as_deref().unwrap_or("(auto)"),
         doc.file = %q.file.as_deref().unwrap_or("(auto)"),
         "handler invoked"
     );
@@ -266,7 +230,7 @@ pub async fn doc_data_tokio_zmc_msgpack(
     debug!(
         target: "cmx_doc::api",
         handler = "doc_data_tokio_zmc_msgpack",
-        doc.module = %q.module,
+        doc.module = %q.module.as_deref().unwrap_or("(auto)"),
         doc.file = %q.file.as_deref().unwrap_or("(auto)"),
         "handler invoked"
     );
@@ -291,7 +255,7 @@ pub async fn doc_data_sqlx_zmc_msgpack(
     debug!(
         target: "cmx_doc::api",
         handler = "doc_data_sqlx_zmc_msgpack",
-        doc.module = %q.module,
+        doc.module = %q.module.as_deref().unwrap_or("(auto)"),
         doc.file = %q.file.as_deref().unwrap_or("(auto)"),
         "handler invoked"
     );
@@ -316,7 +280,7 @@ pub async fn doc_data_tokio_zmc_json(
     debug!(
         target: "cmx_doc::api",
         handler = "doc_data_tokio_zmc_json",
-        doc.module = %q.module,
+        doc.module = %q.module.as_deref().unwrap_or("(auto)"),
         doc.file = %q.file.as_deref().unwrap_or("(auto)"),
         "handler invoked"
     );
@@ -334,7 +298,7 @@ pub async fn doc_data_sqlx_zmc_json(
     debug!(
         target: "cmx_doc::api",
         handler = "doc_data_sqlx_zmc_json",
-        doc.module = %q.module,
+        doc.module = %q.module.as_deref().unwrap_or("(auto)"),
         doc.file = %q.file.as_deref().unwrap_or("(auto)"),
         "handler invoked"
     );
@@ -346,12 +310,21 @@ pub async fn doc_data_sqlx_zmc_json(
 /// `POST /api/doc/data/children` 请求体。
 #[derive(Debug, Deserialize)]
 pub struct DocChildrenReq {
-    pub domain: String,
-    pub application: String,
-    pub module: String,
+    /// 域；可选：缺失时后端按 doc(moduleCode)/file 全局反查（多 DAM 冲突返回 409 + 候选列表）。
+    #[serde(default)]
+    pub domain: Option<String>,
+    /// 应用；可选：同 `domain`，缺失时全局反查补全。
+    #[serde(default)]
+    pub application: Option<String>,
+    /// 模块；可选：同 `domain`，缺失时全局反查补全。
+    #[serde(default)]
+    pub module: Option<String>,
     /// 单据定义文件名；缺失/空时由后端按坐标自动解析默认 DOC 文件（与装载接口一致）。
     #[serde(default)]
     pub file: Option<String>,
+    /// 单据模块编码（moduleMeta.moduleCode）；前端走 code 定位时传，后端据此精确定义文件。
+    #[serde(default)]
+    pub doc: Option<String>,
     /// 要下钻装载的层 id。
     pub layer: String,
     /// 上层选中的父 id 列表（该层 childKey 匹配）。
@@ -385,17 +358,17 @@ pub async fn doc_children(
     debug!(
         target: "cmx_doc::api",
         handler = "doc_children",
-        doc.module = %req.module,
+        doc.module = %req.module.as_deref().unwrap_or("(auto)"),
         doc.layer = %req.layer,
         "handler invoked"
     );
-    let db_id = resolve_doc_db_id(&headers).await;
-    let meta = resolve_doc_meta(
-        &req.domain,
-        &req.application,
-        &req.module,
+    let db_id = resolve_db_id_from_headers(&headers).await;
+    let (meta, _file) = resolve_doc_meta(
+        req.domain.as_deref(),
+        req.application.as_deref(),
+        req.module.as_deref(),
         req.file.as_deref(),
-        None,
+        req.doc.as_deref(),
     )
     .await?;
 
@@ -456,15 +429,15 @@ pub async fn doc_data_stream(
     debug!(
         target: "cmx_doc::api",
         handler = "doc_data_stream",
-        doc.module = %q.module,
+        doc.module = %q.module.as_deref().unwrap_or("(auto)"),
         doc.file = %q.file.as_deref().unwrap_or("(auto)"),
         "handler invoked"
     );
-    let db_id = resolve_doc_db_id(&headers).await;
-    let meta = resolve_doc_meta(
-        &q.domain,
-        &q.application,
-        &q.module,
+    let db_id = resolve_db_id_from_headers(&headers).await;
+    let (meta, _file) = resolve_doc_meta(
+        q.domain.as_deref(),
+        q.application.as_deref(),
+        q.module.as_deref(),
         q.file.as_deref(),
         q.doc.as_deref(),
     )
@@ -560,153 +533,44 @@ pub async fn doc_meta(
     debug!(
         target: "cmx_doc::api",
         handler = "doc_meta",
-        doc.module = %q.module,
+        doc.module = %q.module.as_deref().unwrap_or("(auto)"),
         doc.file = %q.file.as_deref().unwrap_or("(auto)"),
         "handler invoked"
     );
 
-    let meta = resolve_doc_meta(
-        &q.domain,
-        &q.application,
-        &q.module,
+    let (meta, _file) = resolve_doc_meta(
+        q.domain.as_deref(),
+        q.application.as_deref(),
+        q.module.as_deref(),
         q.file.as_deref(),
         q.doc.as_deref(),
     )
     .await?;
-    Ok(Json(ApiResp::ok(project_doc_meta(&meta))))
-}
-
-/// 把强类型 `DocMetaView` 投影成前端通用页要用的 JSON。
-///
-/// `layers` 输出**全部表**(含同层并列表,如 L4 的 cv_aux_line + cv_cyzb_line),每层带
-/// `id/tableName/level/levelName/columns/summaries/aggFields`;每列带
-/// `name/caption/dataType/dimType/agg/nullable/isPrimaryKey`;`summaries` 是本表汇总表(sum 表)。
-/// 附 `layerGroups`(同层全部表分组) + `relations`(父子键) + `layerOrder`(主链路)。
-fn project_doc_meta(meta: &DocMetaView) -> Value {
-    // layers：输出全部表(不止主链路)——前端据 layerGroups/level 自行归组
-    let layers: Vec<Value> = meta
-        .layers
-        .iter()
-        .map(|l| {
-            let cols: Vec<Value> = l.columns.iter().map(column_to_json).collect();
-            let summaries: Vec<Value> = l
-                .summaries
-                .iter()
-                .map(|s| {
-                    let scols: Vec<Value> = s.columns.iter().map(column_to_json).collect();
-                    serde_json::json!({
-                        "id": s.id,
-                        "name": s.name,
-                        "caption": s.caption,
-                        "sourceTable": s.source_table,
-                        "columns": scols,
-                    })
-                })
-                .collect();
-            serde_json::json!({
-                "id": l.id,
-                "tableName": l.table_name,
-                "level": l.level,
-                "levelName": l.level_name,
-                "columns": cols,
-                "summaries": summaries,
-                "aggFields": l.agg_fields,
-            })
-        })
-        .collect();
-
-    let layer_groups: Vec<Value> = meta
-        .layer_groups
-        .iter()
-        .map(|g| {
-            serde_json::json!({
-                "level": g.level,
-                "levelName": g.level_name,
-                "tableIds": g.table_ids,
-            })
-        })
-        .collect();
-
-    let relations: Vec<Value> = meta
-        .relations
-        .iter()
-        .map(|r| {
-            serde_json::json!({
-                "parent": r.parent,
-                "child": r.child,
-                "parentKey": r.parent_key,
-                "childKey": r.child_key,
-            })
-        })
-        .collect();
-
-    serde_json::json!({
-        "moduleCode": meta.module_code,
-        "version": meta.version,
-        "layerOrder": meta.layer_order,
-        "layers": layers,
-        "layerGroups": layer_groups,
-        "relations": relations,
-    })
-}
-
-/// 单列 → 前端 JSON（层列与汇总表列共用）。
-fn column_to_json(c: &cmx_doc_store_pg::ColumnView) -> Value {
-    let mut obj = serde_json::json!({
-        "name": c.name,
-        "caption": c.caption,
-        "dataType": c.data_type,
-        "dimType": c.dim_type,
-        "agg": c.agg,
-        "nullable": c.nullable,
-        "isPrimaryKey": c.is_primary_key,
-    });
-    // 字典/录入控件配置：有值才输出，避免前端列对象携带大量空键。
-    if !c.ref_dict.is_empty() {
-        obj["refDict"] = serde_json::Value::String(c.ref_dict.clone());
-    }
-    if !c.display_field.is_empty() {
-        obj["displayField"] = serde_json::Value::String(c.display_field.clone());
-    }
-    if !c.ref_field.is_empty() {
-        obj["refField"] = serde_json::Value::String(c.ref_field.clone());
-    }
-    if let Some(edit) = &c.edit {
-        obj["edit"] = edit.clone();
-    }
-    if let Some(es) = &c.edit_settings {
-        obj["editSettings"] = es.clone();
-    }
-    // 显示属性（表现交互层）：有值才输出，供前端动态列模型格式化/对齐/显示精度。
-    if let Some(d) = &c.display {
-        obj["display"] = d.clone();
-    }
-    obj
+    Ok(Json(ApiResp::ok(cmx_doc_model::project_doc_meta(&meta))))
 }
 
 /// 构造成功信封的 msgpack 字节:`{code:0, msg:"success", data:<已编码的 data 字节>}`。
-fn encode_envelope_ok(data_msgpack: &[u8]) -> Vec<u8> {
-    use rmp::encode as mp;
-    let mut buf = Vec::with_capacity(data_msgpack.len() + 32);
-    mp::write_map_len(&mut buf, 3).unwrap();
-    mp::write_str(&mut buf, "code").unwrap();
-    mp::write_uint(&mut buf, 0).unwrap();
-    mp::write_str(&mut buf, "msg").unwrap();
-    mp::write_str(&mut buf, "success").unwrap();
-    mp::write_str(&mut buf, "data").unwrap();
-    buf.extend_from_slice(data_msgpack); // data 值 = 列式包(自包含 msgpack value)
-    buf
-}
+// encode_envelope_ok / msgpack_response 已上提到 cmx_api::msgpack（与 dct 共用）。
+use cmx_api::msgpack::msgpack_ok_response;
 
 /// POST /api/doc/save 请求体。
 #[derive(Debug, Deserialize)]
 pub struct DocSaveQuery {
-    pub domain: String,
-    pub application: String,
-    pub module: String,
+    /// 域；可选：缺失时后端按 doc(moduleCode)/file 全局反查（多 DAM 冲突返回 409 + 候选列表）。
+    #[serde(default)]
+    pub domain: Option<String>,
+    /// 应用；可选：同 `domain`，缺失时全局反查补全。
+    #[serde(default)]
+    pub application: Option<String>,
+    /// 模块；可选：同 `domain`，缺失时全局反查补全。
+    #[serde(default)]
+    pub module: Option<String>,
     /// 单据定义文件名；缺失/空时由后端按坐标自动解析默认 DOC 文件（与装载接口一致）。
     #[serde(default)]
     pub file: Option<String>,
+    /// 单据模块编码（moduleMeta.moduleCode）；前端走 code 定位时传，后端据此精确定义文件。
+    #[serde(default)]
+    pub doc: Option<String>,
 }
 
 /// `POST /api/doc/save` —— 回存单据数据（merge/replace 双模式）。
@@ -714,7 +578,7 @@ pub struct DocSaveQuery {
 /// body: `{ saveMode, changes | snapshot }`（§6.4）。单据坐标走 query 参数。
 pub async fn doc_save(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(ctx): CmxSvrContext,
+    ctx: CmxSvrContext,
     Query(q): Query<DocSaveQuery>,
     headers: HeaderMap,
     Json(body): Json<Value>,
@@ -722,25 +586,20 @@ pub async fn doc_save(
     debug!(
         target: "cmx_doc::api",
         handler = "doc_save",
-        doc.module = %q.module,
+        doc.module = %q.module.as_deref().unwrap_or("(auto)"),
         doc.file = ?q.file,
         "handler invoked"
     );
     let mm = get_default_db_manager();
-    let db_id = resolve_doc_db_id(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
 
-    // file 兜底：query 未带 file（前端不传时）→ 按 moduleCode/doc 自动解析默认 DOC 文件，
-    // 与装载接口 doc_load_entry 的「file 缺省自动解析」语义一致。
-    let file = match &q.file {
-        Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.clone(),
-        _ => resolve_doc_file(&q.domain, &q.application, &q.module, None).await?,
-    };
-    let meta = resolve_doc_meta(
-        &q.domain,
-        &q.application,
-        &q.module,
-        Some(file.as_str()),
-        None,
+    // 前端走 doc(moduleCode) 定位，file 由 resolve_doc_meta 内部兜底（对齐 dct_save 的 resolve_dict）。
+    let (meta, file) = resolve_doc_meta(
+        q.domain.as_deref(),
+        q.application.as_deref(),
+        q.module.as_deref(),
+        q.file.as_deref(),
+        q.doc.as_deref(),
     )
     .await?;
     let (mode, changes) = saver::parse_save_body(&body);
@@ -766,11 +625,7 @@ pub async fn doc_save(
         // 列级校验失败：返回结构化 422（data.violations），前端逐行逐列高亮。
         Err(e) => {
             if let Some(vs) = e.violations() {
-                return Ok(Json(ApiResp::fail_with_data(
-                    422,
-                    format!("数据校验未通过（{} 处）", vs.len()),
-                    serde_json::json!({ "violations": vs }),
-                )));
+                return Ok(Json(validation_fail_resp(vs)));
             }
             return Err(e.into());
         }
@@ -789,21 +644,12 @@ pub async fn doc_save(
 /// - `doc_file`：单据定义文件名，版本台账定位「哪种单据」。
 /// - `op_override`：restore 等传 Some("restore")；None 时 saver 按 changeset 桶推断 create/update。
 fn save_ctx(
-    ctx: &cmx_core::model::service::context::SVRContext,
+    ctx: &CmxSvrContext,
     doc_file: &str,
     op_override: Option<&str>,
 ) -> cmx_doc_store_pg::SaveCtx {
-    let auth = ctx.auth_context.as_ref();
-    let actor_id = auth
-        .map(|a| a.user_id.trim())
-        .filter(|u| !u.is_empty())
-        .and_then(|u| u.parse::<i64>().ok())
-        .unwrap_or(0);
-    let actor_name = auth
-        .map(|a| a.username.trim())
-        .filter(|u| !u.is_empty())
-        .unwrap_or("系统")
-        .to_string();
+    let actor_id = actor_id_i64(ctx);
+    let actor_name = actor_name(ctx);
     cmx_doc_store_pg::SaveCtx {
         actor_id,
         actor_name,
@@ -819,12 +665,12 @@ fn save_ctx(
 /// 每单自动享 C（审计）/B1（版本快照）/B2（乐观锁）。
 pub async fn doc_save_batch(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(ctx): CmxSvrContext,
+    ctx: CmxSvrContext,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_db_manager();
-    let db_id = resolve_doc_db_id(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
 
     let atomic = body.get("atomic").and_then(|v| v.as_bool()).unwrap_or(true);
     let docs = body
@@ -844,16 +690,15 @@ pub async fn doc_save_batch(
     let mut ctxs: Vec<cmx_doc_store_pg::SaveCtx> = Vec::with_capacity(docs.len());
     for (i, d) in docs.iter().enumerate() {
         let get = |k: &str| d.get(k).and_then(|v| v.as_str()).unwrap_or("");
-        let (domain, app, module) = (get("domain"), get("application"), get("module"));
+        // DAM 缺失时按 doc(moduleCode)/file 全局反查补全（同单单 /doc/save 路径，空串归一为 None）。
+        let dom = (!get("domain").is_empty()).then_some(get("domain"));
+        let app = (!get("application").is_empty()).then_some(get("application"));
+        let mdl = (!get("module").is_empty()).then_some(get("module"));
         let raw_file = get("file");
-        // file 兜底：每单 file 缺失/空/脏值时按各自坐标自动解析默认 DOC 文件
-        // （与单单路径 /doc/save 的「file 缺省自动解析」契约一致）。
-        let file = if !raw_file.is_empty() && raw_file != "undefined" && raw_file != "null" {
-            raw_file.to_string()
-        } else {
-            resolve_doc_file(domain, app, module, None).await?
-        };
-        let meta = resolve_doc_meta(domain, app, module, Some(file.as_str()), None).await?;
+        let raw_doc = get("doc");
+        let f = (!raw_file.is_empty()).then_some(raw_file);
+        let dc = (!raw_doc.is_empty()).then_some(raw_doc);
+        let (meta, file) = resolve_doc_meta(dom, app, mdl, f, dc).await?;
         let (mode, changes) = saver::parse_save_body(d);
         // 后端二次校验（同单单路径）：有 error 违规即整批拒（atomic）/该单在 save 阶段无从表达，故这里统一先拒。
         if !meta.validation_rules.is_empty()
@@ -963,7 +808,7 @@ pub async fn doc_revisions(
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_db_manager();
-    let db_id = resolve_doc_db_id(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let list = DocRevision::list(mm, &db_id, &q.doc_file, &q.root_id).await?;
     Ok(Json(ApiResp::ok(list)))
 }
@@ -976,7 +821,7 @@ pub async fn doc_revision(
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_db_manager();
-    let db_id = resolve_doc_db_id(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
     let snap = DocRevision::get_snapshot(mm, &db_id, &q.doc_file, &q.root_id, q.rev).await?;
     Ok(Json(ApiResp::ok(snap)))
 }
@@ -986,13 +831,13 @@ pub async fn doc_revision(
 /// body: `{ docFile, rootId, rev }`。取该版快照 → replace 模式写回。
 pub async fn doc_restore(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(ctx): CmxSvrContext,
+    ctx: CmxSvrContext,
     Query(q): Query<DocSaveQuery>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_db_manager();
-    let db_id = resolve_doc_db_id(&headers).await;
+    let db_id = resolve_db_id_from_headers(&headers).await;
 
     let root_id = body
         .get("rootId")
@@ -1000,11 +845,15 @@ pub async fn doc_restore(
         .ok_or_else(|| cmx_biz::BizError::business("restore 缺少 rootId"))?;
     let rev = body.get("rev").and_then(|v| v.as_i64()).map(|n| n as i32);
 
-    // file 兜底：query 未带 file → 自动解析默认 DOC 文件（与 doc_save 一致）。
-    let file = match &q.file {
-        Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.clone(),
-        _ => resolve_doc_file(&q.domain, &q.application, &q.module, None).await?,
-    };
+    // 前端走 doc(moduleCode) 定位，file 由 resolve_doc_meta 内部兜底（同 doc_save）。
+    let (meta, file) = resolve_doc_meta(
+        q.domain.as_deref(),
+        q.application.as_deref(),
+        q.module.as_deref(),
+        q.file.as_deref(),
+        q.doc.as_deref(),
+    )
+    .await?;
 
     // 取历史版快照（列式包）
     let snapshot = DocRevision::get_snapshot(mm, &db_id, &file, root_id, rev).await?;
@@ -1013,14 +862,6 @@ pub async fn doc_restore(
     }
 
     // 用 replace 模式把快照写回（DocSaver 内部单事务）
-    let meta = resolve_doc_meta(
-        &q.domain,
-        &q.application,
-        &q.module,
-        Some(file.as_str()),
-        None,
-    )
-    .await?;
     // 快照是列式包 { datasetId, columns, rows, childRows }；replace 期望 { table:{rows:[{id,upper_id,fields}]} }
     // 这里把列式包转成 replace 输入（简化：交给 DocSaver 前先归一）
     let replace_input = columnar_to_replace_input(&snapshot);
@@ -1101,68 +942,7 @@ fn flatten_columnar(pkg: &Value, out: &mut serde_json::Map<String, Value>) {
 
 // DOC 定义文件解析（resolve_doc_file / doc_matches）+ 文件解析缓存已抽到
 // cmx-model-meta::definitions::resolve（DOC/DCT 共享，供 cmx-api 的业务编码定位复用，避免
-// cmx-api ⇄ cmx-doc 环）。此处经 use 别名转发，保持本文件内旧调用点不变。
-use cmx_model_meta::definitions::resolve::resolve_doc_file;
+// cmx-api ⇄ cmx-doc 环）。读定义链路（resolve_doc_file_smart / resolve_doc_meta / load_base）
+// 已下沉至 cmx-doc-store-pg::resolve（对齐 dct 的 resolve_dict 在 store-pg 层），本文件经 use 引用。
+use cmx_doc_store_pg::resolve_doc_meta;
 
-/// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
-///
-/// `file` 为 `None` 或空串时，自动调 [`resolve_doc_file`] 选默认/最高版本。
-async fn resolve_doc_meta(
-    domain: &str,
-    app: &str,
-    module: &str,
-    file: Option<&str>,
-    doc: Option<&str>,
-) -> Result<Arc<DocMetaView>> {
-    // file 兜底：缺失/空/脏值（"undefined"/"null" 等）时自动解析（按 doc 盲选或 moduleCode 精确定位）。
-    let file = match file {
-        Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.to_string(),
-        _ => resolve_doc_file(domain, app, module, doc).await?,
-    };
-    let key = cache::doc_key(domain, app, module, &file);
-    if let Some(hit) = cache::get(&key) {
-        return Ok(hit);
-    }
-
-    // 读主定义
-    let doc_ref = cmx_model_meta::definitions::store::DefRef {
-        domain: Some(domain.to_string()),
-        application: Some(app.to_string()),
-        app: Some(app.to_string()),
-        module: Some(module.to_string()),
-        file: Some(file.to_string()),
-        id: None,
-        kind: None,
-    };
-    let doc = cmx_model_meta::definitions::store::get_definition(&doc_ref).await?;
-
-    // 读 base 字段集（从 baseDocMetaRef.file 推断；无则空）
-    let base = load_base(&doc).await;
-
-    let view = Arc::new(DocMetaView::parse(&doc, &base)?);
-    cache::put(key, view.clone());
-    Ok(view)
-}
-
-/// 从定义的 baseDocMetaRef.file 读 base 字段集（域=base）；失败返回 Null。
-async fn load_base(doc: &Value) -> Value {
-    let base_file = doc
-        .get("baseDocMetaRef")
-        .and_then(|r| r.get("file"))
-        .and_then(|v| v.as_str());
-    let Some(base_file) = base_file else {
-        return Value::Null;
-    };
-    let base_ref = cmx_model_meta::definitions::store::DefRef {
-        domain: Some("base".to_string()),
-        application: None,
-        app: None,
-        module: None,
-        file: Some(base_file.to_string()),
-        id: None,
-        kind: None,
-    };
-    cmx_model_meta::definitions::store::get_definition(&base_ref)
-        .await
-        .unwrap_or(Value::Null)
-}

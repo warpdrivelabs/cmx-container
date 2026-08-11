@@ -1,7 +1,8 @@
 //! cm_* 主数据写入闸口（激活器唯一入口，强制 lifecycle_status='published'）。
 //!
 //! 自己拼 SQL + DatabaseManager 事务执行（不复用 cmx-dct-store-pg：要纳入激活器单事务 + 强制 published）。
-//! INSERT/UPDATE SQL 由 [`build_insert_sql`]/[`build_update_sql`] 构造；列值经 [`to_dv`] 转 DataValue。
+//! INSERT/UPDATE SQL 由 [`crate::sql_builder`] 的 `build_insert_sql` / `build_update_sql` 构造；
+//! 列值经 `to_dv` 转 DataValue。
 
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
 use cmx_database_pg::DatabaseManager;
@@ -9,6 +10,7 @@ use cmx_utils::next_pk_id;
 use serde_json::{Map, Value};
 
 use crate::error::{api_err, api_err_db};
+use crate::sql_builder::{build_insert_sql, build_update_sql};
 
 /// 新建主数据行（INSERT，头表/明细表共用）。返回新 id。
 ///
@@ -100,89 +102,6 @@ pub async fn get_version(
         return Ok(None);
     };
     Ok(row.get_by_name_as::<i64>(ds.schema.as_ref(), "published_version"))
-}
-
-// ── SQL 构造 ──────────────────────────────────────────────────────────────────
-
-/// 拼 INSERT：列含 id + row 的所有列。VALUES 用 $N 占位；时间戳列(create_time/update_time)用 now()。
-fn build_insert_sql(table: &str, row: &Map<String, Value>, id: i64) -> (String, Vec<DataValue>) {
-    let mut cols = vec!["id".to_string()];
-    let mut params: Vec<DataValue> = vec![DataValue::Int(id)];
-    let mut vals = vec!["$1".to_string()]; // id
-    let mut idx = 2;
-    for (col, val) in row {
-        // 时间戳列用 SQL now() 字面量(避免 String→TIMESTAMP 序列化失败)
-        if col == "create_time" || col == "update_time" {
-            cols.push(col.clone());
-            vals.push("now()".to_string());
-            continue;
-        }
-        cols.push(col.clone());
-        params.push(to_dv(val));
-        vals.push(format!("${idx}"));
-        idx += 1;
-    }
-    let sql = format!(
-        "INSERT INTO {table} ({}) VALUES ({})",
-        cols.join(", "),
-        vals.join(", ")
-    );
-    (sql, params)
-}
-
-/// 拼 UPDATE CAS：SET row 列，WHERE id=$ AND published_version=$expected AND lifecycle_status='published'。
-///
-/// M3 补强（审查重要-5）：lifecycle 条件使 merged/frozen 行拒绝任何 CAS 写入——
-/// merge 把 victim 置 merged 后，并发的 update CR 激活在此处失败回滚。
-fn build_update_sql(
-    table: &str,
-    record_id: i64,
-    row: &Map<String, Value>,
-    expected_version: i64,
-) -> (String, Vec<DataValue>) {
-    let mut sets: Vec<String> = Vec::new();
-    let mut params: Vec<DataValue> = Vec::new();
-    let mut idx = 1;
-    for (col, val) in row {
-        sets.push(format!("{col} = ${idx}"));
-        params.push(to_dv(val));
-        idx += 1;
-    }
-    // WHERE 条件三个：id + published_version（CAS）+ lifecycle_status（M3 补强）
-    let id_idx = idx;
-    let ver_idx = idx + 1;
-    params.push(DataValue::Int(record_id));
-    params.push(DataValue::Int(expected_version));
-    let sql = format!(
-        "UPDATE {table} SET {} WHERE id = ${id_idx} AND published_version = ${ver_idx} \
-         AND lifecycle_status = 'published'",
-        sets.join(", ")
-    );
-    (sql, params)
-}
-
-/// Value → DataValue（覆盖 MDM 用到的类型）。
-///
-/// String→String；Number（i64/f64）→Int/Float；Bool→Bool；Null→Null；
-/// Object/Array→Json(序列化字符串)；其它（罕见）fallback String。
-fn to_dv(v: &Value) -> DataValue {
-    match v {
-        Value::Null => DataValue::Null,
-        Value::Bool(b) => DataValue::Bool(*b),
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                DataValue::Int(i)
-            } else if let Some(f) = n.as_f64() {
-                DataValue::Float(f)
-            } else {
-                DataValue::String(n.to_string())
-            }
-        }
-        Value::String(s) => DataValue::String(s.clone()),
-        Value::Object(_) | Value::Array(_) => {
-            DataValue::Json(v.to_string())
-        }
-    }
 }
 
 /// 改 lifecycle_status（merge→merged / unmerge→published / freeze 等，M3）。

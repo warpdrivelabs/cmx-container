@@ -8,6 +8,7 @@
 //!
 //! M0 仅一个健康检查端点；M1+ 追加激活映射配置、变更请求激活等治理端点。
 
+/// MDM 模块全部 axum handler 的实现集合（按业务域分文件组织）。
 pub mod handlers;
 
 use axum::Router;
@@ -43,6 +44,8 @@ impl ModuleRoutes for MdmModule {
             .route("/mdm/change-requests/detail", get(mdm::mdm_cr_detail))
             // M3 · 匹配合并（禁用 Path Variable，参数走 body/query）
             .route("/mdm/records/find-duplicates", post(mdm::mdm_find_duplicates))
+            // V3.2 · 步骤条关键信息查重（新建场景，无 recordId）
+            .route("/mdm/check-key", post(mdm::mdm_check_key))
             .route(
                 "/mdm/merge-requests",
                 get(mdm::mdm_merge_requests_list).post(mdm::mdm_merge_requests_create),

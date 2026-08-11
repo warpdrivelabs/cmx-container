@@ -1,54 +1,16 @@
-//! cmx-dct-store-pg 错误助手——HTTP 语义稳定、PG 真实明细抽取、统一日志结构。
+//! cmx-dct-store-pg 错误助手——save 路径统一包装 + UNIQUE 冲突判定。
 //!
-//! 三个函数的分工：
-//! - [`api_err`] / [`api_err_db`]：对外暴露（通过 lib.rs `pub use` 重导出），构造业务错误。
-//! - [`map_db_err`]：`pub(crate)`，save 路径（upsert/delete/save_apply）统一包装 DB 错误，
-//!   供 resolve/query/write 模块复用。
-//! - [`pg_detail`]：私有，从 `cmx_database_pg::Error` 抽 PG 真实明细（SQLSTATE + DETAIL + 约束名）。
+//! 公共错误构造（`api_err`/`api_err_db`/`pg_detail`）已上提到 `cmx_biz::error`，
+//! 经 lib.rs `pub use cmx_biz::{api_err, api_err_db}` 重导出，保持本 crate 对外接口不变。
+//! 本模块仅保留依赖 `DictView` 的 save 路径专属助手（`map_db_err` / `is_unique_violation`）。
 
 use cmx_api_types::Error;
 use cmx_database_pg::Error as DbError;
 
 use cmx_dct_model::DictView;
 
-/// 普通业务错误 → cmx_api_types::Error（BusinessError，code!=0/HTTP 200）。
-pub fn api_err(msg: &str) -> Error {
-    cmx_biz::BizError::business(msg.to_string()).into()
-}
-
-/// DB 原始错误 → 已翻译的优雅错误（稳定错误码 + 中文），不再暴露 PG 英文原文。
-pub fn api_err_db(raw: &str) -> Error {
-    cmx_biz::BizError::from_db_error(raw).into()
-}
-
-/// 从 `cmx_database_pg::Error` 抽出 **PostgreSQL 真实错误明细**（SQLSTATE 文案 + DETAIL + 约束名）。
-///
-/// 背景：tokio-postgres 的 `Error` 顶层 `Display` 恒为无信息的 `db error`——真正的
-/// message/detail/constraint 藏在 `as_db_error()` 里。若直接 `format!("{e}")` 会把
-/// 「唯一键冲突」这类可翻译错误塌缩成 `db error`，前端无从判断。
-///
-/// 把三段拼成一个完整串，交给 [`cmx_biz::BizError::from_db_error`] 归类成
-/// `CmxErrCode` + 优雅中文。拼接保证含 `unique constraint "..."` / `foreign key` 等稳定
-/// 子串，令 `classify_db_error` 命中；`brief_db_detail` 再从中抽约束名脱敏展示。
-/// 非 PG 错误（连接/池/事务）回退顶层 Display。
-///
-/// 与 `cmx-rpt-store-pg::pg_detail` 实现一致，保持 DCT/RPT 落库错误翻译口径统一。
-pub(crate) fn pg_detail(e: &DbError) -> String {
-    if let DbError::Postgres(pg) = e
-        && let Some(db) = pg.as_db_error()
-    {
-        let mut s = db.message().to_string();
-        if let Some(d) = db.detail() {
-            s.push(' ');
-            s.push_str(d);
-        }
-        if let Some(c) = db.constraint() {
-            s.push_str(&format!(" constraint \"{c}\""));
-        }
-        return s;
-    }
-    e.to_string()
-}
+// 公共错误助手重导出（向后兼容：本 crate 内 `api_err`/`api_err_db` 调用点零改动）。
+pub use cmx_biz::{api_err, api_err_db};
 
 /// 统一包装 save 路径（upsert/delete/save_apply）的 DB 执行错误：翻译为优雅错误（稳定码 +
 /// 中文）+ 结构化日志。
@@ -75,7 +37,7 @@ pub(crate) fn map_db_err(
     row_index: Option<usize>,
     sql: &str,
 ) -> Error {
-    let detail = pg_detail(&e);
+    let detail = cmx_biz::pg_detail(&e);
     tracing::error!(
         target: "cmx_dct::db",
         phase = phase,
@@ -87,7 +49,7 @@ pub(crate) fn map_db_err(
         sql = sql,
         "db exec failed"
     );
-    api_err_db(&detail)
+    cmx_biz::api_err_db(&detail)
 }
 
 /// 判断 DB 错误是否为 UNIQUE（唯一约束）冲突。
@@ -95,6 +57,6 @@ pub(crate) fn map_db_err(
 /// 用于 saver 层编码兜底重试：落库 UNIQUE 冲突时，清空该行 code 重新铸号后重试 INSERT
 /// （防御发号序列表与业务表不一致的极端并发情况）。判定口径与 `classify_db_error` 一致。
 pub(crate) fn is_unique_violation(e: &DbError) -> bool {
-    let detail = pg_detail(e).to_ascii_lowercase();
+    let detail = cmx_biz::pg_detail(e).to_ascii_lowercase();
     detail.contains("duplicate key") || detail.contains("unique constraint")
 }

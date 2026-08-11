@@ -1,34 +1,15 @@
 //! cmx-dct-store-pg 元数据解析——从定义 JSON 找到目标字典表 + 合并列 + 主键 + 校验规范。
 //!
-//! 对外入口：[`resolve_db_id`]（db_id 路由）+ [`resolve_dict`]（DctQuery → DictView）。
+//! 对外入口：[`resolve_dict`]（DctQuery → DictView）。
 //! 其余函数均为 `resolve_dict` 的纯重构子步骤，模块内私有。
+//! （db_id 路由已上提到 `cmx_api::db_id`，供所有 API crate 共用。）
 
 use cmx_api_types::Result;
-use cmx_dct_model::{DctQuery, DictColumn, DictView, base_fieldset};
-use cmx_database_pg::get_default_pg_db_manager;
+use cmx_dct_model::{DctQuery, DictColumn, DictView, base_fieldset, project_meta_column};
 use serde_json::{Value, json};
 
 use crate::error::api_err;
-
-// ============================================================================
-// db_id 路由
-// ============================================================================
-
-/// 解析字典操作的 db_id：前端显式传 `db_id` header 时用它，缺失时回退到业务库（source_type=biz）。
-/// 字典数据通常建在业务库（如 fico-db），而非默认的主控库（primary）。
-/// 前端字典兜底数据源（cmx-dict-select 的 createRestDictDataSource）不带 db_id，
-/// 这里经 get_biz_db_id() 自动路由到业务库，免去前端手填。
-pub async fn resolve_db_id(db_id_header: Option<&str>) -> String {
-    if let Some(v) = db_id_header {
-        let s = v.trim();
-        if !s.is_empty() {
-            return s.to_string();
-        }
-    }
-    get_default_pg_db_manager().get_biz_db_id().await
-}
-
-// ============================================================================
+use crate::meta::DictMeta;
 // 元数据解析：从定义 JSON 找到目标字典表 + 合并列
 // ============================================================================
 
@@ -36,26 +17,25 @@ pub async fn resolve_db_id(db_id_header: Option<&str>) -> String {
 ///
 /// file 缺失时由 `resolve_dict_file` 在 domain/app/module 下扫描含 dictCode 的 DCT 文件
 /// （前端运行时只持 dictCode + domain/app/module，无 file 坐标）。返回 (doc, base, file)。
-async fn resolve_doc(q: &DctQuery) -> Result<(Value, Value, String)> {
-    // file 缺失时自动解析：在该 domain/app/module 下扫描含 dictCode 的 DCT 文件。
-    // 前端运行时只持有 dictCode + domain/app/module（host 无 file 坐标），故 file 由后端兜底。
-    let file = match &q.file {
-        Some(f) if !f.is_empty() => f.clone(),
+async fn resolve_doc(
+    domain: &str,
+    app: &str,
+    module: &str,
+    file: Option<&str>,
+    dict: &str,
+) -> Result<(Value, Value, String)> {
+    let file = match file {
+        Some(f) if !f.is_empty() => f.to_string(),
         _ => {
-            cmx_model_meta::definitions::resolve::resolve_dict_file(
-                &q.domain,
-                &q.application,
-                &q.module,
-                &q.dict,
-            )
-            .await?
+            cmx_model_meta::definitions::resolve::resolve_dict_file(domain, app, module, dict)
+                .await?
         }
     };
     let doc_ref = cmx_model_meta::definitions::store::DefRef {
-        domain: Some(q.domain.clone()),
-        application: Some(q.application.clone()),
-        app: Some(q.application.clone()),
-        module: Some(q.module.clone()),
+        domain: Some(domain.to_string()),
+        application: Some(app.to_string()),
+        app: Some(app.to_string()),
+        module: Some(module.to_string()),
         file: Some(file.clone()),
         id: None,
         kind: None,
@@ -176,22 +156,19 @@ fn merge_columns(t: &Value, base: &Value, with_props: bool) -> (Vec<DictColumn>,
     // 无 fieldSetOrder 时默认「本表 fields 在前 → 各 *FieldSet 引用按固定键序」，向后兼容。
     // push 闭包内置 seen 去重，故段顺序变化不会导致同名字段重复。
     let own_fields: Option<&Vec<Value>> = t.get("fields").and_then(|v| v.as_array());
-    // 收集本表声明的引用字段集名（按固定键序，去重），供默认顺序与兜底补尾使用。
+    // 收集本表声明的引用字段集名，供默认顺序与兜底补尾使用。
+    // 按键名后缀 "FieldSet" 动态识别（任何 xxxFieldSet 键的字符串值都视为字段集引用），
+    // 不再维护键名清单——新增通用字段集约定时无需改代码。
+    // 段序 = 定义文件里 *FieldSet 键的书写序（serde_json preserve_order 保证）。
     let declared_sets: Vec<String> = {
         let mut out = Vec::new();
         if let Some(obj) = t.as_object() {
-            for key in [
-                "baseFieldSet",
-                "hierarchyFieldSet",
-                "scopeFieldSet",
-                "effectiveFieldSet",
-                "disableFieldSet",
-                "auditFieldSet",
-                "systemFieldSet",
-            ] {
-                if let Some(set_name) = obj.get(key).and_then(|v| v.as_str()) {
+            for (key, val) in obj {
+                if key.ends_with("FieldSet")
+                    && let Some(set_name) = val.as_str()
+                {
                     let s = set_name.to_string();
-                    if !out.contains(&s) {
+                    if !s.is_empty() && !out.contains(&s) {
                         out.push(s);
                     }
                 }
@@ -313,22 +290,24 @@ fn resolve_pk(dm: &Value, columns: &mut [DictColumn]) -> (String, String, String
 /// 落库前列级校验规范：查缓存，未命中则从 raw_fields 构建并缓存。
 ///
 /// 缓存键含 version，定义改版本即换键，旧条目自然作废（免主动失效）。
+#[allow(clippy::too_many_arguments)]
 fn resolve_or_build_spec(
-    q: &DctQuery,
+    domain: &str,
+    app: &str,
+    module: &str,
+    generation: u64,
     file: &str,
     table_name: &str,
     pk: &str,
     raw_fields: &[Value],
     version: u64,
 ) -> std::sync::Arc<cmx_biz::validation::TableSpec> {
-    // 落库前列级校验规范：从合并后的原始字段构建 TableSpec，进程内缓存（键含版本，免失效）。
-    let spec_key = cmx_biz::validation::spec_key(
-        &q.domain,
-        &q.application,
-        &q.module,
-        file,
-        table_name,
-        version,
+    // 落库前列级校验规范：进程内缓存（键含版本 + 定义树代数）。
+    // 拼代数：手动改定义字段但不升 version 的带外变更也会让 spec 陈旧，随代数收敛。
+    let spec_key = format!(
+        "{}#g{}",
+        cmx_biz::validation::spec_key(domain, app, module, file, table_name, version),
+        generation
     );
     match cmx_biz::validation::get_spec(&spec_key) {
         Some(s) => s,
@@ -344,14 +323,64 @@ fn resolve_or_build_spec(
     }
 }
 
+/// 场景入口：取字典元数据文档（投影已下沉，直接可消费/下发）。
+///
+/// `with_props` 从 `q.with_props` 读取——前端字典维护页等需要完整字段属性（width/visible/
+/// pattern/enumValues/...）的场景，构造 `DctQuery` 时链式 `.with_props()` 或 query string
+/// `?with_props=true`；常规数据装载/回存场景不设（默认 false），保持 columns payload 精简。
+///
+/// 内部委托 [`resolve_dict`]（pub(crate)）解析 DictView，再投影成 [`DictMeta`]。
+pub async fn dict_meta(q: &DctQuery) -> Result<DictMeta> {
+    let view = resolve_dict(q, q.with_props).await?;
+    let columns = view
+        .columns
+        .iter()
+        .map(project_meta_column)
+        .collect();
+    Ok(DictMeta {
+        dict_code: view.dict_code,
+        dict_name: view.dict_name,
+        table_name: view.table_name,
+        pk: view.pk,
+        id_field: view.id_field,
+        code_field: view.code_field,
+        label_field: view.label_field,
+        parent_field: view.parent_field,
+        self_hierarchy: view.self_hierarchy,
+        code_rule: view.code_rule,
+        columns,
+    })
+}
+
 /// 解析 `DctQuery` → 强类型 `DictView`（合并列 + base 字段集 + 校验规范缓存）。
 ///
 /// `with_props`：是否把字段定义里的扁平属性（width/visible/pattern/enumValues/required/
 /// intDigits/decimalDigits 等）收集到 `DictColumn.extra`。仅 `/dct/meta` 在 `with_props=true`
 /// 时需要（供前端字典维护页构建完整列模型）；数据装载/回存场景传 false，保持 payload 精简。
-pub async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
+pub(crate) async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
+    // 0) 坐标归一化：DAM 缺失/部分时按 dict 全局反查补全（三段齐全 → 快路径直通）。
+    use cmx_model_meta::definitions::coord;
+    let partial = coord::DamPartial {
+        domain: coord::clean_opt(q.domain.clone()),
+        application: coord::clean_opt(q.application.clone()),
+        module: coord::clean_opt(q.module.clone()),
+    };
+    let (domain, application, module) = if let (Some(d), Some(a), Some(m)) = (
+        partial.domain.clone(),
+        partial.application.clone(),
+        partial.module.clone(),
+    ) {
+        (d, a, m)
+    } else {
+        let c = coord::resolve_dam_by_code("DCT", &q.dict, &partial).await?;
+        (c.domain, c.application, c.module)
+    };
+    // 定义树代数：spec 缓存键用（带外变更感知）。
+    let generation = coord::definitions_generation().await;
+
     // 1) file 解析 + doc/base 加载。
-    let (doc, base, file) = resolve_doc(q).await?;
+    let (doc, base, file) =
+        resolve_doc(&domain, &application, &module, q.file.as_deref(), &q.dict).await?;
 
     // 2) 定位目标字典表定义。
     let tables = doc
@@ -382,7 +411,9 @@ pub async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
         .and_then(|v| v.as_u64())
         .or_else(|| doc.get("version").and_then(|v| v.as_u64()))
         .unwrap_or(0);
-    let spec = resolve_or_build_spec(q, &file, &table_name, &pk, &raw_fields, version);
+    let spec = resolve_or_build_spec(
+        &domain, &application, &module, generation, &file, &table_name, &pk, &raw_fields, version,
+    );
 
     // 6) 组装 DictView。
     Ok(DictView {

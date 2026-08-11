@@ -11,7 +11,7 @@ use cmx_api_types::Result;
 use cmx_core::model::cell::DataValue;
 use cmx_database_pg::{DatabaseManager, get_default_pg_db_manager};
 use cmx_dct_model::{
-    DictView, SERVER_FILLED_COLS, SERVER_REPLACED_COLS, build_upsert_sql_dv,
+    DctQuery, DictView, SERVER_FILLED_COLS, SERVER_REPLACED_COLS, build_upsert_sql_dv,
     is_server_managed_col, mint_ids_for_inserts, pk_is_generated, row_fields, to_dv_by_col,
     valid_col,
 };
@@ -21,6 +21,32 @@ use crate::error::{api_err, is_unique_violation, map_db_err};
 use crate::hierarchy::{
     hierarchy_parent_field, non_empty_id_str, recompute_hierarchy_subtree, select_parent_id,
 };
+
+// ============================================================================
+// 事务归属（写操作共用）
+// ============================================================================
+
+/// 字典写操作的事务归属——取代旧的 `Option<&str>`，语义自文档。
+///
+/// - [`Txn::Auto`]：函数自管事务生命周期（内部 begin → apply → commit/rollback）。
+/// - [`Txn::External`]：路由到外部事务（由外部 guard 管 commit/rollback，本函数不自开不提交），
+///   供激活器等编排器把 DCT 写入纳入主事务。
+pub enum Txn {
+    Auto,
+    External(String),
+}
+
+impl Txn {
+    /// 返回底层 `execute_sql_with_datavalues` 期望的 `Option<&str>`：
+    /// `Auto → None`（auto-commit / 自开事务的内部 txn_id 由 save 自管），
+    /// `External(id) → Some(id)`。
+    pub(crate) fn txn_id(&self) -> Option<&str> {
+        match self {
+            Txn::Auto => None,
+            Txn::External(id) => Some(id.as_str()),
+        }
+    }
+}
 
 // ============================================================================
 // 服务函数：回存（upsert merge）
@@ -38,7 +64,18 @@ pub enum UpsertOutcome {
 }
 
 /// 回存（upsert，merge 语义）。body：数组或单对象。
-pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertOutcome> {
+///
+/// `txn`：[`Txn::Auto`] 时逐行 auto-commit；[`Txn::External`] 时全部 SQL 路由到外部事务
+/// （由外部 guard 管理 commit/rollback，本函数不自开不提交），用于把 DCT 写入纳入主事务
+/// （如激活器）。铸号始终走独立连接（`None`），与 save 一致——CodeEngine 跨 async trait，
+/// 主事务 holder 在铸号时刻不可用。
+pub(crate) async fn upsert(
+    view: &DictView,
+    body: Value,
+    db_id: &str,
+    txn: Txn,
+) -> Result<UpsertOutcome> {
+    let txn_id = txn.txn_id();
     // body：数组或单对象。
     let items: Vec<Value> = match body {
         Value::Array(a) => a,
@@ -91,7 +128,7 @@ pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertO
                 None => break 0,
             };
             match mm
-                .execute_sql_with_datavalues(db_id, None, &sql, params)
+                .execute_sql_with_datavalues(db_id, txn_id, &sql, params)
                 .await
             {
                 Ok(n) => break n,
@@ -118,13 +155,22 @@ pub async fn upsert(view: &DictView, body: Value, db_id: &str) -> Result<UpsertO
 // ============================================================================
 
 /// 删除一行（按 pk）。返回 `{ok, deleted}`。
-pub async fn delete(view: &DictView, id: &str, db_id: &str) -> Result<Value> {
+///
+/// `txn`：[`Txn::Auto`] 时 auto-commit；[`Txn::External`] 时路由到外部事务（不自开不提交）。
+/// 与 [`upsert`] 的 txn 语义一致，供激活器把 DCT 删除纳入主事务。
+pub(crate) async fn delete(
+    view: &DictView,
+    id: &str,
+    db_id: &str,
+    txn: Txn,
+) -> Result<Value> {
+    let txn_id = txn.txn_id();
     let mm = get_default_pg_db_manager();
     // 删之前 SELECT 旧 code + 行属性，供记断号（连号域 enable_gap 才记）。
     if let (Some(minter), Some(code_rule)) =
         (cmx_traits::code::GlobalCodeMinter::get(), view.code_rule.as_ref())
     {
-        if let Ok(Some(row)) = select_row_attrs(&mm, db_id, "", view, &json!(id)).await {
+        if let Ok(Some(row)) = select_row_attrs(&mm, db_id, txn_id, view, &json!(id)).await {
             if let Some(code) = row.get(&view.code_field).and_then(|v| v.as_str()) {
                 if !code.is_empty() {
                     let attrs = Value::Object(row.clone());
@@ -137,7 +183,7 @@ pub async fn delete(view: &DictView, id: &str, db_id: &str) -> Result<Value> {
     // 按 pk 列类型构造 DataValue（整型列的字符串 id 转 Int），走 datavalues 绑定。
     let params = vec![to_dv_by_col(view, &view.pk, &json!(id))];
     let n = mm
-        .execute_sql_with_datavalues(db_id, None, &sql, params)
+        .execute_sql_with_datavalues(db_id, txn_id, &sql, params)
         .await
         .map_err(|e| map_db_err(e, "delete", view, None, &sql))?;
 
@@ -164,8 +210,20 @@ pub enum SaveOutcome {
 
 /// 基于 changeset 的回存（对标 doc 的 ChangeSetCollector/DocSaver）。
 /// body: `{ saveMode, changes: { <tableName|dict>: { inserted, updated, deleted } } }`。
-/// 事务内执行；updated 带 update_time baseline 做乐观锁（冲突→Conflict）。
-pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutcome> {
+///
+/// `txn` 事务归属：
+/// - [`Txn::Auto`]（默认）：函数自开事务（begin → save_apply → commit/rollback），HTTP 单调用用。
+/// - [`Txn::External`]：路由到**外部事务**，本函数**不自开不提交**（由外部 guard 管生命周期），
+///   供激活器等编排器把 DCT changeset 写入纳入主事务。冲突时仍返回 `SaveOutcome::Conflict`，
+///   由**外部**决定回滚还是续冲。
+///
+/// 无论是否外部事务，updated 都带 update_time baseline 做乐观锁（冲突→Conflict）。
+pub(crate) async fn save(
+    view: &DictView,
+    body: &Value,
+    db_id: &str,
+    txn: Txn,
+) -> Result<SaveOutcome> {
     // changes：按 path 分桶。字典是单表，只认与本 dict 的 tableName/dictCode 匹配的那个桶
     // （前端 ChangeSetCollector 的 path 是 root dataset id = dictCode 或 tableName）。
     let changes = body.get("changes").and_then(|v| v.as_object());
@@ -251,60 +309,97 @@ pub async fn save(view: &DictView, body: &Value, db_id: &str) -> Result<SaveOutc
     }
 
     let mm = get_default_pg_db_manager();
-    let tx = mm.get_transaction_context();
-    let txn_id = tx.begin(db_id).await.map_err(|e| {
-        tracing::error!(
-            target: "cmx_dct::save",
-            dict_code = %view.dict_code, table = %view.table_name, db_id = db_id, error = %e,
-            "tx_begin_failed"
-        );
-        api_err(&format!("开启事务失败: {e}"))
-    })?;
 
-    let result = save_apply(mm, db_id, &txn_id, view, effective_bucket).await;
-
-    match result {
-        Ok((affected, updated_at, conflict, id_map)) => {
-            if conflict {
-                tracing::warn!(
-                    target: "cmx_dct::save",
-                    dict_code = %view.dict_code, table = %view.table_name, db_id = db_id,
-                    "optimistic_lock_conflict rolling_back=true"
-                );
-                let _ = tx.rollback(&txn_id).await;
-                return Ok(SaveOutcome::Conflict);
+    // 事务归属：External → 复用外部事务（不自开不提交，外部 guard 管生命周期）；
+    // Auto → 自开事务（begin → save_apply → commit/rollback）。
+    // save_apply 内部已按 txn_id: &str 路由所有 SQL，这里只需决定 effective_txn_id + 生命周期管理。
+    match txn {
+        // 外部事务：直接透传，不自开不提交。冲突/出错由外部决定回滚。
+        Txn::External(ext) => {
+            let result = save_apply(mm, db_id, &ext, view, effective_bucket).await;
+            match result {
+                Ok((affected, updated_at, conflict, id_map)) => {
+                    if conflict {
+                        tracing::warn!(
+                            target: "cmx_dct::save",
+                            dict_code = %view.dict_code, table = %view.table_name, db_id = db_id,
+                            "optimistic_lock_conflict external_txn（由外部决定回滚）"
+                        );
+                        return Ok(SaveOutcome::Conflict);
+                    }
+                    tracing::info!(
+                        target: "cmx_dct::save",
+                        dict_code = %view.dict_code, table = %view.table_name,
+                        db_id = db_id, affected = affected,
+                        updated_rows = updated_at.len(), idmap_size = id_map.len(),
+                        "success external_txn"
+                    );
+                    Ok(SaveOutcome::Ok { affected, updated_at, id_map })
+                }
+                Err(e) => {
+                    tracing::error!(
+                        target: "cmx_dct::save",
+                        dict_code = %view.dict_code, table = %view.table_name, db_id = db_id, error = %e,
+                        "save_apply_failed external_txn（由外部决定回滚）"
+                    );
+                    Err(e)
+                }
             }
-            tx.commit(&txn_id).await.map_err(|e| {
+        }
+        // 自开事务：begin → save_apply → commit/rollback。
+        Txn::Auto => {
+            let tx = mm.get_transaction_context();
+            let own_txn_id = tx.begin(db_id).await.map_err(|e| {
                 tracing::error!(
                     target: "cmx_dct::save",
-                    dict_code = %view.dict_code, table = %view.table_name,
-                    db_id = db_id, affected = affected, error = %e,
-                    "tx_commit_failed"
+                    dict_code = %view.dict_code, table = %view.table_name, db_id = db_id, error = %e,
+                    "tx_begin_failed"
                 );
-                api_err(&format!("提交事务失败: {e}"))
+                api_err(&format!("开启事务失败: {e}"))
             })?;
-            tracing::info!(
-                target: "cmx_dct::save",
-                dict_code = %view.dict_code, table = %view.table_name,
-                db_id = db_id, affected = affected,
-                updated_rows = updated_at.len(), idmap_size = id_map.len(),
-                "success"
-            );
-            Ok(SaveOutcome::Ok {
-                affected,
-                updated_at,
-                id_map,
-            })
-        }
-        Err(e) => {
-            let _ = tx.rollback(&txn_id).await;
-            // 已被 map_db_err 记录过 SQL/原始错误，此处只补充阶段 + 表级上下文。
-            tracing::error!(
-                target: "cmx_dct::save",
-                dict_code = %view.dict_code, table = %view.table_name, db_id = db_id, error = %e,
-                "save_apply_failed"
-            );
-            Err(e)
+
+            let result = save_apply(mm, db_id, &own_txn_id, view, effective_bucket).await;
+
+            match result {
+                Ok((affected, updated_at, conflict, id_map)) => {
+                    if conflict {
+                        tracing::warn!(
+                            target: "cmx_dct::save",
+                            dict_code = %view.dict_code, table = %view.table_name, db_id = db_id,
+                            "optimistic_lock_conflict rolling_back=true"
+                        );
+                        let _ = tx.rollback(&own_txn_id).await;
+                        return Ok(SaveOutcome::Conflict);
+                    }
+                    tx.commit(&own_txn_id).await.map_err(|e| {
+                        tracing::error!(
+                            target: "cmx_dct::save",
+                            dict_code = %view.dict_code, table = %view.table_name,
+                            db_id = db_id, affected = affected, error = %e,
+                            "tx_commit_failed"
+                        );
+                        api_err(&format!("提交事务失败: {e}"))
+                    })?;
+                    tracing::info!(
+                        target: "cmx_dct::save",
+                        dict_code = %view.dict_code, table = %view.table_name,
+                        db_id = db_id, affected = affected,
+                        updated_rows = updated_at.len(), idmap_size = id_map.len(),
+                        "success"
+                    );
+                    Ok(SaveOutcome::Ok { affected, updated_at, id_map })
+                }
+                Err(e) => {
+                    let _ = tx.rollback(&own_txn_id).await;
+                    // 已被 map_db_err 记录过 SQL/原始错误，此处只补充阶段 + 表级上下文。
+                    tracing::error!(
+                        target: "cmx_dct::save",
+                        dict_code = %view.dict_code, table = %view.table_name, db_id = db_id, error = %e,
+                        "save_apply_failed"
+                    );
+                    Err(e)
+                }
+            }
         }
     }
 }
@@ -369,7 +464,7 @@ async fn apply_deletes(
             // ① 分级字典记旧 parent（重算 is_leaf 用）
             // ② 有 code_rule + 引擎注入时，拿 code + attrs 记断号（连号域 enable_gap 才记）
             let old_row = if minter.is_some() && code_rule.is_some() {
-                select_row_attrs(mm, db_id, txn_id, view, id).await.ok().flatten()
+                select_row_attrs(mm, db_id, Some(txn_id), view, id).await.ok().flatten()
             } else {
                 None
             };
@@ -407,7 +502,7 @@ async fn apply_deletes(
 async fn select_row_attrs(
     mm: &DatabaseManager,
     db_id: &str,
-    txn_id: &str,
+    txn_id: Option<&str>,
     view: &DictView,
     id: &Value,
 ) -> Result<Option<serde_json::Map<String, Value>>> {
@@ -420,7 +515,7 @@ async fn select_row_attrs(
     );
     let params = vec![to_dv_by_col(view, &view.pk, id)];
     let ds = mm
-        .query_sql_with_datavalues(db_id, Some(txn_id), &sql, params, "del_row")
+        .query_sql_with_datavalues(db_id, txn_id, &sql, params, "del_row")
         .await
         .map_err(|e| map_db_err(e, "select_row_attrs", view, None, &sql))?;
     let ds_val = serde_json::to_value(&ds).ok();
@@ -819,17 +914,6 @@ pub(crate) async fn mint_codes_for_inserts(
         return;
     };
 
-    // 非 auto mode（manual）→ 跳过（用户手敲）
-    let mode = code_rule.get("mode").and_then(|v| v.as_str()).unwrap_or("manual");
-    if mode != "auto" {
-        return;
-    }
-
-    // 编码引擎未注入 → 跳过（现状零影响）
-    let Some(minter) = cmx_traits::code::GlobalCodeMinter::get() else {
-        return;
-    };
-
     let code_field = &view.code_field;
     let target = serde_json::json!({
         "kind": "dct",
@@ -837,42 +921,75 @@ pub(crate) async fn mint_codes_for_inserts(
         "field": code_field,
     });
 
-    // 收集待铸号行的索引 + attrs（跳过已有 code 的行）
-    let mut pending: Vec<(usize, Value)> = Vec::new();
-    for (idx, row) in rows.iter().enumerate() {
-        // 已有 code 值 → 跳过（前端手填或预览传的）
-        if let Some(existing) = row.get(code_field) {
-            if !existing.is_null() && existing.as_str().map(|s| !s.is_empty()).unwrap_or(false) {
-                continue;
-            }
-        }
-        // 行属性（供 ref 段取字段值 + condition 求值）
-        let attrs = Value::Object(row.clone());
-        pending.push((idx, attrs));
-    }
+    // 收集待铸号行的 attrs（跳过已有 code 的行——前端手填或预览传的不覆盖）
+    let pending: Vec<(usize, Value)> = rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| {
+            // 已有非空 code 值 → 跳过
+            let existing = row.get(code_field);
+            !matches!(existing, Some(v) if !v.is_null() && v.as_str().map(|s| !s.is_empty()).unwrap_or(false))
+        })
+        .map(|(idx, row)| (idx, Value::Object(row.clone())))
+        .collect();
 
     if pending.is_empty() {
         return;
     }
 
-    // 批量铸号：一次调 mint_batch，engine 内按 prefix 分组 + buffer 推进
+    // 公共铸号流水线（cmx-traits）：mode 校验 + 引擎取号 + warn，返回 (attrs索引, code)
     let attrs_list: Vec<Value> = pending.iter().map(|(_, a)| a.clone()).collect();
-    match minter
-        .mint_batch(code_rule, &target, &attrs_list, db_id, txn_id)
-        .await
-    {
-        Ok(codes) => {
-            for ((row_idx, _), code) in pending.iter().zip(codes.iter()) {
-                rows[*row_idx].insert(code_field.clone(), Value::String(code.clone()));
-            }
-        }
-        Err(e) => {
-            tracing::warn!(
-                target: "cmx_dct::mint_code",
-                dict = %view.dict_code, field = %code_field, error = %e,
-                row_count = pending.len(),
-                "编码引擎批量铸号失败，跳过这些行（不阻断保存）"
-            );
-        }
+    let minted = cmx_traits::code::mint_codes_batch(code_rule, &target, &attrs_list, db_id, txn_id).await;
+
+    // 写回：rows[原行索引][code_field] = code
+    for (attrs_idx, code) in minted {
+        let row_idx = pending[attrs_idx].0;
+        rows[row_idx].insert(code_field.clone(), Value::String(code));
     }
+}
+
+// ============================================================================
+// 场景入口（一步到位：内部 resolve_dict + 调上面的 pub(crate) 服务函数）
+// ============================================================================
+
+use crate::resolve::resolve_dict;
+
+/// 回存（upsert，merge 语义）——场景入口。
+///
+/// 一步到位：内部 `resolve_dict` 解析字典视图 → 调 [`upsert`]（铸号 + 列校验 + 落库）。
+/// 调用方只需提供 [`DctQuery`]（定位）+ body（数组或单对象）+ db_id + [`Txn`]。
+pub async fn dict_upsert(
+    q: &DctQuery,
+    body: Value,
+    db_id: &str,
+    txn: Txn,
+) -> Result<UpsertOutcome> {
+    let view = resolve_dict(q, false).await?;
+    upsert(&view, body, db_id, txn).await
+}
+
+/// 删除一行（按 pk）——场景入口。
+///
+/// 一步到位：内部 `resolve_dict` → 调 [`delete`]。`txn` 语义同 [`dict_upsert`]。
+pub async fn dict_delete(
+    q: &DctQuery,
+    id: &str,
+    db_id: &str,
+    txn: Txn,
+) -> Result<Value> {
+    let view = resolve_dict(q, false).await?;
+    delete(&view, id, db_id, txn).await
+}
+
+/// 基于 changeset 的回存——场景入口。
+///
+/// 一步到位：内部 `resolve_dict` → 调 [`save`]（事务 + 乐观锁）。`txn` 语义同 [`dict_upsert`]。
+pub async fn dict_save(
+    q: &DctQuery,
+    body: &Value,
+    db_id: &str,
+    txn: Txn,
+) -> Result<SaveOutcome> {
+    let view = resolve_dict(q, false).await?;
+    save(&view, body, db_id, txn).await
 }

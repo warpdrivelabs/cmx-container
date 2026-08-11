@@ -24,6 +24,8 @@ cmx-traits = { workspace = true }
 cmx-biz = { workspace = true }
 # 内部依赖 - API 通用类型（Error/Result 信封，与 cmx-api 保持同一错误类型）
 cmx-api-types = { workspace = true }
+# 内部依赖 - DCT 字典解析 + 事务化写入（激活器 create 分支复用 dict_upsert，纳入主事务）
+cmx-dct-store-pg = { workspace = true }
 
 # JSON（映射配置 / 提议值）
 serde_json = { workspace = true }

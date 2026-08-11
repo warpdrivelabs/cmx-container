@@ -19,14 +19,21 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 
 /// `/api/dct/*` 共用坐标：定位定义文件 + 其中哪张字典表。
 ///
-/// `file` 可选：缺失时由 `resolve_dict_file`（cmx-dct-store-pg）在 domain/app/module 下自动
-/// 扫描含该 dictCode 的 DCT 文件（优先 isDefault、回退 version 最大）。这样前端运行时只需传
-/// domain/app/module/dict 四元（运行时 host 无 file 坐标）。
+/// DAM 三段（domain/application/module）**可选**：缺失/部分时由后端按 `dict`（dictCode）
+/// 全局反查补全（唯一命中即用；多 DAM 冲突返回 HTTP 409 + 候选列表；零命中报错）。
+/// `file` 可选：缺失时由 `resolve_dict_file` 在 DAM 下自动扫描含该 dictCode 的 DCT 文件
+/// （优先 isDefault、回退 version 最大）。
 #[derive(Debug, Deserialize)]
 pub struct DctQuery {
-    pub domain: String,
-    pub application: String,
-    pub module: String,
+    /// 域（如 basic/fi）；可选，缺失自动反查。
+    #[serde(default)]
+    pub domain: Option<String>,
+    /// 应用（如 dataplatform/cmxfico）；可选，缺失自动反查。
+    #[serde(default)]
+    pub application: Option<String>,
+    /// 模块（如 mdm/gl）；可选，缺失自动反查。
+    #[serde(default)]
+    pub module: Option<String>,
     /// 定义文件名（如 cmxfico_dct_meta_v1.json）；可选，缺失时自动解析。
     pub file: Option<String>,
     /// 字典表 dictCode（如 currency / gl_account / bus_partner）
@@ -37,6 +44,27 @@ pub struct DctQuery {
     /// query key 即 `with_props`（serde 无 rename）。
     #[serde(default)]
     pub with_props: bool,
+}
+
+impl DctQuery {
+    /// 只按 dict code 定位（最常用）：DAM/file 全空，由 `resolve_dict` 全局反查补全。
+    /// `with_props=false`（仅字典元数据维护页等场景需 `true`，届时链式 `.with_props()`）。
+    pub fn by_code(dict: impl Into<String>) -> Self {
+        Self {
+            domain: None,
+            application: None,
+            module: None,
+            file: None,
+            dict: dict.into(),
+            with_props: false,
+        }
+    }
+
+    /// 链式开启完整字段属性投影（`dict_meta` 时 columns 带 width/visible/pattern/...）。
+    pub fn with_props(mut self) -> Self {
+        self.with_props = true;
+        self
+    }
 }
 
 // ============================================================================
@@ -156,12 +184,7 @@ pub fn project_meta_column(c: &DictColumn) -> Value {
 // ============================================================================
 
 /// 从 base 定义里取某个字段集的 `fields` 数组。
-pub fn base_fieldset<'a>(base: &'a Value, set_name: &str) -> Option<&'a Vec<Value>> {
-    base.get("fieldSets")?
-        .get(set_name)?
-        .get("fields")?
-        .as_array()
-}
+pub use cmx_utils::json::base_fieldset;
 
 // ============================================================================
 // SQL 辅助：列名白名单校验（防注入）
@@ -293,21 +316,8 @@ pub fn pk_is_generated(view: &DictView) -> bool {
         .unwrap_or(false)
 }
 
-/// 判断一个 JSON id 值是否为「前端临时 id」——即需要后端铸真号的占位。
-///
-/// 前端新增行的 id 可能是：① 缺失/null；② 字符串占位（CmxDataSet 的 `r{rand}`，或本方案约定的
-/// `t{n}` 关联键）；③ 客户端 `maxId+1` 小整数（历史做法）。前两类必然是临时值。
-/// 对整数：**不能**一律当真号，否则历史前端塞的 `maxId+1` 会绕过铸号又撞库——故整数一律视为需重铸，
-/// 由 `remap` 用生成的真号替换，同时把旧值登记进映射供子行 parent_id 重指向。
-pub fn is_temp_id(v: Option<&Value>) -> bool {
-    match v {
-        None => true,
-        Some(Value::Null) => true,
-        Some(Value::String(s)) => s.is_empty() || !s.chars().all(|c| c.is_ascii_digit()),
-        // 纯数字字符串 / 数字：交给调用方按「是否服务端生成列」决定，这里只判「明显的临时形态」。
-        _ => false,
-    }
-}
+// is_temp_id / id_to_key 已上提到 cmx_utils::id，此处 re-export 保持本 crate 调用点零改动。
+pub use cmx_utils::id::{id_to_key, is_temp_id};
 
 /// 为一批 inserted 行铸号并回填 parent_id 自引用（自分级字典）。
 ///
@@ -350,15 +360,6 @@ pub fn mint_ids_for_inserts(
         }
     }
     id_map
-}
-
-/// id 值 → 稳定字符串键（数字/字符串统一）。null/空 → None。
-pub fn id_to_key(v: Option<&Value>) -> Option<String> {
-    match v {
-        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
-        Some(Value::Number(n)) => Some(n.to_string()),
-        _ => None,
-    }
 }
 
 // ============================================================================

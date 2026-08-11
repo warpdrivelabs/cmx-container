@@ -8,9 +8,13 @@
 //! V3 铁律：cm_* 主数据只存 [`LifecycleStatus::Published`]，草稿一律走 CR 单据（cv_mdm_apply），
 //! 激活器是写入 cm_* published 的唯一入口。
 
+/// 激活器纯逻辑（`ActivationConfig` / `LineMapping` / `plan_create` / `plan_update` / `plan_lines`）。
 pub mod activation;
+/// 编码生成 `CodeGenerator` trait + `RandomCodeGenerator` stub（M8 接 cmx-code）。
 pub mod codegen;
+/// 匹配算法纯逻辑（分块 / 加权比较 / 双阈值裁决 / 候选筛选）。
 pub mod match_algo;
+/// 字段级存活策略纯逻辑（`SurvivorRule` / `survive` / `SurvivorLogEntry`）。
 pub mod survivorship;
 
 use serde::{Deserialize, Serialize};
@@ -48,6 +52,7 @@ impl LifecycleStatus {
     }
 }
 
+/// `Display` 委托 [`LifecycleStatus::as_str`]（便于日志 / 模板直接格式化）。
 impl std::fmt::Display for LifecycleStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())

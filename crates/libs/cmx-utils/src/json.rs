@@ -39,3 +39,14 @@ pub fn coerce_to_object(value: Value) -> Value {
         value
     }
 }
+
+/// 从定义 JSON 的 `fieldSets` 里按名取某字段集的 `fields` 数组引用。
+///
+/// dct-model / doc-model / model-deploy 共用（消除 3 份复刻）。
+/// `base` 是 base 定义 JSON（含 `fieldSets` 对象），`set_name` 是字段集名。
+pub fn base_fieldset<'a>(base: &'a Value, set_name: &str) -> Option<&'a Vec<Value>> {
+    base.get("fieldSets")?
+        .get(set_name)?
+        .get("fields")?
+        .as_array()
+}

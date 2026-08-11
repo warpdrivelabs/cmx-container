@@ -11,9 +11,7 @@ authors.workspace = true
 # （/dct/meta、/dct/data/*、/dct/entries、/dct/save）。
 
 [dependencies]
-# 内部依赖 - DCT 中立模型（DctQuery + 列投影用的 DictColumn 字段）
-cmx-dct-model = { workspace = true }
-# 内部依赖 - DCT 持久化/服务层（resolve_dict + search/upsert/delete/save + 错误助手）
+# 内部依赖 - DCT 持久化/服务层（场景入口 dict_meta/dict_search/dict_upsert/... + DctQuery/BatchConflictMode re-export）
 cmx-dct-store-pg = { workspace = true }
 # 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / ModuleRoutes / ApiResp/Result/Error）
 cmx-api = { workspace = true }

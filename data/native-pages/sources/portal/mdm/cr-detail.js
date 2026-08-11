@@ -47,7 +47,7 @@ function viewHtml() {
         ${kv('单据号', h.doc_no)}${kv('状态', STATUS_META[h.doc_status] || h.doc_status)}
         ${kv('单据类型', h.doc_type)}${kv('变更类型', h.cr_type)}
         ${kv('目标字典', h.target_dict_code)}${kv('目标记录ID', h.target_record_id)}
-        ${kv('供应商名称', h.name)}${kv('税号', h.tax_no)}${kv('信用代码', h.credit_code)}
+        ${kv('供应商名称', h.subject_name)}${kv('税号', (h.payload || {}).tax_no)}${kv('信用代码', (h.payload || {}).credit_code)}
       </cmx-desc-list></div>
     <div class="card"><div class="card-title">明细行</div>
       <table class="tbl"><thead><tr><th>#</th><th>类型</th><th>操作</th><th>账号</th><th>开户行</th></tr></thead><tbody>${lineRows}</tbody></table></div>

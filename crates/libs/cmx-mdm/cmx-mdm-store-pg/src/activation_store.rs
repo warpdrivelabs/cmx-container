@@ -10,7 +10,7 @@ use cmx_mdm_model::activation::ActivationConfig;
 use cmx_utils::snowflake_id_str;
 use serde_json::Value;
 
-use crate::error::{api_err, api_err_db};
+use crate::error::{api_err, api_err_db, parse_jsonb_field};
 
 /// 按来源单据类型 + cr_type 查激活映射（激活器主用）。
 pub async fn find_by_doc_type(
@@ -21,7 +21,7 @@ pub async fn find_by_doc_type(
     cr_type: &str,
 ) -> Result<Option<ActivationConfig>, cmx_api_types::Error> {
     let sql = r#"SELECT activation_code, source_doc_type, cr_type, target_dict, target_table,
-                        header_mapping, line_mappings, code_rule_code
+                        header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field
                  FROM cmx_mdm_activation
                  WHERE source_doc_type = $1 AND cr_type = $2 AND is_active = TRUE
                  LIMIT 1"#;
@@ -72,7 +72,7 @@ pub async fn list(
     }
     let sql = format!(
         r#"SELECT id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                  header_mapping, line_mappings, code_rule_code, is_active
+                  header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field, is_active
            FROM cmx_mdm_activation WHERE {} ORDER BY sort_order_of_none(), activation_code"#,
         where_clauses.join(" AND ")
     );
@@ -106,18 +106,20 @@ pub async fn upsert(
         .map_err(|e| api_err(&format!("line_mappings 序列化失败: {e}")))?;
     let sql = r#"INSERT INTO cmx_mdm_activation
                    (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                    header_mapping, line_mappings, code_rule_code, is_active)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE)
+                    header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field, is_active)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)
                  ON CONFLICT (activation_code) DO UPDATE SET
-                   source_doc_type = EXCLUDED.source_doc_type,
-                   cr_type         = EXCLUDED.cr_type,
-                   target_dict     = EXCLUDED.target_dict,
-                   target_table    = EXCLUDED.target_table,
-                   header_mapping  = EXCLUDED.header_mapping,
-                   line_mappings   = EXCLUDED.line_mappings,
-                   code_rule_code  = EXCLUDED.code_rule_code,
-                   is_active       = TRUE,
-                   updated_at      = now()"#;
+                   source_doc_type     = EXCLUDED.source_doc_type,
+                   cr_type             = EXCLUDED.cr_type,
+                   target_dict         = EXCLUDED.target_dict,
+                   target_table        = EXCLUDED.target_table,
+                   header_mapping      = EXCLUDED.header_mapping,
+                   line_mappings       = EXCLUDED.line_mappings,
+                   code_rule_code      = EXCLUDED.code_rule_code,
+                   subject_name_field  = EXCLUDED.subject_name_field,
+                   subject_code_field  = EXCLUDED.subject_code_field,
+                   is_active           = TRUE,
+                   updated_at          = now()"#;
     let params = dv![
         DataValue::String(id),
         DataValue::String(cfg.activation_code.clone()),
@@ -128,22 +130,11 @@ pub async fn upsert(
         DataValue::Json(header_json),
         DataValue::Json(line_json),
         cfg.code_rule_code.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+        cfg.subject_name_field.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+        cfg.subject_code_field.clone().map(DataValue::String).unwrap_or(DataValue::Null),
     ];
     mm.execute_sql_with_datavalues(db_id, None, sql, params)
         .await
         .map_err(|e| api_err_db(&format!("保存激活映射失败: {e}")))?;
     Ok(cfg.activation_code.clone())
-}
-
-/// 把 Value 里某个字符串字段尝试 parse 成 JSON 对象/数组（JSONB 列在 DB 是 text）。
-#[allow(clippy::collapsible_if)] // 外层验证(不可变借用)+内层写入(可变借用),借用规则要求分两步
-fn parse_jsonb_field(v: &mut Value, field: &str) {
-    if let Some(obj) = v.as_object()
-        && let Some(s) = obj.get(field).and_then(|x| x.as_str())
-        && let Ok(parsed) = serde_json::from_str::<Value>(s)
-    {
-        if let Some(obj) = v.as_object_mut() {
-            obj.insert(field.to_string(), parsed);
-        }
-    }
 }
