@@ -878,7 +878,7 @@ function buildPanelHtml (ds) {
 
   // ── 运维总览：场景徽标 + 模块矩阵 ──
   if (b.loading) return `<section class="cds-ov-card cds-bd">${head}${tabBar}${targetBar}<cmx-empty-state icon="pending" title="模型态加载中…" size="sm"></cmx-empty-state></section>`
-  if (b.error) return `<section class="cds-ov-card cds-bd">${head}${tabBar}${targetBar}<cmx-empty-state icon="message-warning" title="${esc(b.error)}" size="sm"></cmx-empty-state></section>`
+  if (b.error) return `<section class="cds-ov-card cds-bd">${head}${tabBar}${targetBar}<cmx-empty-state icon="message-warning" title="${esc(b.error)}" size="sm"></cmx-empty-state><div style="text-align:center;margin-top:8px"><button type="button" class="cds-bd-btn ghost" data-mc-retry-dbstate><ui5-icon name="refresh"></ui5-icon>重试</button></div></section>`
 
   const counts = b.dbState?.scenario_counts || {}
   const badge = (sc, extra) => {
@@ -1669,7 +1669,10 @@ function bindOverview (root) {
   const b = state.build
   const ds = state.datasources.find((d) => d.id === state.selectedDsId) || null
   // 首次进入 / 切库 → 加载模型态（真实 db-state），拉到后局部重渲染工作台。
-  if (ds && (!b.loaded || b.dsKey !== (ds.db_id || ds.id)) && !b.loading) {
+  // ★ 失败后不自动重试（b.error 置位即短路）：否则 loadDbState 失败 → .then(refreshOverviewHosts)
+  //   → renderInto → bindOverview 会与失败的 loadDbState 互踢，形成死循环（后端不可达时狂打 db-state）。
+  //   切库时 resetBuildStateForDatasource 会清 error，可正常重载新库。
+  if (ds && (!b.loaded || b.dsKey !== (ds.db_id || ds.id)) && !b.loading && !b.error) {
     void loadDbState(ds).then(() => refreshOverviewHosts())
   }
   // 局部重渲：只重画工作台卡片，保留概览容器（避免整块闪烁）。
@@ -1685,7 +1688,7 @@ function bindOverview (root) {
   root.addEventListener('click', (e) => {
     if (e.target instanceof Element && e.target.closest('[data-mc-version]')) return
     const t = e.target instanceof Element
-      ? e.target.closest('[data-mc-upgrade-pick],[data-mc-collapse],[data-mc-optab],[data-mc-badge],[data-mc-cell],[data-mc-pick-scenario],[data-mc-clear],[data-mc-run],[data-mc-gate],[data-mc-stop],[data-mc-recreate],[data-mc-upgrade],[data-mc-review-back],[data-mc-review-approve],[data-mc-review-execute]')
+      ? e.target.closest('[data-mc-upgrade-pick],[data-mc-collapse],[data-mc-optab],[data-mc-badge],[data-mc-cell],[data-mc-pick-scenario],[data-mc-clear],[data-mc-run],[data-mc-gate],[data-mc-stop],[data-mc-retry-dbstate],[data-mc-recreate],[data-mc-upgrade],[data-mc-review-back],[data-mc-review-approve],[data-mc-review-execute]')
       : null
     if (!t) return
     if (t.hasAttribute('data-mc-upgrade-pick')) {
@@ -1714,6 +1717,13 @@ function bindOverview (root) {
       return
     }
     if (t.hasAttribute('data-mc-stop')) { stopMcInit(); return }
+    if (t.hasAttribute('data-mc-retry-dbstate')) {
+      // 手动重试：清 error 后强制重载（绕过 bindOverview 的 !b.error 短路）。
+      const cur = state.datasources.find((d) => d.id === state.selectedDsId)
+      if (cur) { void loadDbState(cur, true).then(() => refreshOverviewHosts()) }
+      rerender()
+      return
+    }
     if (t.hasAttribute('data-mc-review-back')) { mcClearReview(); rerender(); return }
     if (t.hasAttribute('data-mc-review-approve')) {
       if (b.review && b.review.status === 'ready') {
