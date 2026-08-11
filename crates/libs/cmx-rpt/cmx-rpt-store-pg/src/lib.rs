@@ -41,7 +41,7 @@ pub use cmx_biz::api_err;
 /// 把 DB 执行错误翻译成优雅业务错误（PG 明细 → `CmxErrCode` 中文 + 稳定码），
 /// 绝不把 PG 英文原文/SQL 暴露给前端。
 fn db_err(e: cmx_database_pg::Error) -> Error {
-    cmx_biz::BizError::from_db_error(&cmx_biz::pg_detail(&e)).into()
+    cmx_biz::BizError::from_db_error(&cmx_database_pg::pg_detail(&e)).into()
 }
 
 // ============================================================================
@@ -63,7 +63,7 @@ pub(crate) async fn query_rows(sql: &str, params: Vec<DataValue>, label: &str) -
                 rpt_db_id = RPT_DB_ID,
                 query_label = label,
                 query_sql = sql,
-                pg_detail = %cmx_biz::pg_detail(&e),
+                pg_detail = %cmx_database_pg::pg_detail(&e),
                 "报表设计数据查询失败"
             );
             db_err(e)

@@ -16,7 +16,7 @@ pub mod error;
 pub mod migration;
 pub mod zmcdataset;
 
-pub use error::{Error, Result};
+pub use error::{pg_detail, Error, Result};
 
 pub use cmx_core::model::data::dataset::DataSet;
 pub use config::{DbConfig, DbType, PoolConfig, PoolStatus};

@@ -11,9 +11,9 @@ use crate::handlers::Dam;
 /// 把 PG 执行错误包成 `CodeError::Database`（带真实明细，而非塌缩的 `db error`）。
 ///
 /// `label` 为操作名（如"创建规则"），拼进错误消息便于定位。
-/// PG 明细抽取用公共 `cmx_biz::pg_detail`（与 dct/doc/rpt/mdm 统一口径）。
+/// PG 明细抽取用公共 `cmx_database_pg::pg_detail`（与 dct/doc/rpt/mdm 统一口径）。
 pub(crate) fn db_err(label: &str, e: cmx_database_pg::Error) -> CodeError {
-    let detail = cmx_biz::pg_detail(&e);
+    let detail = cmx_database_pg::pg_detail(&e);
     // 日志侧记录完整明细（排障用），响应侧由 handler `err_resp` 判别唯一冲突。
     tracing::error!(
         target: "cmx_code::store",

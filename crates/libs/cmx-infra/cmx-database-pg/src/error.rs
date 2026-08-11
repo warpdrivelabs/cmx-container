@@ -68,3 +68,32 @@ pub enum Error {
         deadpool_postgres::PoolError,
     ),
 }
+
+/// 从 [`Error`] 抽出 **PostgreSQL 真实错误明细**（message + DETAIL + 约束名）。
+///
+/// 背景：tokio-postgres 的 `Error` 顶层 `Display` 恒为无信息的 `db error`——真正的
+/// message/detail/constraint 藏在 `as_db_error()` 里。若直接 `format!("{e}")` 会把
+/// 「唯一键冲突」这类可翻译错误塌缩成 `db error`，无从判断。
+///
+/// 把三段拼成一个完整串，含 `unique constraint "..."` / `foreign key` 等稳定子串，
+/// 供上层（cmx-biz 的 `classify_db_error` / `BizError::from_db_error`，或各 store-pg
+/// 的冲突判定）归类。非 PG 错误（连接/池/事务）回退顶层 Display。
+///
+/// 历史：本函数原位于 `cmx_biz::error`，因其入参即本 crate 的 [`Error`]，归属地更
+/// 自然，已下沉至此；cmx-biz / dct / doc / mdm / rpt / code 等调用方统一改用本路径。
+pub fn pg_detail(e: &Error) -> String {
+    if let Error::Postgres(pg) = e
+        && let Some(db) = pg.as_db_error()
+    {
+        let mut s = db.message().to_string();
+        if let Some(d) = db.detail() {
+            s.push(' ');
+            s.push_str(d);
+        }
+        if let Some(c) = db.constraint() {
+            s.push_str(&format!(" constraint \"{c}\""));
+        }
+        return s;
+    }
+    e.to_string()
+}

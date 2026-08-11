@@ -202,34 +202,11 @@ pub fn api_err(msg: &str) -> cmx_api_types::Error {
 
 /// DB 原始错误字符串 → 已翻译的优雅错误（稳定错误码 + 中文），不暴露 PG 英文原文。
 ///
-/// `raw` 应为 [`pg_detail`] 抽取的真实明细（含 SQLSTATE/DETAIL/constraint），
+/// `raw` 应为 `cmx_database_pg::pg_detail` 抽取的真实明细（含 SQLSTATE/DETAIL/constraint），
 /// 经 [`BizError::from_db_error`] 归类成 `CmxErrCode`。
+///
+/// 注：`pg_detail` 原位于本模块，因入参为 `cmx_database_pg::Error`，已下沉至
+/// `cmx_database_pg::pg_detail`（归属地更自然，供 code/dct/mdm/rpt 等直接引用）。
 pub fn api_err_db(raw: &str) -> cmx_api_types::Error {
     BizError::from_db_error(raw).into()
-}
-
-/// 从 `cmx_database_pg::Error` 抽出 **PostgreSQL 真实错误明细**（message + DETAIL + 约束名）。
-///
-/// 背景：tokio-postgres 的 `Error` 顶层 `Display` 恒为无信息的 `db error`——真正的
-/// message/detail/constraint 藏在 `as_db_error()` 里。若直接 `format!("{e}")` 会把
-/// 「唯一键冲突」这类可翻译错误塌缩成 `db error`，前端无从判断。
-///
-/// 把三段拼成一个完整串，交给 [`api_err_db`] 归类成 `CmxErrCode` + 优雅中文。
-/// 拼接保证含 `unique constraint "..."` / `foreign key` 等稳定子串，令
-/// `classify_db_error` 命中。非 PG 错误（连接/池/事务）回退顶层 Display。
-pub fn pg_detail(e: &cmx_database_pg::Error) -> String {
-    if let cmx_database_pg::Error::Postgres(pg) = e
-        && let Some(db) = pg.as_db_error()
-    {
-        let mut s = db.message().to_string();
-        if let Some(d) = db.detail() {
-            s.push(' ');
-            s.push_str(d);
-        }
-        if let Some(c) = db.constraint() {
-            s.push_str(&format!(" constraint \"{c}\""));
-        }
-        return s;
-    }
-    e.to_string()
 }

@@ -1,7 +1,8 @@
 //! cmx-dct-store-pg 错误助手——save 路径统一包装 + UNIQUE 冲突判定。
 //!
-//! 公共错误构造（`api_err`/`api_err_db`/`pg_detail`）已上提到 `cmx_biz::error`，
-//! 经 lib.rs `pub use cmx_biz::{api_err, api_err_db}` 重导出，保持本 crate 对外接口不变。
+//! 公共错误构造（`api_err`/`api_err_db`）来自 `cmx_biz::error`，经 lib.rs
+//! `pub use cmx_biz::{api_err, api_err_db}` 重导出，保持本 crate 对外接口不变；
+//! `pg_detail` 因入参即 `cmx_database_pg::Error`，已下沉至 `cmx_database_pg`。
 //! 本模块仅保留依赖 `DictView` 的 save 路径专属助手（`map_db_err` / `is_unique_violation`）。
 
 use cmx_api_types::Error;
@@ -37,7 +38,7 @@ pub(crate) fn map_db_err(
     row_index: Option<usize>,
     sql: &str,
 ) -> Error {
-    let detail = cmx_biz::pg_detail(&e);
+    let detail = cmx_database_pg::pg_detail(&e);
     tracing::error!(
         target: "cmx_dct::db",
         phase = phase,
@@ -57,6 +58,6 @@ pub(crate) fn map_db_err(
 /// 用于 saver 层编码兜底重试：落库 UNIQUE 冲突时，清空该行 code 重新铸号后重试 INSERT
 /// （防御发号序列表与业务表不一致的极端并发情况）。判定口径与 `classify_db_error` 一致。
 pub(crate) fn is_unique_violation(e: &DbError) -> bool {
-    let detail = cmx_biz::pg_detail(e).to_ascii_lowercase();
+    let detail = cmx_database_pg::pg_detail(e).to_ascii_lowercase();
     detail.contains("duplicate key") || detail.contains("unique constraint")
 }
