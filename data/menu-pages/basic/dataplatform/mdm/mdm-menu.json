@@ -117,6 +117,7 @@
                     "caption": "数据管家工作台",
                     "type": "workspace-node",
                     "permissionId": null,
+                    "visible": 0,
                     "icon": "tabler-outline/user-check",
                     "workspace": {
                         "id": "mdm_steward",
@@ -460,6 +461,52 @@
                                     "tabLabel": "校验/预览",
                                     "icon": "validate",
                                     "type": "flexible-combination-verify",
+                                    "data": {}
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "md-code-rule-manager",
+                    "name": "md-code-rule-manager",
+                    "caption": "编码规则管理",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/barcode",
+                    "workspace": {
+                        "explorer": {
+                            "caption": "规则列表",
+                            "icon": "tree",
+                            "views": [
+                                {
+                                    "tabLabel": "规则",
+                                    "icon": "list",
+                                    "type": "code-rule-list",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "content": {
+                            "caption": "段序列",
+                            "icon": "barcode",
+                            "views": [
+                                {
+                                    "tabLabel": "设计",
+                                    "icon": "barcode",
+                                    "type": "code-rule-manager",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "规则属性",
+                            "icon": "settings",
+                            "views": [
+                                {
+                                    "tabLabel": "属性",
+                                    "icon": "detail-view",
+                                    "type": "code-rule-inspector",
                                     "data": {}
                                 }
                             ]

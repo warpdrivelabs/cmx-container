@@ -86,7 +86,7 @@ fn flatten_node(
         icon: v.get("icon").and_then(|x| x.as_str()).map(String::from),
         component: None,
         sort_order,
-        visible: 1,
+        visible: v["visible"].as_i64().unwrap_or(1) as i32,
         open_type: 0,
         fun_code: v
             .get("permissionId")
