@@ -24,7 +24,7 @@ use cmx_dct_model::{
 
 use crate::error::{api_err, map_db_err};
 use crate::resolve::resolve_dict;
-use cmx_biz::pg_detail;
+use cmx_database_pg::pg_detail;
 
 // ============================================================================
 // 公共类型

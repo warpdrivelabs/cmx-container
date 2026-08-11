@@ -2,6 +2,8 @@
 
 > AI 在本项目中开发时遵循的规范。
 
+> **定位**：cmx-container 是**后端公用库 + 插件平台 workspace**——本 workspace **无可执行 server bin**。可执行微服务已拆到独立仓库：门户主应用 `cmx-portal-server`（在 `cmx-portalservice/`）、流程服务 `cmx-flow-server`（在 `cmx-flowengine/`）。它们经 `path = "../cmx-container/crates/..."` 跨 workspace 反向引用本 workspace 的公用库（`cmx-core` / `cmx-database-pg` / `cmx-api` / `cmx-biz` 等）。改本仓库公用库 API / trait 时，注意这两个下游 workspace 的引用方，需分别 `cargo check` 验证。
+
 ---
 
 ## 一、Error 处理规则
