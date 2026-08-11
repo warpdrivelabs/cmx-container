@@ -196,7 +196,7 @@ function buildListGrid() {
     const cm = new C.CmxColumnModel({ datasetId: 'crList' })
     cm.setMembers([
       new C.CmxColumn({ id: 'id', caption: 'ID', dataType: 'VARCHAR', width: '110px' }),
-      new C.CmxColumn({ id: 'doc_no', caption: '单据号', dataType: 'VARCHAR', width: '150px' }),
+      new C.CmxColumn({ id: 'doc_no', caption: '单据号', dataType: 'VARCHAR', width: '20%' }),
       new C.CmxColumn({ id: 'subject_name', caption: '名称', dataType: 'VARCHAR', width: '180px' }),
       new C.CmxColumn({ id: 'doc_type', caption: '类型', dataType: 'VARCHAR', width: '150px' }),
       new C.CmxColumn({ id: 'status_name', caption: '状态', dataType: 'VARCHAR', width: '90px' }),
@@ -215,7 +215,7 @@ function buildListGrid() {
     ])
     grid.setColumnModel(cm)
   }
-  grid.setOptions?.({ selectionMode: 'none', fillHeight: true, showRowIndex: true, showTotals: false })
+  grid.setOptions?.({ selectionMode: 'none', fillHeight: true, showRowIndex: true, showTotals: false, allowTextSelect: true, resize: true })
   // 操作列点击：rowId 为 revo 行索引，反查真实行
   grid.addEventListener('cmx-cell-link-click', (e) => {
     const d = e.detail || {}; const ds = grid._ds
