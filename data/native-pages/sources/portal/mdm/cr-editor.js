@@ -129,12 +129,12 @@ function buildListGrid() {
   if (C.CmxColumnModel && C.CmxColumn) {
     const cm = new C.CmxColumnModel({ datasetId: 'suppliers' })
     cm.setMembers([
-      new C.CmxColumn({ id: 'code', caption: '编码', dataType: 'VARCHAR', width: '140px' }),
+      new C.CmxColumn({ id: 'code', caption: '编码', dataType: 'VARCHAR', width: '150px' }),
       new C.CmxColumn({ id: 'name', caption: '名称', dataType: 'VARCHAR', width: '180px' }),
       new C.CmxColumn({ id: 'tax_no', caption: '税号', dataType: 'VARCHAR', width: '150px' }),
       new C.CmxColumn({ id: 'credit_code', caption: '信用代码', dataType: 'VARCHAR', width: '180px' }),
       new C.CmxColumn({ id: 'short_name', caption: '简称', dataType: 'VARCHAR', width: '120px' }),
-      new C.CmxColumn({ id: 'published_version', caption: '版本', dataType: 'INT', width: '70px' }),
+      new C.CmxColumn({ id: 'published_version', caption: '版本', dataType: 'INT', width: '70px',display: { mode: 'text' } }),
       new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '150px', frozen: 'right', edit: { mode: 'readonly' },
         display: { mode: 'actions', actions: [
           { text: '查看详情', actionRef: 'view', icon: 'show' },
