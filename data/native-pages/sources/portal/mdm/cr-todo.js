@@ -200,9 +200,9 @@ function buildListGrid() {
       new C.CmxColumn({ id: 'subject_name', caption: '名称', dataType: 'VARCHAR', width: '150px' }),
       new C.CmxColumn({ id: 'doc_type', caption: '类型', dataType: 'VARCHAR', width: '120px' }),
       new C.CmxColumn({ id: 'status_name', caption: '状态', dataType: 'VARCHAR', width: '80px' }),
-      // new C.CmxColumn({ id: 'create_time', caption: '创建时间', dataType: 'VARCHAR', width: '150px', display: {
-      //   mode: 'text', format: 'datetime:YYYY-MM-DD HH:mm:ss', align: 'center',
-      // } }),
+      new C.CmxColumn({ id: 'create_time', caption: '创建时间', dataType: 'VARCHAR', width: '150px', display: {
+        mode: 'text', format: 'datetime:YYYY-MM-DD HH:mm:ss', align: 'center',
+      } }),
       new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '200px', frozen: 'right', edit: { mode: 'readonly' },
         display: { mode: 'actions', actions: [
           { text: '详情', actionRef: 'view', icon: 'detail-view' },
