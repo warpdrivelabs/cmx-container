@@ -38,16 +38,24 @@ impl ChassisConfig {
     /// 从「可选 toml + 环境变量覆盖」装配。
     ///
     /// - `service`：服务名（默认 log_file 前缀）。
-    /// - toml 路径：环境变量 `env_prefix + "_CONFIG"`（如 `FLOW_CONFIG`）或参数 `default_toml`。
+    /// - toml 路径：统一从 `CONFIG_FILE` 取（与门户一致）→ 回退 `env_prefix + "_CONFIG"`
+    ///   → 参数 `default_toml`。
     /// - 环境变量覆盖：`{PREFIX}_HOST` / `{PREFIX}_PORT` / `{PREFIX}_LOG_DIR` /
     ///   `{PREFIX}_LOG_LEVEL` / `{PREFIX}_GRACEFUL_SECS`（PREFIX 如 "FLOW"）。
     pub fn load(service: &str, env_prefix: &str, default_toml: &str) -> Self {
         let mut cfg = Self::defaults(service);
 
-        // 1) 可选 toml（先 env 指定路径，再默认路径；文件不存在则跳过）。
-        let toml_path = std::env::var(format!("{env_prefix}_CONFIG"))
+        // 1) 可选 toml。路径来源统一约定（与门户 cmx-platform-app 一致）：
+        //    CONFIG_FILE（首选，全服务同名）→ {PREFIX}_CONFIG（向后兼容）→ default_toml（内置默认）。
+        //    文件不存在则跳过。
+        let toml_path = std::env::var("CONFIG_FILE")
             .ok()
             .filter(|s| !s.trim().is_empty())
+            .or_else(|| {
+                std::env::var(format!("{env_prefix}_CONFIG"))
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+            })
             .unwrap_or_else(|| default_toml.to_string());
         if let Ok(text) = std::fs::read_to_string(&toml_path) {
             match toml::from_str::<TomlConfig>(&text) {
