@@ -72,7 +72,8 @@ pub async fn list(
     }
     let sql = format!(
         r#"SELECT id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                  header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field, is_active
+                  header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field,
+                  header_groups, is_active
            FROM cmx_mdm_activation WHERE {} ORDER BY sort_order_of_none(), activation_code"#,
         where_clauses.join(" AND ")
     );
@@ -88,6 +89,7 @@ pub async fn list(
         let mut v = row.to_json_value(schema);
         parse_jsonb_field(&mut v, "header_mapping");
         parse_jsonb_field(&mut v, "line_mappings");
+        parse_jsonb_field(&mut v, "header_groups");
         out.push(v);
     }
     Ok(out)
@@ -104,10 +106,13 @@ pub async fn upsert(
         .map_err(|e| api_err(&format!("header_mapping 序列化失败: {e}")))?;
     let line_json = serde_json::to_string(&cfg.line_mappings)
         .map_err(|e| api_err(&format!("line_mappings 序列化失败: {e}")))?;
+    let groups_json = serde_json::to_string(&cfg.header_groups)
+        .map_err(|e| api_err(&format!("header_groups 序列化失败: {e}")))?;
     let sql = r#"INSERT INTO cmx_mdm_activation
                    (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                    header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field, is_active)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)
+                    header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field,
+                    header_groups, is_active)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE)
                  ON CONFLICT (activation_code) DO UPDATE SET
                    source_doc_type     = EXCLUDED.source_doc_type,
                    cr_type             = EXCLUDED.cr_type,
@@ -118,6 +123,7 @@ pub async fn upsert(
                    code_rule_code      = EXCLUDED.code_rule_code,
                    subject_name_field  = EXCLUDED.subject_name_field,
                    subject_code_field  = EXCLUDED.subject_code_field,
+                   header_groups       = EXCLUDED.header_groups,
                    is_active           = TRUE,
                    updated_at          = now()"#;
     let params = dv![
@@ -132,9 +138,32 @@ pub async fn upsert(
         cfg.code_rule_code.clone().map(DataValue::String).unwrap_or(DataValue::Null),
         cfg.subject_name_field.clone().map(DataValue::String).unwrap_or(DataValue::Null),
         cfg.subject_code_field.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+        DataValue::Json(groups_json),
     ];
     mm.execute_sql_with_datavalues(db_id, None, sql, params)
         .await
         .map_err(|e| api_err_db(&format!("保存激活映射失败: {e}")))?;
     Ok(cfg.activation_code.clone())
+}
+
+/// 删除（按 activation_code，硬删除）。返回影响行数。
+///
+/// 注意：`list` 只返回 `is_active=TRUE` 的行，故「停用」（开关置 FALSE）也会让映射从列表消失；
+/// 本函数是**彻底删除**（DELETE），与停用语义不同——配置器「删除」按钮用此。
+pub async fn delete_by_code(
+    mm: &DatabaseManager,
+    db_id: &str,
+    activation_code: &str,
+) -> Result<u64, cmx_api_types::Error> {
+    let sql = "DELETE FROM cmx_mdm_activation WHERE activation_code = $1";
+    let n = mm
+        .execute_sql_with_datavalues(
+            db_id,
+            None,
+            sql,
+            dv![DataValue::String(activation_code.into())],
+        )
+        .await
+        .map_err(|e| api_err_db(&format!("删除激活映射失败: {e}")))?;
+    Ok(n)
 }

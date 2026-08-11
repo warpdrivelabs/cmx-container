@@ -57,6 +57,31 @@ pub async fn mdm_activations_save(
     Ok(Json(ApiResp::ok(json!({ "activationCode": code }))))
 }
 
+/// 删除激活映射（硬删除）。POST body `{ activationCode }`。
+///
+/// 对应路由 `POST /mdm/activations/delete`（禁用 Path Variable，承接 AGENTS.md §四 第 5 条）。
+pub async fn mdm_activations_delete(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(body): Json<ActivationDeleteBody>,
+) -> Result<Json<ApiResp<Value>>> {
+    let mm = get_default_pg_db_manager();
+    let db_id = resolve_db_id_from_headers(&headers).await;
+    let n = store::delete_by_code(mm, &db_id, &body.activation_code).await?;
+    Ok(Json(ApiResp::ok(
+        json!({ "activationCode": body.activation_code, "affected": n }),
+    )))
+}
+
+/// 删除激活映射请求体。
+#[derive(serde::Deserialize)]
+pub struct ActivationDeleteBody {
+    /// 待删除的激活编码（cmx_mdm_activation 唯一键）。
+    #[serde(alias = "activationCode")]
+    pub activation_code: String,
+}
+
 /// 手动触发激活（审批型 CR 兜底入口 / 内部 CR 直接调）。
 ///
 /// body `{ crId }`，返回激活后的主数据记录 id。

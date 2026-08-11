@@ -2955,6 +2955,7 @@ CREATE TABLE cmx_mdm_activation (
     code_rule_code  VARCHAR(64),
     subject_name_field VARCHAR(64),
     subject_code_field VARCHAR(64),
+    header_groups   JSONB        NOT NULL DEFAULT '[]'::jsonb,
     is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -2972,6 +2973,7 @@ COMMENT ON COLUMN cmx_mdm_activation.line_mappings   IS '明细映射 [{lineType
 COMMENT ON COLUMN cmx_mdm_activation.code_rule_code  IS 'code 由哪个编码规则生成（新建时，M8 接 cmx-code）';
 COMMENT ON COLUMN cmx_mdm_activation.subject_name_field IS '主体名字段来源（payload 内字段名，前端按此填 subject_name）';
 COMMENT ON COLUMN cmx_mdm_activation.subject_code_field IS '主体编码字段来源（为空则由 codeRule 铸号）';
+COMMENT ON COLUMN cmx_mdm_activation.header_groups  IS '头映射分组(UI 展示用,[{groupCode,groupName,fields:[源字段名]}]);激活器不读,header_mapping 落库仍扁平';
 COMMENT ON COLUMN cmx_mdm_activation.is_active       IS '是否启用';
 CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_mdm_activation_code     ON cmx_mdm_activation (activation_code);
 CREATE        INDEX IF NOT EXISTS idx_cmx_mdm_activation_doctype ON cmx_mdm_activation (source_doc_type, cr_type);
