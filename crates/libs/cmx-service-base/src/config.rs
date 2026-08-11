@@ -59,3 +59,25 @@ impl BaseConfig {
         })
     }
 }
+
+/// 初始化全局 ConfigManager（**所有能力中心共用的唯一那段配置装配**）。
+///
+/// 配置源顺序（与门户 cmx-platform-app 历史行为一致）：
+///   `CONFIG_FILE` 指定的 toml（不存在则跳过）→ 进程环境变量覆盖。
+/// 幂等：`ConfigManager::initialize` 内部只初始化一次。
+///
+/// 统一契约：flow / portal / report / mdm 等所有 chassis 系微服务能力中心，启动时都调本函数
+/// （在 `dotenvy::dotenv()` 之后、读任何配置之前），从此 `.env` 的 `CONFIG_FILE` + toml + env
+/// 走同一条装配链，不再各写一套。Nacos 远程配置由 `registry-config` feature 的 `init_infra`
+/// 在此之上叠加（配置中心启用时）。
+#[cfg(feature = "config-manager")]
+pub fn init_config_manager() -> Result<()> {
+    cmx_utils::ConfigManager::initialize(|| {
+        cmx_utils::ConfigBuilder::new()
+            .add_toml_file_from_env("CONFIG_FILE")
+            .add_env()
+            .build()
+    })
+    .map_err(|e| BaseError::Config(format!("全局 ConfigManager 初始化失败: {e}")))?;
+    Ok(())
+}

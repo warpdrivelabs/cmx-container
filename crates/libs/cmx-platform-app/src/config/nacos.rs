@@ -95,12 +95,10 @@ pub async fn init_global_config_with_nacos() -> crate::Result<()> {
 }
 
 fn init_global_config_fallback() -> crate::Result<()> {
-    ConfigManager::initialize(|| {
-        ConfigBuilder::new()
-            .add_toml_file_from_env("CONFIG_FILE")
-            .add_env()
-            .build()
-    })
+    // 收敛到 cmx-service-base 的共享装配（**所有能力中心同一段代码**：CONFIG_FILE toml + env
+    // → ConfigManager::global()）。flow/report/mdm 亦调它，不再各写一套。Nacos 启用时上面的
+    // 分支在此之上叠加远程源；未启用即走本函数。
+    cmx_service_base::init_config_manager()
         .map_err(|e| Error::ConfigError(format!("本地配置加载失败: {}", e)))?;
     Ok(())
 }

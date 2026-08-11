@@ -14,6 +14,8 @@ mod config;
 mod datasource;
 
 pub use config::BaseConfig;
+#[cfg(feature = "config-manager")]
+pub use config::init_config_manager;
 pub use datasource::register_pg_datasources;
 
 #[cfg(feature = "redis")]
