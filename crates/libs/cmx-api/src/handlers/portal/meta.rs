@@ -1,9 +1,8 @@
 //! 域 / 菜单 / 活动 / 工作区节点 handler。
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::Path;
 
-use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 
@@ -59,7 +58,6 @@ use crate::{ApiResp, Result};
 
 /// `GET /api/workspace-nodes` —— 列表摘要。
 pub async fn list_workspace_nodes(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
@@ -69,7 +67,6 @@ pub async fn list_workspace_nodes(
 
 /// `GET /api/workspace-nodes/:id` —— 完整定义。
 pub async fn get_workspace_node(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -81,7 +78,6 @@ pub async fn get_workspace_node(
 
 /// `POST /api/workspace-nodes` —— upsert。
 pub async fn save_workspace_node(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::meta::workspace_nodes::WorkspaceNodeInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -93,7 +89,6 @@ pub async fn save_workspace_node(
 
 /// `DELETE /api/workspace-nodes/:id` —— 删除。
 pub async fn delete_workspace_node(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {

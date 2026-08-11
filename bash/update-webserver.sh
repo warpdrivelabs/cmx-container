@@ -2,10 +2,16 @@
 
 set -e  # 遇到任何命令失败立即退出
 
+# ⚠️ 已迁移（P3）：门户后端 bin（web-server）已迁到独立 workspace presentation/cmx-portalservice，
+#    改名为 cmx-portal-server。cmx-container 现为零可执行服务。生产更新请改用 cmx-portalservice 的
+#    bash/appctl.sh（通用进程管理，APP_NAME=cmx-portal-server），构建走
+#    `cd presentation/cmx-portalservice && cargo build --release -p cmx-portal-server`。
+#    下方 APP_NAME/CMX_DIR 已按新 bin 更新，但请复核 WEB_DIR/CMX_DIR 部署路径是否随之调整。
+
 # ==================== 配置区 ====================
-APP_NAME="web-server"                     # ←←← 修改此处可适配其他程序
+APP_NAME="cmx-portal-server"              # ←←← 已随 P3 从 web-server 改名
 WEB_DIR="/data/apps/webserver"
-CMX_DIR="/data/project/cmx/cmx-container"
+CMX_DIR="/data/project/cmx/cmx-portalservice"   # ←←← 已随 P3 从 cmx-container 改为 cmx-portalservice
 # ==============================================
 
 start_time=$(date +%s)

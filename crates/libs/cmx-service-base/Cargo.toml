@@ -1,0 +1,74 @@
+[package]
+name = "cmx-service-base"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 基础服务库（base services）：把「一个微服务起服前要初始化的基础设施」——config-file 加载、
+# Redis 缓存/分布式锁、DB 数据源注册——收成可复用原语，供各微服务 main 按需调用。
+#
+# 与 cmx-web-chassis 分层：chassis 是「纯框架」（日志/端口/中间件/优雅关闭/banner，零 infra 依赖），
+# 本 crate 是「基础服务」（碰 Redis/DB/ConfigManager）。刻意分成两 crate 而非扩 chassis：chassis 契约
+# 是零 infra 依赖，能被 flowengine 等零 Redis/sqlx 的 workspace 消费；本 crate 用 feature 门控让
+# 不需要 Redis/sqlx/ConfigManager 的服务（如 flow）default-features=false 干净 opt-out。
+#
+# feature 分层：
+#   default = []      轻量核：from_toml_path 加载 + pg 数据源注册。仅依赖 cmx-database-pg/cmx-core（跨 ws 安全）。
+#   redis             Redis 缓存/分布式锁 init（拉 cmx-buffer）。portal 开、flow 不开。
+#   config-manager    from_config_manager 重量加载器（拉 cmx-utils，读 CONFIG_FILE+Nacos+env）。portal 专属。
+#   crypto            加密服务 init（拉 cmx-utils）。纯全局。
+#   debug             调试会话管理器 init（拉 cmx-debug）。纯全局。
+#   event-bus         全局事件总线 init（拉 cmx-traits）。纯全局。
+#   db-sqlx           sqlx 数据源建池 + 迁移（拉 cmx-database）。portal 的老链路通用部分；
+#                     SysDatasourceBmc 持久化/D-A-M 由 portal 经 hook 注入，不入本库。
+#   storage           文件存储服务 init（拉 cmx-storage + cmx-database，依赖 DB manager 已起）。
+#   services          服务管理器 + 调用器 init（拉 cmx-service + cmx-runtime + cmx-traits + cmx-database）。
+#   plugins           插件管理器 init（拉 cmx-plugin + cmx-database）。
+#   wasm              WASM 运行时 init（拉 cmx-runtime + cmx-traits）；IAM/plugin host-fn provider 由 portal 注入。
+#   registry-config   全局配置/Nacos init_infra/shutdown_infra（拉 cmx-registry-config + cmx-utils + tokio + local-ip-address）。
+#   rpc               RPC 子系统 init_rpc（拉 cmx-rpc + cmx-registry-config + cmx-traits + cmx-utils + tokio）；
+#                     function_invoker 由 portal 注入（build_function_invoker 绑 cmx-biz 留 portal），本库不碰 cmx-biz。
+#
+# flow 用 default-features=false → 上述可选依赖一个不拉，跨 ws 消费不膨胀。
+[features]
+default = []
+redis = ["dep:cmx-buffer"]
+config-manager = ["dep:cmx-utils"]
+crypto = ["dep:cmx-utils"]
+debug = ["dep:cmx-debug"]
+event-bus = ["dep:cmx-traits"]
+db-sqlx = ["dep:cmx-database"]
+storage = ["dep:cmx-storage", "dep:cmx-database", "dep:cmx-utils"]
+services = ["dep:cmx-service", "dep:cmx-runtime", "dep:cmx-traits", "dep:cmx-database", "dep:cmx-utils", "dep:cmx-plugin"]
+plugins = ["dep:cmx-plugin", "dep:cmx-database", "dep:cmx-utils"]
+wasm = ["dep:cmx-runtime", "dep:cmx-traits", "dep:cmx-database", "dep:cmx-utils", "dep:cmx-buffer"]
+registry-config = ["dep:cmx-registry-config", "dep:cmx-utils", "dep:tokio", "dep:local-ip-address"]
+rpc = ["dep:cmx-rpc", "dep:cmx-registry-config", "dep:cmx-traits", "dep:cmx-utils", "dep:tokio"]
+
+[dependencies]
+# —— 轻量核（default，跨 workspace 安全）——
+# tokio-postgres 数据源管理（flow + portal 共享的 pg 注册原语）
+cmx-database-pg = { workspace = true }
+# 核心类型
+cmx-core = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# —— 可选（feature 门控；flow default-features=false 一个不拉）——
+cmx-buffer = { workspace = true, optional = true }          # redis
+cmx-utils = { workspace = true, optional = true }           # config-manager / crypto / registry-config
+cmx-debug = { workspace = true, optional = true }           # debug
+cmx-traits = { workspace = true, optional = true }          # event-bus / services / wasm
+cmx-database = { workspace = true, optional = true }        # db-sqlx / storage / services / plugins / wasm
+cmx-storage = { workspace = true, optional = true }         # storage
+cmx-service = { workspace = true, optional = true }         # services
+cmx-plugin = { workspace = true, optional = true }          # plugins
+cmx-runtime = { workspace = true, optional = true }         # services / wasm
+cmx-registry-config = { workspace = true, optional = true } # registry-config / rpc
+cmx-rpc = { workspace = true, optional = true }             # rpc
+local-ip-address = { workspace = true, optional = true }    # registry-config
+tokio = { workspace = true, optional = true }               # registry-config / rpc
+

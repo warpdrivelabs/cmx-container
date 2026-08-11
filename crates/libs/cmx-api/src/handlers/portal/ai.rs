@@ -1,15 +1,13 @@
 //! AI 对话中继 + 本地编辑代理 handler。
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::Path;
 
-use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 
 /// `POST /api/ai/chat` —— 转发到 DeepSeek/OpenAI 兼容服务。未配置返回 501 业务码。
 pub async fn ai_chat(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -26,7 +24,6 @@ pub async fn ai_chat(
 
 /// `GET /api/agent/capabilities` —— 代理能力 / 工具清单。
 pub async fn agent_capabilities(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(cmx_portal::agent::flow::capabilities())))
@@ -34,7 +31,6 @@ pub async fn agent_capabilities(
 
 /// `POST /api/agent/message` —— 一次性返回事件序列。
 pub async fn agent_message(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -49,7 +45,6 @@ pub async fn agent_message(
 /// 即经 mpsc 通道推送给客户端，而非跑完整个流程再一次性下发。flow 在独立 task 上运行，其 `emit`
 /// 回调把事件即时投递到通道；SSE 流从通道逐条读取并下发。协议与 Node 一致：meta / agent_event* / done|error。
 pub async fn agent_message_stream(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> axum::response::Response {
@@ -118,7 +113,6 @@ pub async fn agent_message_stream(
 
 /// `POST /api/agent/approvals/:id` —— 审批决定。
 pub async fn agent_approval(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
     Json(body): Json<serde_json::Value>,

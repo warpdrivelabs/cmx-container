@@ -1,5 +1,11 @@
 #!/bin/bash
 #
+# ⚠️ 已迁移（P3）：门户后端不再是 cmx-container 的 web-server bin。cmx-container 现为零可执行服务，
+#    只剩公用库。门户微服务 bin（cmx-portal-server）已迁到独立 workspace presentation/cmx-portalservice。
+#    请改用：  bash presentation/cmx-portalservice/bash/deploy.sh
+#    本脚本的 build_backend（cargo build -p web-server）将失败（bin 已删）。前端构建逻辑仍有效，
+#    但推荐统一走新脚本（它复用同一份前端构建 + 指向新后端 bin/cwd）。
+#
 # One-click deploy: build both migrated frontends + cmx-container web-server, start, health-check.
 #
 # Usage:

@@ -84,7 +84,7 @@ impl AiError {
 
 /// 把 AI 中继层错误映射为 API 层统一错误，使 handler 可直接 `?` 传播。
 ///
-/// 映射策略（参照 cmx-portal-base::PortalError，配合 [`cmx_api_types::Error`] 现有变体）：
+/// 映射策略（参照 cmx-jsonstore::PortalError，配合 [`cmx_api_types::Error`] 现有变体）：
 /// - [`AiError::InvalidSession`] / [`AiError::NoPendingRequest`] → `NotFound`（HTTP 404）
 /// - [`AiError::Timeout`] → `Timeout`（HTTP 504）
 /// - [`AiError::NotConfigured`] → `BusinessError`（HTTP 200 + 业务码 1，前端按 `code` 判断未配置；

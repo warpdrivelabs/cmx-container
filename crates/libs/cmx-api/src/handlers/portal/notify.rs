@@ -1,9 +1,8 @@
 //! 通知中心 handler（任务/消息/日志 + SSE 主动推送）。
 
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::extract::Query;
 
-use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 
@@ -24,7 +23,6 @@ pub struct NotifyListQuery {
 
 /// `GET /api/notifications/centers` —— 三中心元信息（前端下拉用）。
 pub async fn notify_centers(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(cmx_portal::notify::store::centers_meta())))
@@ -32,7 +30,6 @@ pub async fn notify_centers(
 
 /// `GET /api/notifications/counts` —— 当前用户各中心未读数 + 合计（红色角标）。
 pub async fn notify_counts(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let uid = notify_user_id(&c)?;
@@ -44,7 +41,6 @@ pub async fn notify_counts(
 
 /// `GET /api/notifications?center=task|message|log` —— 当前用户通知列表（缺 center 则全部）。
 pub async fn notify_list(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(c): CmxSvrContext,
     Query(q): Query<NotifyListQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -64,7 +60,6 @@ pub async fn notify_list(
 /// `POST /api/notifications/publish` —— 发布一条通知（也用于后端/服务端主动推送的入口）。
 /// 默认发给当前用户；body 带 userId 时发给指定用户（服务端代发场景）。
 pub async fn notify_publish(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(c): CmxSvrContext,
     Json(mut input): Json<cmx_portal::notify::store::NotifyInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -96,7 +91,6 @@ pub struct NotifyMarkInput {
 
 /// `POST /api/notifications/mark-read` —— 标记已读：{ center, id } 标单条；{ all:true, center? } 标全部。
 pub async fn notify_mark_read(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(c): CmxSvrContext,
     Json(input): Json<NotifyMarkInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -132,7 +126,6 @@ pub async fn notify_mark_read(
 /// `GET /api/notifications/stream` —— SSE：服务端主动推送本用户的新通知与角标刷新。
 /// 浏览器用 fetch + 流读消费（携带 Authorization 头），订阅进程内 broadcast，仅下发本人事件。
 pub async fn notify_stream(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(c): CmxSvrContext,
 ) -> axum::response::Response {
     use axum::response::sse::{Event, KeepAlive};

@@ -8,12 +8,12 @@
 //! - 删除域/应用前做引用完整性校验（拒绝域下仍有应用/模块）
 //!
 //! 复刻自 cmx-portal/src/dam/store.rs 的文件操作逻辑（store.rs 的 CRUD 部分已废弃）。
-//! 路径工具（data_root / data_path）来自 cmx-portal-base。
+//! 路径工具（data_root / data_path）来自 cmx-jsonstore。
 
 use std::path::Path;
 
 use cmx_database::DatabaseManager;
-use cmx_portal_base::data_root;
+use cmx_jsonstore::data_root;
 use tracing::info;
 
 use crate::{BizError, Result};

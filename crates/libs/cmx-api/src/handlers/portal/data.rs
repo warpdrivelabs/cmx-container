@@ -1,10 +1,9 @@
 //! 事实数据 / 帮助中心 handler。
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query};
 use serde::Deserialize;
 
-use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 
@@ -27,7 +26,6 @@ pub struct HelpPath {
 
 /// `GET /api/fact/list?domain=&app=&module=` —— 列出事实文件。
 pub async fn list_facts(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<cmx_portal::fact::store::FactQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -37,7 +35,6 @@ pub async fn list_facts(
 
 /// `POST /api/fact/get` —— 读取事实文件（请求体 { domain, app, module, file }）。
 pub async fn get_fact_post(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(r): Json<cmx_portal::fact::store::FactRef>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -48,7 +45,6 @@ pub async fn get_fact_post(
 
 /// `GET /api/fact/:domain/:app/:module/:file` —— 读取事实文件（路径参数）。
 pub async fn get_fact_path(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<FactPath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -65,7 +61,6 @@ pub async fn get_fact_path(
 
 /// `GET /api/help/catalog?domain=&app=&module=` —— 帮助目录（轻量项，供 explorer 搜索建树）。
 pub async fn help_catalog(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<cmx_portal::help::store::HelpQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -75,7 +70,6 @@ pub async fn help_catalog(
 
 /// `POST /api/help/get` —— 读取完整帮助文档（请求体 { domain, app, module, file }）。
 pub async fn help_get_post(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(r): Json<cmx_portal::help::store::HelpRef>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -87,7 +81,6 @@ pub async fn help_get_post(
 
 /// `GET /api/help/doc/:domain/:app/:module/:file` —— 读取完整帮助文档（路径参数）。
 pub async fn help_get_path(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<HelpPath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -105,7 +98,6 @@ pub async fn help_get_path(
 
 /// `POST /api/help/doc` —— 保存帮助文档（upsert）。
 pub async fn help_save_doc(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::help::store::HelpDocInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -115,7 +107,6 @@ pub async fn help_save_doc(
 
 /// `DELETE /api/help/doc/:domain/:app/:module/:file` —— 删除帮助文档。
 pub async fn help_delete_doc(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<HelpPath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {

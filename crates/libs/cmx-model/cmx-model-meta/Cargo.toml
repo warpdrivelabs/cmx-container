@@ -11,7 +11,7 @@ authors.workspace = true
 
 [dependencies]
 # 内部依赖 - 共享基础设施（config / error / fsutil / util，再导出）
-cmx-portal-base = { workspace = true }
+cmx-jsonstore = { workspace = true }
 # 内部依赖 - API 通用类型（definitions::resolve 返回 cmx_api_types::Result，DOC/DCT 定义文件解析
 #   三方共享错误类型；cmx-api-types 是叶子 crate，不反向依赖 cmx-model，无环）
 cmx-api-types = { workspace = true }

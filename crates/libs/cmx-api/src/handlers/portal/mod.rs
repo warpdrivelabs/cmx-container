@@ -5,6 +5,15 @@
 //!
 //! 模型中心接口（definitions / flexible_combination / model deploy）已迁移至独立 crate
 //! `cmx-model-api`（`ModelModule`），由 web-server 直接合并。
+//!
+//! ## 泛型路由（P-S0 门户微服务化）
+//!
+//! 门户 handler **不读 AppState**（全走全局单例 `get_default_db_manager()` / `data_root()`；
+//! 认证经已泛型的 [`crate::middleware::CmxSvrContext`]）。故路由对 state 泛型 `S` 成立——
+//! 镜像 `cmx_flow_app::flow_routes::<S>()`：
+//!   - 平台内嵌壳 [`PortalModule`]（本 crate）：`portal_routes::<CmxAppState>()`；
+//!   - 独立门户微服务（cmx-portalservice）：`portal_routes::<()>()`。
+//! 同一份 handler 两处跑，能力不缩水（CmxAppState 在平台内嵌时照带）。
 
 pub mod ai;
 pub mod data;
@@ -21,19 +30,15 @@ use axum::routing::{get, post};
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
 
-/// 门户业务模块路由聚合。
+/// 门户业务模块路由聚合（平台内嵌壳）。
+///
+/// `impl ModuleRoutes`（返 `Router<CmxAppState>`）供 web-server 合并；内部调泛型
+/// [`portal_routes`] 实例化为 `CmxAppState`，与独立微服务共用同一份路由表 + handler。
 pub struct PortalModule;
 
 impl ModuleRoutes for PortalModule {
     fn routes(self) -> Router<CmxAppState> {
-        Router::new()
-            .merge(ai_routes())
-            .merge(meta_routes())
-            .merge(pages_routes())
-            .merge(data_routes())
-            .merge(notify_routes())
-            .merge(launcher_routes())
-            .merge(registry_routes())
+        portal_routes::<CmxAppState>()
     }
 
     fn prefix() -> &'static str {
@@ -45,8 +50,29 @@ impl ModuleRoutes for PortalModule {
     }
 }
 
+/// 门户全部业务路由，对任意 state 泛型 `S` 成立（`Clone + Send + Sync + 'static`）。
+///
+/// 平台壳用 `S = CmxAppState`，独立门户微服务用 `S = ()`。handler 均不读 state，
+/// 认证经泛型的 `CmxSvrContext`，业务经全局单例——故泛型化无能力损失。
+pub fn portal_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new()
+        .merge(ai_routes())
+        .merge(meta_routes())
+        .merge(pages_routes())
+        .merge(data_routes())
+        .merge(notify_routes())
+        .merge(launcher_routes())
+        .merge(registry_routes())
+}
+
 // ─── AI 对话中继 + 本地编辑代理 ───
-fn ai_routes() -> Router<CmxAppState> {
+fn ai_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route("/ai/chat", post(ai::ai_chat))
         .route("/agent/capabilities", get(ai::agent_capabilities))
@@ -56,7 +82,10 @@ fn ai_routes() -> Router<CmxAppState> {
 }
 
 // ─── 域 / 菜单 / 活动 / 工作区节点 ───
-fn meta_routes() -> Router<CmxAppState> {
+fn meta_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         // 以下三路由已由 POST /api/domains/tree + GET /api/menu/tree 统一替代（前端 domains-tree-api.js）。
         // handler/service 代码保留（meta.rs / domains.rs / activities.rs / menu_pages.rs），便于回退时取消注释。
@@ -74,7 +103,10 @@ fn meta_routes() -> Router<CmxAppState> {
 }
 
 // ─── 表单页 / 原生页面 / HTML 页面 ───
-fn pages_routes() -> Router<CmxAppState> {
+fn pages_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route(
             "/form-pages",
@@ -96,7 +128,10 @@ fn pages_routes() -> Router<CmxAppState> {
 }
 
 // ─── 事实数据 / 帮助中心 ───
-fn data_routes() -> Router<CmxAppState> {
+fn data_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route("/fact/list", get(data::list_facts))
         .route("/fact/get", post(data::get_fact_post))
@@ -114,7 +149,10 @@ fn data_routes() -> Router<CmxAppState> {
 }
 
 // ─── 通知中心（任务/消息/日志 + SSE 主动推送）───
-fn notify_routes() -> Router<CmxAppState> {
+fn notify_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route("/notifications", get(notify::notify_list))
         .route("/notifications/centers", get(notify::notify_centers))
@@ -125,14 +163,20 @@ fn notify_routes() -> Router<CmxAppState> {
 }
 
 // ─── 功能启动器（AI 助手「我要…」直接打开功能）───
-fn launcher_routes() -> Router<CmxAppState> {
+fn launcher_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         // launcher/catalog 已废弃（无前端调用），见 legacy.rs
         .route("/launcher/resolve", post(launcher::launcher_resolve))
 }
 
 // ─── 注册表只读派生（DAM）+ 服务目录 + 模块清单与资源 ───
-fn registry_routes() -> Router<CmxAppState> {
+fn registry_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route("/registry/domains", get(registry::registry_domains))
         .route("/registry/apps", get(registry::registry_apps))

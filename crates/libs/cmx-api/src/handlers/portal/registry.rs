@@ -1,10 +1,9 @@
 //! 注册表只读派生 / 服务目录 / 模块清单与资源 handler。
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query};
 use serde::Deserialize;
 
-use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 
@@ -68,7 +67,6 @@ pub struct ModuleResourcePath {
 ///
 /// `active_only=true` 只返回 status=1（启用）的域。
 pub async fn registry_domains(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -80,7 +78,6 @@ pub async fn registry_domains(
 ///
 /// `active_only=true` 只返回 status=1（启用）的应用。
 pub async fn registry_apps(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -96,7 +93,6 @@ pub async fn registry_apps(
 ///
 /// `active_only=true` 只返回 status=1（启用）的模块。
 pub async fn registry_modules(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -115,7 +111,6 @@ pub async fn registry_modules(
 /// DAM 维护页（registry-center.js）不传此参数以查看含禁用的全量数据；
 /// 其他消费方（活动栏/菜单/帮助中心/定义管理器/弹性组合管理器等）应传 true。
 pub async fn registry_dam(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -132,7 +127,6 @@ pub async fn registry_dam(
 
 /// `GET /api/service-catalog?domain=&app=&module=` —— 服务列表。
 pub async fn service_catalog_list(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<SvcCatalogQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -149,7 +143,6 @@ pub async fn service_catalog_list(
 
 /// `GET /api/service-catalog/:id` —— 单个服务（不存在 404）。
 pub async fn service_catalog_get(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -163,7 +156,6 @@ pub async fn service_catalog_get(
 
 /// `GET /api/modules?domain=&app=` —— 模块清单列表。
 pub async fn list_modules(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -175,7 +167,6 @@ pub async fn list_modules(
 
 /// `GET /api/modules/:domain/:application/:module` —— 单模块 manifest。
 pub async fn get_module_manifest(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<ModulePath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -189,7 +180,6 @@ pub async fn get_module_manifest(
 /// 注意：`dictEntries` / `dictSeeds` / `dictRegistry` / `facts` 等废弃资源类型仍可被请求
 ///（向后兼容存量 module.json），但前端 DAM 资源态势已不再请求这些类型。
 pub async fn get_module_resource(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<ModuleResourcePath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -208,7 +198,6 @@ pub async fn get_module_resource(
 /// 注意：`dictEntries` / `dictSeeds` / `dictRegistry` / `facts` 等废弃资源类型仍可被请求
 ///（向后兼容存量 module.json），但前端 DAM 资源态势已不再请求这些类型。
 pub async fn module_resources(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<ModuleResourceQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {

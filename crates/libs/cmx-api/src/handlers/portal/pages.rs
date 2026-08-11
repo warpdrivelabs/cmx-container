@@ -1,12 +1,11 @@
 //! 表单页 / 原生页面 / HTML 页面 handler。
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
-use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 
@@ -81,7 +80,6 @@ pub struct HtmlListQuery {
 
 /// `GET /api/form-pages?page=&pageSize=` —— 分页列表。
 pub async fn list_form_pages(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<PageQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -92,7 +90,6 @@ pub async fn list_form_pages(
 
 /// `POST /api/form-pages` —— 保存。
 pub async fn save_form_page(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::pages::form::FormPageInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -103,7 +100,6 @@ pub async fn save_form_page(
 
 /// `GET /api/form-pages/:id` —— 单条。
 pub async fn get_form_page(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -114,7 +110,6 @@ pub async fn get_form_page(
 
 /// `GET /api/native-pages?page=&pageSize=` —— 分页列表。
 pub async fn list_native_pages(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<PageQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -125,7 +120,6 @@ pub async fn list_native_pages(
 
 /// `POST /api/native-pages` —— 保存。
 pub async fn save_native_page(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::pages::native::NativePageInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -136,7 +130,6 @@ pub async fn save_native_page(
 
 /// `POST /api/native-pages/batch` —— 批量取源码。
 pub async fn batch_native_pages(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -149,7 +142,6 @@ pub async fn batch_native_pages(
 ///
 /// 支持 `If-None-Match` → 304（rev 命中）；响应带 `ETag` / `Cache-Control`。
 pub async fn get_native_page(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     headers: HeaderMap,
     Path(id): Path<String>,
@@ -162,7 +154,6 @@ pub async fn get_native_page(
 
 /// `GET /api/html-pages?page=&pageSize=&domain=&app=&module=&keyword=` —— 分页列表。
 pub async fn list_html_pages(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<HtmlListQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -180,7 +171,6 @@ pub async fn list_html_pages(
 
 /// `POST /api/html-pages` —— 保存。
 pub async fn save_html_page(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::pages::html::HtmlPageInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -191,7 +181,6 @@ pub async fn save_html_page(
 
 /// `POST /api/html-pages/batch` —— 批量取完整页面。
 pub async fn batch_html_pages(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -204,7 +193,6 @@ pub async fn batch_html_pages(
 ///
 /// 支持 `If-None-Match` → 304（rev 命中）；响应带 `ETag` / `Cache-Control`。
 pub async fn get_html_page(
-    State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     headers: HeaderMap,
     Path(id): Path<String>,

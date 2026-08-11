@@ -9,7 +9,7 @@ authors.workspace = true
 
 [dependencies]
 # 内部依赖 - 共享基础设施（config / error / fsutil / cache / util，再导出）
-cmx-portal-base = { workspace = true }
+cmx-jsonstore = { workspace = true }
 
 # 异步运行时（tokio::fs 文件读写 + tokio::spawn 异步回填 rev）
 tokio = { workspace = true }
@@ -21,7 +21,7 @@ serde_json = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
-# 测试时启用 cmx-portal-base 的 testing feature（暴露 test_data_root_lock 串行化数据根测试）
-cmx-portal-base = { workspace = true, features = ["testing"] }
+# 测试时启用 cmx-jsonstore 的 testing feature（暴露 test_data_root_lock 串行化数据根测试）
+cmx-jsonstore = { workspace = true, features = ["testing"] }
 # 临时目录（集成测试 mock 数据根）
 tempfile = { workspace = true }

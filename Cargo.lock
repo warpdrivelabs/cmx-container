@@ -992,7 +992,7 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "cmx-database-pg",
- "cmx-portal-base",
+ "cmx-jsonstore",
  "cmx-service",
  "cmx-traits",
  "cmx-utils",
@@ -1469,7 +1469,7 @@ name = "cmx-form"
 version = "0.1.12"
 dependencies = [
  "chrono",
- "cmx-portal-base",
+ "cmx-jsonstore",
  "serde",
  "serde_json",
  "tempfile",
@@ -1548,6 +1548,20 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "cmx-jsonstore"
+version = "0.1.12"
+dependencies = [
+ "cmx-api-types",
+ "cmx-utils",
+ "moka",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -1683,12 +1697,66 @@ version = "0.1.12"
 dependencies = [
  "chrono",
  "cmx-api-types",
- "cmx-portal-base",
+ "cmx-jsonstore",
  "regex",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "cmx-platform-app"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "cmx-ai",
+ "cmx-api",
+ "cmx-audit",
+ "cmx-auth",
+ "cmx-biz",
+ "cmx-buffer",
+ "cmx-code-api",
+ "cmx-core",
+ "cmx-database",
+ "cmx-database-pg",
+ "cmx-dct-api",
+ "cmx-debug",
+ "cmx-doc-api",
+ "cmx-flow-api",
+ "cmx-iam",
+ "cmx-job-api",
+ "cmx-job-core",
+ "cmx-job-store-pg",
+ "cmx-mdm-api",
+ "cmx-model-api",
+ "cmx-plugin",
+ "cmx-registry-config",
+ "cmx-rpc",
+ "cmx-rpt-api",
+ "cmx-runtime",
+ "cmx-service",
+ "cmx-service-base",
+ "cmx-storage",
+ "cmx-traits",
+ "cmx-utils",
+ "cmx-web-chassis",
+ "cmx-web-monitor",
+ "derive_more",
+ "dotenvy",
+ "local-ip-address",
+ "modql",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower-cookies",
+ "tower-http",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1772,8 +1840,8 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "cmx-form",
+ "cmx-jsonstore",
  "cmx-model-meta",
- "cmx-portal-base",
  "cmx-utils",
  "futures-util",
  "regex",
@@ -1782,20 +1850,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "cmx-portal-base"
-version = "0.1.12"
-dependencies = [
- "cmx-api-types",
- "cmx-utils",
- "moka",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "xxhash-rust",
 ]
 
 [[package]]
@@ -1958,6 +2012,32 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "cmx-service-base"
+version = "0.1.12"
+dependencies = [
+ "anyhow",
+ "cmx-buffer",
+ "cmx-core",
+ "cmx-database",
+ "cmx-database-pg",
+ "cmx-debug",
+ "cmx-plugin",
+ "cmx-registry-config",
+ "cmx-rpc",
+ "cmx-runtime",
+ "cmx-service",
+ "cmx-storage",
+ "cmx-traits",
+ "cmx-utils",
+ "local-ip-address",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
 ]
 
 [[package]]
@@ -8962,59 +9042,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "723f2473b47f738c12fc11c8e0bb8b27ce7cf9c78cf1a29dadbc2d34a2513292"
 dependencies = [
  "wast 246.0.1",
-]
-
-[[package]]
-name = "web-server"
-version = "0.1.12"
-dependencies = [
- "async-trait",
- "axum",
- "chrono",
- "cmx-ai",
- "cmx-api",
- "cmx-audit",
- "cmx-auth",
- "cmx-biz",
- "cmx-buffer",
- "cmx-code-api",
- "cmx-core",
- "cmx-database",
- "cmx-database-pg",
- "cmx-dct-api",
- "cmx-debug",
- "cmx-doc-api",
- "cmx-flow-api",
- "cmx-iam",
- "cmx-job-api",
- "cmx-job-core",
- "cmx-job-store-pg",
- "cmx-mdm-api",
- "cmx-model-api",
- "cmx-plugin",
- "cmx-registry-config",
- "cmx-rpc",
- "cmx-rpt-api",
- "cmx-runtime",
- "cmx-service",
- "cmx-storage",
- "cmx-traits",
- "cmx-utils",
- "cmx-web-chassis",
- "cmx-web-monitor",
- "derive_more",
- "dotenvy",
- "local-ip-address",
- "modql",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tower-cookies",
- "tower-http",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
 ]
 
 [[package]]

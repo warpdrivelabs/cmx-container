@@ -1,0 +1,79 @@
+[package]
+name = "cmx-platform-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# cmx-platform-app —— 平台总装配器（原 cmx-portal-app，改名以正名）。
+#
+# 它 **不是** 门户业务，而是把整个平台**所有业务域的路由**（flow/rpt/doc/dct/mdm/job/code/model
+# 各 *-api 的 Module + 门户 PortalModule）拼装到一起、跑 20 步有序 init、起 HTTP 服务的**总装配层**。
+# 依赖 51 个平台 crate（cmx-api/iam/biz/audit + 8 个 *-api…），故必须留 cmx-container（与被装配的
+# 平台 crate 内聚）。各独立微服务 bin（cmx-portalservice/cmx-portal-server）跨 ws path 只引它一个，
+# 即牵入完整平台依赖树、调 `run_portal()` 起服。
+#
+# 20 步 init 顺序 load-bearing（infra→crypto→cache→datasources→…→IAM 链→RPC→AppState→AI→jobs→router），
+# 基础设施经 cmx-service-base 公用包装配（wasm/plugins/crypto/storage/services/Nacos/rpc…）。
+# 对偶于 cmx-flow-app（流程微服务核，在独立 ws cmx-flowengine）。
+
+[dependencies]
+# 内部依赖 - 工具库
+cmx-utils = { workspace = true }
+# 内部依赖 - 数据库
+cmx-database = { workspace = true }
+# 内部依赖 - 数据库(tokio-postgres 零拷贝新链路)
+cmx-database-pg = { workspace = true }
+# 内部依赖 - API
+cmx-api = { workspace = true }
+# 内部依赖 - 各模块 HTTP 层（在此合并进主路由，破环）
+cmx-rpt-api = { workspace = true }
+cmx-flow-api = { workspace = true }
+cmx-doc-api = { workspace = true }
+cmx-dct-api = { workspace = true }
+cmx-mdm-api = { workspace = true }
+cmx-code-api = { workspace = true }
+# 内部依赖 - 异步任务中心
+cmx-job-core = { workspace = true }
+cmx-job-store-pg = { workspace = true }
+cmx-job-api = { workspace = true }
+# 内部依赖 - 模型中心 HTTP 层
+cmx-model-api = { workspace = true }
+# 内部依赖 - 审计/认证/IAM/业务/缓存/插件/AI/运行时
+cmx-audit = { workspace = true }
+cmx-auth = { workspace = true }
+cmx-iam = { workspace = true }
+cmx-biz = { workspace = true }
+cmx-buffer = { workspace = true }
+cmx-plugin = { workspace = true }
+cmx-ai = { workspace = true }
+cmx-runtime = { workspace = true }
+cmx-traits = { workspace = true }
+cmx-core = { workspace = true }
+cmx-service = { workspace = true }
+cmx-debug = { workspace = true }
+cmx-registry-config = { workspace = true }
+cmx-rpc = { workspace = true }
+cmx-storage = { workspace = true }
+local-ip-address = { workspace = true }
+# 通用 HTTP 服务骨架 + 技术监控 + 基础服务库
+cmx-web-chassis = { workspace = true }
+cmx-web-monitor = { workspace = true }
+cmx-service-base = { workspace = true, features = ["redis", "config-manager", "crypto", "debug", "event-bus", "storage", "plugins", "services", "wasm", "registry-config", "rpc"] }
+# Web 框架
+axum = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+tower-cookies = { workspace = true }
+# 日志
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json", "fmt", "tracing-log"] }
+tracing-appender = { workspace = true }
+# 派生/错误/序列化
+derive_more = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+modql = { workspace = true }
+dotenvy = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
