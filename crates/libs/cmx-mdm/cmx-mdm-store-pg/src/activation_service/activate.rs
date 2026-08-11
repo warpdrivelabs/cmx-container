@@ -4,6 +4,8 @@
 //! 全程在一个 DB 事务内，任一步失败 guard drop 自动回滚，无中间态。
 
 use cmx_database_pg::DatabaseManager;
+use cmx_dct_model::DctQuery;
+use cmx_dct_store_pg::{resolve_dict, upsert as dct_upsert, UpsertOutcome};
 use cmx_mdm_model::activation::{plan_create, plan_lines, plan_update};
 use cmx_mdm_model::codegen::CodeGenerator;
 use serde_json::{json, Value};
@@ -133,15 +135,36 @@ async fn activate_inner(
             {
                 plan.header_row.insert("code".into(), Value::String(real_code));
             }
-            let id = dct_accessor::insert_header(
-                mm,
-                db_id,
-                txn_id,
-                &cfg.target_table,
-                &plan.header_row,
-                operated_by,
+            // 激活器铸 id 塞进 header_row——dct upsert 对 Number 类型不重铸（is_temp_id=false），
+            // 直接用此 id 落库。这样激活器持 id 供后续（明细 upper_id / 审计 record_id）。
+            let id = cmx_utils::next_pk_id();
+            plan.header_row.insert("id".into(), Value::Number(id.into()));
+            // resolve_dict 拿 DictView（columns 校验 + backfill 基准），调 dct upsert 纳入主事务。
+            let view = resolve_dict(
+                &DctQuery {
+                    domain: None,
+                    application: None,
+                    module: None,
+                    file: None,
+                    dict: cfg.target_dict.clone(),
+                    with_props: false,
+                },
+                false,
             )
             .await?;
+            match dct_upsert(&view, Value::Object(plan.header_row), db_id, Some(txn_id)).await? {
+                UpsertOutcome::Ok { .. } => {}
+                UpsertOutcome::Invalid(violations) => {
+                    return Err(api_err(&format!(
+                        "激活落库列校验未通过：{}",
+                        violations
+                            .iter()
+                            .map(|v| format!("{}({})", v.column.as_deref().unwrap_or("?"), v.message))
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    )));
+                }
+            }
             (id, 1_i64)
         }
         "update" => {

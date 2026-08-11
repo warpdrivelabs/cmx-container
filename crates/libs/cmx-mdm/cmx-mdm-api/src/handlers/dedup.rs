@@ -4,8 +4,10 @@
 //! - `POST /mdm/records/find-duplicates` → [`mdm_find_duplicates`]
 //! - `POST /mdm/check-key` → [`mdm_check_key`]
 //!
-//! 本模块还提供 [`dict_tables`] / [`load_columns`] 两个注册表辅助函数，
-//! 供 [`super::merge`] 的明细表 reparent / 详情列装载复用。
+//! 本模块还提供：
+//! - [`resolve_dict_view`]：按 dict_code 调 DCT `resolve_dict` 拿 DictView（头表名 + 列清单），
+//!   供 [`super::merge`] 的 detail/undo 取头表名、详情取列清单（替代硬编码 load_columns）。
+//! - [`line_tables`]：明细表清单注册表（merge/undo 的明细 reparent 用，待主从元数据方案通用化）。
 
 use axum::Json;
 use axum::extract::State;
@@ -18,40 +20,45 @@ use cmx_api::middleware::CmxSvrContext;
 use cmx_api::{ApiResp, Result};
 
 use cmx_database_pg::get_default_pg_db_manager;
+use cmx_dct_model::{DctQuery, DictView};
+use cmx_dct_store_pg::resolve_dict;
 use cmx_mdm_model::match_algo::{find_candidates, MatchRecord};
 use cmx_mdm_store_pg as store;
 
 use super::SpecDto;
 
-/// dict → 物理表 / 明细表解析（M3 MVP 注册表；M6 多域改走 DCT meta tableName）。
+/// 按 dict_code 调 DCT `resolve_dict` 拿 [`DictView`]（头表名 + 全量列清单）。
 ///
-/// 仅用于 merge/undo 的明细表 reparent（头表名现由 body.targetTable 传入）。
+/// `DctQuery.domain/application/module` 全部留空——resolve_dict 内部按 dict 全局反查补全坐标
+/// （`coord::resolve_dam_by_code`），MDM 侧无需感知字典定义文件所在模块。
 ///
-/// # Returns
+/// # Errors
 ///
-/// `Some((head_table, line_tables))` 当字典已注册；`None` 当未知字典。
-/// `line_tables` 元素为 `(明细表名, 外键列名)`。
-pub(crate) fn dict_tables(dict_code: &str) -> Option<(String, Vec<(String, String)>)> {
-    match dict_code {
-        "supplier" => Some((
-            "cm_supplier".into(),
-            vec![("cm_bank_account".into(), "supplier_id".into())],
-        )),
-        _ => None,
-    }
+/// dict 未注册、定义文件缺失或 tableName 缺失时返回错误。
+pub(crate) async fn resolve_dict_view(dict_code: &str) -> Result<DictView> {
+    resolve_dict(
+        &DctQuery {
+            domain: None,
+            application: None,
+            module: None,
+            file: None,
+            dict: dict_code.to_string(),
+            with_props: false,
+        },
+        false,
+    )
+    .await
 }
 
-/// 详情列装载白名单（load_by_ids 的列集）。
-pub(crate) fn load_columns() -> Vec<&'static str> {
-    vec![
-        "id",
-        "name",
-        "tax_no",
-        "credit_code",
-        "short_name",
-        "phone",
-        "update_time",
-    ]
+/// dict → 明细表清单（merge/undo 的明细 reparent 用）。
+///
+/// 头表名现由 [`resolve_dict_view`].table_name 获取；本函数只返回明细表 reparent 映射。
+/// 返回元素为 `(明细表名, 外键列名)`；未知字典返回空 Vec。
+pub(crate) fn line_tables(dict_code: &str) -> Vec<(String, String)> {
+    match dict_code {
+        "supplier" => vec![("cm_bank_account".into(), "supplier_id".into())],
+        _ => Vec::new(),
+    }
 }
 
 /// 实时查重（纯查询，不落库）。body `{ dictCode, recordId, targetTable, specs, clusterKeys, surviveFields }`。
