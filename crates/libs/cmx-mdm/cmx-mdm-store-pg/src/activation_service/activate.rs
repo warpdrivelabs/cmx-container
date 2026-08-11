@@ -4,8 +4,7 @@
 //! 全程在一个 DB 事务内，任一步失败 guard drop 自动回滚，无中间态。
 
 use cmx_database_pg::DatabaseManager;
-use cmx_dct_model::DctQuery;
-use cmx_dct_store_pg::{resolve_dict, upsert as dct_upsert, UpsertOutcome};
+use cmx_dct_store_pg::{DctQuery, Txn, UpsertOutcome, dict_upsert};
 use cmx_mdm_model::activation::{plan_create, plan_lines, plan_update};
 use cmx_mdm_model::codegen::CodeGenerator;
 use serde_json::{json, Value};
@@ -139,20 +138,16 @@ async fn activate_inner(
             // 直接用此 id 落库。这样激活器持 id 供后续（明细 upper_id / 审计 record_id）。
             let id = cmx_utils::next_pk_id();
             plan.header_row.insert("id".into(), Value::Number(id.into()));
-            // resolve_dict 拿 DictView（columns 校验 + backfill 基准），调 dct upsert 纳入主事务。
-            let view = resolve_dict(
-                &DctQuery {
-                    domain: None,
-                    application: None,
-                    module: None,
-                    file: None,
-                    dict: cfg.target_dict.clone(),
-                    with_props: false,
-                },
-                false,
+            // dict_upsert 一步到位（内部 resolve_dict 拿 DictView 做列校验 + backfill），
+            // 纳入激活器主事务（Txn::External）。
+            match dict_upsert(
+                &DctQuery::by_code(&cfg.target_dict),
+                Value::Object(plan.header_row),
+                db_id,
+                Txn::External(txn_id.to_string()),
             )
-            .await?;
-            match dct_upsert(&view, Value::Object(plan.header_row), db_id, Some(txn_id)).await? {
+            .await?
+            {
                 UpsertOutcome::Ok { .. } => {}
                 UpsertOutcome::Invalid(violations) => {
                     return Err(api_err(&format!(

@@ -11,7 +11,7 @@ use cmx_api_types::Result;
 use cmx_core::model::cell::DataValue;
 use cmx_database_pg::{DatabaseManager, get_default_pg_db_manager};
 use cmx_dct_model::{
-    DictView, SERVER_FILLED_COLS, SERVER_REPLACED_COLS, build_upsert_sql_dv,
+    DctQuery, DictView, SERVER_FILLED_COLS, SERVER_REPLACED_COLS, build_upsert_sql_dv,
     is_server_managed_col, mint_ids_for_inserts, pk_is_generated, row_fields, to_dv_by_col,
     valid_col,
 };
@@ -21,6 +21,32 @@ use crate::error::{api_err, is_unique_violation, map_db_err};
 use crate::hierarchy::{
     hierarchy_parent_field, non_empty_id_str, recompute_hierarchy_subtree, select_parent_id,
 };
+
+// ============================================================================
+// 事务归属（写操作共用）
+// ============================================================================
+
+/// 字典写操作的事务归属——取代旧的 `Option<&str>`，语义自文档。
+///
+/// - [`Txn::Auto`]：函数自管事务生命周期（内部 begin → apply → commit/rollback）。
+/// - [`Txn::External`]：路由到外部事务（由外部 guard 管 commit/rollback，本函数不自开不提交），
+///   供激活器等编排器把 DCT 写入纳入主事务。
+pub enum Txn {
+    Auto,
+    External(String),
+}
+
+impl Txn {
+    /// 返回底层 `execute_sql_with_datavalues` 期望的 `Option<&str>`：
+    /// `Auto → None`（auto-commit / 自开事务的内部 txn_id 由 save 自管），
+    /// `External(id) → Some(id)`。
+    pub(crate) fn txn_id(&self) -> Option<&str> {
+        match self {
+            Txn::Auto => None,
+            Txn::External(id) => Some(id.as_str()),
+        }
+    }
+}
 
 // ============================================================================
 // 服务函数：回存（upsert merge）
@@ -39,16 +65,17 @@ pub enum UpsertOutcome {
 
 /// 回存（upsert，merge 语义）。body：数组或单对象。
 ///
-/// `txn_id`：`None` 时逐行 auto-commit（现状语义）；`Some(id)` 时全部 SQL 路由到外部事务
+/// `txn`：[`Txn::Auto`] 时逐行 auto-commit；[`Txn::External`] 时全部 SQL 路由到外部事务
 /// （由外部 guard 管理 commit/rollback，本函数不自开不提交），用于把 DCT 写入纳入主事务
 /// （如激活器）。铸号始终走独立连接（`None`），与 save 一致——CodeEngine 跨 async trait，
 /// 主事务 holder 在铸号时刻不可用。
-pub async fn upsert(
+pub(crate) async fn upsert(
     view: &DictView,
     body: Value,
     db_id: &str,
-    txn_id: Option<&str>,
+    txn: Txn,
 ) -> Result<UpsertOutcome> {
+    let txn_id = txn.txn_id();
     // body：数组或单对象。
     let items: Vec<Value> = match body {
         Value::Array(a) => a,
@@ -129,14 +156,15 @@ pub async fn upsert(
 
 /// 删除一行（按 pk）。返回 `{ok, deleted}`。
 ///
-/// `txn_id`：`None` 时 auto-commit；`Some(id)` 时路由到外部事务（不自开不提交）。
-/// 与 [`upsert`] 的 txn_id 语义一致，供激活器把 DCT 删除纳入主事务。
-pub async fn delete(
+/// `txn`：[`Txn::Auto`] 时 auto-commit；[`Txn::External`] 时路由到外部事务（不自开不提交）。
+/// 与 [`upsert`] 的 txn 语义一致，供激活器把 DCT 删除纳入主事务。
+pub(crate) async fn delete(
     view: &DictView,
     id: &str,
     db_id: &str,
-    txn_id: Option<&str>,
+    txn: Txn,
 ) -> Result<Value> {
+    let txn_id = txn.txn_id();
     let mm = get_default_pg_db_manager();
     // 删之前 SELECT 旧 code + 行属性，供记断号（连号域 enable_gap 才记）。
     if let (Some(minter), Some(code_rule)) =
@@ -183,18 +211,18 @@ pub enum SaveOutcome {
 /// 基于 changeset 的回存（对标 doc 的 ChangeSetCollector/DocSaver）。
 /// body: `{ saveMode, changes: { <tableName|dict>: { inserted, updated, deleted } } }`。
 ///
-/// `txn_id` 事务归属：
-/// - `None`（默认）：函数自开事务（begin → save_apply → commit/rollback），HTTP 单调用用。
-/// - `Some(id)`：路由到**外部事务**，本函数**不自开不提交**（由外部 guard 管生命周期），
+/// `txn` 事务归属：
+/// - [`Txn::Auto`]（默认）：函数自开事务（begin → save_apply → commit/rollback），HTTP 单调用用。
+/// - [`Txn::External`]：路由到**外部事务**，本函数**不自开不提交**（由外部 guard 管生命周期），
 ///   供激活器等编排器把 DCT changeset 写入纳入主事务。冲突时仍返回 `SaveOutcome::Conflict`，
 ///   由**外部**决定回滚还是续冲。
 ///
 /// 无论是否外部事务，updated 都带 update_time baseline 做乐观锁（冲突→Conflict）。
-pub async fn save(
+pub(crate) async fn save(
     view: &DictView,
     body: &Value,
     db_id: &str,
-    txn_id: Option<&str>,
+    txn: Txn,
 ) -> Result<SaveOutcome> {
     // changes：按 path 分桶。字典是单表，只认与本 dict 的 tableName/dictCode 匹配的那个桶
     // （前端 ChangeSetCollector 的 path 是 root dataset id = dictCode 或 tableName）。
@@ -282,13 +310,13 @@ pub async fn save(
 
     let mm = get_default_pg_db_manager();
 
-    // 事务归属：Some → 复用外部事务（不自开不提交，外部 guard 管生命周期）；
-    // None → 自开事务（begin → save_apply → commit/rollback）。
+    // 事务归属：External → 复用外部事务（不自开不提交，外部 guard 管生命周期）；
+    // Auto → 自开事务（begin → save_apply → commit/rollback）。
     // save_apply 内部已按 txn_id: &str 路由所有 SQL，这里只需决定 effective_txn_id + 生命周期管理。
-    match txn_id {
+    match txn {
         // 外部事务：直接透传，不自开不提交。冲突/出错由外部决定回滚。
-        Some(ext) => {
-            let result = save_apply(mm, db_id, ext, view, effective_bucket).await;
+        Txn::External(ext) => {
+            let result = save_apply(mm, db_id, &ext, view, effective_bucket).await;
             match result {
                 Ok((affected, updated_at, conflict, id_map)) => {
                     if conflict {
@@ -319,7 +347,7 @@ pub async fn save(
             }
         }
         // 自开事务：begin → save_apply → commit/rollback。
-        None => {
+        Txn::Auto => {
             let tx = mm.get_transaction_context();
             let own_txn_id = tx.begin(db_id).await.map_err(|e| {
                 tracing::error!(
@@ -918,4 +946,50 @@ pub(crate) async fn mint_codes_for_inserts(
         let row_idx = pending[attrs_idx].0;
         rows[row_idx].insert(code_field.clone(), Value::String(code));
     }
+}
+
+// ============================================================================
+// 场景入口（一步到位：内部 resolve_dict + 调上面的 pub(crate) 服务函数）
+// ============================================================================
+
+use crate::resolve::resolve_dict;
+
+/// 回存（upsert，merge 语义）——场景入口。
+///
+/// 一步到位：内部 `resolve_dict` 解析字典视图 → 调 [`upsert`]（铸号 + 列校验 + 落库）。
+/// 调用方只需提供 [`DctQuery`]（定位）+ body（数组或单对象）+ db_id + [`Txn`]。
+pub async fn dict_upsert(
+    q: &DctQuery,
+    body: Value,
+    db_id: &str,
+    txn: Txn,
+) -> Result<UpsertOutcome> {
+    let view = resolve_dict(q, false).await?;
+    upsert(&view, body, db_id, txn).await
+}
+
+/// 删除一行（按 pk）——场景入口。
+///
+/// 一步到位：内部 `resolve_dict` → 调 [`delete`]。`txn` 语义同 [`dict_upsert`]。
+pub async fn dict_delete(
+    q: &DctQuery,
+    id: &str,
+    db_id: &str,
+    txn: Txn,
+) -> Result<Value> {
+    let view = resolve_dict(q, false).await?;
+    delete(&view, id, db_id, txn).await
+}
+
+/// 基于 changeset 的回存——场景入口。
+///
+/// 一步到位：内部 `resolve_dict` → 调 [`save`]（事务 + 乐观锁）。`txn` 语义同 [`dict_upsert`]。
+pub async fn dict_save(
+    q: &DctQuery,
+    body: &Value,
+    db_id: &str,
+    txn: Txn,
+) -> Result<SaveOutcome> {
+    let view = resolve_dict(q, false).await?;
+    save(&view, body, db_id, txn).await
 }

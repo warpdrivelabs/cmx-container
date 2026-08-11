@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 
 use crate::query;
 use crate::resolve::resolve_dict;
-use crate::write::{self, SaveOutcome as DctSaveOutcome};
+use crate::write::{self, SaveOutcome as DctSaveOutcome, Txn};
 
 /// DCT 字典的层级服务实现。持有定位坐标 + 数据源 id；每次调用解析 DictView。
 pub struct DctHierService {
@@ -118,7 +118,7 @@ impl HierService for DctHierService {
         // 中立 ChangeSet → DCT saver 的 body：{ saveMode:"merge", changes:{ <dictCode>: {...} } }
         // 协调器已做写时上卷，承接字段在 changes 里就绪。
         let body = json!({ "saveMode": "merge", "changes": changes.to_json() });
-        let outcome = write::save(&view, &body, &self.db_id, None)
+        let outcome = write::save(&view, &body, &self.db_id, Txn::Auto)
             .await
             .map_err(|e| e.to_string())?;
 

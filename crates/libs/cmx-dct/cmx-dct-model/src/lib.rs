@@ -46,6 +46,27 @@ pub struct DctQuery {
     pub with_props: bool,
 }
 
+impl DctQuery {
+    /// 只按 dict code 定位（最常用）：DAM/file 全空，由 `resolve_dict` 全局反查补全。
+    /// `with_props=false`（仅字典元数据维护页等场景需 `true`，届时链式 `.with_props()`）。
+    pub fn by_code(dict: impl Into<String>) -> Self {
+        Self {
+            domain: None,
+            application: None,
+            module: None,
+            file: None,
+            dict: dict.into(),
+            with_props: false,
+        }
+    }
+
+    /// 链式开启完整字段属性投影（`dict_meta` 时 columns 带 width/visible/pattern/...）。
+    pub fn with_props(mut self) -> Self {
+        self.with_props = true;
+        self
+    }
+}
+
 // ============================================================================
 // 字典表视图（由 cmx-dct-store-pg::resolve_dict 从定义 JSON 构造）
 // ============================================================================

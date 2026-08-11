@@ -1,22 +1,25 @@
-//! cmx-dct-store-pg 数据装载服务——分页查询（`search`）与零拷贝列式（`search_zmc`）。
+//! cmx-dct-store-pg 数据装载服务——分页查询（[`dict_search`]）与零拷贝列式（[`dict_search_zmc`]）。
 //!
-//! 两个函数共用 [`build_search`] 前置（构造 data + count SQL + 参数，附带脱敏 debug 日志），
-//! 避免重复。zmc 路径不执行 count（流式列式导出不分页计数）。
+//! 两个场景函数共用 [`build_search`] 前置（构造 data + count SQL + 参数，附带脱敏 debug 日志），
+//! 避免重复。zmc 路径返回原始 `ZmcDataSet`（未编码），由 handler 层自行决定序列化方式
+//! （msgpack / JSON）。
 
 use cmx_api_types::Result;
 use cmx_core::model::cell::DataValue;
-use cmx_database_pg::{ZmcRowSource, get_default_pg_db_manager};
-use cmx_dct_model::{DictView, build_search_sql};
-use serde_json::{Value, json};
+use cmx_database_pg::{ZmcDataSet, ZmcRowSource, get_default_pg_db_manager};
+use cmx_dct_model::{DctQuery, DictView, build_search_sql};
 
 use crate::error::api_err;
+use crate::meta::{SearchQuery, SearchResult};
+use crate::resolve::resolve_dict;
 
 /// 构造 search 的 (sql, count_sql, params)，附带结构化 debug 日志（脱敏：不打印 raw 全文）。
 ///
-/// [`search`]（执行 data + count）与 [`search_zmc`]（只执行 data）共用此前置，
-/// 避免 SQL 构造 + 日志重复。zmc 不执行 count（流式列式导出不分页计数）。
-fn build_search(view: &DictView, raw: &Value) -> (String, String, Vec<DataValue>) {
-    let (sql, count_sql, params) = build_search_sql(view, raw);
+/// [`dict_search`]（执行 data + count）与 [`dict_search_zmc`]（只执行 data + count 挂 total）
+/// 共用此前置，避免 SQL 构造 + 日志重复。
+fn build_search(view: &DictView, q: &SearchQuery) -> (String, String, Vec<DataValue>) {
+    let raw = q.to_raw();
+    let (sql, count_sql, params) = build_search_sql(view, &raw);
     tracing::debug!(
         target: "cmx_dct::search",
         dict_code = %view.dict_code, table = %view.table_name,
@@ -26,19 +29,21 @@ fn build_search(view: &DictView, raw: &Value) -> (String, String, Vec<DataValue>
     (sql, count_sql, params)
 }
 
-/// 装载字典数据（分页 + 计数）。返回 `{rows,total,page,pageSize}`。
-pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> {
-    let (sql, count_sql, params) = build_search(view, raw);
+/// 装载字典数据（分页 + 计数）。返回 [`SearchResult`]（rows + total + page + pageSize）。
+///
+/// 一步到位：内部 `resolve_dict` 解析字典视图 → 构造 SQL → 执行 data + count → 组装结果。
+/// 调用方只需提供 [`DctQuery`]（定位）+ [`SearchQuery`]（查询参数）+ db_id。
+pub async fn dict_search(
+    q: &DctQuery,
+    search: &SearchQuery,
+    db_id: &str,
+) -> Result<SearchResult> {
+    let view = resolve_dict(q, false).await?;
+    let (sql, count_sql, params) = build_search(&view, search);
 
     let mm = get_default_pg_db_manager();
     let ds = mm
-        .query_sql_with_datavalues(
-            db_id,
-            None,
-            &sql,
-            params.clone(),
-            &view.dict_code,
-        )
+        .query_sql_with_datavalues(db_id, None, &sql, params.clone(), &view.dict_code)
         .await
         .map_err(|e| {
             tracing::error!(
@@ -63,8 +68,12 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
         })?;
 
     // DataSet → rows JSON。
-    let rows_val = serde_json::to_value(&ds).map_err(|e| api_err(&format!("序列化失败: {e}")))?;
-    let rows = rows_val.get("rows").cloned().unwrap_or_else(|| json!([]));
+    let rows = serde_json::to_value(&ds)
+        .map_err(|e| api_err(&format!("序列化失败: {e}")))?
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     let total = serde_json::to_value(&total_ds)
         .ok()
         .and_then(|v| {
@@ -76,41 +85,28 @@ pub async fn search(view: &DictView, raw: &Value, db_id: &str) -> Result<Value> 
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
 
-    let (page, page_size) = cmx_dct_model::parse_paging(raw);
-    Ok(json!({
-        "rows": rows,
-        "total": total,
-        "page": page,
-        "pageSize": page_size,
-    }))
+    Ok(SearchResult {
+        rows,
+        total,
+        page: search.page,
+        page_size: search.page_size,
+    })
 }
 
-/// 零拷贝装载：tokio-postgres + ZmcDataSet + 列式二进制。返回列式包字节（handler 包 msgpack 信封）。
+/// 零拷贝装载：tokio-postgres + ZmcDataSet + COUNT 挂 total。返回原始 [`ZmcDataSet`]（未编码）。
 ///
-/// 与 [`search`] 对齐：跑一次 COUNT(*) 把总条数挂到 `zmc.total`，编码进列式包的 `total` 字段，
-/// 供前端分页工具栏算总页数（前端 `pkg.total` 读取，缺省 null）。COUNT 与主 SELECT 共用同一份
-/// filter 下推（同一 where_sql + params），看到的行集一致。
+/// 与 [`dict_search`] 对齐：跑一次 COUNT(*) 把总条数挂到 `zmc.total`，供前端分页工具栏算总页数
+/// （前端 `pkg.total` 读取，缺省 null）。COUNT 与主 SELECT 共用同一份 filter 下推
+/// （同一 where_sql + params），看到的行集一致。
 ///
-/// 内部委托 [`search_zmc_raw`] 取原始 `ZmcDataSet` 后再编码为列式二进制；需要原始 ZmcDataSet
-/// （做进一步列式处理 / 喂给协调器）的调用方直接用 `search_zmc_raw`。
-pub async fn search_zmc(view: &DictView, raw: &Value, db_id: &str) -> Result<Vec<u8>> {
-    let zmc = search_zmc_raw(view, raw, db_id).await?;
-    let mut buf = Vec::new();
-    zmc.encode_columnar_binary(&mut buf);
-    Ok(buf)
-}
-
-/// 零拷贝装载的原始 `ZmcDataSet`（未编码），供其他 crate 复用 DCT 的列式查询结果。
-///
-/// 与 [`search_zmc`] 共用同一份 SQL + COUNT 构造（[`build_search`]），区别仅在返回原始 ZmcDataSet
-/// 而非已编码的列式二进制——调用方可自行决定序列化方式（msgpack / JSON / 喂给协调器）。
-/// 与 DOC 侧的 `ZmcDocLoader::load`（返回原始 ZmcDataSet）对称。
-pub async fn search_zmc_raw(
-    view: &DictView,
-    raw: &Value,
+/// 调用方（通常是 handler）拿到 ZmcDataSet 后自行决定序列化方式（msgpack 列式二进制 / JSON 等）。
+pub async fn dict_search_zmc(
+    q: &DctQuery,
+    search: &SearchQuery,
     db_id: &str,
-) -> Result<cmx_database_pg::zmcdataset::ZmcDataSet> {
-    let (sql, count_sql, params) = build_search(view, raw);
+) -> Result<ZmcDataSet> {
+    let view = resolve_dict(q, false).await?;
+    let (sql, count_sql, params) = build_search(&view, search);
 
     let mm = get_default_pg_db_manager();
     // 零拷贝：ZmcDataSet 持有原始 tokio-postgres Row，惰性列式二进制编码。
@@ -127,7 +123,7 @@ pub async fn search_zmc_raw(
             api_err(&format!("字典零拷贝查询失败: {e}"))
         })?;
 
-    // COUNT(*) → zmc.total（与 search 端点契约对齐：zmc 路径也回传 total 供前端分页）。
+    // COUNT(*) → zmc.total（与 dict_search 端点契约对齐：zmc 路径也回传 total 供前端分页）。
     let count_ds = mm
         .query_sql_zmc_with_datavalues(db_id, &count_sql, params, "cnt")
         .await

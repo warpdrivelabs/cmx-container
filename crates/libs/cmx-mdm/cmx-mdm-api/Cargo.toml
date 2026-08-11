@@ -21,10 +21,8 @@ cmx-api = { workspace = true }
 cmx-biz = { workspace = true }
 # 内部依赖 - tokio-postgres 并行 DB 层（get_default_pg_db_manager 全局单例）
 cmx-database-pg = { workspace = true }
-# 内部依赖 - DCT 字典解析（resolve_dict 取表名/列清单，替代 merge handler 硬编码）
+# 内部依赖 - DCT 字典解析（dict_meta 取表名/列清单，替代 merge handler 硬编码）
 cmx-dct-store-pg = { workspace = true }
-# 内部依赖 - DCT 模型（DctQuery 构造，domain/application/module 可选）
-cmx-dct-model = { workspace = true }
 
 # Web 框架（handler 提取器 + Router）
 axum = { workspace = true }

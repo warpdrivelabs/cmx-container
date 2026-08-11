@@ -5,10 +5,11 @@
 //! （db_id 路由已上提到 `cmx_api::db_id`，供所有 API crate 共用。）
 
 use cmx_api_types::Result;
-use cmx_dct_model::{DctQuery, DictColumn, DictView, base_fieldset};
+use cmx_dct_model::{DctQuery, DictColumn, DictView, base_fieldset, project_meta_column};
 use serde_json::{Value, json};
 
 use crate::error::api_err;
+use crate::meta::DictMeta;
 // 元数据解析：从定义 JSON 找到目标字典表 + 合并列
 // ============================================================================
 
@@ -322,12 +323,41 @@ fn resolve_or_build_spec(
     }
 }
 
+/// 场景入口：取字典元数据文档（投影已下沉，直接可消费/下发）。
+///
+/// `with_props` 从 `q.with_props` 读取——前端字典维护页等需要完整字段属性（width/visible/
+/// pattern/enumValues/...）的场景，构造 `DctQuery` 时链式 `.with_props()` 或 query string
+/// `?with_props=true`；常规数据装载/回存场景不设（默认 false），保持 columns payload 精简。
+///
+/// 内部委托 [`resolve_dict`]（pub(crate)）解析 DictView，再投影成 [`DictMeta`]。
+pub async fn dict_meta(q: &DctQuery) -> Result<DictMeta> {
+    let view = resolve_dict(q, q.with_props).await?;
+    let columns = view
+        .columns
+        .iter()
+        .map(project_meta_column)
+        .collect();
+    Ok(DictMeta {
+        dict_code: view.dict_code,
+        dict_name: view.dict_name,
+        table_name: view.table_name,
+        pk: view.pk,
+        id_field: view.id_field,
+        code_field: view.code_field,
+        label_field: view.label_field,
+        parent_field: view.parent_field,
+        self_hierarchy: view.self_hierarchy,
+        code_rule: view.code_rule,
+        columns,
+    })
+}
+
 /// 解析 `DctQuery` → 强类型 `DictView`（合并列 + base 字段集 + 校验规范缓存）。
 ///
 /// `with_props`：是否把字段定义里的扁平属性（width/visible/pattern/enumValues/required/
 /// intDigits/decimalDigits 等）收集到 `DictColumn.extra`。仅 `/dct/meta` 在 `with_props=true`
 /// 时需要（供前端字典维护页构建完整列模型）；数据装载/回存场景传 false，保持 payload 精简。
-pub async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
+pub(crate) async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictView> {
     // 0) 坐标归一化：DAM 缺失/部分时按 dict 全局反查补全（三段齐全 → 快路径直通）。
     use cmx_model_meta::definitions::coord;
     let partial = coord::DamPartial {

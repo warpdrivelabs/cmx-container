@@ -24,7 +24,7 @@ use cmx_database_pg::{get_default_pg_db_manager, DatabaseManager};
 use cmx_mdm_model::survivorship::SurvivorRule;
 use cmx_mdm_store_pg as store;
 
-use super::dedup::{line_tables, resolve_dict_view};
+use super::dedup::{line_tables, resolve_dict_meta};
 use super::{default_page, default_page_size};
 
 /// 合并请求列表（默认排除 pending）。
@@ -268,9 +268,9 @@ pub async fn mdm_merge_request_detail(
         .unwrap_or("supplier")
         .to_string();
     let master_id = group.get("master_id").and_then(|v| v.as_i64()).unwrap_or(0);
-    // 头表名 + 列清单走 DCT resolve_dict（替代硬编码 dict_tables/load_columns）
-    let view = resolve_dict_view(&dict_code).await?;
-    let head_table = view.table_name.clone();
+    // 头表名 + 列清单走 DCT dict_meta（替代硬编码 dict_tables/load_columns）
+    let meta = resolve_dict_meta(&dict_code).await?;
+    let head_table = meta.table_name.clone();
     let victim_ids: Vec<i64> = group
         .get("member_ids")
         .and_then(|v| v.as_array())
@@ -280,8 +280,8 @@ pub async fn mdm_merge_request_detail(
                 .collect()
         })
         .unwrap_or_default();
-    // 列清单取 DictView.columns 全量字段名（替代硬编码 load_columns）
-    let cols: Vec<String> = view.columns.iter().map(|c| c.name.clone()).collect();
+    // 列清单取 DictMeta.column_names() 全量字段名（替代硬编码 load_columns）
+    let cols: Vec<String> = meta.column_names().into_iter().map(String::from).collect();
     let cols_ref: Vec<&str> = cols.iter().map(|s| s.as_str()).collect();
     let master = store::load_by_ids(mm, &db_id, None, &head_table, &cols_ref, &[master_id])
         .await?
@@ -358,9 +358,9 @@ pub async fn mdm_merge_requests_undo(
         .unwrap_or("supplier")
         .to_string();
     let master_id = group.get("master_id").and_then(|v| v.as_i64()).unwrap_or(0);
-    // 头表名走 DCT resolve_dict（替代硬编码 dict_tables 头表）；明细表清单用注册表
-    let view = resolve_dict_view(&dict_code).await?;
-    let head_table = view.table_name.clone();
+    // 头表名走 DCT dict_meta（替代硬编码 dict_tables 头表）；明细表清单用注册表
+    let meta = resolve_dict_meta(&dict_code).await?;
+    let head_table = meta.table_name.clone();
     let line_tables = line_tables(&dict_code);
     // victim = member_ids 中非 master 的第一个（JSONB 列 to_json_value 为转义字符串，需 parse）
     let members_raw = group.get("member_ids").cloned().unwrap_or(Value::Null);

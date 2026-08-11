@@ -5,7 +5,7 @@
 //! - `POST /mdm/check-key` → [`mdm_check_key`]
 //!
 //! 本模块还提供：
-//! - [`resolve_dict_view`]：按 dict_code 调 DCT `resolve_dict` 拿 DictView（头表名 + 列清单），
+//! - [`resolve_dict_meta`]：按 dict_code 调 DCT `dict_meta` 拿 DictMeta（头表名 + 列清单），
 //!   供 [`super::merge`] 的 detail/undo 取头表名、详情取列清单（替代硬编码 load_columns）。
 //! - [`line_tables`]：明细表清单注册表（merge/undo 的明细 reparent 用，待主从元数据方案通用化）。
 
@@ -20,39 +20,27 @@ use cmx_api::middleware::CmxSvrContext;
 use cmx_api::{ApiResp, Result};
 
 use cmx_database_pg::get_default_pg_db_manager;
-use cmx_dct_model::{DctQuery, DictView};
-use cmx_dct_store_pg::resolve_dict;
+use cmx_dct_store_pg::{DctQuery, DictMeta, dict_meta};
 use cmx_mdm_model::match_algo::{find_candidates, MatchRecord};
 use cmx_mdm_store_pg as store;
 
 use super::SpecDto;
 
-/// 按 dict_code 调 DCT `resolve_dict` 拿 [`DictView`]（头表名 + 全量列清单）。
+/// 按 dict_code 调 DCT `dict_meta` 拿 [`DictMeta`]（头表名 + 全量列清单）。
 ///
-/// `DctQuery.domain/application/module` 全部留空——resolve_dict 内部按 dict 全局反查补全坐标
+/// [`DctQuery::by_code`] 构造定位器——dict_meta 内部按 dict 全局反查补全坐标
 /// （`coord::resolve_dam_by_code`），MDM 侧无需感知字典定义文件所在模块。
 ///
 /// # Errors
 ///
 /// dict 未注册、定义文件缺失或 tableName 缺失时返回错误。
-pub(crate) async fn resolve_dict_view(dict_code: &str) -> Result<DictView> {
-    resolve_dict(
-        &DctQuery {
-            domain: None,
-            application: None,
-            module: None,
-            file: None,
-            dict: dict_code.to_string(),
-            with_props: false,
-        },
-        false,
-    )
-    .await
+pub(crate) async fn resolve_dict_meta(dict_code: &str) -> Result<DictMeta> {
+    dict_meta(&DctQuery::by_code(dict_code)).await
 }
 
 /// dict → 明细表清单（merge/undo 的明细 reparent 用）。
 ///
-/// 头表名现由 [`resolve_dict_view`].table_name 获取；本函数只返回明细表 reparent 映射。
+/// 头表名现由 [`resolve_dict_meta`].table_name 获取；本函数只返回明细表 reparent 映射。
 /// 返回元素为 `(明细表名, 外键列名)`；未知字典返回空 Vec。
 pub(crate) fn line_tables(dict_code: &str) -> Vec<(String, String)> {
     match dict_code {

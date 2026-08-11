@@ -25,9 +25,7 @@ use cmx_api::msgpack::msgpack_ok_response;
 use cmx_api::validation::validation_fail_resp;
 use cmx_api::{ApiResp, Result};
 
-use cmx_dct_model::DctQuery;
-use cmx_dct_model::BatchConflictMode;
-use cmx_dct_store_pg as store;
+use cmx_dct_store_pg::{self as store, BatchConflictMode, DctQuery, SearchQuery, Txn};
 
 /// 把 `tokio::sync::mpsc::Receiver<Bytes>` 包成 `Stream<Item = Result<Bytes, io::Error>>`。
 ///
@@ -74,28 +72,11 @@ pub async fn dct_meta(
     _headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     debug!("{:<12} - dct_meta {}/{}", "HANDLER", q.module.as_deref().unwrap_or("(auto)"), q.dict);
-    // dct_meta 是唯一需要字段完整属性（width/visible/pattern/enumValues 等）的场景：
-    // 供前端字典维护页构建列模型（编辑/校验/布局）。按 ?with_props=true 按需下发扁平键，
-    // 避免基本场景 payload 膨胀。
-    let view = store::resolve_dict(&q, q.with_props).await?;
-    let cols: Vec<Value> = view
-        .columns
-        .iter()
-        .map(cmx_dct_model::project_meta_column)
-        .collect();
-    Ok(Json(ApiResp::ok(json!({
-        "dictCode": view.dict_code,
-        "dictName": view.dict_name,
-        "tableName": view.table_name,
-        "idField": view.id_field,
-        "codeField": view.code_field,
-        "labelField": view.label_field,
-        "parentField": view.parent_field,
-        "selfHierarchy": view.self_hierarchy,
-        "pk": view.pk,
-        "codeRule": view.code_rule,
-        "columns": cols,
-    }))))
+    // dict_meta 场景函数已下沉投影（DictMeta derive Serialize + camelCase），
+    // handler 直接 to_value 包进 ApiResp，无需手动拼 json!。
+    // with_props 从 q 读取：?with_props=true 时 columns 含完整扁平属性（供字典维护页）。
+    let meta = store::dict_meta(&q).await?;
+    Ok(Json(ApiResp::ok(serde_json::to_value(&meta)?)))
 }
 
 // ============================================================================
@@ -110,14 +91,15 @@ pub async fn dct_search(
     body: Option<Json<Value>>,
 ) -> Result<Json<ApiResp<Value>>> {
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let view = store::resolve_dict(&q, false).await?;
-    let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
-    debug!(
-        "{:<12} - dct_search {} table={}",
-        "HANDLER", q.dict, view.table_name
-    );
-    let data = store::search(&view, &raw, &db_id).await?;
-    Ok(Json(ApiResp::ok(data)))
+    let search = SearchQuery::from_body(body.map(|b| b.0));
+    debug!("{:<12} - dct_search {}", "HANDLER", q.dict);
+    let result = store::dict_search(&q, &search, &db_id).await?;
+    Ok(Json(ApiResp::ok(json!({
+        "rows": result.rows,
+        "total": result.total,
+        "page": result.page,
+        "pageSize": result.page_size,
+    }))))
 }
 
 // ============================================================================
@@ -133,14 +115,13 @@ pub async fn dct_search_zmc_msgpack(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let view = store::resolve_dict(&q, false).await?;
-    let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
-    debug!(
-        "{:<12} - dct zmc-msgpack {} table={}",
-        "HANDLER", q.dict, view.table_name
-    );
+    let search = SearchQuery::from_body(body.map(|b| b.0));
+    debug!("{:<12} - dct zmc-msgpack {}", "HANDLER", q.dict);
 
-    let buf = store::search_zmc(&view, &raw, &db_id).await?;
+    // dict_search_zmc 返回原始 ZmcDataSet；此处编码为列式二进制 + msgpack 信封。
+    let zmc = store::dict_search_zmc(&q, &search, &db_id).await?;
+    let mut buf = Vec::new();
+    zmc.encode_columnar_binary(&mut buf);
     Ok(msgpack_ok_response(&buf))
 }
 
@@ -156,13 +137,9 @@ pub async fn dct_upsert(
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let view = store::resolve_dict(&q, false).await?;
-    debug!(
-        "{:<12} - dct_upsert {} table={}",
-        "HANDLER", q.dict, view.table_name
-    );
+    debug!("{:<12} - dct_upsert {}", "HANDLER", q.dict);
 
-    match store::upsert(&view, body, &db_id, None).await? {
+    match store::dict_upsert(&q, body, &db_id, Txn::Auto).await? {
         store::UpsertOutcome::Invalid(violations) => Ok(Json(validation_fail_resp(&violations))),
         store::UpsertOutcome::Ok { affected, id_map } => Ok(Json(ApiResp::ok(
             json!({ "count": affected, "idMap": id_map }),
@@ -182,9 +159,8 @@ pub async fn dct_delete(
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let view = store::resolve_dict(&q, false).await?;
     debug!("{:<12} - dct_delete {} id={}", "HANDLER", q.dict, id);
-    let data = store::delete(&view, &id, &db_id, None).await?;
+    let data = store::dict_delete(&q, &id, &db_id, Txn::Auto).await?;
     Ok(Json(ApiResp::ok(data)))
 }
 
@@ -205,18 +181,17 @@ pub async fn dct_save(
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let view = store::resolve_dict(&q, false).await?;
     let save_mode = body
         .get("saveMode")
         .and_then(|v| v.as_str())
         .unwrap_or("merge")
         .to_string();
     debug!(
-        "{:<12} - dct_save {} table={} mode={}",
-        "HANDLER", q.dict, view.table_name, save_mode
+        "{:<12} - dct_save {} mode={}",
+        "HANDLER", q.dict, save_mode
     );
 
-    match store::save(&view, &body, &db_id, None).await? {
+    match store::dict_save(&q, &body, &db_id, Txn::Auto).await? {
         store::SaveOutcome::Invalid(violations) => {
             Ok(Json(validation_fail_resp(&violations)).into_response())
         }
@@ -275,29 +250,31 @@ pub async fn dct_export(
     use axum::response::IntoResponse;
 
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let view = store::resolve_dict(&q, false).await?;
     let fmt = match params.format.to_lowercase().as_str() {
         "csv" => store::ImportFormat::Csv,
         _ => store::ImportFormat::Json,
     };
 
     debug!(
-        "{:<12} - dct_export {} table={} fmt={}",
-        "HANDLER", q.dict, view.table_name, fmt.as_str()
+        "{:<12} - dct_export {} fmt={}",
+        "HANDLER", q.dict, fmt.as_str()
     );
 
-    // 启动导出流：mpsc::Receiver<Bytes>（内部 spawn tokio task 跑 keyset 分页）
-    let rx = store::export_stream(view.clone(), db_id, fmt, 5000, 8);
+    // 启动导出流：mpsc::Receiver<Bytes>（内部 spawn tokio task 跑 keyset 分页）。
+    // export_stream 现在接 &DctQuery（内部 resolve_dict），返回 Result<Receiver>。
+    let rx = store::export_stream(&q, db_id, fmt, 5000, 8).await?;
 
     // 包装为 axum Body：用 SafeReceiverStream（channel 关闭后再次 poll 安全返回 None，不 panic）。
     // 不能用 futures::stream::unfold：unfold 在返回 Ready(None) 后会 panic（hyper 1.x 可能再次 poll）。
     let stream = SafeReceiverStream::new(rx);
     let body = Body::from_stream(stream);
 
+    // 文件名需 dict_code + table_name：再查一次 meta（轻量，定义已缓存）。
+    let meta = store::dict_meta(&q).await?;
     let filename = format!(
         "{}_{}.{}",
-        view.dict_code,
-        view.table_name,
+        meta.dict_code,
+        meta.table_name,
         fmt.ext()
     );
     let content_disposition = format!("attachment; filename=\"{}\"", filename);
@@ -381,7 +358,6 @@ pub async fn dct_import(
     mut multipart: Multipart,
 ) -> Result<Json<ApiResp<Value>>> {
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let view = store::resolve_dict(&q, false).await?;
 
     let mut mode = match params.mode.as_str() {
         "replace" => BatchConflictMode::Replace,
@@ -431,14 +407,14 @@ pub async fn dct_import(
     })?;
     let fmt = detect_format(&file_name, &file_content_type)?;
     debug!(
-        "{:<12} - dct_import {} table={} fmt={:?} mode={:?}",
-        "HANDLER", q.dict, view.table_name, fmt, mode
+        "{:<12} - dct_import {} fmt={:?} mode={:?}",
+        "HANDLER", q.dict, fmt, mode
     );
 
     // 用 std::io::Cursor 包装 bytes（tokio 为 std::io::Cursor<T: AsRef<[u8]> + Unpin>
     // 实现了 AsyncRead，Bytes 满足 AsRef<[u8]> + Unpin）。
     let cursor = std::io::Cursor::new(bytes);
-    let summary = store::import_stream(view, db_id, fmt, mode, 1000, cursor).await?;
+    let summary = store::import_stream(&q, db_id, fmt, mode, 1000, cursor).await?;
 
     Ok(Json(ApiResp::ok(json!({
         "total": summary.total,
