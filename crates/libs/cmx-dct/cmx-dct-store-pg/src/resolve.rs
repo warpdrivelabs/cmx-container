@@ -166,6 +166,7 @@ fn merge_columns(t: &Value, base: &Value, with_props: bool) -> (Vec<DictColumn>,
                 "effectiveFieldSet",
                 "disableFieldSet",
                 "auditFieldSet",
+                "mdmGovernanceFieldSet",
                 "systemFieldSet",
             ] {
                 if let Some(set_name) = obj.get(key).and_then(|v| v.as_str()) {
