@@ -155,23 +155,19 @@ fn merge_columns(t: &Value, base: &Value, with_props: bool) -> (Vec<DictColumn>,
     // 无 fieldSetOrder 时默认「本表 fields 在前 → 各 *FieldSet 引用按固定键序」，向后兼容。
     // push 闭包内置 seen 去重，故段顺序变化不会导致同名字段重复。
     let own_fields: Option<&Vec<Value>> = t.get("fields").and_then(|v| v.as_array());
-    // 收集本表声明的引用字段集名（按固定键序，去重），供默认顺序与兜底补尾使用。
+    // 收集本表声明的引用字段集名，供默认顺序与兜底补尾使用。
+    // 按键名后缀 "FieldSet" 动态识别（任何 xxxFieldSet 键的字符串值都视为字段集引用），
+    // 不再维护键名清单——新增通用字段集约定时无需改代码。
+    // 段序 = 定义文件里 *FieldSet 键的书写序（serde_json preserve_order 保证）。
     let declared_sets: Vec<String> = {
         let mut out = Vec::new();
         if let Some(obj) = t.as_object() {
-            for key in [
-                "baseFieldSet",
-                "hierarchyFieldSet",
-                "scopeFieldSet",
-                "effectiveFieldSet",
-                "disableFieldSet",
-                "auditFieldSet",
-                "mdmGovernanceFieldSet",
-                "systemFieldSet",
-            ] {
-                if let Some(set_name) = obj.get(key).and_then(|v| v.as_str()) {
+            for (key, val) in obj {
+                if key.ends_with("FieldSet")
+                    && let Some(set_name) = val.as_str()
+                {
                     let s = set_name.to_string();
-                    if !out.contains(&s) {
+                    if !s.is_empty() && !out.contains(&s) {
                         out.push(s);
                     }
                 }
