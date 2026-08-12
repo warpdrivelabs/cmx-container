@@ -4,27 +4,16 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
-# 报表模块的 HTTP 层：薄 axum handler（提取 → 调 cmx-rpt-store-pg 服务 → ApiResp 包装）+
-# ReportModule(impl cmx_api::ModuleRoutes) 路由表。依赖 cmx-api 拿 CmxAppState/CmxSvrContext/
-# ApiResp 等 HTTP 绑定类型；由 web-server 合并 ReportModule.routes()（cmx-api 不反向依赖本
-# crate，避免环）。端点：/report-design/*、/rpt/compute（URL 与迁移前完全一致）。
+# 报表模块的**平台适配薄壳**（keep-wired，对标 cmx-flow-api）。抽核后 handler + 路由 + 大盘全在独立
+# workspace ../cmx-report 的中立核 cmx-rpt-app（report_routes::<S>()）。本 crate 只剩 ReportModule
+# （impl cmx_api_core::ModuleRoutes），在 CmxAppState 上实例化 report_routes，由 web-server 合并
+# （cmx-api-core 不反向依赖本 crate，避免环）。端点路径与迁移前完全一致。
 
 [dependencies]
-# 内部依赖 - 报表中立模型（常量 + DTO）
-cmx-rpt-model = { workspace = true }
-# 内部依赖 - 报表持久化/服务层
-cmx-rpt-store-pg = { workspace = true }
-# 内部依赖 - 报表函数引擎（catalog_json：GET /functions 枚举已注册函数目录给设计器向导）
-cmx-rpt-formula = { workspace = true }
-# 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / routes::traits::ModuleRoutes /
-#   ApiResp/Result/Error）。单向依赖：cmx-rpt-api → cmx-api。
+# 内部依赖 - 报表平台中立应用层（全部 handler + report_routes::<S>() + 大盘）。跨 workspace path 进 ../cmx-report。
+cmx-rpt-app = { workspace = true }
+# 内部依赖 - API 共享骨架层（CmxAppState / routes::traits::ModuleRoutes）。单向依赖：cmx-rpt-api → cmx-api-core。
 cmx-api-core = { workspace = true }
 
-# Web 框架（handler 提取器 + Router + 409 裸响应）
+# Web 框架（Router 类型）
 axum = { workspace = true }
-# 请求 DTO 反序列化
-serde = { workspace = true }
-# JSON 载荷
-serde_json = { workspace = true }
-# 日志追踪
-tracing = { workspace = true }

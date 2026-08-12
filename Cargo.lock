@@ -2034,9 +2034,19 @@ version = "0.1.12"
 dependencies = [
  "axum",
  "cmx-api-core",
+ "cmx-rpt-app",
+]
+
+[[package]]
+name = "cmx-rpt-app"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api-types",
  "cmx-rpt-formula",
  "cmx-rpt-model",
  "cmx-rpt-store-pg",
+ "cmx-traits",
  "serde",
  "serde_json",
  "tracing",
@@ -2051,7 +2061,6 @@ dependencies = [
  "rust_decimal",
  "serde",
  "serde_json",
- "tokio",
  "tracing",
 ]
 
