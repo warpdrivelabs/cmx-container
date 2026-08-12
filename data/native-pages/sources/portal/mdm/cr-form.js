@@ -21,11 +21,12 @@
 
 const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
 function unwrap(res, body) {
+  // 后端错误响应有两种字段名：ApiResp 用 msg，cmx_api_types::Error 用 error；两者都兼容。
   if (body && typeof body === 'object' && typeof body.code === 'number') {
-    if (body.code !== 0) { const e = new Error(body.msg || `业务错误 ${body.code}`); e.body = body; throw e }
+    if (body.code !== 0) { const e = new Error(body.msg || body.error || `业务错误 ${body.code}`); e.body = body; throw e }
     return body.data
   }
-  if (!res.ok) { const e = new Error((body && body.error) || `HTTP ${res.status}`); e.status = res.status; throw e }
+  if (!res.ok) { const e = new Error((body && (body.msg || body.error)) || `HTTP ${res.status}`); e.status = res.status; throw e }
   return body
 }
 async function apiGet(url, dbId) {
@@ -648,6 +649,17 @@ function doSave(submit) {
         await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId)
       }
       showToast(submit ? `变更申请 ${crId} 已提交审批` : (isFirstSave ? `已创建变更申请 ${crId}（草稿）` : `变更申请 ${crId} 已更新`))
+      // 保存并提交成功后切只读视图：CR 已进审批流不应再改，避免重复点「保存并提交」
+      // 触发 submit 状态校验失败 → cmxError 模态遮罩锁页面。保存草稿保持可编辑（可继续修改）。
+      if (submit) {
+        state.mode = 'view'
+        try {
+          const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
+          state.crHead = (detail && detail.head) || {}
+          state.crLines = (detail && detail.lines) || []
+        } catch (e) { /* 重载失败不阻断，按当前内存数据渲染只读 */ }
+        refresh()
+      }
     } catch (e) {
       if (e && e.violations && typeof C.formatViolations === 'function') {
         C.cmxError?.(`数据校验未通过：\n${C.formatViolations(e.violations, TABLE_NAMES)}`)

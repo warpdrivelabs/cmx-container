@@ -278,7 +278,7 @@
       "codeRule": {
         "mode": "auto",
         "field": "doc_no",
-        "ruleCode": "MDM_GYS"
+        "ruleCode": "MDM_BILL"
       }
     },
     {
@@ -475,5 +475,5 @@
       }
     ]
   },
-  "updatedAt": "2026-08-05T12:25:01.856Z"
+  "updatedAt": "2026-08-12T08:41:14.480Z"
 }
