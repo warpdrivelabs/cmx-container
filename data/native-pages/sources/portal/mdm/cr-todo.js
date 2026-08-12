@@ -256,7 +256,7 @@ async function doAction(act, id) {
       const ok = await M.cmxConfirm?.({ title: '作废', message: `确认作废 CR-${crId}？`, danger: true })
       if (ok === false) return
       await apiPost('/api/mdm/change-requests/abort', { crId }, state.dbId); M.cmxInfo?.(`CR-${crId} 已作废`)
-    } else if (act === 'view') { openTab(currentHost, `单据·CR-${crId}`, 'portal.mdm.cr-detail', { crId }); return }
+    } else if (act === 'view') { openTab(currentHost, `单据·CR-${crId}`, 'portal.mdm.cr-form', { mode: 'view', crId, domain: state.domain, application: state.application, dbId: state.dbId }); return }
     await load(); refresh()
   } catch (e) { cmx().cmxError?.(`操作失败：${e.message}`) }
 }

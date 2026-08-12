@@ -64,6 +64,8 @@ function showToast(message, tone = 'ok', duration = 3000) {
   _toastTimer = setTimeout(() => { el.style.opacity = '0'; _toastTimer = null }, duration)
 }
 
+// 头表分组渲染样式（前端配置，不存后端）：card=卡片分区 / bar=色条+下分隔线。改此常量切换。
+const HEAD_GROUP_STYLE = 'card'
 // step：create 模式初始 1（先查重），update 模式初始 2（改已有记录，跳过查重）
 const state = {
   dbId: '', coord: null,
@@ -77,6 +79,7 @@ const state = {
   headerGroups: [],
   lineDefs: [],            // [{lineType, targetDict, targetTable, parentIdField, meta, map:[[src,tgt]], cols:[CmxColumn]}]
   step: 1, keyName: '', savedCrId: null,
+  crId: null, crHead: null, crLines: [],
   loading: true, loadErr: '',
 }
 let rootEl = null
@@ -122,6 +125,18 @@ function styleCss() {
   .tbl-wrap { flex:1; min-height:0; display:flex; flex-direction:column; }
   .tbl-wrap cmx-revo-grid { display:flex; width:100%; flex:1 1 0%; min-width:0; min-height:0; flex-direction:column; }
   cmx-toolbar { display:block; }
+  /* 头表单分组：card（卡片分区）/ bar（色条+下分隔线），由 group.groupType 控制 */
+  .grp { margin-bottom:6px; }
+  .grp-title { display:flex; align-items:center; gap:6px; font-weight:700; color:var(--sapTitleColor); font-size:0.92rem; }
+  .grp-title ui5-icon { color:var(--sapInformativeTextColor,var(--sapHighlightColor)); font-size:0.95rem; }
+  .grp-body { box-sizing:border-box; }
+  .grp-card { border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); border-radius:6px; overflow:hidden;
+    background:var(--sapList_Background,#fff); }
+  .grp-card .grp-title { padding:6px 10px; background:var(--sapGroup_TitleBackground,#f7f7f7);
+    border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); }
+  .grp-card .grp-body { padding:8px 10px; }
+  .grp-bar .grp-title { padding:2px 0 2px 10px; border-left:3px solid var(--sapButton_Emphasized_Background,#0a6ed1); }
+  .grp-bar .grp-body { padding:8px 0 6px; border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); }
   .step-bar { display:flex; align-items:center; gap:6px; padding:6px 10px;
     background:var(--sapList_Background,#fff); border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0);
     border-radius:6px; margin-bottom:6px; font-size:0.85rem; color:var(--sapContent_LabelColor); }
@@ -149,8 +164,10 @@ function esc(s) { return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;
 function viewHtml() {
   if (state.loading) return `<div class="pg"><div class="loading">正在加载表单元数据…</div></div>`
   if (state.loadErr) return `<div class="pg"><div class="load-err">⚠ ${esc(state.loadErr)}</div></div>`
-  const isEdit = state.mode === 'update'
-  const showSteps = !isEdit
+  const mode = state.mode
+  const isView = mode === 'view'
+  const isEdit = mode === 'update'
+  const showSteps = mode === 'create' // 仅新增显示步骤条（查重 → 完整信息）
   const step = state.step
   const stepBarHtml = showSteps ? `<div class="step-bar">
       <div class="step ${step >= 1 ? (step > 1 ? 'done' : 'cur') : 'pending'}"><span class="num">1</span><span>关键信息</span></div>
@@ -158,9 +175,16 @@ function viewHtml() {
       <div class="step ${step >= 2 ? 'cur' : 'pending'}"><span class="num">2</span><span>完整信息</span></div>
     </div>` : ''
   const domainLabel = state.dictMeta?.dictName || state.activation?.target_dict || '主数据'
+  const modeLabel = isView ? '查看' : (isEdit ? '变更' : '新增')
+  // view 模式标题带单据号
+  const titleSuffix = (isView && state.crHead?.doc_no) ? `· ${esc(state.crHead.doc_no)}` : ''
   let topActions = ''
   if (showSteps && step === 1) {
     topActions = `<ui5-button design="Emphasized" icon="navigation-right-arrow" id="fNext">下一步</ui5-button>`
+  } else if (showSteps && step === 2) {
+    topActions = `<ui5-button design="Transparent" icon="navigation-left-arrow" id="fPrev">上一步</ui5-button>
+      <ui5-button design="Default" icon="save" id="fSave2">保存草稿</ui5-button>
+      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit2">保存并提交</ui5-button>`
   } else if (isEdit) {
     topActions = `<ui5-button design="Default" icon="save" id="fSave">保存草稿</ui5-button>
       <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit">保存并提交</ui5-button>`
@@ -174,30 +198,29 @@ function viewHtml() {
     </div>` : ''
   const fullVisible = !showSteps || step === 2
   const headHtml = fullVisible ? `<div id="fHeadForms"></div>` : ''
+  // 明细区：view 模式无增删行按钮
+  const lineToolbar = isView ? '' : `<div class="sec-hd-r">
+          <ui5-button design="Default" icon="add" id="fAddRow">增行</ui5-button>
+          <ui5-button design="Transparent" icon="delete" id="fDelRow">删选中</ui5-button>
+        </div>`
   const lineHtml = (fullVisible && state.lineDefs.length) ? `<div class="sec sec-grid" style="flex:1 1 auto;">
       <div class="sec-hd">
         <div class="sec-hd-l">
           <ui5-icon name="accounting-document-verification" design="Default" mode="Decorative"></ui5-icon>
           <ui5-title level="H6" size="H6" wrapping-type="Normal" class="sec-t">明细</ui5-title>
         </div>
-        <div class="sec-hd-r">
-          <ui5-button design="Default" icon="add" id="fAddRow">增行</ui5-button>
-          <ui5-button design="Transparent" icon="delete" id="fDelRow">删选中</ui5-button>
-        </div>
+        ${lineToolbar}
       </div>
       <div class="sec-bd">
         <div id="fLineTabs" class="line-tabs"></div>
         <div id="fLinePanels" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>
       </div>
     </div>` : ''
-  const bottomActions = (showSteps && step === 2) ? `<div class="step-actions" style="margin-top:6px;">
-      <ui5-button design="Transparent" icon="navigation-left-arrow" id="fPrev">上一步</ui5-button>
-      <ui5-button design="Default" icon="save" id="fSave2">保存草稿</ui5-button>
-      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit2">保存并提交</ui5-button>
-    </div>` : ''
+  // 操作按钮统一放顶部 ui5-bar（各模式集中），底部不再放按钮
+  const bottomActions = ''
   return `<div class="pg">
     <ui5-bar design="Header" accessible-role="Toolbar">
-      <ui5-label wrapping-type="Normal" style="font-weight:800;font-size:1.05rem;color:var(--sapShellTitleColor,var(--sapTitleColor));">${isEdit ? '变更' : '新增'}${esc(domainLabel)}</ui5-label>
+      <ui5-label wrapping-type="Normal" style="font-weight:800;font-size:1.05rem;color:var(--sapShellTitleColor,var(--sapTitleColor));">${modeLabel}${esc(domainLabel)} ${titleSuffix}</ui5-label>
       <div slot="endContent" style="display:flex;gap:4px;">${topActions}</div>
     </ui5-bar>
     ${stepBarHtml}
@@ -334,56 +357,64 @@ function buildKeyForm() {
   wrap.appendChild(form); keyForm = form
 }
 
-// 头表单：按 header_groups 分区，每区一个 cmx-ui5-form 卡片；未分组字段单独一卡片。
+// 头表单：单个 cmx-ui5-form，分组用 CmxColumnGroup（列模型语义）+ form.setGroupStyle(HEAD_GROUP_STYLE)。
+// cmx-ui5-form 内部按 groupStyle 渲染：每分组独立 ui5-form，标题用 ui5-form::part(header)（CSS 可控 card/bar）。
 function buildHeadForms() {
   const C = cmx(); const wrap = q('fHeadForms'); if (!wrap) return
   wrap.innerHTML = ''; headForms.length = 0
   const isEdit = state.mode === 'update'
-  // create 步骤2：nameFieldKey 列改只读回显（步骤1 已查重）；update：name 可编辑（复用元数据派生结果）。
-  // 直接改实例 edit（保持 CmxColumn 类型，不 spread）。
+  const isView = state.mode === 'view'
+  // 列只读处理（直接改实例 edit，保持 CmxColumn 类型）：view 全只读；create 步骤2 nameFieldKey 只读回显
   const cols = state.headCols.map((c) => {
-    if (!isEdit && c.id === state.nameFieldKey) c.edit = { ...(c.edit || {}), mode: 'readonly' }
+    if (isView) c.edit = { ...(c.edit || {}), mode: 'readonly' }
+    else if (!isEdit && c.id === state.nameFieldKey) c.edit = { ...(c.edit || {}), mode: 'readonly' }
     return c
   })
+  // 按 header_groups 包成 CmxColumnGroup；未归组字段：有分组配置时包「其他」组，无分组配置时散列
   const used = new Set()
-  const groups = []
+  const members = []
   for (const g of state.headerGroups) {
     const items = cols.filter((c) => (g.fields || []).includes(c.id) && !used.has(c.id))
     items.forEach((c) => used.add(c.id))
-    if (items.length) groups.push({ name: g.groupName || g.groupCode || '分组', items })
+    if (!items.length) continue
+    if (C.CmxColumnGroup) members.push(new C.CmxColumnGroup({ caption: g.groupName || g.groupCode || '分组', members: items }))
+    else members.push(...items)
   }
   const ungrouped = cols.filter((c) => !used.has(c.id))
-  if (ungrouped.length) groups.push({ name: state.headerGroups.length ? '其他' : (isEdit ? '基本信息' : '完整信息'), items: ungrouped })
-
-  for (const grp of groups) {
-    const card = document.createElement('div'); card.className = 'sec sec-head'
-    card.style.marginBottom = '6px'
-    card.innerHTML = `<div class="sec-hd"><div class="sec-hd-l">
-        <ui5-icon name="add-document" design="Default" mode="Decorative"></ui5-icon>
-        <ui5-title level="H6" size="H6" wrapping-type="Normal" class="sec-t">${esc(grp.name)}</ui5-title>
-      </div></div><div class="sec-bd"></div>`
-    wrap.appendChild(card)
-    const body = card.querySelector('.sec-bd')
-    const form = document.createElement('cmx-ui5-form'); form.classList.add('cmx-form-neo')
-    if (C.CmxColumnModel) {
-      const cm = new C.CmxColumnModel({ datasetId: 'crHead_' + grp.name })
-      cm.setMembers(grp.items)
-      form.setColumnModel(cm)
-    }
-    form.setLayout?.('S1 M2 L3 XL3')
-    const ds = {}
-    for (const c of grp.items) ds[c.id] = headInitialValue(c.id)
-    form.setDataSet?.(ds)
-    body.appendChild(form); headForms.push(form)
+  if (ungrouped.length) {
+    if (C.CmxColumnGroup && state.headerGroups.length) members.push(new C.CmxColumnGroup({ caption: '其他', members: ungrouped }))
+    else members.push(...ungrouped)
   }
+  const form = document.createElement('cmx-ui5-form'); form.classList.add('cmx-form-neo')
+  if (C.CmxColumnModel) {
+    const cm = new C.CmxColumnModel({ datasetId: 'crHead' })
+    cm.setMembers(members)
+    form.setColumnModel(cm)
+  }
+  form.setGroupStyle?.(HEAD_GROUP_STYLE) // card/bar 由前端常量控制
+  form.setLayout?.('S1 M2 L3 XL3')
+  const ds = {}
+  for (const c of cols) ds[c.id] = headInitialValue(c.id)
+  form.setDataSet?.(ds)
+  wrap.appendChild(form)
+  headForms.push(form)
 }
 
-// 头字段初始值：update 从 target 回填（按 tgtCol 取，兼容扁平/payload）；create 步骤2 name 从 keyName 回显。
+// 头字段初始值：
+//   view：从 CR 头回填（subject_name 顶层 + payload[srcField] 下沉）
+//   update：从 target 字典记录回填（按 tgtCol 取，兼容扁平/payload）
+//   create 步骤2：name 从步骤1 缓存的 keyName 回显
 function headInitialValue(srcField) {
-  const isEdit = state.mode === 'update'
+  const mode = state.mode
   const entry = state.headMap.find(([s]) => s === srcField)
   const tgtCol = entry ? entry[1] : srcField
-  if (isEdit) {
+  if (mode === 'view') {
+    const cr = state.crHead || {}
+    if (srcField === state.nameFieldKey) return cr.subject_name != null ? String(cr.subject_name) : ''
+    const p = cr.payload || {}
+    return p[srcField] != null ? String(p[srcField]) : ''
+  }
+  if (mode === 'update') {
     const t = state.target || {}
     const v = t[tgtCol] != null ? t[tgtCol] : (t.payload && t.payload[tgtCol]) != null ? t.payload[tgtCol] : ''
     return v != null ? String(v) : ''
@@ -421,10 +452,13 @@ function buildLineGrids() {
       cm.setMembers(lm.cols)
       grid.setColumnModel(cm)
     }
-    grid.setOptions?.({ editable: true, fillHeight: true, showRowIndex: true, selectionMode: 'multi', showTotals: false })
+    const readonlyGrid = state.mode === 'view'
+    grid.setOptions?.({ editable: !readonlyGrid, fillHeight: true, showRowIndex: true, selectionMode: readonlyGrid ? 'none' : 'multi', showTotals: false })
     const fill = () => {
-      if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows([newLineRow(lm)]); grid.setDataSet(ds) }
-      else grid.setDataSet?.([newLineRow(lm)])
+      const rows = lineSeedRows(lm)
+      if (!rows.length) { grid.refreshLayout?.(); return }
+      if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows(rows); grid.setDataSet(ds) }
+      else grid.setDataSet?.(rows)
       grid.refreshLayout?.()
     }
     requestAnimationFrame(() => requestAnimationFrame(fill))
@@ -445,6 +479,22 @@ function newLineRow(lm) {
   const r = { id: `nl_${Date.now()}_${lineSeq}` }
   for (const [src] of lm.map) r[src] = ''
   return r
+}
+// 明细 grid 初始行：view 模式从 CR.lines 按 line_type 预填（line_payload → srcField）；
+// 其余模式给一行空行待录。
+function lineSeedRows(lm) {
+  if (state.mode === 'view') {
+    const crLines = (state.crLines || []).filter((l) => l.line_type === lm.lineType)
+    if (!crLines.length) return []
+    return crLines.map((l) => {
+      lineSeq += 1
+      const row = { id: l.id || `cr_${Date.now()}_${lineSeq}`, _savedId: l.id }
+      const p = (l.line_payload && typeof l.line_payload === 'object') ? l.line_payload : {}
+      for (const [src] of lm.map) row[src] = p[src] != null ? String(p[src]) : ''
+      return row
+    })
+  }
+  return [newLineRow(lm)]
 }
 
 // ── 查重 ────────────────────────────────────────────────────────────────────
@@ -623,14 +673,14 @@ function syncSavedLineIds(idMap) {
 function bind(root) {
   rootEl = root
   if (state.loading || state.loadErr) return
-  const showSteps = state.mode !== 'update'
+  const showSteps = state.mode === 'create'
   if (showSteps && state.step === 1) {
     try { buildKeyForm() } catch (e) { console.error('[cr-form] buildKeyForm fail', e) }
   } else {
     try { buildHeadForms() } catch (e) { console.error('[cr-form] buildHeadForms fail', e) }
     if (state.lineDefs.length) {
       try { buildLineGrids() } catch (e) { console.error('[cr-form] buildLineGrids fail', e) }
-      bindLineToolbar()
+      if (state.mode !== 'view') bindLineToolbar()
     }
   }
   root.querySelector('#fNext')?.addEventListener('click', onNext)
@@ -673,6 +723,14 @@ function whenRendered(host, sel, cb, t) {
 // ── 入口 ────────────────────────────────────────────────────────────────────
 async function init() {
   try {
+    // view 模式：先加载 CR 详情，从 CR 头取 docType/crType 定位 activation 配置
+    if (state.mode === 'view' && state.crId) {
+      const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${state.crId}`, state.dbId)
+      state.crHead = (detail && detail.head) || {}
+      state.crLines = (detail && detail.lines) || []
+      state.docType = state.crHead.doc_type || state.docType
+      state.crType = state.crHead.cr_type || state.crType
+    }
     state.activation = await loadActivation()
     await buildFieldModel()
   } catch (e) {
@@ -693,12 +751,15 @@ export default {
       const ctxGet = (k) => { try { return wctx && wctx.get ? wctx.get(k) : undefined } catch { return undefined } }
       state.coord = readCoord(ctx)
       state.dbId = state.coord.dbId || p.dbId || p.db_id || ''
+      state.crId = ctxGet('crId') || p.crId || null
       state.docType = ctxGet('docType') || p.docType || ''
       state.crType = ctxGet('crType') || p.crType || 'create'
-      state.mode = state.crType === 'update' ? 'update' : 'create'
+      // mode：view（只读详情，由 cr-todo 传 crId）/ update（变更，列表台传 target）/ create（新增）
+      state.mode = ctxGet('mode') || p.mode || (state.crId ? 'view' : (state.crType === 'update' ? 'update' : 'create'))
       state.target = ctxGet('target') || p.target || null
-      state.step = state.mode === 'update' ? 2 : 1
+      state.step = state.mode === 'create' ? 1 : 2
       state.keyName = ''; state.savedCrId = null
+      state.crHead = null; state.crLines = []
       state.loading = true; state.loadErr = ''
       activeLineIdx = 0; lineSeq = 0
       if (host) whenRendered(host, '.pg', () => { init() })

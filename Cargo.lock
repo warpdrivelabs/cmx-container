@@ -1443,15 +1443,11 @@ dependencies = [
  "cmx-flow-engine",
  "cmx-flow-model",
  "cmx-flow-store-pg",
- "cmx-web-monitor",
  "jsonwebtoken",
  "serde",
  "serde_json",
  "tokio",
- "tokio-stream",
  "tracing",
- "utoipa",
- "utoipa-swagger-ui",
  "uuid",
 ]
 
@@ -7875,7 +7871,6 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
- "tokio-util",
 ]
 
 [[package]]
