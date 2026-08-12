@@ -65,7 +65,7 @@ function showToast(message, tone = 'ok', duration = 3000) {
 }
 
 // 头表分组渲染样式（前端配置，不存后端）：card=卡片分区 / bar=色条+下分隔线。改此常量切换。
-const HEAD_GROUP_STYLE = 'card'
+const HEAD_GROUP_STYLE = 'bar'
 // step：create 模式初始 1（先查重），update 模式初始 2（改已有记录，跳过查重）
 const state = {
   dbId: '', coord: null,
@@ -83,6 +83,9 @@ const state = {
   loading: true, loadErr: '',
 }
 let rootEl = null
+// init 调用令牌：每次 content 重新进入页面时自增，使旧的异步加载链在 await 后判定过期而中止，
+// 避免刷新时新旧两次 init 并发，把明细重复 push 进共享 state.lineDefs（刷新翻倍 bug）。
+let initToken = 0
 const q = (id) => rootEl && rootEl.querySelector('#' + id)
 
 // 字典坐标四元组（domain/application/module/dbId），来自 ctx.props / workspace.context；module 回退 mdm。
@@ -106,57 +109,61 @@ function coordQs(extra = {}) {
 
 function styleCss() {
   return `
-  .pg { height:100%; display:flex; flex-direction:column; gap:6px; box-sizing:border-box; padding:8px;
+  .pg { height:100%; display:flex; flex-direction:column; gap:10px; box-sizing:border-box; padding:12px 16px;
     background:var(--sapBackgroundColor); color:var(--sapTextColor); overflow:auto;
     font-family:var(--sapFontFamily,'72','Segoe UI',Arial,sans-serif); }
-  .sec { border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); border-radius:6px; overflow:hidden;
+  .sec { border:1px solid var(--sapList_BorderColor,#e0e0e0); border-radius:8px; overflow:hidden;
     background:var(--sapList_Background,#fff); }
   .sec-hd { display:flex; align-items:center; justify-content:space-between; gap:8px;
-    padding:6px 10px; border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0);
-    background:var(--sapGroup_TitleBackground,transparent); }
-  .sec-hd-l { display:flex; align-items:center; gap:6px; }
+    padding:9px 14px; border-bottom:1px solid var(--sapList_BorderColor,#e0e0e0);
+    background:var(--sapList_HeaderBackground,#f5f6f7); }
+  .sec-hd-l { display:flex; align-items:center; gap:8px; }
   .sec-hd-r { display:flex; gap:4px; align-items:center; }
-  .sec-hd ui5-icon { color:var(--sapInformativeTextColor,var(--sapHighlightColor)); font-size:1rem; }
-  .sec-t { margin:0; font-weight:700; color:var(--sapTitleColor); font-size:0.95rem; }
-  .sec-bd { padding:8px 10px; box-sizing:border-box; }
+  .sec-hd ui5-icon { color:var(--neo-cyan,var(--sapInformativeTextColor,#00b4d8)); font-size:14px; }
+  .sec-t { margin:0; font-weight:600; color:var(--sapTitleColor); font-size:13px; }
+  .sec-bd { padding:12px 14px; box-sizing:border-box; }
   .sec-head { flex:0 0 auto; }
   .sec-grid { flex:1 1 0; display:flex; flex-direction:column; min-height:120px; }
   .sec-grid .sec-bd { flex:1; min-height:0; padding:0; display:flex; flex-direction:column; }
   .tbl-wrap { flex:1; min-height:0; display:flex; flex-direction:column; }
   .tbl-wrap cmx-revo-grid { display:flex; width:100%; flex:1 1 0%; min-width:0; min-height:0; flex-direction:column; }
   cmx-toolbar { display:block; }
-  /* 头表单分组：card（卡片分区）/ bar（色条+下分隔线），由 group.groupType 控制 */
-  .grp { margin-bottom:6px; }
-  .grp-title { display:flex; align-items:center; gap:6px; font-weight:700; color:var(--sapTitleColor); font-size:0.92rem; }
-  .grp-title ui5-icon { color:var(--sapInformativeTextColor,var(--sapHighlightColor)); font-size:0.95rem; }
+  /* 头表单分组：card（卡片分区）/ bar（色条+下分隔线），由 HEAD_GROUP_STYLE 控制 */
+  /* 内紧外松：字段卡片由 neo 皮肤处理（紧凑），分组之间留 14px 形成阅读节奏 */
+  .grp { margin-bottom:14px; }
+  .grp:last-child { margin-bottom:0; }
+  .grp-title { display:flex; align-items:center; gap:6px; font-weight:600; color:var(--sapTitleColor);
+    font-size:12px; letter-spacing:.01em; }
+  .grp-title ui5-icon { color:var(--neo-cyan,var(--sapInformativeTextColor,#00b4d8)); font-size:13px; }
   .grp-body { box-sizing:border-box; }
-  .grp-card { border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); border-radius:6px; overflow:hidden;
+  .grp-card { border:1px solid var(--sapList_BorderColor,#e0e0e0); border-radius:8px; overflow:hidden;
     background:var(--sapList_Background,#fff); }
-  .grp-card .grp-title { padding:6px 10px; background:var(--sapGroup_TitleBackground,#f7f7f7);
-    border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); }
-  .grp-card .grp-body { padding:8px 10px; }
-  .grp-bar .grp-title { padding:2px 0 2px 10px; border-left:3px solid var(--sapButton_Emphasized_Background,#0a6ed1); }
-  .grp-bar .grp-body { padding:8px 0 6px; border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); }
-  .step-bar { display:flex; align-items:center; gap:6px; padding:6px 10px;
-    background:var(--sapList_Background,#fff); border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0);
-    border-radius:6px; margin-bottom:6px; font-size:0.85rem; color:var(--sapContent_LabelColor); }
-  .step-bar .step { display:flex; align-items:center; gap:4px; }
+  .grp-card .grp-title { padding:8px 12px; background:var(--sapList_HeaderBackground,#f5f6f7);
+    border-bottom:1px solid var(--sapList_BorderColor,#e0e0e0); }
+  .grp-card .grp-body { padding:10px 12px; }
+  .grp-bar .grp-title { padding:3px 0 3px 10px; border-left:3px solid var(--neo-cyan,#00b4d8); }
+  .grp-bar .grp-body { padding:10px 0 8px; border-bottom:1px solid var(--sapList_BorderColor,#e0e0e0); }
+  .step-bar { display:flex; align-items:center; gap:8px; padding:9px 14px;
+    background:var(--sapList_Background,#fff); border:1px solid var(--sapList_BorderColor,#e0e0e0);
+    border-radius:8px; font-size:12px; color:var(--sapContent_LabelColor); }
+  .step-bar .step { display:flex; align-items:center; gap:5px; }
   .step-bar .step .num { display:inline-flex; align-items:center; justify-content:center;
-    width:20px; height:20px; border-radius:50%; font-size:0.75rem; font-weight:700;
-    background:var(--sapButton_Emphasized_Background,#0a6ed1); color:#fff; }
+    width:18px; height:18px; border-radius:50%; font-size:11px; font-weight:600;
+    background:var(--neo-cyan,#00b4d8); color:#fff; }
   .step-bar .step.done .num { background:var(--sapSuccessBorderColor,#2b7c2b); }
-  .step-bar .step.cur .num { background:var(--sapButton_Emphasized_Background,#0a6ed1); }
+  .step-bar .step.cur .num { background:var(--neo-cyan,#00b4d8); }
   .step-bar .step.pending .num { background:var(--sapNeutralBorderColor,#899191); }
   .step-bar .sep { color:var(--sapContent_DisabledTextColor); }
   .step-actions { display:flex; gap:6px; align-items:center; }
   .line-tabs { display:flex; gap:2px; flex-wrap:wrap; }
-  .line-tab { padding:4px 12px; font-size:0.82rem; cursor:pointer; border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0);
-    border-bottom:none; border-radius:6px 6px 0 0; background:var(--sapGroup_TitleBackground,transparent);
+  .line-tab { padding:6px 14px; font-size:12px; cursor:pointer; border:1px solid var(--sapList_BorderColor,#e0e0e0);
+    border-bottom:none; border-radius:6px 6px 0 0; background:var(--sapList_HeaderBackground,transparent);
     color:var(--sapContent_LabelColor); }
   .line-tab.active { background:var(--sapList_Background,#fff); color:var(--sapTitleColor); font-weight:600;
-    border-bottom:1px solid var(--sapList_Background,#fff); position:relative; top:1px; }
-  .loading { padding:40px; text-align:center; color:var(--sapContent_LabelColor); font-size:0.9rem; }
-  .load-err { padding:24px; color:var(--sapNegativeTextColor,#b00); font-size:0.9rem; }
+    border-bottom:1px solid var(--sapList_Background,#fff); position:relative; top:1px;
+    box-shadow:inset 0 -2px 0 var(--neo-cyan,#00b4d8); }
+  .loading { padding:40px; text-align:center; color:var(--sapContent_LabelColor); font-size:13px; }
+  .load-err { padding:24px; color:var(--sapNegativeTextColor,#b00); font-size:13px; }
   `
 }
 function esc(s) { return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) }
@@ -220,7 +227,7 @@ function viewHtml() {
   const bottomActions = ''
   return `<div class="pg">
     <ui5-bar design="Header" accessible-role="Toolbar">
-      <ui5-label wrapping-type="Normal" style="font-weight:800;font-size:1.05rem;color:var(--sapShellTitleColor,var(--sapTitleColor));">${modeLabel}${esc(domainLabel)} ${titleSuffix}</ui5-label>
+      <ui5-label wrapping-type="Normal" style="font-weight:600;font-size:15px;color:var(--sapShellTitleColor,var(--sapTitleColor));">${modeLabel}${esc(domainLabel)} ${titleSuffix}</ui5-label>
       <div slot="endContent" style="display:flex;gap:4px;">${topActions}</div>
     </ui5-bar>
     ${stepBarHtml}
@@ -309,20 +316,23 @@ async function buildFieldModel() {
   const nameCol = state.headCols.find((col) => col.id === state.nameFieldKey)
   state.nameCaption = nameCol ? (nameCol.caption || subjField) : (subjField || '名称')
   state.headerGroups = a.header_groups || []
-  // 明细
-  state.lineDefs = []
+  // 明细：先用局部数组构建，全部就绪后一次性赋值给 state.lineDefs。
+  // 不能边循环边 push 进 state.lineDefs——for 体内有 await loadDictMeta，会让出执行权；
+  // 若刷新触发第二次 init 并发，两次 push 会交织，导致明细从 2 个翻倍成 4 个。
+  const lineDefs = []
   for (const lmRaw of (a.line_mappings || [])) {
     const lm = normLineMapping(lmRaw)
     const meta = await loadDictMeta(lm.targetDict)
     const all = meta ? metaColumns(meta) : []
     const map = Object.keys(lm.fields || {}).map((src) => [src, lm.fields[src]])
     const cols = pickAndRename(all, lm.fields || {})
-    state.lineDefs.push({
+    lineDefs.push({
       lineType: lm.lineType, targetDict: lm.targetDict,
       targetTable: lm.targetTable, parentIdField: lm.parentIdField,
       meta, map, cols,
     })
   }
+  state.lineDefs = lineDefs
 }
 
 function normLineMapping(lm) {
@@ -721,22 +731,31 @@ function whenRendered(host, sel, cb, t) {
 }
 
 // ── 入口 ────────────────────────────────────────────────────────────────────
-async function init() {
+async function init(tok) {
+  // 过期判定：content 每次重新进入会 initToken++，使旧 tok 作废；
+  // 每个 await 之后检查，作废则立即中止，避免旧异步链覆盖新状态（根治刷新并发）。
+  const stale = () => tok !== initToken
   try {
+    if (stale()) return
     // view 模式：先加载 CR 详情，从 CR 头取 docType/crType 定位 activation 配置
     if (state.mode === 'view' && state.crId) {
       const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${state.crId}`, state.dbId)
+      if (stale()) return
       state.crHead = (detail && detail.head) || {}
       state.crLines = (detail && detail.lines) || []
       state.docType = state.crHead.doc_type || state.docType
       state.crType = state.crHead.cr_type || state.crType
     }
     state.activation = await loadActivation()
+    if (stale()) return
     await buildFieldModel()
+    if (stale()) return
   } catch (e) {
+    if (stale()) return
     state.loadErr = `元数据加载失败：${e.message}`
     console.error('[cr-form] init fail', e)
   }
+  if (stale()) return
   state.loading = false
   refresh()
 }
@@ -761,8 +780,9 @@ export default {
       state.keyName = ''; state.savedCrId = null
       state.crHead = null; state.crLines = []
       state.loading = true; state.loadErr = ''
-      activeLineIdx = 0; lineSeq = 0
-      if (host) whenRendered(host, '.pg', () => { init() })
+    activeLineIdx = 0; lineSeq = 0
+    initToken++; const tok = initToken
+    if (host) whenRendered(host, '.pg', () => { init(tok) })
       return `<style>${styleCss()}</style>${viewHtml()}`
     },
   },
