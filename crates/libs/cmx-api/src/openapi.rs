@@ -13,15 +13,8 @@ use utoipa::OpenApi;
         description = "CMX 系统 API 文档",
     ),
     paths(
-        // Domain/Application/Menu/SysDatasource/Form handlers 已迁至 cmx-biz-api（BizApiDoc）。
-        // Module handlers（写操作手写委托 ModuleService 带 DAM 资产钩子；读操作复用 rest::handler 泛型）
-        crate::handlers::module::handler::create_module,
-        crate::handlers::module::handler::update_module,
-        crate::handlers::module::handler::delete_module,
-        crate::handlers::module::handler::module_custom_page,
-        // Module package 导入/导出
-        crate::handlers::module::package_handler::module_package_import,
-        crate::handlers::module::package_handler::module_package_export,
+        // Module handlers（CRUD + 包）已拆分迁至 cmx-biz-api（ModuleCrudModule）
+        // + cmx-plugin-api（ModulePackageModule）。
         // Plugin/TableMetadata/Marketplace handlers 已迁至 cmx-plugin-api（PluginApiDoc）。
         //服务
         crate::handlers::service::handler::service_call,
@@ -68,12 +61,8 @@ use utoipa::OpenApi;
 
     components(
         schemas(
-            // Domain/Application/Menu/SysDatasource/Form schemas 已迁至 cmx-biz-api（BizApiDoc）。
-            crate::handlers::module::Module,
-            crate::handlers::module::ModuleForCreate,
-            crate::handlers::module::ModuleForUpdate,
-            // Module package schemas
-            crate::handlers::module::package_handler::ModuleImportResponse,
+            // Module schemas 已拆分迁至 cmx-biz-api（Module/ForCreate/ForUpdate）
+            // + cmx-plugin-api（ModuleImportResponse）。
             // Plugin schemas 已迁至 cmx-plugin-api（PluginApiDoc）。
             crate::Pagination,
             // cmx-api service models

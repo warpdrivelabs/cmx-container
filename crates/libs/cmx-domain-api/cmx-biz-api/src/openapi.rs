@@ -47,6 +47,11 @@ use utoipa::OpenApi;
         crate::handlers::sys_datasource::handler::update_datasource,
         crate::handlers::sys_datasource::handler::delete_datasource,
         crate::handlers::sys_datasource::handler::test_connection,
+        // Module CRUD handlers（写委托 ModuleService 带 DAM 钩子；读复用 rest::handler）
+        crate::handlers::module::handler::create_module,
+        crate::handlers::module::handler::update_module,
+        crate::handlers::module::handler::delete_module,
+        crate::handlers::module::handler::module_custom_page,
     ),
     components(
         schemas(
@@ -74,6 +79,10 @@ use utoipa::OpenApi;
             crate::handlers::menu::MenuForUpdate,
             crate::handlers::menu::MenuTreeNodeData,
             cmx_api_types::TreeNode<crate::handlers::menu::MenuTreeNodeData>,
+            // Module schemas
+            crate::handlers::module::Module,
+            crate::handlers::module::ModuleForCreate,
+            crate::handlers::module::ModuleForUpdate,
         )
     )
 )]

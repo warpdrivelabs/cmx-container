@@ -26,6 +26,9 @@ use utoipa::OpenApi;
         crate::handlers::table_metadata::handler::table_metadata_get_by_id,
         crate::handlers::table_metadata::handler::table_metadata_get_by_name,
         crate::handlers::table_metadata::handler::table_metadata_exists,
+        // Module 迁移包导入/导出
+        crate::handlers::module::package_handler::module_package_import,
+        crate::handlers::module::package_handler::module_package_export,
         // Marketplace handlers
         crate::handlers::marketplace::handler::marketplace_plugin_page,
         crate::handlers::marketplace::handler::marketplace_plugin_get_by_id,
@@ -77,6 +80,8 @@ use utoipa::OpenApi;
             crate::handlers::marketplace::response::MarketInstallResponse,
             crate::handlers::marketplace::response::MarketplaceRatingResponse,
             crate::handlers::marketplace::response::CategoryResponse,
+            // Module 迁移包 schema
+            crate::handlers::module::package_handler::ModuleImportResponse,
         )
     )
 )]

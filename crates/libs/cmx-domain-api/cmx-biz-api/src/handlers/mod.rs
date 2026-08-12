@@ -7,4 +7,5 @@ pub mod application;
 pub mod domain;
 pub mod form;
 pub mod menu;
+pub mod module;
 pub mod sys_datasource;

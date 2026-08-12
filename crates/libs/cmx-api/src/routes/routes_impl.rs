@@ -5,7 +5,6 @@
 use crate::app_state::CmxAppState;
 use crate::handlers::debug;
 use crate::handlers::dev;
-use crate::handlers::module;
 use crate::handlers::portal;
 use crate::handlers::service;
 use crate::openapi::ApiDoc;
@@ -38,8 +37,8 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // Domain/Application/Menu/SysDatasource/Form 路由已迁至 cmx-biz-api，由 platform-app 合并。
 
-    // 注册 Module 模块路由（使用 ModuleRoutes）
-    let router = router.merge(module::ModuleHandler.routes());
+    // Module 路由（CRUD + 包）已拆分迁至 cmx-biz-api（ModuleCrudModule）
+    // + cmx-plugin-api（ModulePackageModule），由 cmx-platform-app 合并。
 
     // 插件管理 / 表元数据 / 插件市场 路由已迁至 cmx-plugin-api，由 cmx-platform-app 合并。
 

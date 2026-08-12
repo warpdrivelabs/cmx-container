@@ -15,10 +15,10 @@ use cmx_plugin::common::{PackageUtils, PackageUtilsDeps};
 use cmx_plugin::service::module_export::ModuleExportService;
 use cmx_plugin::service::module_install::{ModuleInstallService, ModulePackageSource};
 
-use crate::app_state::CmxAppState;
-use crate::middleware::CmxSvrContext;
-use crate::rest::header_parse::get_db_id_from_header;
-use crate::{ApiResp, Result};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::rest::header_parse::get_db_id_from_header;
+use cmx_api_core::{ApiResp, Result};
 
 /// 模块迁移包导入请求参数
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -82,7 +82,7 @@ pub async fn module_package_import(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| crate::Error::BadRequest(format!("解析 multipart 请求失败: {e}")))?
+        .map_err(|e| cmx_api_core::Error::BadRequest(format!("解析 multipart 请求失败: {e}")))?
     {
         let name = field.name().unwrap_or_default().to_string();
         match name.as_str() {
@@ -90,21 +90,21 @@ pub async fn module_package_import(
                 let data = field
                     .bytes()
                     .await
-                    .map_err(|e| crate::Error::BadRequest(format!("读取文件失败: {e}")))?;
+                    .map_err(|e| cmx_api_core::Error::BadRequest(format!("读取文件失败: {e}")))?;
                 file_bytes = Some(data.to_vec());
             }
             "force" => {
                 let val = field
                     .text()
                     .await
-                    .map_err(|e| crate::Error::BadRequest(format!("读取 force 失败: {e}")))?;
+                    .map_err(|e| cmx_api_core::Error::BadRequest(format!("读取 force 失败: {e}")))?;
                 force = val == "true" || val == "1";
             }
             _ => {}
         }
     }
     let file_bytes = file_bytes
-        .ok_or_else(|| crate::Error::BadRequest("未上传文件，请上传模块 zip 包".to_string()))?;
+        .ok_or_else(|| cmx_api_core::Error::BadRequest("未上传文件，请上传模块 zip 包".to_string()))?;
 
     // 2. 构造 ModuleInstallService
     let manager = cmx_plugin::GlobalPluginManager::get();
@@ -129,8 +129,8 @@ pub async fn module_package_import(
         .install_module_package(ModulePackageSource::Bytes(file_bytes), force, None)
         .await
         .map_err(|e| match e {
-            cmx_plugin::error::PluginError::CenterData(msg) => crate::Error::BadRequest(msg),
-            other => crate::Error::InternalError(format!("导入失败: {other}")),
+            cmx_plugin::error::PluginError::CenterData(msg) => cmx_api_core::Error::BadRequest(msg),
+            other => cmx_api_core::Error::InternalError(format!("导入失败: {other}")),
         })?;
 
     Ok(Json(ApiResp::ok(ModuleImportResponse {
@@ -178,7 +178,7 @@ pub async fn module_package_export(
             &q.module_code,
         )
         .await
-        .map_err(|e| crate::Error::InternalError(format!("{e}")))?;
+        .map_err(|e| cmx_api_core::Error::InternalError(format!("{e}")))?;
 
     info!(module_code = %q.module_code, size = zip_bytes.len(), "模块包导出成功");
 

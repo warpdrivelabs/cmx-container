@@ -9,6 +9,6 @@ pub mod openapi;
 
 pub use openapi::PluginApiDoc;
 pub use handlers::{
-    marketplace::MarketplaceModule, plugin::PluginModule,
+    marketplace::MarketplaceModule, module::ModulePackageModule, plugin::PluginModule,
     table_metadata::TableMetadataModule,
 };

@@ -15,5 +15,5 @@ pub mod openapi;
 pub use openapi::BizApiDoc;
 pub use handlers::{
     application::ApplicationModule, domain::DomainModule, form::FormModule, menu::MenuModule,
-    sys_datasource::SysDatasourceModule,
+    module::ModuleCrudModule, sys_datasource::SysDatasourceModule,
 };

@@ -11,6 +11,5 @@
 
 pub mod debug;
 pub mod dev;
-pub mod module;
 pub mod portal;
 pub mod service;

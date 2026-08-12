@@ -9,10 +9,13 @@ use cmx_api::routes::routes_impl::api_routes;
 use cmx_api::routes::traits::ModuleRoutes;
 use cmx_ai_api::{AiApiDoc, AiModule};
 use cmx_biz_api::{
-    ApplicationModule, BizApiDoc, DomainModule, FormModule, MenuModule, SysDatasourceModule,
+    ApplicationModule, BizApiDoc, DomainModule, FormModule, MenuModule, ModuleCrudModule,
+    SysDatasourceModule,
 };
 use cmx_code_api::CodeModule;
-use cmx_plugin_api::{MarketplaceModule, PluginApiDoc, PluginModule, TableMetadataModule};
+use cmx_plugin_api::{
+    MarketplaceModule, ModulePackageModule, PluginApiDoc, PluginModule, TableMetadataModule,
+};
 use cmx_iam_api::{AuthModule, IamApiDoc, IamModule};
 use cmx_dct_api::DctModule;
 use cmx_doc_api::DocModule;
@@ -127,9 +130,11 @@ pub fn routes() -> Router<CmxAppState> {
         .merge(MenuModule.routes())
         .merge(SysDatasourceModule.routes())
         .merge(FormModule.routes())
+        .merge(ModuleCrudModule.routes())
         .merge(PluginModule.routes())
         .merge(TableMetadataModule.routes())
-        .merge(MarketplaceModule.routes());
+        .merge(MarketplaceModule.routes())
+        .merge(ModulePackageModule.routes());
     merge_flow(base)
 }
 

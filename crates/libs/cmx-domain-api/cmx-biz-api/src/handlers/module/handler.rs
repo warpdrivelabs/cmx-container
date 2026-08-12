@@ -14,11 +14,11 @@ use cmx_database::crud::CustomQueryService;
 use cmx_database::get_default_db_manager;
 use tracing::debug;
 
-use crate::ApiResp;
-use crate::Result;
-use crate::app_state::CmxAppState;
-use crate::middleware::CmxSvrContext;
-use crate::rest::header_parse::get_db_id_from_header;
+use cmx_api_core::ApiResp;
+use cmx_api_core::Result;
+use cmx_api_core::CmxAppState;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::rest::header_parse::get_db_id_from_header;
 use cmx_biz::module::{ModuleFilter, ModuleForCreate, ModuleForUpdate, ModuleService};
 
 /// Module 自定义分页查询 Handler
@@ -80,7 +80,7 @@ pub async fn module_custom_page(
     let (dataset, total) =
         CustomQueryService::page_custom(mm, &db_id, None, filters, list_options, sql, "cmx_module")
             .await
-            .map_err(|e| crate::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
+            .map_err(|e| cmx_api_core::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,
