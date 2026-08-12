@@ -51,7 +51,7 @@ async function runChecks() {
   checks.push(await t('模块健康 /api/mdm/health', async () => { const d = await apiGet('/api/mdm/health', state.dbId); return `status=${d.status}` }))
   checks.push(await t('激活映射 /api/mdm/activations', async () => { const d = await apiGet('/api/mdm/activations', state.dbId); return `${(d || []).length} 条映射` }))
   checks.push(await t('变更申请 /api/mdm/change-requests', async () => { const d = await apiGet('/api/mdm/change-requests?page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
-  checks.push(await t('合并请求 /api/mdm/merge-requests', async () => { const d = await apiGet('/api/mdm/merge-requests?dictCode=supplier&page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
+  checks.push(await t('合并请求 /api/mdm/merge-requests', async () => { const d = await apiGet('/api/mdm/merge-requests?page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
   checks.push(await t('变更历史 /api/mdm/audit', async () => { const d = await apiGet('/api/mdm/audit?page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
   checks.push(await t('事件 /api/mdm/events', async () => { const d = await apiGet('/api/mdm/events?page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))
   checks.push(await t('订阅 /api/mdm/subscriptions', async () => { const d = await apiGet('/api/mdm/subscriptions?page=1&pageSize=1', state.dbId); return `共 ${d?.total ?? 0} 条` }))

@@ -33,8 +33,6 @@ async function apiPost(url, payload, dbId) {
   return unwrap(r, await r.json().catch(() => null))
 }
 
-// 字典下拉选项（去硬编码 supplier；后续可从 match-configs 动态拉）
-const DICTS = ['supplier']
 // 合并历史 tab 的 zone（md_merge_record.status）
 const ZONES = [
   { code: 'pending', name: '待审', tone: 'warning' },
@@ -48,10 +46,11 @@ const FINDING_ZONES = [
   { code: 'resolved', name: '已合并', tone: 'success' },
   { code: 'ignored', name: '已忽略', tone: 'neutral' },
 ]
-const DIFF_FIELDS = ['name', 'tax_no', 'credit_code', 'short_name', 'phone']
 const state = {
   dbId: '',
-  dictCode: 'supplier',
+  dicts: [],            // 有查重规则的字典列表（从 match-configs 动态拉）
+  dictConfigMap: {},    // dictCode → match_config（含 survive_fields，供字段对比动态取列）
+  dictCode: '',         // 当前选中字典（init 后默认 dicts[0]）
   tab: 'findings',
   // 发现项（md_match_scan）
   findingsZone: 'pending',
@@ -98,6 +97,24 @@ function styleCss() {
 }
 
 // ─── 数据装载 ─────────────────────────────────────────────────────────────
+// 拉全部查重规则，建字典列表 + 配置索引（dictCode → match_config）。init 时调一次。
+async function loadDicts() {
+  const list = (await apiGet('/api/mdm/match-configs', state.dbId)) || []
+  state.dictConfigMap = {}
+  const seen = []
+  for (const c of list) {
+    if (c.dict_code && !state.dictConfigMap[c.dict_code]) {
+      state.dictConfigMap[c.dict_code] = c
+      seen.push(c.dict_code)
+    }
+  }
+  state.dicts = seen
+  if (!state.dictCode && state.dicts.length) state.dictCode = state.dicts[0]
+}
+// 当前字典的字段对比列（从 match_config.survive_fields 动态取；缺失则空数组）
+function diffFields() {
+  return ((state.dictConfigMap[state.dictCode] || {}).survive_fields) || []
+}
 async function loadFindings() {
   // 拉全量（不分 status），前端按 findingsZone 过滤展示 + 各 zone 计数
   const d = (await apiGet(`/api/mdm/match-scan?dictCode=${encodeURIComponent(state.dictCode)}&pageSize=500`, state.dbId)) || {}
@@ -124,7 +141,9 @@ function headHtml() {
       <div class="pg-sub">查重发现项评审 · 合并/忽略 · 合并历史追溯</div></div>
     <div class="head-tools">
       <select class="dict-sel" data-dict>
-        ${DICTS.map((d) => `<option value="${d}" ${state.dictCode === d ? 'selected' : ''}>${d}</option>`).join('')}
+        ${state.dicts.length
+          ? state.dicts.map((d) => `<option value="${d}" ${state.dictCode === d ? 'selected' : ''}>${d}</option>`).join('')
+          : '<option value="">（暂无查重规则）</option>'}
       </select>
     </div>
   </div>
@@ -164,7 +183,7 @@ function findingDiffHtml() {
   const scan = fd.scan || {}
   const members = fd.members || []
   const heads = members.map((m) => `<th>${m.id}</th>`).join('')
-  const rows = DIFF_FIELDS.map((f) => {
+  const rows = diffFields().map((f) => {
     const vals = members.map((m) => `<td>${m[f] ?? ''}</td>`).join('')
     return `<tr><td>${f}</td>${vals}</tr>`
   }).join('')
@@ -204,7 +223,7 @@ function queueHtml() {
 }
 function diffHtml() {
   const m = state.detail.master || {}; const v = (state.detail.victims || [])[0] || {}
-  const rows = DIFF_FIELDS.map((f) => {
+  const rows = diffFields().map((f) => {
     const mv = m[f] ?? ''; const vv = v[f] ?? ''
     const differ = String(mv) !== String(vv)
     const r = state.rulings[f] || { pick: 'master', text: '' }
@@ -295,7 +314,7 @@ async function doFindingIgnore(scanId) {
 
 function collectRulings() {
   const survivorship = {}; const overrides = {}
-  for (const f of DIFF_FIELDS) {
+  for (const f of diffFields()) {
     const r = state.rulings[f]; if (!r) continue
     if (r.pick === 'master') survivorship[f] = 'master'
     else if (r.pick === 'victim') overrides[f] = ((state.detail.victims || [])[0] || {})[f] ?? null
@@ -384,7 +403,7 @@ export default {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
       state.dbId = (ctx && ctx.props && (ctx.props.dbId || ctx.props.db_id)) || ''
-      try { await reloadCurrent() } catch (e) { console.error('[steward] init fail', e) }
+      try { await loadDicts(); await reloadCurrent() } catch (e) { console.error('[steward] init fail', e) }
       if (host) whenRendered(host, '.pg', (r) => bind(r))
       return `<style>${styleCss()}</style>${viewHtml()}`
     },

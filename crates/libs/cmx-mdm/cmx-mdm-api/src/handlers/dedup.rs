@@ -7,7 +7,7 @@
 //! 本模块还提供：
 //! - [`resolve_dict_meta`]：按 dict_code 调 DCT `dict_meta` 拿 DictMeta（头表名 + 列清单），
 //!   供 [`super::merge`] 的 detail/undo 取头表名、详情取列清单（替代硬编码 load_columns）。
-//! - [`line_tables`]：明细表清单注册表（merge/undo 的明细 reparent 用，待主从元数据方案通用化）。
+//! - [`line_tables`]：明细表清单（merge/undo 的明细 reparent 用，从 cmx_mdm_activation.line_mappings 按 target_dict 聚合）。
 
 use axum::Json;
 use axum::extract::State;
@@ -40,13 +40,16 @@ pub(crate) async fn resolve_dict_meta(dict_code: &str) -> Result<DictMeta> {
 
 /// dict → 明细表清单（merge/undo 的明细 reparent 用）。
 ///
-/// 头表名现由 [`resolve_dict_meta`].table_name 获取；本函数只返回明细表 reparent 映射。
-/// 返回元素为 `(明细表名, 外键列名)`；未知字典返回空 Vec。
-pub(crate) fn line_tables(dict_code: &str) -> Vec<(String, String)> {
-    match dict_code {
-        "supplier" => vec![("cm_bank_account".into(), "supplier_id".into())],
-        _ => Vec::new(),
-    }
+/// 从 `cmx_mdm_activation.line_mappings` 按 `target_dict` 聚合所有激活配置的明细表
+/// （元素含 `{targetTable, parentIdField}`），按 `(表名, 外键列)` 去重。
+/// 头表名由 [`resolve_dict_meta`].table_name 获取；本函数只返回明细表 reparent 映射。
+/// 返回元素为 `(明细表名, 外键列名)`；未配置明细的字典返回空 Vec（合并不 reparent）。
+pub(crate) async fn line_tables(
+    mm: &DatabaseManager,
+    db_id: &str,
+    dict_code: &str,
+) -> Result<Vec<(String, String)>> {
+    store::line_tables_for_dict(mm, db_id, dict_code).await
 }
 
 /// 查重规则默认值（从 md_match_config 按 dictCode 读）。

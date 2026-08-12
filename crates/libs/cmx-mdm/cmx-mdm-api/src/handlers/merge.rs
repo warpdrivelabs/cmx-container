@@ -105,15 +105,15 @@ async fn enrich_group_names(
         }
     }
 
-    // 每字典查一次（dict→table 映射仍用注册表；通用化后 target_table 由配置带，此处兜底 supplier）
+    // 每字典查一次：头表名走 DCT dict_meta（替代硬编码 dict→table 映射）
     let mut name_cache: HashMap<(String, i64), (String, String)> = HashMap::new(); // (dict,id) -> (name,code)
     for (dict_code, ids) in &by_dict {
-        let table = match dict_code.as_str() {
-            "supplier" => "cm_supplier",
-            _ => continue, // 未知字典跳过（名称留空）
+        let table = match resolve_dict_meta(dict_code).await {
+            Ok(meta) => meta.table_name.clone(),
+            Err(_) => continue, // dict 未注册，跳过（名称留空）
         };
         let cols = ["id", "name", "code"];
-        if let Ok(rows) = store::load_by_ids(mm, db_id, None, table, &cols, ids).await {
+        if let Ok(rows) = store::load_by_ids(mm, db_id, None, &table, &cols, ids).await {
             for r in rows {
                 let get = |k: &str| {
                     r.fields
@@ -185,14 +185,14 @@ pub async fn mdm_merge_requests_create(
         }
     }
     // 头表名由 body.targetTable 传入（或 match_config 回填）；
-    // line_tables（明细表 reparent）仍由 line_tables 注册表解析，未知字典给空明细。
+    // line_tables（明细表 reparent）从 cmx_mdm_activation.line_mappings 按 target_dict 聚合。
     let head_table = body.target_table.clone();
     if head_table.is_empty() {
         return Err(store::api_err(
             "target_table 不能为空（body 未传且 match_config 无配置）",
         ));
     }
-    let line_tables: Vec<(String, String)> = line_tables(&body.dict_code);
+    let line_tables: Vec<(String, String)> = line_tables(mm, &db_id, &body.dict_code).await?;
     let operated_by = actor_id_i64(&svr_ctx);
 
     // 审查 C1：管家路径带 mergeId 复用 group（不新插）；否则新插 pending
@@ -311,7 +311,7 @@ pub async fn mdm_merge_request_detail(
     let dict_code = group
         .get("dict_code")
         .and_then(|v| v.as_str())
-        .unwrap_or("supplier")
+        .ok_or_else(|| store::api_err("合并记录 dict_code 缺失"))?
         .to_string();
     let master_id = group.get("master_id").and_then(|v| v.as_i64()).unwrap_or(0);
     // 头表名 + 列清单走 DCT dict_meta（替代硬编码 dict_tables/load_columns）
@@ -401,13 +401,13 @@ pub async fn mdm_merge_requests_undo(
     let dict_code = group
         .get("dict_code")
         .and_then(|v| v.as_str())
-        .unwrap_or("supplier")
+        .ok_or_else(|| store::api_err("合并记录 dict_code 缺失"))?
         .to_string();
     let master_id = group.get("master_id").and_then(|v| v.as_i64()).unwrap_or(0);
-    // 头表名走 DCT dict_meta（替代硬编码 dict_tables 头表）；明细表清单用注册表
+    // 头表名走 DCT dict_meta（替代硬编码 dict_tables 头表）；明细表清单从 line_mappings 聚合
     let meta = resolve_dict_meta(&dict_code).await?;
     let head_table = meta.table_name.clone();
-    let line_tables = line_tables(&dict_code);
+    let line_tables = line_tables(mm, &db_id, &dict_code).await?;
     // victim = member_ids 中非 master 的第一个（JSONB 列 to_json_value 为转义字符串，需 parse）
     let members_raw = group.get("member_ids").cloned().unwrap_or(Value::Null);
     let members = match members_raw {

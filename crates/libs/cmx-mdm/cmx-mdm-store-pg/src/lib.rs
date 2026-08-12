@@ -39,7 +39,7 @@ mod md_accessor;
 /// cm_* 写入的 SQL 构造与列值转换工具（dct_accessor 内部用）。
 mod sql_builder;
 
-pub use activation_store::{find_by_doc_type, list, upsert, delete_by_code};
+pub use activation_store::{find_by_doc_type, line_tables_for_dict, list, upsert, delete_by_code};
 pub use cr_service::{abort_cr, check_status, clone_revise, get_cr_detail, list_cr};
 pub use error::{api_err, api_err_db};
 // 激活器主流程对 api 层暴露（M1 activate + M3 merge/unmerge）

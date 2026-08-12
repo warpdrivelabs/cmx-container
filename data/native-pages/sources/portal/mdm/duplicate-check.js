@@ -77,7 +77,7 @@ const state = {
   selCand: null,                           // 当前选中对比的候选
   victimIds: [],                           // 勾选待合并的 victim id
   // 历史区
-  histDict: '', histKw: '', histPage: 1, histPageSize: 10, histList: [], histTotal: 0,
+  histDict: '', histKw: '', histPage: 1, histPageSize: 10, histList: [], histTotal: 0, allDicts: [],
   histDetailId: null, histDetail: null,   // 详情查看：选中 mergeId + detail 数据
   activeTab: 'dup',                       // 当前 tab（dup/hist），refresh 后保持不跳回
   // 双模式（页头 toggle 切换）：anchor=锚点查重（默认，按目标记录比对候选）；
@@ -237,6 +237,14 @@ async function loadRules() {
   // 默认选第一条
   if (state.rules.length && !state.rule) state.rule = normalizeRule(state.rules[0])
   else if (!state.rules.length) state.rule = null
+}
+
+// 拉全部查重规则，提取 dict_code 去重（历史筛选下拉用，不依赖当前 dictCode）
+async function loadAllDicts() {
+  const list = (await apiGet('/api/mdm/match-configs', coord && coord.dbId)) || []
+  const seen = []
+  for (const c of list) { if (c.dict_code && !seen.includes(c.dict_code)) seen.push(c.dict_code) }
+  state.allDicts = seen
 }
 
 // 把后端规则或用户新建统一成编辑器内部结构
@@ -471,7 +479,7 @@ function histHtml() {
       <div class="bar" style="margin-bottom:10px;">
         <ui5-select id="dcHistDict" style="min-width:160px;">
           <ui5-option value="" ${state.histDict === '' ? 'selected' : ''}>全部字典</ui5-option>
-          <ui5-option value="supplier" ${state.histDict === 'supplier' ? 'selected' : ''}>供应商</ui5-option>
+          ${state.allDicts.map((d) => `<ui5-option value="${d}" ${state.histDict === d ? 'selected' : ''}>${d}</ui5-option>`).join('')}
         </ui5-select>
         <ui5-input id="dcHistKw" placeholder="搜索主记录/被合并方名称" value="${state.histKw}" style="min-width:240px;flex:1 1 240px;"></ui5-input>
         <ui5-button design="Default" icon="search" id="dcHistSearch">查询</ui5-button>
@@ -970,6 +978,8 @@ export default {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
       coord = readCoord(ctx)
+      // 预加载全部查重字典（历史筛选下拉用，不依赖当前 dictCode）
+      try { await loadAllDicts() } catch (e) { console.error('[dup-check] loadAllDicts', e) }
       // 历史改为切到「合并历史」tab 时按需加载（loadHist 在 bind 的 cmx-view-change 里触发）
       if (host) whenRendered(host, '.pg', (r) => { rootEl = r; bind(r) })
       // coord 缺失时仍渲染页面，条件区提示「请配置菜单 props 的 domain/application/module」
