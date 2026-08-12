@@ -6,7 +6,8 @@
 //! 状态机:
 //!   draft ──submit──→ approving ──approve(激活器)──→ activated(归档)
 //!                          └──reject──→ rejected(归档)
-//!   rejected ──clone-revise──→ draft(新 CR, source_cr_id 指向旧)
+//!   rejected ──submit──→ approving（驳回后可直接编辑重新提交，无需 clone 新 CR）
+//!   rejected ──clone-revise──→ draft(新 CR, source_cr_id 指向旧；可选，一般直接 resubmit)
 //!   draft ──abort──→ aborted(作废)
 
 use cmx_core::dv;
@@ -30,6 +31,26 @@ pub async fn check_status(
     if cur != expect {
         return Err(api_err(&format!(
             "CR {cr_id} 状态「{cur}」不符(须 {expect})"
+        )));
+    }
+    Ok(head)
+}
+
+/// 校验 CR 当前状态在允许集合内，返回头 Map。状态不符报错。
+/// 用于跨状态操作（如 submit 允许 draft / rejected）。
+pub async fn check_status_in(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: Option<&str>,
+    cr_id: i64,
+    expect: &[&str],
+) -> Result<serde_json::Map<String, Value>, cmx_api_types::Error> {
+    let head = crate::doc_accessor::load_cr_head(mm, db_id, txn_id, cr_id).await?;
+    let cur = head.get("doc_status").and_then(|v| v.as_str()).unwrap_or("");
+    if !expect.contains(&cur) {
+        return Err(api_err(&format!(
+            "CR {cr_id} 状态「{cur}」不符(须 {})",
+            expect.join(" 或 ")
         )));
     }
     Ok(head)

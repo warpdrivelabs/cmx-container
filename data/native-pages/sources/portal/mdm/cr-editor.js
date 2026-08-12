@@ -83,7 +83,7 @@ function openTab(host, caption, nativePage, context, opts = {}) {
     }
   }
   if (!app || typeof app.openNode !== 'function') { console.warn('[cr-editor] 未找到 portal-app.openNode'); return }
-  const ctxKey = (context && (context.crId || (context.target && context.target.id) || (context.supplier && context.supplier.id))) || ''
+  const ctxKey = (context && (context.crId || (context.target && context.target.id) || context.supplierId)) || ''
   const key = opts.single ? 'single' : (ctxKey || Date.now())
   app.openNode({
     id: `${nativePage}-${key}`, name: nativePage, caption, type: 'workspace-node',
@@ -153,7 +153,7 @@ function buildListGrid() {
     const row = (ds && ds.rows && !isNaN(parseInt(d.rowId, 10))) ? ds.rows[parseInt(d.rowId, 10)] : null
     const s = row ? (row.toPlainObject ? row.toPlainObject() : row) : null
     if (!s) return
-    if (d.actionRef === 'view') openTab(currentHost, `供应商·${s.name || ''}`, 'portal.mdm.supplier-detail', { supplier: s })
+    if (d.actionRef === 'view') openTab(currentHost, `供应商·${s.name || ''}`, 'portal.mdm.supplier-detail', { supplierId: s.id, supplierName: s.name, domain: coord && coord.domain, application: coord && coord.application, module: (coord && coord.module) || 'mdm', dbId: coord && coord.dbId })
     else if (d.actionRef === 'edit') openTab(currentHost, `变更·${s.name || ''}`, 'portal.mdm.cr-form', { docType: DOC_TYPE, crType: 'update', target: s })
   })
   const fill = () => {

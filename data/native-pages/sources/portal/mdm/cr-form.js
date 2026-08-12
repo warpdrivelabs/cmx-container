@@ -81,6 +81,7 @@ const state = {
   lineDefs: [],            // [{lineType, targetDict, targetTable, parentIdField, meta, map:[[src,tgt]], cols:[CmxColumn]}]
   step: 1, keyName: '', savedCrId: null,
   crId: null, crHead: null, crLines: [],
+  editing: false,              // view 模式草稿编辑态（true=表单可编辑、右侧操作区切保存/取消）
   loading: true, loadErr: '',
 }
 let rootEl = null
@@ -165,6 +166,16 @@ function styleCss() {
     box-shadow:inset 0 -2px 0 var(--neo-cyan,#00b4d8); }
   .loading { padding:40px; text-align:center; color:var(--sapContent_LabelColor); font-size:13px; }
   .load-err { padding:24px; color:var(--sapNegativeTextColor,#b00); font-size:13px; }
+  /* view 模式左右分栏：左主内容 + 右固定操作区（操作按钮 + 流程占位） */
+  .pg-view { flex-direction:row; align-items:stretch; overflow:hidden; }
+  .pg-view .pg-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; overflow:auto; }
+  .action-panel { flex:0 0 240px; display:flex; flex-direction:column; gap:10px; overflow:auto; }
+  .ap-card { background:var(--sapList_Background,#fff); border:1px solid var(--sapList_BorderColor,#e0e0e0);
+    border-radius:8px; padding:10px 12px; }
+  .ap-title { font-size:13px; font-weight:600; color:var(--sapTitleColor); margin-bottom:8px; }
+  .ap-actions { display:flex; flex-direction:column; gap:8px; }
+  .ap-actions ui5-button { width:100%; }
+  .ap-opinion { width:100%; }
   `
 }
 function esc(s) { return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) }
@@ -206,8 +217,8 @@ function viewHtml() {
     </div>` : ''
   const fullVisible = !showSteps || step === 2
   const headHtml = fullVisible ? `<div id="fHeadForms"></div>` : ''
-  // 明细区：view 模式无增删行按钮
-  const lineToolbar = isView ? '' : `<div class="sec-hd-r">
+  // 明细区：view 只读无增删行按钮；view 编辑态（editing）需要增删行
+  const lineToolbar = (isView && !state.editing) ? '' : `<div class="sec-hd-r">
           <ui5-button design="Default" icon="add" id="fAddRow">增行</ui5-button>
           <ui5-button design="Transparent" icon="delete" id="fDelRow">删选中</ui5-button>
         </div>`
@@ -224,19 +235,54 @@ function viewHtml() {
         <div id="fLinePanels" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>
       </div>
     </div>` : ''
-  // 操作按钮统一放顶部 ui5-bar（各模式集中），底部不再放按钮
-  const bottomActions = ''
-  return `<div class="pg">
-    <ui5-bar design="Header" accessible-role="Toolbar">
+  // view 模式：左右分栏（左主内容 + 右固定操作区）；create/update 单栏，按钮在顶部 bar
+  const body = `<ui5-bar design="Header" accessible-role="Toolbar">
       <ui5-label wrapping-type="Normal" style="font-weight:600;font-size:15px;color:var(--sapShellTitleColor,var(--sapTitleColor));">${modeLabel}${esc(domainLabel)} ${titleSuffix}</ui5-label>
       <div slot="endContent" style="display:flex;gap:4px;">${topActions}</div>
     </ui5-bar>
     ${stepBarHtml}
     ${keyFormCard}
     ${headHtml}
-    ${lineHtml}
-    ${bottomActions}
-  </div>`
+    ${lineHtml}`
+  if (isView) {
+    return `<div class="pg pg-view"><div class="pg-main">${body}</div><aside class="action-panel">${actionPanelHtml()}</aside></div>`
+  }
+  return `<div class="pg">${body}</div>`
+}
+
+// view 模式右侧操作区：按 doc_status 显示操作按钮；草稿/驳回可切编辑态；下方流程区占位（暂不开发）。
+function actionPanelHtml() {
+  if (state.mode !== 'view') return ''
+  // 编辑态：保存/取消
+  if (state.editing) {
+    return `<div class="ap-card"><div class="ap-title">编辑</div><div class="ap-actions">
+        <ui5-button design="Emphasized" icon="save" id="fEditSave">保存</ui5-button>
+        <ui5-button design="Transparent" icon="cancel" id="fEditCancel">取消</ui5-button>
+      </div></div>${flowPlaceholderHtml()}`
+  }
+  // 非编辑态：按单据状态显示对应操作按钮
+  const st = state.crHead?.doc_status || ''
+  let actions = ''
+  // draft / rejected 都可编辑 + 重新提交；draft 额外可作废（rejected 已终止，无需作废）
+  if (st === 'draft' || st === 'rejected') {
+    actions = `<ui5-button design="Default" icon="edit" id="fEdit">编辑</ui5-button>
+      <ui5-button design="Emphasized" icon="paper-plane" id="fCrSubmit">提交</ui5-button>`
+    if (st === 'draft') {
+      actions += `<ui5-button design="Transparent" icon="cancel" id="fAbort">作废</ui5-button>`
+    }
+  } else if (st === 'approving') {
+    actions = `<ui5-textarea id="fOpinion" placeholder="审批意见（可选）" rows="3" class="ap-opinion"></ui5-textarea>
+      <ui5-button design="Emphasized" icon="accept" id="fApprove">通过</ui5-button>
+      <ui5-button design="Transparent" icon="decline" id="fReject">驳回</ui5-button>`
+  }
+  const actionsCard = actions ? `<div class="ap-card"><div class="ap-title">操作</div><div class="ap-actions">${actions}</div></div>` : ''
+  return `${actionsCard}${flowPlaceholderHtml()}`
+}
+
+// 流程节点/审批历史占位（暂不开发，等流程能力落地后填充真实节点/历史）
+function flowPlaceholderHtml() {
+  return `<div class="ap-card"><div class="ap-title">流程</div>
+    <cmx-empty-state icon="process" title="流程功能开发中" description="后续展示流程节点与审批历史"></cmx-empty-state></div>`
 }
 
 // ── 元数据加载 ──────────────────────────────────────────────────────────────
@@ -303,6 +349,9 @@ async function buildFieldModel() {
   const headAll = metaColumns(state.dictMeta)
   state.headMap = Object.keys(a.header_mapping || {}).map((src) => [src, a.header_mapping[src]])
   state.headCols = pickAndRename(headAll, a.header_mapping || {})
+  // 快照每列原始 edit.mode，供 buildHeadForms 在 view↔editing 切换时正确恢复
+  // （否则反复设/清 readonly 会污染共享 headCols，导致编辑态仍只读或系统列被误解锁）
+  state.headCols.forEach((c) => { c._origEditMode = c.edit ? c.edit.mode : undefined })
   // 主体名 key：header_mapping 里 value === subject_name_field（目标列名）的那个 key
   const subjField = a.subject_name_field || state.dictMeta.labelField || ''
   state.nameFieldKey = ''
@@ -374,11 +423,15 @@ function buildHeadForms() {
   const C = cmx(); const wrap = q('fHeadForms'); if (!wrap) return
   wrap.innerHTML = ''; headForms.length = 0
   const isEdit = state.mode === 'update'
-  const isView = state.mode === 'view'
-  // 列只读处理（直接改实例 edit，保持 CmxColumn 类型）：view 全只读；create 步骤2 nameFieldKey 只读回显
+  // view 只读（editing=true 时解锁为可编辑，用于草稿编辑态）
+  const isView = state.mode === 'view' && !state.editing
+  // 列只读处理：基于 _origEditMode 重置，避免 view↔editing 切换时 readonly 残留 / 系统列被误解锁。
+  // 系统列（_origEditMode=readonly）恒只读；view 全只读；create 步骤2 nameFieldKey 只读回显。
   const cols = state.headCols.map((c) => {
-    if (isView) c.edit = { ...(c.edit || {}), mode: 'readonly' }
-    else if (!isEdit && c.id === state.nameFieldKey) c.edit = { ...(c.edit || {}), mode: 'readonly' }
+    const forceRo = c._origEditMode === 'readonly' || isView || (!isEdit && c.id === state.nameFieldKey)
+    c.edit = { ...(c.edit || {}) }
+    if (forceRo) c.edit.mode = 'readonly'
+    else if (c.edit.mode === 'readonly') delete c.edit.mode
     return c
   })
   // 按 header_groups 包成 CmxColumnGroup；未归组字段：有分组配置时包「其他」组，无分组配置时散列
@@ -463,7 +516,7 @@ function buildLineGrids() {
       cm.setMembers(lm.cols)
       grid.setColumnModel(cm)
     }
-    const readonlyGrid = state.mode === 'view'
+    const readonlyGrid = state.mode === 'view' && !state.editing
     grid.setOptions?.({ editable: !readonlyGrid, fillHeight: true, showRowIndex: true, selectionMode: readonlyGrid ? 'none' : 'multi', showTotals: false })
     const fill = () => {
       const rows = lineSeedRows(lm)
@@ -659,6 +712,8 @@ function doSave(submit) {
         await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId)
       }
       showToast(submit ? `变更申请 ${crId} 已提交审批` : (isFirstSave ? `已创建变更申请 ${crId}（草稿）` : `变更申请 ${crId} 已更新`))
+      // view 草稿编辑态保存（submit=false）成功后，回退到只读查看
+      if (!submit && state.mode === 'view' && state.editing) { state.editing = false; refresh() }
       // 保存并提交成功后切只读视图：CR 已进审批流不应再改，避免重复点「保存并提交」
       // 触发 submit 状态校验失败 → cmxError 模态遮罩锁页面。保存草稿保持可编辑（可继续修改）。
       if (submit) {
@@ -678,6 +733,46 @@ function doSave(submit) {
       }
     }
   })
+}
+
+// view 模式单据状态操作（提交/作废/通过/驳回），复用 /api/mdm/change-requests/* 接口。
+// confirmFirst=true 前置二次确认；needReason=true 从意见框取理由（驳回默认"详情页驳回"）。
+async function doCrAction(act, confirmFirst = false, needReason = false) {
+  const C = cmx()
+  const crId = Number(state.crId)
+  if (!crId) return
+  try {
+    if (confirmFirst) {
+      const label = ({ abort: '作废' })[act] || '该操作'
+      const ok = await C.cmxConfirm?.({ title: '确认操作', message: `确认对 CR-${crId} 执行${label}？`, danger: true })
+      if (ok === false) return
+    }
+    let url = ''; let payload = { crId }
+    if (act === 'submit') url = '/api/mdm/change-requests/submit'
+    else if (act === 'abort') url = '/api/mdm/change-requests/abort'
+    else if (act === 'approve') url = '/api/mdm/change-requests/approve'
+    else if (act === 'reject') {
+      url = '/api/mdm/change-requests/reject'
+      const reason = needReason ? ((rootEl.querySelector('#fOpinion')?.value || '').trim() || '详情页驳回') : undefined
+      payload = reason ? { crId, reason } : { crId }
+    }
+    await apiPost(url, payload, state.dbId)
+    const msgMap = { submit: '已提交审批', abort: '已作废', approve: '已通过并激活', reject: '已驳回' }
+    C.cmxInfo?.(`CR-${crId} ${msgMap[act] || '操作成功'}`)
+    await reloadDetail()
+  } catch (e) { C.cmxError?.(`操作失败：${e.message}`) }
+}
+
+// 状态操作后重新拉详情，刷新 doc_status 与表单回显（编辑态强制回只读）
+async function reloadDetail() {
+  if (state.crId == null) return
+  try {
+    const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${state.crId}`, state.dbId)
+    state.crHead = (detail && detail.head) || {}
+    state.crLines = (detail && detail.lines) || []
+    state.editing = false
+    refresh()
+  } catch (e) { cmx().cmxError?.(`刷新详情失败：${e.message}`) }
 }
 
 function syncSavedLineIds(idMap) {
@@ -702,7 +797,8 @@ function bind(root) {
     try { buildHeadForms() } catch (e) { console.error('[cr-form] buildHeadForms fail', e) }
     if (state.lineDefs.length) {
       try { buildLineGrids() } catch (e) { console.error('[cr-form] buildLineGrids fail', e) }
-      if (state.mode !== 'view') bindLineToolbar()
+      // view 只读不绑明细增删；view 编辑态（editing）需要
+      if (state.mode !== 'view' || state.editing) bindLineToolbar()
     }
   }
   root.querySelector('#fNext')?.addEventListener('click', onNext)
@@ -711,6 +807,14 @@ function bind(root) {
   root.querySelector('#fSubmit')?.addEventListener('click', () => doSave(true))
   root.querySelector('#fSave2')?.addEventListener('click', () => doSave(false))
   root.querySelector('#fSubmit2')?.addEventListener('click', () => doSave(true))
+  // view 模式右侧操作区按钮（按 doc_status 渲染，元素不存在则跳过）
+  root.querySelector('#fEdit')?.addEventListener('click', () => { state.editing = true; refresh() })
+  root.querySelector('#fEditCancel')?.addEventListener('click', () => { state.editing = false; refresh() })
+  root.querySelector('#fEditSave')?.addEventListener('click', () => doSave(false))
+  root.querySelector('#fCrSubmit')?.addEventListener('click', () => doCrAction('submit'))
+  root.querySelector('#fAbort')?.addEventListener('click', () => doCrAction('abort', true))
+  root.querySelector('#fApprove')?.addEventListener('click', () => doCrAction('approve'))
+  root.querySelector('#fReject')?.addEventListener('click', () => doCrAction('reject', false, true))
 }
 
 function bindLineToolbar() {
@@ -757,6 +861,8 @@ async function init(tok) {
       state.crLines = (detail && detail.lines) || []
       state.docType = state.crHead.doc_type || state.docType
       state.crType = state.crHead.cr_type || state.crType
+      // view 草稿编辑保存走 update 该 CR（复用 doSave 的 savedCrId 分支）
+      state.savedCrId = Number(state.crId) || null
     }
     state.activation = await loadActivation()
     if (stale()) return
@@ -791,6 +897,7 @@ export default {
       state.step = state.mode === 'create' ? 1 : 2
       state.keyName = ''; state.savedCrId = null
       state.crHead = null; state.crLines = []
+      state.editing = false
       state.loading = true; state.loadErr = ''
     activeLineIdx = 0; lineSeq = 0
     initToken++; const tok = initToken
