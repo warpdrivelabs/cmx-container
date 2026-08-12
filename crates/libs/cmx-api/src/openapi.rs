@@ -53,9 +53,7 @@ use utoipa::OpenApi;
         // IAM User temp role handlers（阶段1新增）
         // IAM Rule handlers（阶段2新增）
         // IAM Audit handlers（阶段5新增）
-        // Dev handlers
-        crate::handlers::dev::handler::list_templates,
-        crate::handlers::dev::handler::create_project,
+        // Dev handlers 已 feature-gate（dev-tools），不进 Swagger。
         // AI handlers 已迁至 cmx-ai-api（AiApiDoc），由 platform-app OpenApi::merge() 聚合。
     ),
 
@@ -159,11 +157,7 @@ use utoipa::OpenApi;
             crate::ApiResp<cmx_iam::service_traits::EffectivePermissionsResponse>,
             crate::ApiResp<cmx_iam::service_traits::PermissionDiffResponse>,
             crate::ApiResp<Vec<cmx_iam::service_traits::PermissionUsageStat>>,
-            // Dev schemas
-            crate::handlers::dev::request::CreateProjectRequest,
-            crate::handlers::dev::response::CreateProjectResponse,
-            crate::handlers::dev::response::TemplateInfo,
-            crate::ApiResp<Vec<crate::handlers::dev::response::TemplateInfo>>,
+            // Dev schemas 已 feature-gate（dev-tools），不进 Swagger。
             // AI schemas 已迁至 cmx-ai-api（AiApiDoc）。
         )
     )

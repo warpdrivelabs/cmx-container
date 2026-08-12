@@ -4,6 +4,7 @@
 
 use crate::app_state::CmxAppState;
 use crate::handlers::debug;
+#[cfg(feature = "dev-tools")]
 use crate::handlers::dev;
 use crate::handlers::portal;
 use crate::handlers::service;
@@ -55,12 +56,15 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // AI 中继路由（AiModule）已迁至 cmx-ai-api，由 cmx-platform-app 合并。
 
-    // 注册开发工具路由（使用 ModuleRoutes）
-
-    let mut router = router.merge(dev::DevModule.routes());
+    // 开发工具路由（仅 dev-tools feature 启用时注册；违反集群无状态约束，生产禁用）
+    #[cfg(feature = "dev-tools")]
+    let router = {
+        tracing::warn!("dev-tools feature 已启用：开发脚手架端点暴露，仅限单节点 dev，不可水平扩展！");
+        router.merge(dev::DevModule.routes())
+    };
 
     // 注册健康检查路由（无需认证，供 Docker HEALTHCHECK 和负载均衡器使用）
-    router = router.route("/health", get(health_check));
+    let router = router.route("/health", get(health_check));
 
     router
     // 统一添加 /api 前缀

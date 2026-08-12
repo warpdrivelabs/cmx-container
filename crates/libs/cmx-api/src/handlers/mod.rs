@@ -10,6 +10,7 @@
 //! - `handler.rs` - Handler 实现（HTTP 处理，可选）
 
 pub mod debug;
+#[cfg(feature = "dev-tools")]
 pub mod dev;
 pub mod portal;
 pub mod service;

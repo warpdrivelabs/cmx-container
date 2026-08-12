@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
+[features]
+default = []
+# 开发脚手架工具（项目模板生成：本地 fs 写入/解压 zip/写 settings.json）。
+# 违反集群无状态约束（AGENTS.md §五），仅单节点 dev 环境启用；默认关闭，启用时启动告警。
+dev-tools = []
+
 [dependencies]
 # Web 框架 - HTTP 服务器
 axum = { workspace = true }
