@@ -5,15 +5,15 @@
  * @LastEditors: yqs
  * @LastEditTime: 2026-03-18 08:41:53
  */
-//! cmx-api 模块
-//!
-//! 提供 Web API 开发所需的基础组件，包括错误处理、响应封装、中间件和通用 CRUD 框架。
+//! cmx-common-api —— 通用 API 层（原 cmx-api 重命名）。
 //!
 //! 重构后：共享骨架（CmxAppState / ModuleRoutes / rest / middleware / CRUD 宏）已下沉到
-//! `cmx-api-core`。本 crate 通过 re-export 保持对外 API 兼容（`cmx_api::CmxAppState`、
-//! `cmx_api::ModuleRoutes`、`cmx_api::rest::handler::create` 等仍可用），并保留具体 handler
-//! （handlers/）、CRUD 宏调用（routes/crud_handlers.rs）、路由聚合（routes/routes_impl.rs）、
-//! OpenAPI 文档（openapi.rs）。
+//! `cmx-api-core`。本 crate 通过 re-export 保持对外 API 兼容（`cmx_common_api::CmxAppState`、
+//! `cmx_common_api::ModuleRoutes`、`cmx_common_api::rest::handler::create` 等仍可用），并保留
+//! 剩余 handler（debug/portal/service）、路由聚合（routes/routes_impl.rs）、OpenAPI 文档（openapi.rs）。
+//!
+//! 命名：cmx-domain-api 分组目录已改名 cmx-apis（含 5 个域 api crate）；本 crate 因不再
+//! 是唯一的 "api" crate，改名 cmx-common-api 以区分（common = 跨域通用 + 装配中枢）。
 
 // —— 从 cmx-api-core re-export 共享骨架（保持 crate::xxx 与 cmx_api::xxx 双路径兼容）——
 pub use cmx_api_core::app_state;

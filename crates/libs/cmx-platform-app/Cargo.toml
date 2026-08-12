@@ -24,7 +24,7 @@ cmx-database = { workspace = true }
 # 内部依赖 - 数据库(tokio-postgres 零拷贝新链路)
 cmx-database-pg = { workspace = true }
 # 内部依赖 - API
-cmx-api = { workspace = true }
+cmx-common-api = { workspace = true }
 # 内部依赖 - 各模块 HTTP 层（在此合并进主路由，破环）
 cmx-rpt-api = { workspace = true }
 cmx-flow-api = { workspace = true }

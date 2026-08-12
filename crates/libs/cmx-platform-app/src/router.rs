@@ -5,8 +5,8 @@
 
 use axum::extract::DefaultBodyLimit;
 use axum::{Router, middleware};
-use cmx_api::CmxAppState;
-use cmx_api::middleware::{cors_layer, mw_auth, mw_context_resolver, mw_permission, trace_layer};
+use cmx_common_api::CmxAppState;
+use cmx_common_api::middleware::{cors_layer, mw_auth, mw_context_resolver, mw_permission, trace_layer};
 use cmx_utils::ConfigManager;
 use tower_cookies::CookieManagerLayer;
 use tower_http::compression::CompressionLayer;

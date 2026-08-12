@@ -28,7 +28,7 @@ pub async fn init_auth_service(
     // 1.5 初始化全局认证白名单（合并内置白名单 + TOML 自定义白名单）
     // 必须在 mw_auth 中间件被首次请求前完成初始化
     if let Err(e) =
-        cmx_api::middleware::GlobalAuthService::initialize_whitelist(auth_config.whitelist.clone())
+        cmx_common_api::middleware::GlobalAuthService::initialize_whitelist(auth_config.whitelist.clone())
     {
         warn!("全局认证白名单初始化失败: {}", e);
     }
@@ -94,7 +94,7 @@ pub async fn init_auth_service(
             registry.register(provider);
         }
 
-        cmx_api::middleware::GlobalAuthService::initialize_provider_registry(registry)
+        cmx_common_api::middleware::GlobalAuthService::initialize_provider_registry(registry)
             .map_err(crate::error::Error::ServerSetup)?;
 
         info!("第三方 OAuth2 Provider 注册表初始化完成");
@@ -113,7 +113,7 @@ pub async fn init_auth_service(
     // 5. 注册全局 OAuth2 策略（供 OAuth2 handler 使用）
     // 5.6 修复：从 AuthServiceImpl 获取已创建的 OAuth2Policy，避免重复创建
     let oauth2_policy = Arc::new(auth_service_impl.oauth2_policy().clone());
-    cmx_api::middleware::GlobalAuthService::initialize_oauth2(oauth2_policy)
+    cmx_common_api::middleware::GlobalAuthService::initialize_oauth2(oauth2_policy)
         .map_err(crate::error::Error::ServerSetup)?;
 
     // 5.5 启动过期会话定时清理任务（必须在 auth_service_impl move 到 Arc<dyn AuthService> 之前调用）
@@ -125,7 +125,7 @@ pub async fn init_auth_service(
     let auth_service: Arc<dyn AuthService> = Arc::new(auth_service_impl);
 
     // 6. 注册全局认证服务（供 mw_auth 中间件使用）
-    cmx_api::middleware::GlobalAuthService::initialize(auth_service.clone())
+    cmx_common_api::middleware::GlobalAuthService::initialize(auth_service.clone())
         .map_err(crate::error::Error::ServerSetup)?;
 
     // 7. 注册 Pub/Sub 订阅（缓存失效回调）

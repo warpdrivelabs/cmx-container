@@ -3,10 +3,10 @@
 //! 负责配置应用程序的所有 HTTP 路由，包括 API 路由和 Swagger 文档路由。
 
 use axum::Router;
-use cmx_api::CmxAppState;
-use cmx_api::openapi::ApiDoc;
-use cmx_api::routes::routes_impl::api_routes;
-use cmx_api::routes::traits::ModuleRoutes;
+use cmx_common_api::CmxAppState;
+use cmx_common_api::openapi::ApiDoc;
+use cmx_common_api::routes::routes_impl::api_routes;
+use cmx_common_api::routes::traits::ModuleRoutes;
 use cmx_ai_api::{AiApiDoc, AiModule};
 use cmx_biz_api::{
     ApplicationModule, BizApiDoc, DomainModule, FormModule, MenuModule, ModuleCrudModule,
