@@ -23,7 +23,7 @@ use cmx_flow_api::{FlowModule, FlowProxyModule};
 use cmx_job_api::JobModule;
 use cmx_mdm_api::MdmModule;
 use cmx_model_api::ModelModule;
-use cmx_rpt_api::ReportModule;
+use cmx_rpt_api::{ReportModule, ReportProxyModule};
 use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -43,6 +43,18 @@ pub(crate) fn flow_remote_base() -> Option<String> {
 /// 流程引擎是否在远程（代理态）。main.rs 据此决定是否起本进程引擎 poller。
 pub fn flow_is_proxied() -> bool {
     flow_remote_base().is_some()
+}
+
+/// 读 `[center_client.urls].report`：非空=独立报表微服务部署（反代到它），空=进程内嵌（默认）。
+///
+/// 与 [`flow_remote_base`] 同构——报表侧的「后端一芯双壳」切换点。报表微服务对外 URL 与平台一致
+/// （`/api/report-design/*` 等，无 `/v1`），配了远程地址就转发、没配就本进程跑引擎，前端全零改。
+pub(crate) fn report_remote_base() -> Option<String> {
+    let cfg = cmx_plugin::center_client::CenterClientConfig::load();
+    cfg.urls
+        .report
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 /// 平台服务依赖拓扑：枚举各已挂载能力当前挂的是「进程内内嵌」还是「反代独立微服务」。
@@ -78,7 +90,23 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
         },
     ];
     // 其余已挂载模块（routes() 里无条件 merge，全进程内嵌）。
-    deps.push(embedded("report", "报表引擎"));
+    // report：第二个「一芯双壳」能力——按 [center_client.urls].report 决定 embedded/proxy。
+    deps.push(match report_remote_base() {
+        Some(base) => cmx_web_monitor::ServiceDep {
+            key: "report".into(),
+            label: "报表引擎".into(),
+            mode: "proxy".into(),
+            target: Some(base),
+            proxiable: true,
+        },
+        None => cmx_web_monitor::ServiceDep {
+            key: "report".into(),
+            label: "报表引擎".into(),
+            mode: "embedded".into(),
+            target: None,
+            proxiable: true,
+        },
+    });
     deps.push(embedded("doc", "业务单据"));
     deps.push(embedded("dct", "数据字典"));
     deps.push(embedded("mdm", "主数据"));
@@ -100,6 +128,19 @@ fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
     }
 }
 
+/// 按配置产出报表模块路由：远程基址非空 → ReportProxyModule（转发到独立 cmx-rpt-server）；
+/// 否则 ReportModule（进程内嵌）。与 [`merge_flow`] 同构。
+fn merge_report(router: Router<CmxAppState>) -> Router<CmxAppState> {
+    match report_remote_base() {
+        Some(base) => {
+            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            tracing::info!(report_base = %base, "报表引擎：独立微服务模式（ReportProxy 转发 /api/report-design/*）");
+            router.merge(ReportProxyModule::new(base, api_key).routes())
+        }
+        None => router.merge(ReportModule.routes()),
+    }
+}
+
 /// 配置所有 API 路由
 ///
 /// 直接调用 cmx-api 的统一路由注册，返回配置好的 Axum Router。
@@ -107,7 +148,7 @@ fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
 /// 数据字典 DctModule、主数据 MdmModule、异步任务中心 JobModule、模型中心 ModelModule、
 /// 编码引擎 CodeModule）在此合并——cmx-api 不依赖它们，避免循环依赖。
 ///
-/// 流程模块按 `[center_client.urls].flow` 二选一：配了=反代到独立 flow-server，没配=进程内嵌。
+/// 流程、报表模块各按 `[center_client.urls].{flow,report}` 二选一：配了=反代到独立微服务，没配=进程内嵌。
 ///
 /// # Returns
 ///
@@ -116,7 +157,6 @@ pub fn routes() -> Router<CmxAppState> {
     let base = api_routes()
         .merge(AuthModule.routes())
         .merge(IamModule.routes())
-        .merge(ReportModule.routes())
         .merge(DocModule.routes())
         .merge(DctModule.routes())
         .merge(MdmModule.routes())
@@ -135,7 +175,8 @@ pub fn routes() -> Router<CmxAppState> {
         .merge(TableMetadataModule.routes())
         .merge(MarketplaceModule.routes())
         .merge(ModulePackageModule.routes());
-    merge_flow(base)
+    // 报表、流程各按 [center_client.urls].{report,flow} 二选一：配了=反代到独立微服务，没配=进程内嵌。
+    merge_flow(merge_report(base))
 }
 
 /// 获取 Swagger 文档路由

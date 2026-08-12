@@ -2035,6 +2035,10 @@ dependencies = [
  "axum",
  "cmx-api-core",
  "cmx-rpt-app",
+ "cmx-traits",
+ "reqwest",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

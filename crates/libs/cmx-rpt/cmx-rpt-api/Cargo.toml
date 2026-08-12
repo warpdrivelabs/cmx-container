@@ -17,3 +17,13 @@ cmx-api-core = { workspace = true }
 
 # Web 框架（Router 类型）
 axum = { workspace = true }
+
+# ── 反代壳 ReportProxyModule 依赖（对齐 cmx-flow-api）：出站 HTTP + 三层鉴权上下文 + 日志/JSON。 ──
+# 出站 HTTP 客户端（反代转发到独立 cmx-rpt-server）。
+reqwest = { workspace = true }
+# 三层出站鉴权上下文（current_original_token / current_request_id）。
+cmx-traits = { workspace = true }
+# 502 兜底的 JSON 信封。
+serde_json = { workspace = true }
+# 转发失败日志。
+tracing = { workspace = true }

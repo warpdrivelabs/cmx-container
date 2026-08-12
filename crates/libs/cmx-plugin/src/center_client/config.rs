@@ -48,6 +48,9 @@ pub struct CenterUrlsConfig {
     /// 流程中心（流程定义）URL。
     #[serde(default)]
     pub flow: Option<String>,
+    /// 报表中心（独立报表微服务 cmx-rpt-server）URL。非空=平台反代到它，空=进程内嵌。
+    #[serde(default)]
+    pub report: Option<String>,
 }
 
 /// 服务发现模式配置。
