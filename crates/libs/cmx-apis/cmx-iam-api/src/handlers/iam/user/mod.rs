@@ -23,25 +23,32 @@ impl ModuleRoutes for UserModule {
             .route("/iam/users/page", post(handler::page_users))
             .route("/iam/users/list", post(handler::list_users))
             // 关联操作
+            // 给用户批量分配角色（覆盖式：替换该用户的角色集合）
             .route("/iam/users/assign-roles", post(handler::assign_roles))
+            // 查询用户已绑定的角色清单
             .route("/iam/users/roles", get(handler::get_user_roles))
-            // 临时角色授权（阶段1新增）
+            // 临时角色授权（阶段1新增，带时效，到期自动失效）
+            // 授予临时角色（指定起止时间）
             .route(
                 "/iam/users/assign-temp-role",
                 post(temp_role_handler::assign_temp_role),
             )
+            // 撤销单条临时角色授权
             .route(
                 "/iam/users/revoke-temp-role",
                 post(temp_role_handler::revoke_temp_role),
             )
+            // 批量撤销临时角色授权
             .route(
                 "/iam/users/revoke-temp-roles-batch",
                 post(temp_role_handler::revoke_temp_roles_batch),
             )
+            // 延长临时角色授权有效期
             .route(
                 "/iam/users/extend-temp-role",
                 post(temp_role_handler::extend_temp_role),
             )
+            // 查询（当前 / 指定）用户的临时授权列表
             .route(
                 "/iam/users/temp-assignments",
                 get(temp_role_handler::get_temp_assignments),

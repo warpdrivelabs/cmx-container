@@ -17,10 +17,12 @@ pub struct ModulePackageModule;
 impl ModuleRoutes for ModulePackageModule {
     fn routes(self) -> Router<CmxAppState> {
         Router::new()
+            // 导入模块迁移包（解包并写入表 / DAM 资产 / 配置）
             .route(
                 "/module/package/import",
                 post(package_handler::module_package_import),
             )
+            // 导出模块迁移包（聚合表 / DAM 资产 / 配置为 zip 流下载）
             .route(
                 "/module/package/export",
                 get(package_handler::module_package_export),

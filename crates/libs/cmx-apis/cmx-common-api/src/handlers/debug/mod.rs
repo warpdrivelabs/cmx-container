@@ -14,7 +14,9 @@ use crate::routes::traits::ModuleRoutes;
 pub use handler::get_current_debug_session;
 
 fn inner_routes() -> Router<CmxAppState> {
-    Router::new().route("/current", get(get_current_debug_session))
+    Router::new()
+        // 查询当前用户的插件调试会话状态（断点 / 上下文 / 调用栈）
+        .route("/current", get(get_current_debug_session))
 }
 
 pub struct DebugModule;

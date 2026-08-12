@@ -16,7 +16,9 @@ pub use handler::{create_project, list_templates};
 
 fn inner_routes() -> Router<CmxAppState> {
     Router::new()
+        // 列出可用脚手架模板（插件 / 页面 / 服务模板等）
         .route("/templates", get(list_templates))
+        // 基于模板生成新项目骨架（落盘到工作区）
         .route("/projects", post(create_project))
 }
 
