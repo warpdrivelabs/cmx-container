@@ -16,7 +16,7 @@ authors.workspace = true
 # 平台中立核（引擎单例 + 全部 handler + flow_routes + 信封）——跨 workspace path 进 cmx-flowengine
 cmx-flow-app = { workspace = true }
 # API 框架（CmxAppState / routes::traits::ModuleRoutes）。单向依赖 cmx-flow-api → cmx-api。
-cmx-api = { workspace = true }
+cmx-api-core = { workspace = true }
 
 # Web 框架（Router 类型；路由体由 core 提供）
 axum = { workspace = true }

@@ -16,7 +16,7 @@ cmx-doc-model = { workspace = true }
 # 内部依赖 - DOC 持久化/服务层（DocLoader/DocSaver/Zmc*/DocRevision/cache）
 cmx-doc-store-pg = { workspace = true }
 # 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / ModuleRoutes / ApiResp/Result/Error）
-cmx-api = { workspace = true }
+cmx-api-core = { workspace = true }
 # 内部依赖 - 模型中心（definitions::store：读单据定义 JSON + base 字段集）
 cmx-model-meta = { workspace = true }
 # 内部依赖 - 业务错误（BizError → cmx_api_types::Error 桥接，供 ? 传播）

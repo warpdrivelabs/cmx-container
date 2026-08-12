@@ -22,8 +22,15 @@ members = [
     "crates/libs/cmx-web-monitor",
     "crates/libs/cmx-service-base",
     "crates/libs/cmx-platform-app",
-    "crates/libs/cmx-api",
-    "crates/libs/cmx-api-types",
+    "crates/libs/cmx-apis/cmx-common-api",
+    "crates/libs/cmx-apis/cmx-api-core",
+    "crates/libs/cmx-apis/cmx-api-types",
+    # —— 域 HTTP 层薄 crate（cmx-biz-api/cmx-iam-api/... 逐步补齐）——
+    "crates/libs/cmx-apis/cmx-storage-api",
+    "crates/libs/cmx-apis/cmx-ai-api",
+    "crates/libs/cmx-apis/cmx-biz-api",
+    "crates/libs/cmx-apis/cmx-plugin-api",
+    "crates/libs/cmx-apis/cmx-iam-api",
     "crates/libs/cmx-biz",
     "crates/libs/cmx-iam",
     "crates/libs/cmx-macros",
@@ -43,9 +50,9 @@ members = [
     # 独立 workspace ../cmx-flowengine/（S0：独立流程微服务）。此处仅保留平台适配层
     # cmx-flow-api，它经 [workspace.dependencies] 跨 workspace 路径引用迁走的引擎 crate。
     "crates/libs/cmx-flow/cmx-flow-api",
-    "crates/libs/cmx-rpt/cmx-rpt-model",
-    "crates/libs/cmx-rpt/cmx-rpt-formula",
-    "crates/libs/cmx-rpt/cmx-rpt-store-pg",
+    # 报表模块中立 crate（model/formula/store-pg）+ 中立核 cmx-rpt-app 已迁至独立 workspace
+    # ../cmx-report/（对标 flow S0：独立报表平台微服务）。此处仅保留平台适配层 cmx-rpt-api，
+    # 它经 [workspace.dependencies] 跨 workspace 路径引用迁走的 cmx-rpt-app。
     "crates/libs/cmx-rpt/cmx-rpt-api",
     "crates/libs/cmx-job/cmx-job-core",
     "crates/libs/cmx-job/cmx-job-store-pg",
@@ -87,10 +94,22 @@ authors = ["skylake@pansoft.com"]
 cmx-core = { path = "crates/libs/cmx-core", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 工具库
 cmx-utils = { path = "crates/libs/cmx-utils", version = "0.1.12", registry = "nora" }
-# 内部依赖 - API
-cmx-api = { path = "crates/libs/cmx-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 通用 API（剩余 handler：debug/portal/service + 主 ApiDoc + 装配，原 cmx-api）
+cmx-common-api = { path = "crates/libs/cmx-apis/cmx-common-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - API 共享骨架层（CmxAppState/ModuleRoutes/rest/middleware/CRUD 宏，从 cmx-api 抽出）
+cmx-api-core = { path = "crates/libs/cmx-apis/cmx-api-core", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 文件存储 HTTP 层（薄 ModuleRoutes，handler 函数在 cmx-storage）
+cmx-storage-api = { path = "crates/libs/cmx-apis/cmx-storage-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - AI 中继 HTTP 层（薄 handler 转发 OpenCode + SSE）
+cmx-ai-api = { path = "crates/libs/cmx-apis/cmx-ai-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 业务模型 HTTP 层（domain/application/menu/sys_datasource/form）
+cmx-biz-api = { path = "crates/libs/cmx-apis/cmx-biz-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 插件/市场/表元数据 HTTP 层
+cmx-plugin-api = { path = "crates/libs/cmx-apis/cmx-plugin-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - IAM/认证 HTTP 层
+cmx-iam-api = { path = "crates/libs/cmx-apis/cmx-iam-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - API 通用类型
-cmx-api-types = { path = "crates/libs/cmx-api-types", version = "0.1.12", registry = "nora" }
+cmx-api-types = { path = "crates/libs/cmx-apis/cmx-api-types", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 业务模型
 cmx-biz = { path = "crates/libs/cmx-biz", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 数据库
@@ -161,13 +180,15 @@ cmx-flow-def = { path = "../cmx-flowengine/crates/cmx-flow-def", version = "0.1.
 cmx-flow-app = { path = "../cmx-flowengine/crates/cmx-flow-app", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 流程引擎 HTTP 层（FlowModule 路由，web-server 合并，避免 cmx-api⇄cmx-flow 环）
 cmx-flow-api = { path = "crates/libs/cmx-flow/cmx-flow-api", version = "0.1.12", registry = "nora" }
-# 内部依赖 - 报表模块中立模型（常量 + 请求 DTO，无 DB/HTTP 依赖）
-cmx-rpt-model = { path = "crates/libs/cmx-rpt/cmx-rpt-model", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 报表模块中立 crate 已迁至独立 workspace ../cmx-report/（对标 flow S0），此处跨 workspace 路径引用。
+cmx-rpt-model = { path = "../cmx-report/crates/cmx-rpt-model", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 报表函数引擎（DSL 词法/语法/求值 + 函数注册 + REF 递归依赖解析，语义中立无 DB）
-cmx-rpt-formula = { path = "crates/libs/cmx-rpt/cmx-rpt-formula", version = "0.1.12", registry = "nora" }
+cmx-rpt-formula = { path = "../cmx-report/crates/cmx-rpt-formula", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 报表模块 PG 持久化/服务层（cr_* 表读写 + ZmcDataSet 零拷贝）
-cmx-rpt-store-pg = { path = "crates/libs/cmx-rpt/cmx-rpt-store-pg", version = "0.1.12", registry = "nora" }
-# 内部依赖 - 报表模块 HTTP 层（薄 handler + ReportModule 路由）
+cmx-rpt-store-pg = { path = "../cmx-report/crates/cmx-rpt-store-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 报表模块平台中立应用层（全部 handler + report_routes + 大盘）。抽核后 cmx-rpt-api 只调它。
+cmx-rpt-app = { path = "../cmx-report/crates/cmx-rpt-app", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 报表模块 HTTP 层（keep-wired 薄壳：ReportModule → report_routes::<CmxAppState>()）
 cmx-rpt-api = { path = "crates/libs/cmx-rpt/cmx-rpt-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 异步任务中心内核（作业状态机 + JobHandler/JobContext + JobManager + SSE 扇出，语义中立无 DB）
 cmx-job-core = { path = "crates/libs/cmx-job/cmx-job-core", version = "0.1.12", registry = "nora" }

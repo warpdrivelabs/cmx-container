@@ -10,8 +10,8 @@ pub mod handlers;
 use axum::Router;
 use axum::routing::{get, post};
 
-use cmx_api::CmxAppState;
-use cmx_api::routes::traits::ModuleRoutes;
+use cmx_api_core::CmxAppState;
+use cmx_api_core::routes::traits::ModuleRoutes;
 
 use handlers as dct;
 

@@ -4,9 +4,9 @@ use axum::Json;
 use axum::extract::{Query, State};
 use serde::Deserialize;
 
-use cmx_api::CmxAppState;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::{ApiResp, Result};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, Result};
 
 /// definitions 查询（list / config / delete 用）。
 #[derive(Debug, Deserialize)]

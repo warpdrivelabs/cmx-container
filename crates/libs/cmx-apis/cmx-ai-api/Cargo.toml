@@ -1,0 +1,24 @@
+[package]
+name = "cmx-ai-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# cmx-ai-api —— AI 中继模块的 HTTP 层（薄 crate）。
+# 薄 axum handler：解析请求 → 委托 cmx_ai::OpenCodeClient → ApiResp 信封。
+# 依赖 cmx-api-core（CmxAppState/ModuleRoutes）+ cmx-ai。
+
+[dependencies]
+cmx-api-core = { workspace = true }
+cmx-api-types = { workspace = true }
+cmx-ai = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+
+[lib]
+path = "src/lib.rs"

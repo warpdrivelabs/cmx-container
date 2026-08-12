@@ -4,9 +4,9 @@ use axum::Json;
 use axum::extract::{Query, State};
 use serde::Deserialize;
 
-use cmx_api::CmxAppState;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::{ApiResp, Result};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, Result};
 
 /// flexible-combination DAM + scenario query（list 只用 domain/app/module；其余用全四段 + 任意锚点键）。
 #[derive(Debug, Deserialize)]

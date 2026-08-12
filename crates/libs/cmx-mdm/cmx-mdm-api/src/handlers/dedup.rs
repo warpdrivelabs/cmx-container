@@ -14,10 +14,10 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use serde_json::{json, Value};
 
-use cmx_api::CmxAppState;
-use cmx_api::db_id::resolve_db_id_from_headers;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::{ApiResp, Result};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::db_id::resolve_db_id_from_headers;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, Result};
 
 use cmx_database_pg::get_default_pg_db_manager;
 use cmx_dct_store_pg::{DctQuery, DictMeta, dict_meta};

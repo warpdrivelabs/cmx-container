@@ -27,12 +27,12 @@ use cmx_core::model::data::dataset::ColumnarCodec;
 use cmx_database::get_default_db_manager;
 use cmx_doc_store_pg::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, saver};
 
-use cmx_api::actor::{actor_id_i64, actor_name};
-use cmx_api::CmxAppState;
-use cmx_api::db_id::resolve_db_id_from_headers;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::validation::validation_fail_resp;
-use cmx_api::{ApiResp, Result};
+use cmx_api_core::actor::{actor_id_i64, actor_name};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::db_id::resolve_db_id_from_headers;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_biz::errcode::validation_fail_resp;
+use cmx_api_core::{ApiResp, Result};
 
 /// `/api/doc/data/*` 装载端点共用查询参数（GET 便捷路径：URL query）。
 #[derive(Debug, Deserialize)]
@@ -550,8 +550,8 @@ pub async fn doc_meta(
 }
 
 /// 构造成功信封的 msgpack 字节:`{code:0, msg:"success", data:<已编码的 data 字节>}`。
-// encode_envelope_ok / msgpack_response 已上提到 cmx_api::msgpack（与 dct 共用）。
-use cmx_api::msgpack::msgpack_ok_response;
+// encode_envelope_ok / msgpack_response 已上提到 cmx_api_core::msgpack（与 dct 共用）。
+use cmx_api_core::msgpack::msgpack_ok_response;
 
 /// POST /api/doc/save 请求体。
 #[derive(Debug, Deserialize)]
@@ -783,7 +783,7 @@ fn build_row_scope(row: &Value) -> cmx_doc_store_pg::Scope {
 }
 
 /// serde_json 序列化错误 → api Error（局部小工具）。
-fn serde_err_to_api(e: serde_json::Error) -> cmx_api::Error {
+fn serde_err_to_api(e: serde_json::Error) -> cmx_api_core::Error {
     cmx_biz::BizError::internal(format!("序列化保存结果失败: {e}")).into()
 }
 
