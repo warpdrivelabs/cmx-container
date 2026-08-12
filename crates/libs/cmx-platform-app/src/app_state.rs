@@ -4,8 +4,8 @@
 
 use std::sync::Arc;
 
-use cmx_api::CmxAppState;
-use cmx_api::app_state::IamState;
+use cmx_common_api::CmxAppState;
+use cmx_common_api::app_state::IamState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
 use cmx_traits::auth::AuthService;
 use cmx_traits::resource::{DefinitionImporterBundle, ResourceDataImporter};

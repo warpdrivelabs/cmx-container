@@ -1,0 +1,20 @@
+[package]
+name = "cmx-storage-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# cmx-storage-api —— 文件存储模块的 HTTP 层（薄 crate）。
+#
+# 与 cmx-rpt-api / cmx-doc-api 等同模式：只放 ModuleRoutes 胶水，HTTP handler 函数
+# 本就在 cmx-storage::handler。依赖 cmx-api-core（CmxAppState/ModuleRoutes）+ cmx-storage。
+# `FromRef<CmxAppState> for cmx_storage::handler::AppState` 已在 cmx-api-core 实现。
+
+[dependencies]
+cmx-api-core = { workspace = true }
+cmx-storage = { workspace = true }
+axum = { workspace = true }
+utoipa = { workspace = true }
+
+[lib]
+path = "src/lib.rs"

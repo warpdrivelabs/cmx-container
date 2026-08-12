@@ -1,0 +1,32 @@
+[package]
+name = "cmx-plugin-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# cmx-plugin-api —— 插件管理/市场/表元数据的 HTTP 层。
+# 薄 axum handler 调 cmx-plugin 服务。依赖 cmx-api-core（骨架）+ cmx-plugin（服务）。
+# module handler（CRUD+包）暂留 cmx-api，将在阶段 3 拆分（CRUD→cmx-biz-api，包→本 crate）。
+
+[dependencies]
+cmx-api-core = { workspace = true }
+cmx-api-types = { workspace = true }
+cmx-plugin = { workspace = true }
+cmx-storage = { workspace = true }
+cmx-core = { workspace = true, features = ["openapi"] }
+cmx-database = { workspace = true }
+cmx-traits = { workspace = true }
+cmx-utils = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+modql = { workspace = true }
+uuid = { workspace = true }
+bytes = { workspace = true }
+
+[lib]
+path = "src/lib.rs"

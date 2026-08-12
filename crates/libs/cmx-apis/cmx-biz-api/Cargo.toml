@@ -1,0 +1,29 @@
+[package]
+name = "cmx-biz-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# cmx-biz-api —— 业务模型（domain/application/menu/sys_datasource/form）的 HTTP 层。
+#
+# 与 cmx-rpt-api 等同模式：薄 axum handler 调 cmx-biz 服务 + 通用 CRUD（rest::handler /
+# declare_crud_handlers 宏）。依赖 cmx-api-core（骨架）+ cmx-biz（服务）。cmx-biz 保持纯
+# service 不引入 axum。
+#
+# 注：module handler 暂留 cmx-api（CRUD+包两半，将在 cmx-plugin-api 阶段拆分迁出）。
+
+[dependencies]
+cmx-api-core = { workspace = true }
+cmx-api-types = { workspace = true }
+cmx-biz = { workspace = true, features = ["openapi"] }
+cmx-core = { workspace = true, features = ["openapi"] }
+cmx-database = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+modql = { workspace = true }
+
+[lib]
+path = "src/lib.rs"

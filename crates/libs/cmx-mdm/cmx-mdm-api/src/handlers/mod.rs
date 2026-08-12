@@ -31,8 +31,8 @@ use axum::Json;
 use axum::extract::State;
 use serde_json::{json, Value};
 
-use cmx_api::CmxAppState;
-use cmx_api::{ApiResp, Result};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::{ApiResp, Result};
 use cmx_mdm_model::match_algo::{FieldKind, MatchFieldSpec};
 use cmx_mdm_store_pg as store;
 
@@ -97,7 +97,7 @@ fn default_kind() -> String {
 /// MDM 模块健康检查。
 pub async fn mdm_health(
     State(_s): State<CmxAppState>,
-    cmx_api::middleware::CmxSvrContext(_ctx): cmx_api::middleware::CmxSvrContext,
+    cmx_api_core::middleware::CmxSvrContext(_ctx): cmx_api_core::middleware::CmxSvrContext,
 ) -> Result<Json<ApiResp<Value>>> {
     Ok(Json(ApiResp::ok(json!({ "module": "mdm", "status": "ok" }))))
 }

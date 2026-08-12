@@ -8,9 +8,9 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use cmx_api::db_id::resolve_db_id_from_headers;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::{ApiResp, CmxAppState};
+use cmx_api_core::db_id::resolve_db_id_from_headers;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, CmxAppState};
 use cmx_code_model::context::ResolveContext;
 use cmx_code_model::spec::{RuleSpec, Target};
 

@@ -24,7 +24,7 @@ cmx-database = { workspace = true }
 # 内部依赖 - 数据库(tokio-postgres 零拷贝新链路)
 cmx-database-pg = { workspace = true }
 # 内部依赖 - API
-cmx-api = { workspace = true }
+cmx-common-api = { workspace = true }
 # 内部依赖 - 各模块 HTTP 层（在此合并进主路由，破环）
 cmx-rpt-api = { workspace = true }
 cmx-flow-api = { workspace = true }
@@ -32,6 +32,14 @@ cmx-doc-api = { workspace = true }
 cmx-dct-api = { workspace = true }
 cmx-mdm-api = { workspace = true }
 cmx-code-api = { workspace = true }
+cmx-storage-api = { workspace = true }
+cmx-ai-api = { workspace = true }
+cmx-biz-api = { workspace = true }
+cmx-plugin-api = { workspace = true }
+cmx-iam-api = { workspace = true }
+# OpenApi 聚合（merge 各域 *-api 的 ApiDoc 切片）
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
 # 内部依赖 - 异步任务中心
 cmx-job-core = { workspace = true }
 cmx-job-store-pg = { workspace = true }

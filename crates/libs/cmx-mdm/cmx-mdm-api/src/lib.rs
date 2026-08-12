@@ -14,8 +14,8 @@ pub mod handlers;
 use axum::Router;
 use axum::routing::{get, post};
 
-use cmx_api::CmxAppState;
-use cmx_api::routes::traits::ModuleRoutes;
+use cmx_api_core::CmxAppState;
+use cmx_api_core::routes::traits::ModuleRoutes;
 
 use handlers as mdm;
 
@@ -27,11 +27,12 @@ impl ModuleRoutes for MdmModule {
         Router::new()
             // 健康检查
             .route("/mdm/health", get(mdm::mdm_health))
-            // 激活映射配置 CRUD（配置器 UI 用；GET 列表 + POST 保存）
+            // 激活映射配置 CRUD（配置器 UI 用；GET 列表 + POST 保存 + POST 删除）
             .route(
                 "/mdm/activations",
                 get(mdm::mdm_activations_list).post(mdm::mdm_activations_save),
             )
+            .route("/mdm/activations/delete", post(mdm::mdm_activations_delete))
             // 手动触发激活（body: { crId }；禁用 Path Variable，承接 AGENTS.md §四 第 5 条）
             .route("/mdm/change-requests/activate", post(mdm::mdm_cr_activate))
             // M2 · CR 变更请求:审批流转/列表/详情（新建走标准 /doc/save）

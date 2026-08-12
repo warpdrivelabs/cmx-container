@@ -35,6 +35,12 @@ pub struct ActivationConfig {
     /// 主体编码字段来源（为空则由 codeRule 铸号）。
     #[serde(default)]
     pub subject_code_field: Option<String>,
+    /// 头映射分组（纯 UI 展示用，不影响激活器搬运）。
+    /// fields 存 header_mapping 的 key（源字段名），用它把扁平映射行归组展示。
+    /// 激活器（find_by_doc_type / plan_create）不读此字段——header_mapping 落库仍扁平。
+    /// 外层 snake（对齐 line_mappings 范式 + DB 列名），内层 HeaderGroup 字段 camel。
+    #[serde(default)]
+    pub header_groups: Vec<HeaderGroup>,
 }
 
 /// 明细映射(一条 = 一类明细行,如 bank_account)。
@@ -54,6 +60,20 @@ pub struct LineMapping {
     pub parent_field: String,
     #[serde(default)]
     pub fields: Map<String, Value>,
+}
+
+/// 头映射分组（一条 = 一个展示分组，如「基础信息」「工商资质」）。
+///
+/// 纯 UI 组织用：fields 列出归入本组的 header_mapping key（源字段名），
+/// 渲染时按此把扁平映射行分区展示。激活器不读此结构。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct HeaderGroup {
+    #[serde(rename = "groupCode")]
+    pub group_code: String,
+    #[serde(rename = "groupName")]
+    pub group_name: String,
+    #[serde(default)]
+    pub fields: Vec<String>,
 }
 
 /// 激活器产出:要写入 cm_* 的头行数据(供 dct_accessor 执行)。

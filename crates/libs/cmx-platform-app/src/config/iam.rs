@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use cmx_api::app_state::IamState;
-use cmx_api::middleware::GlobalPermissionConfig;
+use cmx_common_api::app_state::IamState;
+use cmx_common_api::middleware::GlobalPermissionConfig;
 use cmx_database::get_default_db_manager;
 use cmx_iam::config::IamConfig;
 use cmx_iam::iam_checker::IamChecker;

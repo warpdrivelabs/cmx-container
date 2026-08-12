@@ -3,10 +3,20 @@
 //! 负责配置应用程序的所有 HTTP 路由，包括 API 路由和 Swagger 文档路由。
 
 use axum::Router;
-use cmx_api::CmxAppState;
-use cmx_api::routes::routes_impl::{api_routes, swagger_routes};
-use cmx_api::routes::traits::ModuleRoutes;
+use cmx_common_api::CmxAppState;
+use cmx_common_api::openapi::ApiDoc;
+use cmx_common_api::routes::routes_impl::api_routes;
+use cmx_common_api::routes::traits::ModuleRoutes;
+use cmx_ai_api::{AiApiDoc, AiModule};
+use cmx_biz_api::{
+    ApplicationModule, BizApiDoc, DomainModule, FormModule, MenuModule, ModuleCrudModule,
+    SysDatasourceModule,
+};
 use cmx_code_api::CodeModule;
+use cmx_plugin_api::{
+    MarketplaceModule, ModulePackageModule, PluginApiDoc, PluginModule, TableMetadataModule,
+};
+use cmx_iam_api::{AuthModule, IamApiDoc, IamModule};
 use cmx_dct_api::DctModule;
 use cmx_doc_api::DocModule;
 use cmx_flow_api::{FlowModule, FlowProxyModule};
@@ -14,6 +24,9 @@ use cmx_job_api::JobModule;
 use cmx_mdm_api::MdmModule;
 use cmx_model_api::ModelModule;
 use cmx_rpt_api::ReportModule;
+use cmx_storage_api::{StorageApiDoc, StorageModule};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 /// 读 `[center_client.urls].flow`：非空=独立流程微服务部署（反代到它），空=进程内嵌引擎（默认）。
 ///
@@ -101,13 +114,27 @@ fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
 /// 配置完成的 Axum Router 实例，已挂载所有 API 端点。
 pub fn routes() -> Router<CmxAppState> {
     let base = api_routes()
+        .merge(AuthModule.routes())
+        .merge(IamModule.routes())
         .merge(ReportModule.routes())
         .merge(DocModule.routes())
         .merge(DctModule.routes())
         .merge(MdmModule.routes())
         .merge(JobModule.routes())
         .merge(ModelModule.routes())
-        .merge(CodeModule.routes());
+        .merge(CodeModule.routes())
+        .merge(StorageModule.routes())
+        .merge(AiModule.routes())
+        .merge(DomainModule.routes())
+        .merge(ApplicationModule.routes())
+        .merge(MenuModule.routes())
+        .merge(SysDatasourceModule.routes())
+        .merge(FormModule.routes())
+        .merge(ModuleCrudModule.routes())
+        .merge(PluginModule.routes())
+        .merge(TableMetadataModule.routes())
+        .merge(MarketplaceModule.routes())
+        .merge(ModulePackageModule.routes());
     merge_flow(base)
 }
 
@@ -118,6 +145,20 @@ pub fn routes() -> Router<CmxAppState> {
 /// # Returns
 ///
 /// Axum Router 实例，包含 Swagger 文档相关端点。
+/// 聚合 OpenApi 文档：以 cmx-api 的主 ApiDoc 为基底，merge 各域 `*-api` crate 的切片。
+///
+/// 随 handler 逐步迁出 cmx-api，各域自带 ApiDoc 切片，此处统一合并，保证 Swagger 覆盖不丢。
+/// 注：`OpenApi::merge` 对同名 schema 静默丢弃后者，迁移时注意 schema 命名不冲突。
+fn merged_openapi() -> utoipa::openapi::OpenApi {
+    let mut doc = ApiDoc::openapi();
+    doc.merge(AiApiDoc::openapi());
+    doc.merge(StorageApiDoc::openapi());
+    doc.merge(BizApiDoc::openapi());
+    doc.merge(PluginApiDoc::openapi());
+    doc.merge(IamApiDoc::openapi());
+    doc
+}
+
 pub fn get_swagger_routes() -> Router {
-    swagger_routes()
+    Router::new().merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", merged_openapi()))
 }

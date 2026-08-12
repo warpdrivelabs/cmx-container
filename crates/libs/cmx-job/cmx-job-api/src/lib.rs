@@ -11,8 +11,8 @@ pub mod handlers;
 use axum::Router;
 use axum::routing::{get, post};
 
-use cmx_api::CmxAppState;
-use cmx_api::routes::traits::ModuleRoutes;
+use cmx_api_core::CmxAppState;
+use cmx_api_core::routes::traits::ModuleRoutes;
 
 /// 任务中心模块路由聚合（实现 cmx-api 的 ModuleRoutes，由 web-server 合并进主路由）。
 pub struct JobModule;

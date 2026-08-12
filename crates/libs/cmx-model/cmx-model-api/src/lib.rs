@@ -9,8 +9,8 @@ pub mod handlers;
 
 use axum::Router;
 use axum::routing::{get, post};
-use cmx_api::app_state::CmxAppState;
-use cmx_api::routes::traits::ModuleRoutes;
+use cmx_api_core::app_state::CmxAppState;
+use cmx_api_core::routes::traits::ModuleRoutes;
 
 /// 模型中心路由模块。
 pub struct ModelModule;

@@ -10,11 +10,11 @@ use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use serde_json::{json, Value};
 
-use cmx_api::CmxAppState;
-use cmx_api::actor::actor_id_i64;
-use cmx_api::db_id::resolve_db_id_from_headers;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::{ApiResp, Result};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::actor::actor_id_i64;
+use cmx_api_core::db_id::resolve_db_id_from_headers;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, Result};
 
 use cmx_database_pg::get_default_pg_db_manager;
 use cmx_mdm_model::activation::ActivationConfig;
@@ -55,6 +55,31 @@ pub async fn mdm_activations_save(
     let db_id = resolve_db_id_from_headers(&headers).await;
     let code = store::upsert(mm, &db_id, &body).await?;
     Ok(Json(ApiResp::ok(json!({ "activationCode": code }))))
+}
+
+/// 删除激活映射（硬删除）。POST body `{ activationCode }`。
+///
+/// 对应路由 `POST /mdm/activations/delete`（禁用 Path Variable，承接 AGENTS.md §四 第 5 条）。
+pub async fn mdm_activations_delete(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(body): Json<ActivationDeleteBody>,
+) -> Result<Json<ApiResp<Value>>> {
+    let mm = get_default_pg_db_manager();
+    let db_id = resolve_db_id_from_headers(&headers).await;
+    let n = store::delete_by_code(mm, &db_id, &body.activation_code).await?;
+    Ok(Json(ApiResp::ok(
+        json!({ "activationCode": body.activation_code, "affected": n }),
+    )))
+}
+
+/// 删除激活映射请求体。
+#[derive(serde::Deserialize)]
+pub struct ActivationDeleteBody {
+    /// 待删除的激活编码（cmx_mdm_activation 唯一键）。
+    #[serde(alias = "activationCode")]
+    pub activation_code: String,
 }
 
 /// 手动触发激活（审批型 CR 兜底入口 / 内部 CR 直接调）。

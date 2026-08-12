@@ -1,0 +1,29 @@
+[package]
+name = "cmx-iam-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# cmx-iam-api —— IAM（用户/角色/角色组/权限/规则）+ 认证（登录/OAuth2/API Key）的 HTTP 层。
+# 薄 axum handler 调 cmx-iam / cmx-auth 服务。依赖 cmx-api-core（骨架）+ cmx-iam + cmx-auth。
+# IamState 仍由 cmx-api-core 持有（过渡期，Strategy 2 下服务 crate 不依赖 core，不成环）。
+
+[dependencies]
+cmx-api-core = { workspace = true }
+cmx-api-types = { workspace = true }
+cmx-iam = { workspace = true, features = ["openapi"] }
+cmx-auth = { workspace = true }
+cmx-buffer = { workspace = true }
+cmx-core = { workspace = true, features = ["openapi"] }
+cmx-traits = { workspace = true }
+cmx-utils = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+utoipa = { workspace = true }
+
+[lib]
+path = "src/lib.rs"
