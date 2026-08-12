@@ -23,7 +23,14 @@ members = [
     "crates/libs/cmx-service-base",
     "crates/libs/cmx-platform-app",
     "crates/libs/cmx-api",
+    "crates/libs/cmx-api-core",
     "crates/libs/cmx-api-types",
+    # —— 域 HTTP 层薄 crate（cmx-biz-api/cmx-iam-api/... 逐步补齐）——
+    "crates/libs/cmx-domain-api/cmx-storage-api",
+    "crates/libs/cmx-domain-api/cmx-ai-api",
+    "crates/libs/cmx-domain-api/cmx-biz-api",
+    "crates/libs/cmx-domain-api/cmx-plugin-api",
+    "crates/libs/cmx-domain-api/cmx-iam-api",
     "crates/libs/cmx-biz",
     "crates/libs/cmx-iam",
     "crates/libs/cmx-macros",
@@ -89,6 +96,18 @@ cmx-core = { path = "crates/libs/cmx-core", version = "0.1.12", registry = "nora
 cmx-utils = { path = "crates/libs/cmx-utils", version = "0.1.12", registry = "nora" }
 # 内部依赖 - API
 cmx-api = { path = "crates/libs/cmx-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - API 共享骨架层（CmxAppState/ModuleRoutes/rest/middleware/CRUD 宏，从 cmx-api 抽出）
+cmx-api-core = { path = "crates/libs/cmx-api-core", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 文件存储 HTTP 层（薄 ModuleRoutes，handler 函数在 cmx-storage）
+cmx-storage-api = { path = "crates/libs/cmx-domain-api/cmx-storage-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - AI 中继 HTTP 层（薄 handler 转发 OpenCode + SSE）
+cmx-ai-api = { path = "crates/libs/cmx-domain-api/cmx-ai-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 业务模型 HTTP 层（domain/application/menu/sys_datasource/form）
+cmx-biz-api = { path = "crates/libs/cmx-domain-api/cmx-biz-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 插件/市场/表元数据 HTTP 层
+cmx-plugin-api = { path = "crates/libs/cmx-domain-api/cmx-plugin-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - IAM/认证 HTTP 层
+cmx-iam-api = { path = "crates/libs/cmx-domain-api/cmx-iam-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - API 通用类型
 cmx-api-types = { path = "crates/libs/cmx-api-types", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 业务模型

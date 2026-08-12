@@ -1,0 +1,45 @@
+[package]
+name = "cmx-api-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# cmx-api-core —— Web API 共享骨架层。
+#
+# 从 cmx-api 抽出的稳定骨架：CmxAppState / ModuleRoutes / 通用 CRUD（rest）/
+# 中间件（middleware）/ 路由注册宏。各域 *-api crate 依赖本 crate 暴露自己的 handler，
+# 而 cmx-api 仍依赖各域 crate 装配路由——服务 crate 不反向依赖本 crate，故无环。
+#
+# 注：过渡期持有 cmx-iam（IamState）/ cmx-storage（storage_service），因服务 crate
+# 不依赖本 crate，此为单向边，不成环。阶段 4（可选）trait 化后可移除。
+
+[dependencies]
+# —— 平台基础 ——
+cmx-core = { workspace = true }
+cmx-utils = { workspace = true }
+cmx-traits = { workspace = true }
+cmx-api-types = { workspace = true }
+
+# —— rest/handler 必须 ——
+cmx-database = { workspace = true }
+modql = { workspace = true }
+
+# —— mw_auth（OAuth2Policy/Registry 具体类型）/ app_state（IamState/storage_service）——
+cmx-auth = { workspace = true }
+cmx-iam = { workspace = true }
+cmx-storage = { workspace = true }
+
+# —— axum/web ——
+axum = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+
+# —— CRUD 宏的 #[utoipa::path] 属性 ——
+utoipa = { workspace = true }
+
+[lib]
+path = "src/lib.rs"

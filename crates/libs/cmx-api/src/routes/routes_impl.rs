@@ -3,23 +3,11 @@
 //! 提供统一的路由注册入口，简化 web-server 的路由配置
 
 use crate::app_state::CmxAppState;
-use crate::handlers::ai;
-use crate::handlers::application;
-use crate::handlers::auth;
 use crate::handlers::debug;
 use crate::handlers::dev;
-use crate::handlers::domain;
-use crate::handlers::form;
-use crate::handlers::iam;
-use crate::handlers::marketplace;
-use crate::handlers::menu;
 use crate::handlers::module;
-use crate::handlers::plugin;
 use crate::handlers::portal;
 use crate::handlers::service;
-use crate::handlers::storage;
-use crate::handlers::sys_datasource;
-use crate::handlers::table_metadata;
 use crate::openapi::ApiDoc;
 use crate::routes::traits::ModuleRoutes;
 use axum::{Json, Router, routing::get};
@@ -46,38 +34,14 @@ use utoipa_swagger_ui::SwaggerUi;
 pub fn api_routes() -> Router<CmxAppState> {
     let router = Router::new();
 
-    // 注册认证模块路由（使用 ModuleRoutes）
-    let router = router.merge(auth::AuthModule.routes());
+    // 认证（AuthModule）+ IAM（IamModule）路由已迁至 cmx-iam-api，由 cmx-platform-app 合并。
 
-    // 注册 Domain 模块路由（使用 ModuleRoutes）
-    let router = router.merge(domain::DomainModule.routes());
-
-    // 注册 IAM 模块路由（使用 ModuleRoutes）
-    let router = router.merge(iam::IamModule.routes());
-
-    // 注册 Application 模块路由（使用 ModuleRoutes）
-    let router = router.merge(application::ApplicationModule.routes());
+    // Domain/Application/Menu/SysDatasource/Form 路由已迁至 cmx-biz-api，由 platform-app 合并。
 
     // 注册 Module 模块路由（使用 ModuleRoutes）
     let router = router.merge(module::ModuleHandler.routes());
 
-    // 注册 SysDatasource 模块路由（使用 ModuleRoutes）
-    let router = router.merge(sys_datasource::SysDatasourceModule.routes());
-
-    // 注册 Form 模块路由（使用 ModuleRoutes）
-    let router = router.merge(form::FormModule.routes());
-
-    // 注册 Menu 模块路由（使用 ModuleRoutes）
-    let router = router.merge(menu::MenuModule.routes());
-
-    // 注册插件管理路由（使用 ModuleRoutes）
-    let router = router.merge(plugin::PluginModule.routes());
-
-    // 注册插件管控路由（使用 ModuleRoutes）
-    // let router = router.merge(plugin::control::PluginControlModule.routes());
-
-    // 注册表元数据查询路由（使用 ModuleRoutes）
-    let router = router.merge(table_metadata::TableMetadataModule.routes());
+    // 插件管理 / 表元数据 / 插件市场 路由已迁至 cmx-plugin-api，由 cmx-platform-app 合并。
 
     // 注册服务调用路由（使用 ModuleRoutes）
     let router = router.merge(service::ServiceModule.routes());
@@ -85,17 +49,12 @@ pub fn api_routes() -> Router<CmxAppState> {
     // 注册调试路由（使用 ModuleRoutes）
     let router = router.merge(debug::DebugModule.routes());
 
-    // 注册插件市场路由（使用 ModuleRoutes）
-    let router = router.merge(marketplace::MarketplaceModule.routes());
-
-    // 注册文件存储路由（使用 ModuleRoutes）
-    let router = router.merge(storage::StorageModule.routes());
+    // 文件存储路由（StorageModule）已迁至 cmx-storage-api，由 cmx-platform-app 合并。
 
     // 注册门户/设计器业务路由（迁移自 Node 后端，使用 ModuleRoutes）
     let router = router.merge(portal::PortalModule.routes());
 
-    // 注册 AI 生成中继路由（薄代理转发 OpenCode + SSE，使用 ModuleRoutes）
-    let router = router.merge(ai::AiModule.routes());
+    // AI 中继路由（AiModule）已迁至 cmx-ai-api，由 cmx-platform-app 合并。
 
     // 注册开发工具路由（使用 ModuleRoutes）
 

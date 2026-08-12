@@ -1,0 +1,60 @@
+//! 角色审计 handler
+//!
+//! 提供角色权限差异比较 API。
+
+use axum::Json;
+use axum::extract::{Query, State};
+use serde::Deserialize;
+use tracing::debug;
+
+use cmx_iam::service_traits::PermissionDiffResponse;
+
+use cmx_api_core::CmxAppState;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, Error, Result};
+
+/// 权限差异查询参数。
+///
+/// 用于比较两个角色之间权限集合的差异，常用于角色合并/迁移审计。
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub struct PermissionDiffQuery {
+    /// 角色 1 ID。
+    pub role_id_1: String,
+    /// 角色 2 ID。
+    pub role_id_2: String,
+}
+
+/// 比较两个角色的权限差异
+#[utoipa::path(
+    get,
+    path = "/api/iam/roles/permission-diff",
+    params(
+        PermissionDiffQuery
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<PermissionDiffResponse>)
+    ),
+    tag = "IAM-Audit"
+)]
+pub async fn get_permission_diff(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    Query(params): Query<PermissionDiffQuery>,
+) -> Result<Json<ApiResp<PermissionDiffResponse>>> {
+    debug!(
+        "{:<12} - handler::get_permission_diff - r1: {}, r2: {}",
+        "HANDLER", params.role_id_1, params.role_id_2
+    );
+
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
+
+    let result = iam
+        .role_service
+        .get_permission_diff(&params.role_id_1, &params.role_id_2)
+        .await
+        .map_err(|e| Error::business_error(e.to_string()))?;
+
+    Ok(Json(ApiResp::ok(result)))
+}

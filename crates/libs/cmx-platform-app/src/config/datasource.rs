@@ -2,7 +2,7 @@
 //!
 //! 负责数据源配置的持久化、查询和动态加载。
 
-use cmx_api::handlers::sys_datasource::{
+use cmx_biz::datasource::{
     SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate, SysDatasourceForUpdate,
 };
 use cmx_database::crud::GenericCrudService;

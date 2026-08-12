@@ -32,6 +32,14 @@ cmx-doc-api = { workspace = true }
 cmx-dct-api = { workspace = true }
 cmx-mdm-api = { workspace = true }
 cmx-code-api = { workspace = true }
+cmx-storage-api = { workspace = true }
+cmx-ai-api = { workspace = true }
+cmx-biz-api = { workspace = true }
+cmx-plugin-api = { workspace = true }
+cmx-iam-api = { workspace = true }
+# OpenApi 聚合（merge 各域 *-api 的 ApiDoc 切片）
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
 # 内部依赖 - 异步任务中心
 cmx-job-core = { workspace = true }
 cmx-job-store-pg = { workspace = true }

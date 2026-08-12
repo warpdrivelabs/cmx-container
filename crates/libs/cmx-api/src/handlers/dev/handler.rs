@@ -18,7 +18,7 @@ use super::request::CreateProjectRequest;
 use super::response::{CreateProjectResponse, TemplateInfo};
 use crate::ApiResp;
 use crate::Result;
-use crate::handlers::sys_datasource::SysDatasourceService;
+use cmx_biz::datasource::SysDatasourceService;
 use cmx_utils::ConfigManager;
 
 /// 获取模板列表 Handler

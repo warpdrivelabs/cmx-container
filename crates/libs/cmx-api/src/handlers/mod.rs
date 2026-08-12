@@ -9,20 +9,8 @@
 //! - `service.rs` - Service 实现（业务逻辑，可选）
 //! - `handler.rs` - Handler 实现（HTTP 处理，可选）
 
-pub mod ai;
-pub mod application;
-pub mod auth;
 pub mod debug;
 pub mod dev;
-pub mod domain;
-pub mod form;
-pub mod iam;
-pub mod marketplace;
-pub mod menu;
 pub mod module;
-pub mod plugin;
 pub mod portal;
 pub mod service;
-pub mod storage;
-pub mod sys_datasource;
-pub mod table_metadata;

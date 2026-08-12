@@ -861,6 +861,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-ai-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-ai",
+ "cmx-api-core",
+ "cmx-api-types",
+ "futures",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "utoipa",
+]
+
+[[package]]
 name = "cmx-api"
 version = "0.1.12"
 dependencies = [
@@ -868,6 +884,7 @@ dependencies = [
  "bytes",
  "chrono",
  "cmx-ai",
+ "cmx-api-core",
  "cmx-api-types",
  "cmx-auth",
  "cmx-biz",
@@ -910,6 +927,29 @@ dependencies = [
  "uuid",
  "validator",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "cmx-api-core"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "chrono",
+ "cmx-api-types",
+ "cmx-auth",
+ "cmx-core",
+ "cmx-database",
+ "cmx-iam",
+ "cmx-storage",
+ "cmx-traits",
+ "cmx-utils",
+ "modql",
+ "regex",
+ "serde",
+ "serde_json",
+ "tower-http",
+ "tracing",
+ "utoipa",
 ]
 
 [[package]]
@@ -1011,6 +1051,23 @@ dependencies = [
  "utoipa",
  "uuid",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "cmx-biz-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api-core",
+ "cmx-api-types",
+ "cmx-biz",
+ "cmx-core",
+ "cmx-database",
+ "modql",
+ "serde",
+ "serde_json",
+ "tracing",
+ "utoipa",
 ]
 
 [[package]]
@@ -1507,6 +1564,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-iam-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "chrono",
+ "cmx-api-core",
+ "cmx-api-types",
+ "cmx-auth",
+ "cmx-buffer",
+ "cmx-core",
+ "cmx-iam",
+ "cmx-traits",
+ "cmx-utils",
+ "serde",
+ "serde_json",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "cmx-job-api"
 version = "0.1.12"
 dependencies = [
@@ -1715,10 +1793,12 @@ dependencies = [
  "axum",
  "chrono",
  "cmx-ai",
+ "cmx-ai-api",
  "cmx-api",
  "cmx-audit",
  "cmx-auth",
  "cmx-biz",
+ "cmx-biz-api",
  "cmx-buffer",
  "cmx-code-api",
  "cmx-core",
@@ -1729,12 +1809,14 @@ dependencies = [
  "cmx-doc-api",
  "cmx-flow-api",
  "cmx-iam",
+ "cmx-iam-api",
  "cmx-job-api",
  "cmx-job-core",
  "cmx-job-store-pg",
  "cmx-mdm-api",
  "cmx-model-api",
  "cmx-plugin",
+ "cmx-plugin-api",
  "cmx-registry-config",
  "cmx-rpc",
  "cmx-rpt-api",
@@ -1742,6 +1824,7 @@ dependencies = [
  "cmx-service",
  "cmx-service-base",
  "cmx-storage",
+ "cmx-storage-api",
  "cmx-traits",
  "cmx-utils",
  "cmx-web-chassis",
@@ -1759,6 +1842,8 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "utoipa",
+ "utoipa-swagger-ui",
 ]
 
 [[package]]
@@ -1807,6 +1892,30 @@ dependencies = [
  "uuid",
  "walkdir",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "cmx-plugin-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "cmx-api-core",
+ "cmx-api-types",
+ "cmx-core",
+ "cmx-database",
+ "cmx-plugin",
+ "cmx-storage",
+ "cmx-traits",
+ "cmx-utils",
+ "modql",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]
@@ -2073,6 +2182,15 @@ dependencies = [
  "utoipa",
  "uuid",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "cmx-storage-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api-core",
+ "cmx-storage",
 ]
 
 [[package]]
