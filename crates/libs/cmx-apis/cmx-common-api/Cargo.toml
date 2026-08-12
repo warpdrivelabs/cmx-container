@@ -43,8 +43,6 @@ cmx-traits = { workspace = true }
 cmx-buffer = { workspace = true }
 # 内部依赖 - 认证模块
 cmx-auth = { workspace = true }
-# 内部依赖 - IAM 权限角色管理
-cmx-iam = { workspace = true, features = ["openapi"] }
 # 内部依赖 - 门户/设计器业务（迁移自 Node 后端）
 cmx-portal = { workspace = true }
 # 内部依赖 - RPC 通信

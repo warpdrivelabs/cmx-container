@@ -773,6 +773,7 @@ mod tests {
                 order: Vec::new(),
             }),
             code_rule: None,
+            unique_keys: vec![],
         }
     }
 }

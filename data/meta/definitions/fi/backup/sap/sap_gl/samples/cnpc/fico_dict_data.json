@@ -1,0 +1,1620 @@
+{
+  "_remark": "CNPC 字典数据(SAP FI)——全字典补齐",
+  "company": [
+    {
+      "id": "CNPC",
+      "code": "CNPC",
+      "name": "中国石油天然气集团有限公司",
+      "status": 1,
+      "country": "CN",
+      "currency": "CNY",
+      "cons_method": "完全合并"
+    }
+  ],
+  "company_code": [
+    {
+      "id": "PCL",
+      "code": "PCL",
+      "name": "中国石油天然气股份有限公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "DAQING",
+      "code": "DAQING",
+      "name": "大庆油田有限责任公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "CQOF",
+      "code": "CQOF",
+      "name": "长庆油田分公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "DLPC",
+      "code": "DLPC",
+      "name": "大连石化分公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "LZPC",
+      "code": "LZPC",
+      "name": "兰州石化分公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "JSSALE",
+      "code": "JSSALE",
+      "name": "江苏销售分公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "GDSALE",
+      "code": "GDSALE",
+      "name": "广东销售分公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "PIPE",
+      "code": "PIPE",
+      "name": "国家管网(原管道)分公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "BHDC",
+      "code": "BHDC",
+      "name": "渤海钻探工程有限公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "CPECC",
+      "code": "CPECC",
+      "name": "中国石油工程建设公司",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "CN",
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "CN00"
+    },
+    {
+      "id": "PKZ",
+      "code": "PKZ",
+      "name": "PetroKazakhstan(哈萨克)",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "KZ",
+      "currency": "USD",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "OS00"
+    },
+    {
+      "id": "GNPOC",
+      "code": "GNPOC",
+      "name": "大尼罗河石油(苏丹)",
+      "status": 1,
+      "company_id": "CNPC",
+      "country": "SD",
+      "currency": "USD",
+      "chart_of_accounts": "YPCA",
+      "fiscal_year_variant": "K4",
+      "controlling_area": "OS00"
+    }
+  ],
+  "segment": [
+    {
+      "id": "UPSTREAM",
+      "code": "UPSTREAM",
+      "name": "上游-勘探开发",
+      "status": 1
+    },
+    {
+      "id": "REFINING",
+      "code": "REFINING",
+      "name": "炼油化工",
+      "status": 1
+    },
+    {
+      "id": "MARKETING",
+      "code": "MARKETING",
+      "name": "销售",
+      "status": 1
+    },
+    {
+      "id": "PIPELINE",
+      "code": "PIPELINE",
+      "name": "管道天然气",
+      "status": 1
+    },
+    {
+      "id": "OILSVC",
+      "code": "OILSVC",
+      "name": "油田服务(未上市)",
+      "status": 1
+    },
+    {
+      "id": "OVERSEAS",
+      "code": "OVERSEAS",
+      "name": "海外油气",
+      "status": 1
+    }
+  ],
+  "profit_center": [
+    {
+      "id": "PC-DAQING",
+      "code": "PC-DAQING",
+      "name": "利润中心-大庆油田有限责任公司",
+      "status": 1,
+      "controlling_area": "CN00",
+      "segment_id": "UPSTREAM",
+      "company_code_id": "DAQING"
+    },
+    {
+      "id": "PC-CQOF",
+      "code": "PC-CQOF",
+      "name": "利润中心-长庆油田分公司",
+      "status": 1,
+      "controlling_area": "CN00",
+      "segment_id": "UPSTREAM",
+      "company_code_id": "CQOF"
+    },
+    {
+      "id": "PC-DLPC",
+      "code": "PC-DLPC",
+      "name": "利润中心-大连石化分公司",
+      "status": 1,
+      "controlling_area": "CN00",
+      "segment_id": "REFINING",
+      "company_code_id": "DLPC"
+    },
+    {
+      "id": "PC-LZPC",
+      "code": "PC-LZPC",
+      "name": "利润中心-兰州石化分公司",
+      "status": 1,
+      "controlling_area": "CN00",
+      "segment_id": "REFINING",
+      "company_code_id": "LZPC"
+    },
+    {
+      "id": "PC-JSSALE",
+      "code": "PC-JSSALE",
+      "name": "利润中心-江苏销售分公司",
+      "status": 1,
+      "controlling_area": "CN00",
+      "segment_id": "MARKETING",
+      "company_code_id": "JSSALE"
+    },
+    {
+      "id": "PC-GDSALE",
+      "code": "PC-GDSALE",
+      "name": "利润中心-广东销售分公司",
+      "status": 1,
+      "controlling_area": "CN00",
+      "segment_id": "MARKETING",
+      "company_code_id": "GDSALE"
+    },
+    {
+      "id": "PC-PIPE",
+      "code": "PC-PIPE",
+      "name": "利润中心-国家管网(原管道)分公司",
+      "status": 1,
+      "controlling_area": "CN00",
+      "segment_id": "PIPELINE",
+      "company_code_id": "PIPE"
+    },
+    {
+      "id": "PC-BHDC",
+      "code": "PC-BHDC",
+      "name": "利润中心-渤海钻探工程有限公司",
+      "status": 1,
+      "controlling_area": "CN00",
+      "segment_id": "OILSVC",
+      "company_code_id": "BHDC"
+    },
+    {
+      "id": "PC-CPECC",
+      "code": "PC-CPECC",
+      "name": "利润中心-中国石油工程建设公司",
+      "status": 1,
+      "controlling_area": "CN00",
+      "segment_id": "OILSVC",
+      "company_code_id": "CPECC"
+    },
+    {
+      "id": "PC-PKZ",
+      "code": "PC-PKZ",
+      "name": "利润中心-PetroKazakhstan(哈萨克)",
+      "status": 1,
+      "controlling_area": "OS00",
+      "segment_id": "OVERSEAS",
+      "company_code_id": "PKZ"
+    },
+    {
+      "id": "PC-GNPOC",
+      "code": "PC-GNPOC",
+      "name": "利润中心-大尼罗河石油(苏丹)",
+      "status": 1,
+      "controlling_area": "OS00",
+      "segment_id": "OVERSEAS",
+      "company_code_id": "GNPOC"
+    }
+  ],
+  "cost_center": [
+    {
+      "id": "CC-JS-NJ",
+      "code": "CC-JS-NJ",
+      "name": "江苏南京销售-机关",
+      "status": 1,
+      "controlling_area": "CN00",
+      "profit_center_id": "PC-JSSALE",
+      "functional_area_id": "0500"
+    },
+    {
+      "id": "CC-JS-STN01",
+      "code": "CC-JS-STN01",
+      "name": "江苏南京-江宁加油站",
+      "status": 1,
+      "controlling_area": "CN00",
+      "profit_center_id": "PC-JSSALE",
+      "functional_area_id": "0500"
+    },
+    {
+      "id": "CC-JS-DEP",
+      "code": "CC-JS-DEP",
+      "name": "江苏-南京油库",
+      "status": 1,
+      "controlling_area": "CN00",
+      "profit_center_id": "PC-JSSALE",
+      "functional_area_id": "0500"
+    },
+    {
+      "id": "CC-DQ-PROD",
+      "code": "CC-DQ-PROD",
+      "name": "大庆-采油一厂",
+      "status": 1,
+      "controlling_area": "CN00",
+      "profit_center_id": "PC-DAQING",
+      "functional_area_id": "0400"
+    },
+    {
+      "id": "CC-DL-PROD",
+      "code": "CC-DL-PROD",
+      "name": "大连石化-炼油车间",
+      "status": 1,
+      "controlling_area": "CN00",
+      "profit_center_id": "PC-DLPC",
+      "functional_area_id": "0400"
+    },
+    {
+      "id": "CC-BH-RIG7",
+      "code": "CC-BH-RIG7",
+      "name": "渤海钻探-7011钻井队",
+      "status": 1,
+      "controlling_area": "CN00",
+      "profit_center_id": "PC-BHDC",
+      "functional_area_id": "0400"
+    },
+    {
+      "id": "CC-PIPE-E",
+      "code": "CC-PIPE-E",
+      "name": "东部管道运行处",
+      "status": 1,
+      "controlling_area": "CN00",
+      "profit_center_id": "PC-PIPE",
+      "functional_area_id": "0400"
+    },
+    {
+      "id": "CC-GD-NJ",
+      "code": "CC-GD-NJ",
+      "name": "广东销售-机关",
+      "status": 1,
+      "controlling_area": "CN00",
+      "profit_center_id": "PC-GDSALE",
+      "functional_area_id": "0500"
+    }
+  ],
+  "business_area": [
+    {
+      "id": "BA-EAST",
+      "code": "BA-EAST",
+      "name": "华东",
+      "status": 1
+    },
+    {
+      "id": "BA-NE",
+      "code": "BA-NE",
+      "name": "东北",
+      "status": 1
+    },
+    {
+      "id": "BA-NW",
+      "code": "BA-NW",
+      "name": "西北",
+      "status": 1
+    },
+    {
+      "id": "BA-SOUTH",
+      "code": "BA-SOUTH",
+      "name": "华南",
+      "status": 1
+    },
+    {
+      "id": "BA-OS",
+      "code": "BA-OS",
+      "name": "海外",
+      "status": 1
+    }
+  ],
+  "functional_area": [
+    {
+      "id": "0400",
+      "code": "0400",
+      "name": "生产",
+      "status": 1
+    },
+    {
+      "id": "0500",
+      "code": "0500",
+      "name": "销售",
+      "status": 1
+    },
+    {
+      "id": "0600",
+      "code": "0600",
+      "name": "管理",
+      "status": 1
+    },
+    {
+      "id": "0700",
+      "code": "0700",
+      "name": "研发",
+      "status": 1
+    }
+  ],
+  "controlling_area": [
+    {
+      "id": "CN00",
+      "code": "CN00",
+      "name": "中国控制范围",
+      "status": 1,
+      "currency": "CNY",
+      "chart_of_accounts": "YPCA"
+    },
+    {
+      "id": "OS00",
+      "code": "OS00",
+      "name": "海外控制范围",
+      "status": 1,
+      "currency": "USD",
+      "chart_of_accounts": "YPCA"
+    }
+  ],
+  "chart_of_accounts": [
+    {
+      "id": "YPCA",
+      "code": "YPCA",
+      "name": "中国石油运营科目表",
+      "status": 1,
+      "coa_type": "运营",
+      "maint_language": "ZH"
+    },
+    {
+      "id": "GRP",
+      "code": "GRP",
+      "name": "集团合并科目表",
+      "status": 1,
+      "coa_type": "集团",
+      "maint_language": "ZH"
+    }
+  ],
+  "gl_account": [
+    {
+      "id": "1001",
+      "code": "1001",
+      "name": "库存现金",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "1002",
+      "code": "1002",
+      "name": "银行存款",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "1012",
+      "code": "1012",
+      "name": "其他货币资金",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "1122",
+      "code": "1122",
+      "name": "应收账款",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "1123",
+      "code": "1123",
+      "name": "预付账款",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "1221",
+      "code": "1221",
+      "name": "其他应收款",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "1403",
+      "code": "1403",
+      "name": "原材料(原油)",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "1405",
+      "code": "1405",
+      "name": "库存商品(成品油)",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "1601",
+      "code": "1601",
+      "name": "固定资产",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "1602",
+      "code": "1602",
+      "name": "累计折旧",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "C"
+    },
+    {
+      "id": "1801",
+      "code": "1801",
+      "name": "勘探支出",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "asset",
+      "balance_dir": "D"
+    },
+    {
+      "id": "2202",
+      "code": "2202",
+      "name": "应付账款",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "liability",
+      "balance_dir": "C"
+    },
+    {
+      "id": "2203",
+      "code": "2203",
+      "name": "预收账款",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "liability",
+      "balance_dir": "C"
+    },
+    {
+      "id": "2211",
+      "code": "2211",
+      "name": "应付职工薪酬",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "liability",
+      "balance_dir": "C"
+    },
+    {
+      "id": "2221",
+      "code": "2221",
+      "name": "应交税费",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "liability",
+      "balance_dir": "C"
+    },
+    {
+      "id": "2241",
+      "code": "2241",
+      "name": "其他应付款",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "liability",
+      "balance_dir": "C"
+    },
+    {
+      "id": "2501",
+      "code": "2501",
+      "name": "长期借款",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "liability",
+      "balance_dir": "C"
+    },
+    {
+      "id": "4001",
+      "code": "4001",
+      "name": "实收资本",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "equity",
+      "balance_dir": "C"
+    },
+    {
+      "id": "4103",
+      "code": "4103",
+      "name": "本年利润",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "equity",
+      "balance_dir": "C"
+    },
+    {
+      "id": "4104",
+      "code": "4104",
+      "name": "利润分配",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "equity",
+      "balance_dir": "C"
+    },
+    {
+      "id": "5101",
+      "code": "5101",
+      "name": "制造费用",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "cost",
+      "balance_dir": "D"
+    },
+    {
+      "id": "6001",
+      "code": "6001",
+      "name": "主营业务收入",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "income",
+      "balance_dir": "C"
+    },
+    {
+      "id": "6051",
+      "code": "6051",
+      "name": "其他业务收入",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "income",
+      "balance_dir": "C"
+    },
+    {
+      "id": "6401",
+      "code": "6401",
+      "name": "主营业务成本",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "cost",
+      "balance_dir": "D"
+    },
+    {
+      "id": "6601",
+      "code": "6601",
+      "name": "销售费用",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "expense",
+      "balance_dir": "D"
+    },
+    {
+      "id": "6602",
+      "code": "6602",
+      "name": "管理费用",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "expense",
+      "balance_dir": "D"
+    },
+    {
+      "id": "6603",
+      "code": "6603",
+      "name": "财务费用",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "expense",
+      "balance_dir": "D"
+    },
+    {
+      "id": "6801",
+      "code": "6801",
+      "name": "所得税费用",
+      "status": 1,
+      "chart_of_accounts": "YPCA",
+      "account_type": "expense",
+      "balance_dir": "D"
+    }
+  ],
+  "account_group": [
+    {
+      "id": "ASST",
+      "code": "ASST",
+      "name": "资产",
+      "status": 1,
+      "from_account": "1000",
+      "to_account": "1999"
+    },
+    {
+      "id": "LIAB",
+      "code": "LIAB",
+      "name": "负债",
+      "status": 1,
+      "from_account": "2000",
+      "to_account": "2999"
+    },
+    {
+      "id": "EQTY",
+      "code": "EQTY",
+      "name": "权益",
+      "status": 1,
+      "from_account": "4000",
+      "to_account": "4999"
+    },
+    {
+      "id": "PROF",
+      "code": "PROF",
+      "name": "损益",
+      "status": 1,
+      "from_account": "6000",
+      "to_account": "6999"
+    }
+  ],
+  "account_type": [
+    {
+      "id": "S",
+      "code": "S",
+      "name": "总账",
+      "status": 1
+    },
+    {
+      "id": "D",
+      "code": "D",
+      "name": "客户",
+      "status": 1
+    },
+    {
+      "id": "K",
+      "code": "K",
+      "name": "供应商",
+      "status": 1
+    },
+    {
+      "id": "A",
+      "code": "A",
+      "name": "资产",
+      "status": 1
+    },
+    {
+      "id": "M",
+      "code": "M",
+      "name": "物料",
+      "status": 1
+    }
+  ],
+  "fs_version": [
+    {
+      "id": "BAUS",
+      "code": "BAUS",
+      "name": "资产负债表/利润表",
+      "status": 1,
+      "parent_id": null,
+      "fs_item_type": "节点"
+    },
+    {
+      "id": "BS-ASSET",
+      "code": "BS-ASSET",
+      "name": "资产",
+      "status": 1,
+      "parent_id": "BAUS",
+      "fs_item_type": "节点"
+    },
+    {
+      "id": "BS-LIAB",
+      "code": "BS-LIAB",
+      "name": "负债",
+      "status": 1,
+      "parent_id": "BAUS",
+      "fs_item_type": "节点"
+    },
+    {
+      "id": "PL-INC",
+      "code": "PL-INC",
+      "name": "收入",
+      "status": 1,
+      "parent_id": "BAUS",
+      "fs_item_type": "节点"
+    }
+  ],
+  "posting_key": [
+    {
+      "id": "40",
+      "code": "40",
+      "name": "总账借",
+      "status": 1,
+      "debit_credit": "S",
+      "account_type": "S"
+    },
+    {
+      "id": "50",
+      "code": "50",
+      "name": "总账贷",
+      "status": 1,
+      "debit_credit": "H",
+      "account_type": "S"
+    },
+    {
+      "id": "01",
+      "code": "01",
+      "name": "客户借",
+      "status": 1,
+      "debit_credit": "S",
+      "account_type": "D"
+    },
+    {
+      "id": "11",
+      "code": "11",
+      "name": "客户贷",
+      "status": 1,
+      "debit_credit": "H",
+      "account_type": "D"
+    },
+    {
+      "id": "21",
+      "code": "21",
+      "name": "供应商借",
+      "status": 1,
+      "debit_credit": "S",
+      "account_type": "K"
+    },
+    {
+      "id": "31",
+      "code": "31",
+      "name": "供应商贷",
+      "status": 1,
+      "debit_credit": "H",
+      "account_type": "K"
+    },
+    {
+      "id": "70",
+      "code": "70",
+      "name": "资产借",
+      "status": 1,
+      "debit_credit": "S",
+      "account_type": "A"
+    },
+    {
+      "id": "75",
+      "code": "75",
+      "name": "资产贷",
+      "status": 1,
+      "debit_credit": "H",
+      "account_type": "A"
+    }
+  ],
+  "debit_credit_ind": [
+    {
+      "id": "S",
+      "code": "S",
+      "name": "借方",
+      "status": 1
+    },
+    {
+      "id": "H",
+      "code": "H",
+      "name": "贷方",
+      "status": 1
+    }
+  ],
+  "special_gl_ind": [
+    {
+      "id": "A",
+      "code": "A",
+      "name": "预付款",
+      "status": 1,
+      "special_gl_type": "预付",
+      "recon_account": "1123"
+    },
+    {
+      "id": "F",
+      "code": "F",
+      "name": "预收款",
+      "status": 1,
+      "special_gl_type": "预收",
+      "recon_account": "2203"
+    },
+    {
+      "id": "W",
+      "code": "W",
+      "name": "应收票据",
+      "status": 1,
+      "special_gl_type": "票据",
+      "recon_account": "1121"
+    }
+  ],
+  "field_status_group": [
+    {
+      "id": "G001",
+      "code": "G001",
+      "name": "一般科目",
+      "status": 1,
+      "field_status_variant": "1000"
+    },
+    {
+      "id": "G004",
+      "code": "G004",
+      "name": "成本科目",
+      "status": 1,
+      "field_status_variant": "1000"
+    },
+    {
+      "id": "G067",
+      "code": "G067",
+      "name": "往来科目",
+      "status": 1,
+      "field_status_variant": "1000"
+    }
+  ],
+  "exchange_rate_type": [
+    {
+      "id": "M",
+      "code": "M",
+      "name": "平均汇率",
+      "status": 1
+    },
+    {
+      "id": "B",
+      "code": "B",
+      "name": "银行买入价",
+      "status": 1
+    },
+    {
+      "id": "G",
+      "code": "G",
+      "name": "卖出价",
+      "status": 1
+    }
+  ],
+  "fiscal_year_variant": [
+    {
+      "id": "K4",
+      "code": "K4",
+      "name": "日历年(1-12月)",
+      "status": 1,
+      "calendar_year": 1,
+      "posting_periods": 12,
+      "special_periods": 4
+    }
+  ],
+  "fiscal_period": [
+    {
+      "id": "2026",
+      "code": "2026",
+      "name": "2026年",
+      "status": 1,
+      "parent_id": null,
+      "fiscal_year": "2026"
+    },
+    {
+      "id": "2026-01",
+      "code": "2026-01",
+      "name": "2026年1月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 1,
+      "period_end_date": "2026-01-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-02",
+      "code": "2026-02",
+      "name": "2026年2月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 2,
+      "period_end_date": "2026-02-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-03",
+      "code": "2026-03",
+      "name": "2026年3月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 3,
+      "period_end_date": "2026-03-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-04",
+      "code": "2026-04",
+      "name": "2026年4月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 4,
+      "period_end_date": "2026-04-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-05",
+      "code": "2026-05",
+      "name": "2026年5月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 5,
+      "period_end_date": "2026-05-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-06",
+      "code": "2026-06",
+      "name": "2026年6月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 6,
+      "period_end_date": "2026-06-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-07",
+      "code": "2026-07",
+      "name": "2026年7月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 7,
+      "period_end_date": "2026-07-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-08",
+      "code": "2026-08",
+      "name": "2026年8月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 8,
+      "period_end_date": "2026-08-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-09",
+      "code": "2026-09",
+      "name": "2026年9月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 9,
+      "period_end_date": "2026-09-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-10",
+      "code": "2026-10",
+      "name": "2026年10月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 10,
+      "period_end_date": "2026-10-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-11",
+      "code": "2026-11",
+      "name": "2026年11月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 11,
+      "period_end_date": "2026-11-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    },
+    {
+      "id": "2026-12",
+      "code": "2026-12",
+      "name": "2026年12月",
+      "status": 1,
+      "parent_id": "2026",
+      "fiscal_year": "2026",
+      "period_no": 12,
+      "period_end_date": "2026-12-28",
+      "special_period": 0,
+      "posting_allowed": 1
+    }
+  ],
+  "tax_code": [
+    {
+      "id": "J1",
+      "code": "J1",
+      "name": "销项税13%",
+      "status": 1,
+      "tax_type": "销项",
+      "tax_rate": 13.0,
+      "tax_procedure": "TAXCN",
+      "target_tax_account": "2221"
+    },
+    {
+      "id": "J2",
+      "code": "J2",
+      "name": "销项税9%",
+      "status": 1,
+      "tax_type": "销项",
+      "tax_rate": 9.0,
+      "tax_procedure": "TAXCN",
+      "target_tax_account": "2221"
+    },
+    {
+      "id": "V1",
+      "code": "V1",
+      "name": "进项税13%",
+      "status": 1,
+      "tax_type": "进项",
+      "tax_rate": 13.0,
+      "tax_procedure": "TAXCN",
+      "target_tax_account": "2221"
+    },
+    {
+      "id": "V2",
+      "code": "V2",
+      "name": "进项税9%",
+      "status": 1,
+      "tax_type": "进项",
+      "tax_rate": 9.0,
+      "tax_procedure": "TAXCN",
+      "target_tax_account": "2221"
+    },
+    {
+      "id": "J0",
+      "code": "J0",
+      "name": "免税",
+      "status": 1,
+      "tax_type": "销项",
+      "tax_rate": 0.0,
+      "tax_procedure": "TAXCN",
+      "target_tax_account": "2221"
+    }
+  ],
+  "payment_terms": [
+    {
+      "id": "NT00",
+      "code": "NT00",
+      "name": "立即付款",
+      "status": 1,
+      "baseline_date_type": "凭证日期",
+      "net_due_days": 0,
+      "discount_days_1": 0,
+      "discount_pct_1": 0
+    },
+    {
+      "id": "NT30",
+      "code": "NT30",
+      "name": "30天净额",
+      "status": 1,
+      "baseline_date_type": "凭证日期",
+      "net_due_days": 30,
+      "discount_days_1": 10,
+      "discount_pct_1": 2
+    }
+  ],
+  "payment_method": [
+    {
+      "id": "T",
+      "code": "T",
+      "name": "电汇转账",
+      "status": 1,
+      "payment_type": "电汇转账"
+    },
+    {
+      "id": "C",
+      "code": "C",
+      "name": "支票",
+      "status": 1,
+      "payment_type": "支票"
+    },
+    {
+      "id": "B",
+      "code": "B",
+      "name": "银行承兑",
+      "status": 1,
+      "payment_type": "银行承兑"
+    },
+    {
+      "id": "W",
+      "code": "W",
+      "name": "网银",
+      "status": 1,
+      "payment_type": "网银"
+    }
+  ],
+  "business_partner": [
+    {
+      "id": "C-SINOPEC",
+      "code": "C-SINOPEC",
+      "name": "中石化华东分销",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "客户",
+      "recon_account": "1122",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "C-CNOOC",
+      "code": "C-CNOOC",
+      "name": "中海油贸易",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "客户",
+      "recon_account": "1122",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "C-SHELL",
+      "code": "C-SHELL",
+      "name": "壳牌(中国)",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "客户",
+      "recon_account": "1122",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "C-LOCAL01",
+      "code": "C-LOCAL01",
+      "name": "南京加油站客户",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "客户",
+      "recon_account": "1122",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "C-AVIA",
+      "code": "C-AVIA",
+      "name": "东方航空(航煤)",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "客户",
+      "recon_account": "1122",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "C-POWER",
+      "code": "C-POWER",
+      "name": "华能电力(燃料油)",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "客户",
+      "recon_account": "1122",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "S-OILFIELD",
+      "code": "S-OILFIELD",
+      "name": "大庆采油供应",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "供应商",
+      "recon_account": "2202",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "S-EQUIP",
+      "code": "S-EQUIP",
+      "name": "宝石机械(设备)",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "供应商",
+      "recon_account": "2202",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "S-CHEM",
+      "code": "S-CHEM",
+      "name": "巴斯夫(化工料)",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "供应商",
+      "recon_account": "2202",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "S-LOGIS",
+      "code": "S-LOGIS",
+      "name": "中油物流",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "供应商",
+      "recon_account": "2202",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "S-IMPORT",
+      "code": "S-IMPORT",
+      "name": "沙特阿美(进口原油)",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "供应商",
+      "recon_account": "2202",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    },
+    {
+      "id": "S-SERVICE",
+      "code": "S-SERVICE",
+      "name": "斯伦贝谢(油服)",
+      "status": 1,
+      "bp_category": "2",
+      "bp_role": "供应商",
+      "recon_account": "2202",
+      "country": "CN",
+      "payment_terms_id": "NT30"
+    }
+  ],
+  "house_bank": [
+    {
+      "id": "BK-ICBC",
+      "code": "BK-ICBC",
+      "name": "工商银行南京分行",
+      "status": 1,
+      "parent_id": null,
+      "bank_country": "CN",
+      "bank_key": "6222001",
+      "account_no": "6222001888",
+      "currency": "CNY",
+      "gl_account_id": "1002"
+    },
+    {
+      "id": "BK-CCB",
+      "code": "BK-CCB",
+      "name": "建设银行大庆分行",
+      "status": 1,
+      "parent_id": null,
+      "bank_country": "CN",
+      "bank_key": "6217002",
+      "account_no": "6217002888",
+      "currency": "CNY",
+      "gl_account_id": "1002"
+    },
+    {
+      "id": "BK-BOC",
+      "code": "BK-BOC",
+      "name": "中国银行国际部",
+      "status": 1,
+      "parent_id": null,
+      "bank_country": "CN",
+      "bank_key": "6013003",
+      "account_no": "6013003888",
+      "currency": "CNY",
+      "gl_account_id": "1002"
+    }
+  ],
+  "internal_order": [
+    {
+      "id": "IO-PRJ-DQ-W",
+      "code": "IO-PRJ-DQ-W",
+      "name": "内部订单-大庆新井开发",
+      "status": 1,
+      "order_type": "项目",
+      "controlling_area": "CN00",
+      "responsible_cc": "CC-DQ-PROD"
+    },
+    {
+      "id": "IO-PRJ-PIPE-W",
+      "code": "IO-PRJ-PIPE-W",
+      "name": "内部订单-西气东输三线",
+      "status": 1,
+      "order_type": "项目",
+      "controlling_area": "CN00",
+      "responsible_cc": "CC-DQ-PROD"
+    },
+    {
+      "id": "IO-PRJ-OVS-KZ",
+      "code": "IO-PRJ-OVS-KZ",
+      "name": "内部订单-哈萨克勘探区块",
+      "status": 1,
+      "order_type": "项目",
+      "controlling_area": "CN00",
+      "responsible_cc": "CC-DQ-PROD"
+    },
+    {
+      "id": "IO-PRJ-DL-EXP",
+      "code": "IO-PRJ-DL-EXP",
+      "name": "内部订单-大连石化扩能",
+      "status": 1,
+      "order_type": "项目",
+      "controlling_area": "CN00",
+      "responsible_cc": "CC-DQ-PROD"
+    }
+  ],
+  "wbs_element": [
+    {
+      "id": "WBS-PRJ-DQ-W",
+      "code": "WBS-PRJ-DQ-W",
+      "name": "WBS-大庆新井开发",
+      "status": 1,
+      "parent_id": null,
+      "project_def": "PRJ-DQ-W",
+      "responsible_cc": "CC-DQ-PROD"
+    },
+    {
+      "id": "WBS-PRJ-PIPE-W",
+      "code": "WBS-PRJ-PIPE-W",
+      "name": "WBS-西气东输三线",
+      "status": 1,
+      "parent_id": null,
+      "project_def": "PRJ-PIPE-W",
+      "responsible_cc": "CC-DQ-PROD"
+    },
+    {
+      "id": "WBS-PRJ-OVS-KZ",
+      "code": "WBS-PRJ-OVS-KZ",
+      "name": "WBS-哈萨克勘探区块",
+      "status": 1,
+      "parent_id": null,
+      "project_def": "PRJ-OVS-KZ",
+      "responsible_cc": "CC-DQ-PROD"
+    },
+    {
+      "id": "WBS-PRJ-DL-EXP",
+      "code": "WBS-PRJ-DL-EXP",
+      "name": "WBS-大连石化扩能",
+      "status": 1,
+      "parent_id": null,
+      "project_def": "PRJ-DL-EXP",
+      "responsible_cc": "CC-DQ-PROD"
+    }
+  ],
+  "country": [
+    {
+      "id": "CN",
+      "code": "CN",
+      "name": "中国",
+      "status": 1,
+      "currency": "CNY"
+    },
+    {
+      "id": "US",
+      "code": "US",
+      "name": "美国",
+      "status": 1,
+      "currency": "USD"
+    },
+    {
+      "id": "KZ",
+      "code": "KZ",
+      "name": "哈萨克斯坦",
+      "status": 1,
+      "currency": "KZT"
+    },
+    {
+      "id": "SD",
+      "code": "SD",
+      "name": "苏丹",
+      "status": 1,
+      "currency": "USD"
+    },
+    {
+      "id": "SG",
+      "code": "SG",
+      "name": "新加坡",
+      "status": 1,
+      "currency": "USD"
+    }
+  ],
+  "currency": [
+    {
+      "id": "CNY",
+      "code": "CNY",
+      "name": "人民币",
+      "status": 1,
+      "symbol": "¥",
+      "decimals": 2
+    },
+    {
+      "id": "USD",
+      "code": "USD",
+      "name": "美元",
+      "status": 1,
+      "symbol": "$",
+      "decimals": 2
+    },
+    {
+      "id": "EUR",
+      "code": "EUR",
+      "name": "欧元",
+      "status": 1,
+      "symbol": "€",
+      "decimals": 2
+    },
+    {
+      "id": "KZT",
+      "code": "KZT",
+      "name": "坚戈",
+      "status": 1,
+      "symbol": "₸",
+      "decimals": 2
+    }
+  ],
+  "document_type": [
+    {
+      "id": "DR",
+      "code": "DR",
+      "name": "客户发票",
+      "status": 1
+    },
+    {
+      "id": "KR",
+      "code": "KR",
+      "name": "供应商发票",
+      "status": 1
+    },
+    {
+      "id": "SA",
+      "code": "SA",
+      "name": "总账凭证",
+      "status": 1
+    },
+    {
+      "id": "AB",
+      "code": "AB",
+      "name": "一般凭证",
+      "status": 1
+    },
+    {
+      "id": "AA",
+      "code": "AA",
+      "name": "资产凭证",
+      "status": 1
+    },
+    {
+      "id": "ZP",
+      "code": "ZP",
+      "name": "付款凭证",
+      "status": 1
+    },
+    {
+      "id": "DZ",
+      "code": "DZ",
+      "name": "收款凭证",
+      "status": 1
+    }
+  ],
+  "ledger": [
+    {
+      "id": "0L",
+      "code": "0L",
+      "name": "主分类账(IFRS)",
+      "status": 1,
+      "leading_ledger": 1,
+      "accounting_principle": "IFRS"
+    },
+    {
+      "id": "CN",
+      "code": "CN",
+      "name": "中国准则分类账",
+      "status": 1,
+      "leading_ledger": 0,
+      "accounting_principle": "CAS"
+    }
+  ]
+}

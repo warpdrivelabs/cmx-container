@@ -28,6 +28,9 @@ async function apiPost(url, payload, dbId) {
 }
 
 const state = { suppliers: [], kw: '', page: 1, pageSize: 20, total: 0 }
+// 供应商的 CR 单据类型（= activation.source_doc_type，与激活映射配置保持一致；
+// cr-form 据此定位 activation 配置，渲染对应字段）
+const DOC_TYPE = 'gys'
 
 // 字典坐标四元组（domain/application/module/dbId），全部来自 ctx.props，代码中不写死。
 let coord = null
@@ -80,7 +83,7 @@ function openTab(host, caption, nativePage, context, opts = {}) {
     }
   }
   if (!app || typeof app.openNode !== 'function') { console.warn('[cr-editor] 未找到 portal-app.openNode'); return }
-  const ctxKey = (context && (context.crId || (context.supplier && context.supplier.id))) || ''
+  const ctxKey = (context && (context.crId || (context.target && context.target.id) || (context.supplier && context.supplier.id))) || ''
   const key = opts.single ? 'single' : (ctxKey || Date.now())
   app.openNode({
     id: `${nativePage}-${key}`, name: nativePage, caption, type: 'workspace-node',
@@ -151,7 +154,7 @@ function buildListGrid() {
     const s = row ? (row.toPlainObject ? row.toPlainObject() : row) : null
     if (!s) return
     if (d.actionRef === 'view') openTab(currentHost, `供应商·${s.name || ''}`, 'portal.mdm.supplier-detail', { supplier: s })
-    else if (d.actionRef === 'edit') openTab(currentHost, `变更·${s.name || ''}`, 'portal.mdm.cr-form', { mode: 'update', supplier: s })
+    else if (d.actionRef === 'edit') openTab(currentHost, `变更·${s.name || ''}`, 'portal.mdm.cr-form', { docType: DOC_TYPE, crType: 'update', target: s })
   })
   const fill = () => {
     if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows(state.suppliers); grid.setDataSet(ds) }
@@ -170,7 +173,7 @@ function bind(root) {
   rootEl = root
   const host = currentHost
   // 新增=单例（只开一个）；详情/变更=按行 id 多开
-  root.querySelector('#ceAdd')?.addEventListener('click', () => openTab(host, '新增供应商', 'portal.mdm.cr-form', { mode: 'create' }, { single: true }))
+  root.querySelector('#ceAdd')?.addEventListener('click', () => openTab(host, '新增供应商', 'portal.mdm.cr-form', { docType: DOC_TYPE, crType: 'create' }, { single: true }))
   root.querySelector('#ceReload')?.addEventListener('click', () => { loadSuppliers().then(refresh) })
   root.querySelector('#ceFilter')?.addEventListener('cmx-filter-search', (e) => { state.kw = e.detail?.text || ''; state.page = 1; loadSuppliers().then(refresh) })
   root.querySelector('#ceFilter')?.addEventListener('cmx-filter-reset', () => { state.kw = ''; state.page = 1; loadSuppliers().then(refresh) })

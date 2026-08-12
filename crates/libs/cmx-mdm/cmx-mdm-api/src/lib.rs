@@ -66,6 +66,11 @@ impl ModuleRoutes for MdmModule {
             // 查重规则配置（规则维护内嵌查重界面，无独立管理页）
             .route("/mdm/match-configs", get(mdm::mdm_match_configs_list).post(mdm::mdm_match_configs_save))
             .route("/mdm/match-configs/delete", post(mdm::mdm_match_configs_delete))
+            // M3.5 · 全库扫描查重（管家工作台「发现未知重复」入口）
+            .route("/mdm/match-scan", get(mdm::mdm_match_scan_list))
+            .route("/mdm/match-scan/run", post(mdm::mdm_match_scan_run))
+            .route("/mdm/match-scan/detail", get(mdm::mdm_match_scan_detail))
+            .route("/mdm/match-scan/ignore", post(mdm::mdm_match_scan_ignore))
     }
 
     fn prefix() -> &'static str {

@@ -1,12 +1,18 @@
 /**
- * MDM 查重候选台（native-page · 企业级重设计 v4）。
+ * MDM 查重候选台（native-page · 企业级重设计 v4 · 双模式）。
+ *
+ * 双模式（页头 toggle 切换 state.mode，规则配置区共享）：
+ *  - anchor（锚点查重，默认）：选目标记录 → `POST /api/mdm/records/find-duplicates`（不落库）
+ *    → 候选列表 + 字段对比 → 勾选 victim 执行合并（落库）。整套逻辑保留不变。
+ *  - scan（全库扫描，新增）：无需目标记录 → `POST /api/mdm/match-scan/run`（落评审队列）
+ *    → 摘要卡（新发现 / 去重跳过 / 待评审总数）+ 「去工作台评审」跳转数据管家工作台。
  *
  * 设计要点（Neo 主题 + 换肤 + 克制视觉）：
  *  - 三区垂直（条件→候选→历史），`.neo-panel` 卡片分区，颜色全 `var(--sap*|--neo-*)` 派生，不硬编码。
  *  - cmx 组件不写 data-cmx-skin 即走门户默认 Neo；light/dark 自动跟随。
  *  - 单一签名：字段对比表差异行红底高亮 + 一致行弱化。
  *
- * 业务流程（查重预览不落库 → 用户确认合并才落库）：
+ * 业务流程（锚点查重预览不落库 → 用户确认合并才落库）：
  *  ① 选数据字典 → ② 选/编辑查重规则（内嵌维护，无独立管理页）→ ③ 选目标记录 → ④ 查重（不落库）
  *  ⑤ 候选列表 + 选中展开字段对比 → ⑥ 勾选 victim 执行合并（落库）→ ⑦ 历史区可还原。
  *
@@ -71,9 +77,14 @@ const state = {
   selCand: null,                           // 当前选中对比的候选
   victimIds: [],                           // 勾选待合并的 victim id
   // 历史区
-  histDict: '', histKw: '', histPage: 1, histPageSize: 10, histList: [], histTotal: 0,
+  histDict: '', histKw: '', histPage: 1, histPageSize: 10, histList: [], histTotal: 0, allDicts: [],
   histDetailId: null, histDetail: null,   // 详情查看：选中 mergeId + detail 数据
   activeTab: 'dup',                       // 当前 tab（dup/hist），refresh 后保持不跳回
+  // 双模式（页头 toggle 切换）：anchor=锚点查重（默认，按目标记录比对候选）；
+  // scan=全库扫描（无目标记录，整库跑匹配、新发现落评审队列，不在此页合并）
+  mode: 'anchor',
+  scanning: false,                        // 全库扫描进行中（按钮置 loading/disabled，防重复点击）
+  scanResult: null,                       // 全库扫描结果 { newFindings, skipped, pendingTotal }
 }
 
 function styleCss() {
@@ -96,6 +107,7 @@ function styleCss() {
   .bar .f-item { display:flex; flex-direction:column; gap:4px; min-width:200px; flex:1 1 200px; }
   /* 字典选择框：下拉型，限制宽度避免过宽 */
   .bar .f-item.f-dict { flex:0 0 280px; max-width:300px; }
+  .bar .f-item.f-rec { flex:0 0 320px; max-width:360px; }
   .bar label { font-size:12px; color:var(--sapContent_LabelColor,#6a6d70); }
   cmx-dict-select { display:block; }
   .hint { font-size:12px; color:var(--sapContent_LabelColor,#6a6d70); margin-top:6px; }
@@ -131,6 +143,21 @@ function styleCss() {
   /* 对比表 */
   .cmp-tip { font-size:12px; color:var(--sapContent_LabelColor,#6a6d70); padding:8px 0; }
   cmx-toolbar { display:flex; gap:8px; }
+  /* 模式 toggle（锚点查重 / 全库扫描）：页头 segmented 控件，active 用 neo-cyan 填充 */
+  .dc-mode-bar { display:inline-flex; gap:4px; margin-top:10px; padding:3px; border-radius:6px;
+    background:var(--sapList_HeaderBackground,#f5f6f7); border:1px solid var(--neo-border-subtle,#e9e9e9); }
+  .dc-mode-btn { appearance:none; cursor:pointer; border:none; background:transparent;
+    padding:5px 14px; font-size:13px; color:var(--sapContent_LabelColor,#6a6d70); border-radius:4px; }
+  .dc-mode-btn.active { background:var(--neo-cyan,#00b4d8); color:var(--sapButton_Emphasized_TextColor,#fff); font-weight:600; }
+  .dc-mode-btn:disabled { opacity:0.6; cursor:default; }
+  /* 全库扫描摘要卡（scan 模式替代候选区） */
+  .scan-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+  .scan-card { padding:14px 16px; border:1px solid var(--neo-border,var(--sapGroup_ContentBorderColor,#d9d9d9));
+    border-radius:6px; background:var(--sapList_Background,#fff); }
+  .scan-card .sc-num { font-size:24px; font-weight:600; color:var(--neo-cyan,#00b4d8); }
+  .scan-card .sc-lbl { font-size:12px; color:var(--sapContent_LabelColor,#6a6d70); margin-top:4px; }
+  .scan-actions { display:flex; gap:8px; margin-top:14px; }
+  @media (max-width:640px) { .scan-summary { grid-template-columns:1fr; } }
   `
 }
 
@@ -212,6 +239,14 @@ async function loadRules() {
   else if (!state.rules.length) state.rule = null
 }
 
+// 拉全部查重规则，提取 dict_code 去重（历史筛选下拉用，不依赖当前 dictCode）
+async function loadAllDicts() {
+  const list = (await apiGet('/api/mdm/match-configs', coord && coord.dbId)) || []
+  const seen = []
+  for (const c of list) { if (c.dict_code && !seen.includes(c.dict_code)) seen.push(c.dict_code) }
+  state.allDicts = seen
+}
+
 // 把后端规则或用户新建统一成编辑器内部结构
 function normalizeRule(r) {
   if (!r) return null
@@ -237,10 +272,14 @@ function condHtml() {
       C.CmxColumn && new C.CmxColumn({ id: 'dictName', caption: '字典名称', dataType: 'VARCHAR' }),
     ].filter(Boolean),
   }
-  const recSel = state.dictCode ? `<div class="f-item">
+  const recSel = (state.dictCode && state.mode === 'anchor') ? `<div class="f-item f-rec">
       <label>目标记录</label>
       <cmx-dict-select id="dcRecord" ${state.targetRow ? `value="${state.targetRow.id}"` : ''}></cmx-dict-select>
     </div>` : ''
+  // 动作按钮随模式切换：anchor=查重（需字典+目标记录+规则字段）；scan=开始扫描（仅需字典，扫描中置 disabled）
+  const actionBtn = state.mode === 'scan'
+    ? `<ui5-button design="Emphasized" icon="background-process" id="dcScan" ${(!state.dictCode || state.scanning) ? 'disabled' : ''}>${state.scanning ? '扫描中…' : '开始扫描'}</ui5-button>`
+    : `<ui5-button design="Emphasized" icon="search" id="dcFind" ${(!state.dictCode || !state.targetId || !ruleHasFields()) ? 'disabled' : ''}>查重</ui5-button>`
   return `<section class="neo-panel">
     <div class="neo-panel-head"><div class="pt"><ui5-icon name="filter"></ui5-icon>查重条件</div></div>
     <div class="neo-panel-body">
@@ -251,9 +290,10 @@ function condHtml() {
           <cmx-dict-select id="dcDict" ${state.dictCode ? `value="${state.dictCode}"` : ''}></cmx-dict-select>
         </div>
         ${recSel}
-        <ui5-button design="Emphasized" icon="search" id="dcFind" ${(!state.dictCode || !state.targetId || !ruleHasFields()) ? 'disabled' : ''}>查重</ui5-button>
+        ${actionBtn}
       </div>
-      ${state.dictCode ? ruleHtml() : '<div class="hint">请先选择数据字典</div>'}`}
+      ${state.dictCode ? ruleHtml() : '<div class="hint">请先选择数据字典</div>'}
+      ${state.dictCode && state.mode === 'scan' ? '<div class="hint">规则配置为可选：未填写时后端从 md_match_config 读默认；填写则覆盖默认参与本次扫描。</div>' : ''}`}
     </div>
   </section>`
 }
@@ -393,6 +433,29 @@ function recLabel(fields, id) {
 }
 function eqVal(a, b) { return String(a) === String(b) }
 
+// ── 渲染：全库扫描摘要区（scan 模式替代候选区）─────────────────────────
+function scanHtml() {
+  const r = state.scanResult
+  if (!r) {
+    return `<section class="neo-panel"><div class="neo-panel-head"><div class="pt"><ui5-icon name="background-process"></ui5-icon>扫描结果</div></div>
+      <div class="neo-panel-body"><div class="empty">${state.dictCode ? '点击「开始扫描」对全库执行匹配，新发现将进入待评审队列' : '请先选择数据字典'}</div></div></section>`
+  }
+  const cards = [
+    { num: r.newFindings ?? 0, lbl: '本次新发现（进入待评审）' },
+    { num: r.skipped ?? 0, lbl: '去重跳过（已存在评审）' },
+    { num: r.pendingTotal ?? 0, lbl: '当前待评审总数' },
+  ].map((c) => `<div class="scan-card"><div class="sc-num">${c.num}</div><div class="sc-lbl">${c.lbl}</div></div>`).join('')
+  return `<section class="neo-panel">
+    <div class="neo-panel-head"><div class="pt"><ui5-icon name="background-process"></ui5-icon>扫描结果</div></div>
+    <div class="neo-panel-body">
+      <div class="scan-summary">${cards}</div>
+      <div class="scan-actions">
+        <ui5-button design="Emphasized" icon="forward" id="dcGotoSteward">去工作台评审</ui5-button>
+      </div>
+    </div>
+  </section>`
+}
+
 // ── 渲染：合并历史区 ────────────────────────────────────────────────────
 function histHtml() {
   const rows = state.histList.map((g) => {
@@ -416,7 +479,7 @@ function histHtml() {
       <div class="bar" style="margin-bottom:10px;">
         <ui5-select id="dcHistDict" style="min-width:160px;">
           <ui5-option value="" ${state.histDict === '' ? 'selected' : ''}>全部字典</ui5-option>
-          <ui5-option value="supplier" ${state.histDict === 'supplier' ? 'selected' : ''}>供应商</ui5-option>
+          ${state.allDicts.map((d) => `<ui5-option value="${d}" ${state.histDict === d ? 'selected' : ''}>${d}</ui5-option>`).join('')}
         </ui5-select>
         <ui5-input id="dcHistKw" placeholder="搜索主记录/被合并方名称" value="${state.histKw}" style="min-width:240px;flex:1 1 240px;"></ui5-input>
         <ui5-button design="Default" icon="search" id="dcHistSearch">查询</ui5-button>
@@ -455,6 +518,7 @@ function histDetailHtml() {
       <td>${from ? `<cmx-status-tag tone="${log.from === 'master' ? 'info' : (log.from === 'override' ? 'warning' : 'positive')}" variant="subtle" size="sm">${from}</cmx-status-tag>` : ''}</td></tr>`
   }).join('')
   const reparented = slog.reparented ? Object.entries(slog.reparented).map(([t, ids]) => `${t}: ${(ids || []).length} 行`).join('，') : ''
+  const deduped = slog.deduped ? Object.entries(slog.deduped).map(([t, ids]) => `${t}: ${(ids || []).length} 行`).join('，') : ''
   const lblF = state.dictMeta ? (state.dictMeta.labelField || 'name') : 'name'
   const masterLabel = master[lblF] || master.id || ''
   const victimLabels = victims.map((v) => v[lblF] || v.id).join('、')
@@ -462,20 +526,35 @@ function histDetailHtml() {
     <div class="cmp-tip">合并详情：主记录「${masterLabel}」vs 被合并方（${victimLabels}）。来源列说明存活值取自 master/victim/override。</div>
     <table class="tbl"><thead><tr><th>字段</th><th>主记录</th><th>被合并方</th><th>存活来源</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">无字段差异</td></tr>'}</tbody></table>
     ${reparented ? `<div class="cmp-tip">明细行迁移：${reparented}</div>` : ''}
+    ${deduped ? `<div class="cmp-tip">明细去重（软删重复行）：${deduped}</div>` : ''}
   </div>`
 }
+// 合并结果摘要文案（迁移/去重明细数，来自后端 MergeStats 响应）
+function mergeSummary(d) {
+  const r = (d && typeof d === 'object') ? d : {}
+  const rep = r.reparentedTotal ?? 0
+  const ded = r.dedupedTotal ?? 0
+  return (rep === 0 && ded === 0) ? '合并成功' : `合并成功：迁移 ${rep} 条明细，去重 ${ded} 条`
+}
+
 const fmtTime = (s) => { if (!s) return ''; try { return new Date(s).toLocaleString('zh-CN', { hour12: false }) } catch { return s } }
 
 function viewHtml() {
+  // 页头模式 toggle（锚点查重 / 全库扫描）：切换 state.mode 后 refresh 重渲，规则配置区两模式共享
+  const modeBar = `<div class="dc-mode-bar" role="tablist" aria-label="查重模式">
+    <button class="dc-mode-btn ${state.mode === 'anchor' ? 'active' : ''}" data-mode="anchor" role="tab" ${state.scanning ? 'disabled' : ''}>锚点查重</button>
+    <button class="dc-mode-btn ${state.mode === 'scan' ? 'active' : ''}" data-mode="scan" role="tab" ${state.scanning ? 'disabled' : ''}>全库扫描</button>
+  </div>`
   return `<div class="pg">
     <div class="pg-head"><div class="pg-title">主数据查重</div>
-      <div class="pg-sub">识别一物多码：选择字典与记录，比对字段后合并重复项；查看历史合并并还原</div></div>
+      <div class="pg-sub">识别一物多码：锚点查重按目标记录比对候选并合并；全库扫描整库跑匹配、新发现进入待评审队列</div>
+      ${modeBar}</div>
     <cmx-view-tabs active="${state.activeTab}" id="dcTabs">
       <div slot="tabs" class="dc-tab-bar">
-        <button class="dc-tab" data-view="dup">查重候选</button>
+        <button class="dc-tab" data-view="dup">${state.mode === 'scan' ? '扫描结果' : '查重候选'}</button>
         <button class="dc-tab" data-view="hist">合并历史</button>
       </div>
-      <div data-view-panel="dup" class="dc-panel">${condHtml()}${candHtml()}</div>
+      <div data-view-panel="dup" class="dc-panel">${condHtml()}${state.mode === 'scan' ? scanHtml() : candHtml()}</div>
       <div data-view-panel="hist" class="dc-panel">${histHtml()}</div>
     </cmx-view-tabs>
   </div>`
@@ -525,6 +604,17 @@ function bind(root) {
   }
   // 查重按钮
   root.querySelector('#dcFind')?.addEventListener('click', () => runFind().catch((e) => cmx().cmxError?.(`查重失败：${e.message}`)))
+  // 模式 toggle（锚点查重 / 全库扫描）：扫描进行中禁止切换
+  root.querySelectorAll('.dc-mode-btn').forEach((b) => b.addEventListener('click', () => {
+    const m = b.dataset.mode
+    if (m && m !== state.mode && !state.scanning) { state.mode = m; refresh() }
+  }))
+  // 全库扫描按钮
+  root.querySelector('#dcScan')?.addEventListener('click', () => runScan().catch((e) => cmx().cmxError?.(`扫描失败：${e.message}`)))
+  // 扫描结果 → 去工作台评审（单例 tab，重复点击复用同一标签页）
+  root.querySelector('#dcGotoSteward')?.addEventListener('click', () => {
+    openTab(currentHost, '数据管家工作台', 'portal.mdm.steward', {}, { single: true })
+  })
   // 规则下拉切换
   root.querySelector('#dcRule')?.addEventListener('change', (e) => {
     const id = e.target.value; const r = state.rules.find((x) => String(x.id) === String(id))
@@ -746,6 +836,32 @@ async function runFind() {
   cmx().cmxInfo?.(`查重完成，发现 ${((state.result && state.result.candidates) || []).length} 个候选`)
 }
 
+// 全库扫描（scan 模式）：无目标记录，对整库执行匹配，新发现落评审队列（不在此页合并）。
+// 规则配置可复用 anchor 模式的值（specs/clusterKeys/surviveFields）；未配置则不传，后端从 md_match_config 读默认。
+async function runScan() {
+  const M = cmx()
+  if (!state.dictCode) { M.cmxWarn?.('请先选择数据字典'); return }
+  if (state.scanning) return
+  state.scanning = true; state.scanResult = null
+  refresh()
+  try {
+    const r = state.rule
+    const payload = { dictCode: state.dictCode }
+    if (r && r.targetTable) payload.targetTable = r.targetTable
+    if (ruleHasFields()) {
+      payload.specs = r.specs
+      payload.clusterKeys = r.clusterKeys
+      payload.surviveFields = r.surviveFields
+    }
+    const res = await apiPost('/api/mdm/match-scan/run', payload, coord && coord.dbId)
+    state.scanResult = res || { newFindings: 0, skipped: 0, pendingTotal: 0 }
+    M.cmxInfo?.(`扫描完成：新发现 ${state.scanResult.newFindings ?? 0} 条，待评审 ${state.scanResult.pendingTotal ?? 0} 条`)
+  } finally {
+    state.scanning = false
+    refresh()
+  }
+}
+
 async function doMerge() {
   const M = cmx()
   if (!state.victimIds.length) { M.cmxWarn?.('请先勾选要合并的候选'); return }
@@ -761,11 +877,11 @@ async function doMerge() {
     message: `确认执行合并？\n\n保留为主记录(master)：${targetName}\n将被废弃标记已合并(victim)：${victims.join('、')}\n\n说明：被合并方可完整还原；主记录被合并带过来的字段值不会回退，如需修正请走变更单。`,
   })
   if (ok === false) return
-  await apiPost('/api/mdm/merge-requests', {
+  const d = await apiPost('/api/mdm/merge-requests', {
     dictCode: state.dictCode, masterId: Number(state.targetId), victimIds: state.victimIds,
     targetTable: r.targetTable, surviveFields: r.surviveFields,
   }, coord && coord.dbId)
-  M.cmxInfo?.('合并成功')
+  M.cmxInfo?.(mergeSummary(d))
   // 刷新候选（剔除已合并）+ 历史
   state.victimIds = []; state.selCand = null
   await runFind().catch(() => {})
@@ -840,12 +956,40 @@ function readCoord(ctx) {
   return (c.domain && c.application && c.module) ? c : null
 }
 
+/**
+ * 打开并列门户标签页（照抄 cr-editor.js 模式，域/应用取自 coord 不写死）。
+ * opts.single=true 单例复用（如「去工作台评审」重复点击聚焦同一 tab）；默认按 context 业务 id 多开。
+ * addTab 按 id 去重：同 id 复用并同步 context，不同 id 新开。
+ */
+function openTab(host, caption, nativePage, context, opts = {}) {
+  let app = null
+  try { app = document.querySelector('cmx-portal-app') } catch { app = null }
+  if (!app || typeof app.openNode !== 'function') {
+    let n = host
+    for (let i = 0; i < 6 && n; i++) {
+      if (typeof n.openNode === 'function') { app = n; break }
+      const r = n.getRootNode && n.getRootNode(); n = r && r.host
+    }
+  }
+  if (!app || typeof app.openNode !== 'function') { console.warn('[duplicate-check] 未找到 portal-app.openNode'); return }
+  const ctxKey = (context && (context.mergeId || context.recordId || context.crId)) || ''
+  const key = opts.single ? 'single' : (ctxKey || Date.now())
+  app.openNode({
+    id: `${nativePage}-${key}`, name: nativePage, caption, type: 'workspace-node',
+    // 带上域/应用（来自当前页 ctx.props 经 coord 解析，不写死）：F5 重建动态页时据此切换左侧菜单与右上角域。
+    domainCode: (coord && coord.domain) || '', applicationCode: (coord && coord.application) || '',
+    workspace: { content: { caption, views: [{ type: 'native_pages', native_page: nativePage, view: 'content' }] } },
+  }, { initialContext: context })
+}
+
 export default {
   defaultView: 'content',
   views: {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
       coord = readCoord(ctx)
+      // 预加载全部查重字典（历史筛选下拉用，不依赖当前 dictCode）
+      try { await loadAllDicts() } catch (e) { console.error('[dup-check] loadAllDicts', e) }
       // 历史改为切到「合并历史」tab 时按需加载（loadHist 在 bind 的 cmx-view-change 里触发）
       if (host) whenRendered(host, '.pg', (r) => { rootEl = r; bind(r) })
       // coord 缺失时仍渲染页面，条件区提示「请配置菜单 props 的 domain/application/module」

@@ -1,0 +1,2346 @@
+{
+  "_remark": "CNPC 字典数据(Oracle EBS)——全字典补齐",
+  "coa_structure": [
+    {
+      "id": "CNPC_COA",
+      "code": "CNPC_COA",
+      "name": "CNPC会计弹性域",
+      "status": 1,
+      "segment_count": 4,
+      "structure_code": "CO-CC-AC-SEG"
+    }
+  ],
+  "ledger": [
+    {
+      "id": "CNPC_PL",
+      "code": "CNPC_PL",
+      "name": "中国石油主账本",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "accounting_calendar": "CAL_CN",
+      "currency": "CNY",
+      "accounting_method": "应计制",
+      "ledger_category": "主账本"
+    },
+    {
+      "id": "CNPC_OVS",
+      "code": "CNPC_OVS",
+      "name": "海外账本",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "accounting_calendar": "CAL_CN",
+      "currency": "USD",
+      "accounting_method": "应计制",
+      "ledger_category": "从账本"
+    }
+  ],
+  "legal_entity": [
+    {
+      "id": "LE-PCL",
+      "code": "LE-PCL",
+      "name": "中国石油股份(法人)",
+      "status": 1,
+      "ledger_id": "CNPC_PL",
+      "country": "CN",
+      "tax_registration_no": "9100PCL"
+    },
+    {
+      "id": "LE-BHDC",
+      "code": "LE-BHDC",
+      "name": "渤海钻探(法人)",
+      "status": 1,
+      "ledger_id": "CNPC_PL",
+      "country": "CN",
+      "tax_registration_no": "9100BHDC"
+    },
+    {
+      "id": "LE-PKZ",
+      "code": "LE-PKZ",
+      "name": "PetroKazakhstan",
+      "status": 1,
+      "ledger_id": "CNPC_OVS",
+      "country": "KZ"
+    }
+  ],
+  "operating_unit": [
+    {
+      "id": "OU-JSSALE",
+      "code": "OU-JSSALE",
+      "name": "江苏销售OU",
+      "status": 1,
+      "ledger_id": "CNPC_PL",
+      "legal_entity_id": "LE-PCL"
+    },
+    {
+      "id": "OU-DAQING",
+      "code": "OU-DAQING",
+      "name": "大庆油田OU",
+      "status": 1,
+      "ledger_id": "CNPC_PL",
+      "legal_entity_id": "LE-PCL"
+    },
+    {
+      "id": "OU-DLPC",
+      "code": "OU-DLPC",
+      "name": "大连石化OU",
+      "status": 1,
+      "ledger_id": "CNPC_PL",
+      "legal_entity_id": "LE-PCL"
+    },
+    {
+      "id": "OU-OVS",
+      "code": "OU-OVS",
+      "name": "海外OU",
+      "status": 1,
+      "ledger_id": "CNPC_OVS",
+      "legal_entity_id": "LE-PKZ"
+    }
+  ],
+  "inventory_org": [
+    {
+      "id": "INV-DL",
+      "code": "INV-DL",
+      "name": "大连石化库存组织",
+      "status": 1,
+      "operating_unit_id": "OU-DLPC",
+      "org_type": "制造"
+    },
+    {
+      "id": "INV-JS",
+      "code": "INV-JS",
+      "name": "江苏成品油库",
+      "status": 1,
+      "operating_unit_id": "OU-JSSALE",
+      "org_type": "分销"
+    }
+  ],
+  "value_set": [
+    {
+      "id": "VS_COMPANY",
+      "code": "VS_COMPANY",
+      "name": "公司值集",
+      "status": 1,
+      "validation_type": "独立"
+    },
+    {
+      "id": "VS_CC",
+      "code": "VS_CC",
+      "name": "成本中心值集",
+      "status": 1,
+      "validation_type": "独立"
+    },
+    {
+      "id": "VS_ACCOUNT",
+      "code": "VS_ACCOUNT",
+      "name": "科目值集",
+      "status": 1,
+      "validation_type": "独立"
+    },
+    {
+      "id": "VS_SEGMENT",
+      "code": "VS_SEGMENT",
+      "name": "板块值集",
+      "status": 1,
+      "validation_type": "独立"
+    }
+  ],
+  "flex_segment": [
+    {
+      "id": "SEG1-COMPANY",
+      "code": "SEG1-COMPANY",
+      "name": "公司段",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "segment_num": 1,
+      "column_name": "SEGMENT1",
+      "value_set_id": "VS_COMPANY",
+      "qualifier": "平衡段"
+    },
+    {
+      "id": "SEG2-CC",
+      "code": "SEG2-CC",
+      "name": "成本中心段",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "segment_num": 2,
+      "column_name": "SEGMENT2",
+      "value_set_id": "VS_CC",
+      "qualifier": "成本中心"
+    },
+    {
+      "id": "SEG3-ACCT",
+      "code": "SEG3-ACCT",
+      "name": "自然账户段",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "segment_num": 3,
+      "column_name": "SEGMENT3",
+      "value_set_id": "VS_ACCOUNT",
+      "qualifier": "自然账户"
+    },
+    {
+      "id": "SEG4-SEG",
+      "code": "SEG4-SEG",
+      "name": "板块段",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "segment_num": 4,
+      "column_name": "SEGMENT4",
+      "value_set_id": "VS_SEGMENT",
+      "qualifier": "次要段"
+    }
+  ],
+  "flex_value": [
+    {
+      "id": "CO-01",
+      "code": "CO-01",
+      "name": "公司段-股份公司",
+      "status": 1,
+      "value_set_id": "VS_COMPANY",
+      "allow_posting": 1
+    },
+    {
+      "id": "CO-02",
+      "code": "CO-02",
+      "name": "公司段-大庆油田",
+      "status": 1,
+      "value_set_id": "VS_COMPANY",
+      "allow_posting": 1
+    },
+    {
+      "id": "CO-03",
+      "code": "CO-03",
+      "name": "公司段-长庆油田",
+      "status": 1,
+      "value_set_id": "VS_COMPANY",
+      "allow_posting": 1
+    },
+    {
+      "id": "CO-11",
+      "code": "CO-11",
+      "name": "公司段-大连石化",
+      "status": 1,
+      "value_set_id": "VS_COMPANY",
+      "allow_posting": 1
+    },
+    {
+      "id": "CO-21",
+      "code": "CO-21",
+      "name": "公司段-江苏销售",
+      "status": 1,
+      "value_set_id": "VS_COMPANY",
+      "allow_posting": 1
+    },
+    {
+      "id": "CO-22",
+      "code": "CO-22",
+      "name": "公司段-广东销售",
+      "status": 1,
+      "value_set_id": "VS_COMPANY",
+      "allow_posting": 1
+    },
+    {
+      "id": "CO-31",
+      "code": "CO-31",
+      "name": "公司段-渤海钻探",
+      "status": 1,
+      "value_set_id": "VS_COMPANY",
+      "allow_posting": 1
+    },
+    {
+      "id": "CO-41",
+      "code": "CO-41",
+      "name": "公司段-管道公司",
+      "status": 1,
+      "value_set_id": "VS_COMPANY",
+      "allow_posting": 1
+    },
+    {
+      "id": "CO-91",
+      "code": "CO-91",
+      "name": "公司段-海外",
+      "status": 1,
+      "value_set_id": "VS_COMPANY",
+      "allow_posting": 1
+    },
+    {
+      "id": "CC-000",
+      "code": "CC-000",
+      "name": "成本中心段-默认",
+      "status": 1,
+      "value_set_id": "VS_CC",
+      "allow_posting": 1
+    },
+    {
+      "id": "CC-100",
+      "code": "CC-100",
+      "name": "成本中心段-采油",
+      "status": 1,
+      "value_set_id": "VS_CC",
+      "allow_posting": 1
+    },
+    {
+      "id": "CC-200",
+      "code": "CC-200",
+      "name": "成本中心段-炼油",
+      "status": 1,
+      "value_set_id": "VS_CC",
+      "allow_posting": 1
+    },
+    {
+      "id": "CC-300",
+      "code": "CC-300",
+      "name": "成本中心段-管输",
+      "status": 1,
+      "value_set_id": "VS_CC",
+      "allow_posting": 1
+    },
+    {
+      "id": "CC-500",
+      "code": "CC-500",
+      "name": "成本中心段-销售",
+      "status": 1,
+      "value_set_id": "VS_CC",
+      "allow_posting": 1
+    },
+    {
+      "id": "CC-700",
+      "code": "CC-700",
+      "name": "成本中心段-钻探",
+      "status": 1,
+      "value_set_id": "VS_CC",
+      "allow_posting": 1
+    },
+    {
+      "id": "CC-900",
+      "code": "CC-900",
+      "name": "成本中心段-机关",
+      "status": 1,
+      "value_set_id": "VS_CC",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1001",
+      "code": "AC-1001",
+      "name": "科目段-库存现金",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1002",
+      "code": "AC-1002",
+      "name": "科目段-银行存款",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1012",
+      "code": "AC-1012",
+      "name": "科目段-其他货币资金",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1122",
+      "code": "AC-1122",
+      "name": "科目段-应收账款",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1123",
+      "code": "AC-1123",
+      "name": "科目段-预付账款",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1221",
+      "code": "AC-1221",
+      "name": "科目段-其他应收款",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1403",
+      "code": "AC-1403",
+      "name": "科目段-原材料(原油)",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1405",
+      "code": "AC-1405",
+      "name": "科目段-库存商品(成品油)",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1601",
+      "code": "AC-1601",
+      "name": "科目段-固定资产",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1602",
+      "code": "AC-1602",
+      "name": "科目段-累计折旧",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-1801",
+      "code": "AC-1801",
+      "name": "科目段-勘探支出",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "A",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-2202",
+      "code": "AC-2202",
+      "name": "科目段-应付账款",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "L",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-2203",
+      "code": "AC-2203",
+      "name": "科目段-预收账款",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "L",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-2211",
+      "code": "AC-2211",
+      "name": "科目段-应付职工薪酬",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "L",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-2221",
+      "code": "AC-2221",
+      "name": "科目段-应交税费",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "L",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-2241",
+      "code": "AC-2241",
+      "name": "科目段-其他应付款",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "L",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-2501",
+      "code": "AC-2501",
+      "name": "科目段-长期借款",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "L",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-4001",
+      "code": "AC-4001",
+      "name": "科目段-实收资本",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "O",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-4103",
+      "code": "AC-4103",
+      "name": "科目段-本年利润",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "O",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-4104",
+      "code": "AC-4104",
+      "name": "科目段-利润分配",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "O",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-5101",
+      "code": "AC-5101",
+      "name": "科目段-制造费用",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "E",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-6001",
+      "code": "AC-6001",
+      "name": "科目段-主营业务收入",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "R",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-6051",
+      "code": "AC-6051",
+      "name": "科目段-其他业务收入",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "R",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-6401",
+      "code": "AC-6401",
+      "name": "科目段-主营业务成本",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "E",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-6601",
+      "code": "AC-6601",
+      "name": "科目段-销售费用",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "E",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-6602",
+      "code": "AC-6602",
+      "name": "科目段-管理费用",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "E",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-6603",
+      "code": "AC-6603",
+      "name": "科目段-财务费用",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "E",
+      "allow_posting": 1
+    },
+    {
+      "id": "AC-6801",
+      "code": "AC-6801",
+      "name": "科目段-所得税费用",
+      "status": 1,
+      "value_set_id": "VS_ACCOUNT",
+      "account_type": "E",
+      "allow_posting": 1
+    },
+    {
+      "id": "SG-UPSTREAM",
+      "code": "SG-UPSTREAM",
+      "name": "板块段-上游-勘探开发",
+      "status": 1,
+      "value_set_id": "VS_SEGMENT",
+      "allow_posting": 1
+    },
+    {
+      "id": "SG-REFINING",
+      "code": "SG-REFINING",
+      "name": "板块段-炼油化工",
+      "status": 1,
+      "value_set_id": "VS_SEGMENT",
+      "allow_posting": 1
+    },
+    {
+      "id": "SG-MARKETING",
+      "code": "SG-MARKETING",
+      "name": "板块段-销售",
+      "status": 1,
+      "value_set_id": "VS_SEGMENT",
+      "allow_posting": 1
+    },
+    {
+      "id": "SG-PIPELINE",
+      "code": "SG-PIPELINE",
+      "name": "板块段-管道天然气",
+      "status": 1,
+      "value_set_id": "VS_SEGMENT",
+      "allow_posting": 1
+    },
+    {
+      "id": "SG-OILSVC",
+      "code": "SG-OILSVC",
+      "name": "板块段-油田服务(未上市)",
+      "status": 1,
+      "value_set_id": "VS_SEGMENT",
+      "allow_posting": 1
+    },
+    {
+      "id": "SG-OVERSEAS",
+      "code": "SG-OVERSEAS",
+      "name": "板块段-海外油气",
+      "status": 1,
+      "value_set_id": "VS_SEGMENT",
+      "allow_posting": 1
+    }
+  ],
+  "natural_account_type": [
+    {
+      "id": "A",
+      "code": "A",
+      "name": "资产",
+      "status": 1
+    },
+    {
+      "id": "L",
+      "code": "L",
+      "name": "负债",
+      "status": 1
+    },
+    {
+      "id": "O",
+      "code": "O",
+      "name": "权益",
+      "status": 1
+    },
+    {
+      "id": "R",
+      "code": "R",
+      "name": "收入",
+      "status": 1
+    },
+    {
+      "id": "E",
+      "code": "E",
+      "name": "费用",
+      "status": 1
+    }
+  ],
+  "code_combination": [
+    {
+      "id": "21-500-1001-MARKETING",
+      "code": "21-500-1001-MARKETING",
+      "name": "江苏销售-库存现金",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1001-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1001",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1002-MARKETING",
+      "code": "21-500-1002-MARKETING",
+      "name": "江苏销售-银行存款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1002-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1002",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1012-MARKETING",
+      "code": "21-500-1012-MARKETING",
+      "name": "江苏销售-其他货币资金",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1012-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1012",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1122-MARKETING",
+      "code": "21-500-1122-MARKETING",
+      "name": "江苏销售-应收账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1122-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1122",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1123-MARKETING",
+      "code": "21-500-1123-MARKETING",
+      "name": "江苏销售-预付账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1123-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1123",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1221-MARKETING",
+      "code": "21-500-1221-MARKETING",
+      "name": "江苏销售-其他应收款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1221-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1221",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1403-MARKETING",
+      "code": "21-500-1403-MARKETING",
+      "name": "江苏销售-原材料(原油)",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1403-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1403",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1405-MARKETING",
+      "code": "21-500-1405-MARKETING",
+      "name": "江苏销售-库存商品(成品油)",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1405-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1405",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1601-MARKETING",
+      "code": "21-500-1601-MARKETING",
+      "name": "江苏销售-固定资产",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1601-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1601",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1602-MARKETING",
+      "code": "21-500-1602-MARKETING",
+      "name": "江苏销售-累计折旧",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1602-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1602",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-1801-MARKETING",
+      "code": "21-500-1801-MARKETING",
+      "name": "江苏销售-勘探支出",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-1801-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-1801",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-2202-MARKETING",
+      "code": "21-500-2202-MARKETING",
+      "name": "江苏销售-应付账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-2202-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-2202",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-2203-MARKETING",
+      "code": "21-500-2203-MARKETING",
+      "name": "江苏销售-预收账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-2203-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-2203",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-2211-MARKETING",
+      "code": "21-500-2211-MARKETING",
+      "name": "江苏销售-应付职工薪酬",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-2211-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-2211",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-2221-MARKETING",
+      "code": "21-500-2221-MARKETING",
+      "name": "江苏销售-应交税费",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-2221-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-2221",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-2241-MARKETING",
+      "code": "21-500-2241-MARKETING",
+      "name": "江苏销售-其他应付款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-2241-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-2241",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-2501-MARKETING",
+      "code": "21-500-2501-MARKETING",
+      "name": "江苏销售-长期借款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-2501-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-2501",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-4001-MARKETING",
+      "code": "21-500-4001-MARKETING",
+      "name": "江苏销售-实收资本",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-4001-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-4001",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-4103-MARKETING",
+      "code": "21-500-4103-MARKETING",
+      "name": "江苏销售-本年利润",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-4103-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-4103",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-4104-MARKETING",
+      "code": "21-500-4104-MARKETING",
+      "name": "江苏销售-利润分配",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-4104-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-4104",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-5101-MARKETING",
+      "code": "21-500-5101-MARKETING",
+      "name": "江苏销售-制造费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-5101-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-5101",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-6001-MARKETING",
+      "code": "21-500-6001-MARKETING",
+      "name": "江苏销售-主营业务收入",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-6001-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-6001",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-6051-MARKETING",
+      "code": "21-500-6051-MARKETING",
+      "name": "江苏销售-其他业务收入",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-6051-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-6051",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-6401-MARKETING",
+      "code": "21-500-6401-MARKETING",
+      "name": "江苏销售-主营业务成本",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-6401-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-6401",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-6601-MARKETING",
+      "code": "21-500-6601-MARKETING",
+      "name": "江苏销售-销售费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-6601-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-6601",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-6602-MARKETING",
+      "code": "21-500-6602-MARKETING",
+      "name": "江苏销售-管理费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-6602-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-6602",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-6603-MARKETING",
+      "code": "21-500-6603-MARKETING",
+      "name": "江苏销售-财务费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-6603-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-6603",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "21-500-6801-MARKETING",
+      "code": "21-500-6801-MARKETING",
+      "name": "江苏销售-所得税费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "21-500-6801-MARKETING",
+      "company_segment": "CO-21",
+      "cost_center_segment": "CC-500",
+      "account_segment": "AC-6801",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1001-REFINING",
+      "code": "11-200-1001-REFINING",
+      "name": "大连石化-库存现金",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1001-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1001",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1002-REFINING",
+      "code": "11-200-1002-REFINING",
+      "name": "大连石化-银行存款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1002-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1002",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1012-REFINING",
+      "code": "11-200-1012-REFINING",
+      "name": "大连石化-其他货币资金",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1012-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1012",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1122-REFINING",
+      "code": "11-200-1122-REFINING",
+      "name": "大连石化-应收账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1122-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1122",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1123-REFINING",
+      "code": "11-200-1123-REFINING",
+      "name": "大连石化-预付账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1123-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1123",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1221-REFINING",
+      "code": "11-200-1221-REFINING",
+      "name": "大连石化-其他应收款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1221-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1221",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1403-REFINING",
+      "code": "11-200-1403-REFINING",
+      "name": "大连石化-原材料(原油)",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1403-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1403",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1405-REFINING",
+      "code": "11-200-1405-REFINING",
+      "name": "大连石化-库存商品(成品油)",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1405-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1405",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1601-REFINING",
+      "code": "11-200-1601-REFINING",
+      "name": "大连石化-固定资产",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1601-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1601",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1602-REFINING",
+      "code": "11-200-1602-REFINING",
+      "name": "大连石化-累计折旧",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1602-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1602",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-1801-REFINING",
+      "code": "11-200-1801-REFINING",
+      "name": "大连石化-勘探支出",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-1801-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-1801",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-2202-REFINING",
+      "code": "11-200-2202-REFINING",
+      "name": "大连石化-应付账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-2202-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-2202",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-2203-REFINING",
+      "code": "11-200-2203-REFINING",
+      "name": "大连石化-预收账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-2203-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-2203",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-2211-REFINING",
+      "code": "11-200-2211-REFINING",
+      "name": "大连石化-应付职工薪酬",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-2211-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-2211",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-2221-REFINING",
+      "code": "11-200-2221-REFINING",
+      "name": "大连石化-应交税费",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-2221-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-2221",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-2241-REFINING",
+      "code": "11-200-2241-REFINING",
+      "name": "大连石化-其他应付款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-2241-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-2241",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-2501-REFINING",
+      "code": "11-200-2501-REFINING",
+      "name": "大连石化-长期借款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-2501-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-2501",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-4001-REFINING",
+      "code": "11-200-4001-REFINING",
+      "name": "大连石化-实收资本",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-4001-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-4001",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-4103-REFINING",
+      "code": "11-200-4103-REFINING",
+      "name": "大连石化-本年利润",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-4103-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-4103",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-4104-REFINING",
+      "code": "11-200-4104-REFINING",
+      "name": "大连石化-利润分配",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-4104-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-4104",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-5101-REFINING",
+      "code": "11-200-5101-REFINING",
+      "name": "大连石化-制造费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-5101-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-5101",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-6001-REFINING",
+      "code": "11-200-6001-REFINING",
+      "name": "大连石化-主营业务收入",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-6001-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-6001",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-6051-REFINING",
+      "code": "11-200-6051-REFINING",
+      "name": "大连石化-其他业务收入",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-6051-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-6051",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-6401-REFINING",
+      "code": "11-200-6401-REFINING",
+      "name": "大连石化-主营业务成本",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-6401-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-6401",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-6601-REFINING",
+      "code": "11-200-6601-REFINING",
+      "name": "大连石化-销售费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-6601-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-6601",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-6602-REFINING",
+      "code": "11-200-6602-REFINING",
+      "name": "大连石化-管理费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-6602-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-6602",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-6603-REFINING",
+      "code": "11-200-6603-REFINING",
+      "name": "大连石化-财务费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-6603-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-6603",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "11-200-6801-REFINING",
+      "code": "11-200-6801-REFINING",
+      "name": "大连石化-所得税费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "11-200-6801-REFINING",
+      "company_segment": "CO-11",
+      "cost_center_segment": "CC-200",
+      "account_segment": "AC-6801",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1001-UPSTREAM",
+      "code": "02-100-1001-UPSTREAM",
+      "name": "大庆油田-库存现金",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1001-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1001",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1002-UPSTREAM",
+      "code": "02-100-1002-UPSTREAM",
+      "name": "大庆油田-银行存款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1002-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1002",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1012-UPSTREAM",
+      "code": "02-100-1012-UPSTREAM",
+      "name": "大庆油田-其他货币资金",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1012-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1012",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1122-UPSTREAM",
+      "code": "02-100-1122-UPSTREAM",
+      "name": "大庆油田-应收账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1122-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1122",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1123-UPSTREAM",
+      "code": "02-100-1123-UPSTREAM",
+      "name": "大庆油田-预付账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1123-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1123",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1221-UPSTREAM",
+      "code": "02-100-1221-UPSTREAM",
+      "name": "大庆油田-其他应收款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1221-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1221",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1403-UPSTREAM",
+      "code": "02-100-1403-UPSTREAM",
+      "name": "大庆油田-原材料(原油)",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1403-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1403",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1405-UPSTREAM",
+      "code": "02-100-1405-UPSTREAM",
+      "name": "大庆油田-库存商品(成品油)",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1405-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1405",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1601-UPSTREAM",
+      "code": "02-100-1601-UPSTREAM",
+      "name": "大庆油田-固定资产",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1601-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1601",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1602-UPSTREAM",
+      "code": "02-100-1602-UPSTREAM",
+      "name": "大庆油田-累计折旧",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1602-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1602",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-1801-UPSTREAM",
+      "code": "02-100-1801-UPSTREAM",
+      "name": "大庆油田-勘探支出",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-1801-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-1801",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-2202-UPSTREAM",
+      "code": "02-100-2202-UPSTREAM",
+      "name": "大庆油田-应付账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-2202-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-2202",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-2203-UPSTREAM",
+      "code": "02-100-2203-UPSTREAM",
+      "name": "大庆油田-预收账款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-2203-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-2203",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-2211-UPSTREAM",
+      "code": "02-100-2211-UPSTREAM",
+      "name": "大庆油田-应付职工薪酬",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-2211-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-2211",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-2221-UPSTREAM",
+      "code": "02-100-2221-UPSTREAM",
+      "name": "大庆油田-应交税费",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-2221-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-2221",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-2241-UPSTREAM",
+      "code": "02-100-2241-UPSTREAM",
+      "name": "大庆油田-其他应付款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-2241-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-2241",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-2501-UPSTREAM",
+      "code": "02-100-2501-UPSTREAM",
+      "name": "大庆油田-长期借款",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-2501-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-2501",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-4001-UPSTREAM",
+      "code": "02-100-4001-UPSTREAM",
+      "name": "大庆油田-实收资本",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-4001-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-4001",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-4103-UPSTREAM",
+      "code": "02-100-4103-UPSTREAM",
+      "name": "大庆油田-本年利润",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-4103-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-4103",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-4104-UPSTREAM",
+      "code": "02-100-4104-UPSTREAM",
+      "name": "大庆油田-利润分配",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-4104-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-4104",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-5101-UPSTREAM",
+      "code": "02-100-5101-UPSTREAM",
+      "name": "大庆油田-制造费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-5101-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-5101",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-6001-UPSTREAM",
+      "code": "02-100-6001-UPSTREAM",
+      "name": "大庆油田-主营业务收入",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-6001-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-6001",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-6051-UPSTREAM",
+      "code": "02-100-6051-UPSTREAM",
+      "name": "大庆油田-其他业务收入",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-6051-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-6051",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-6401-UPSTREAM",
+      "code": "02-100-6401-UPSTREAM",
+      "name": "大庆油田-主营业务成本",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-6401-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-6401",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-6601-UPSTREAM",
+      "code": "02-100-6601-UPSTREAM",
+      "name": "大庆油田-销售费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-6601-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-6601",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-6602-UPSTREAM",
+      "code": "02-100-6602-UPSTREAM",
+      "name": "大庆油田-管理费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-6602-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-6602",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-6603-UPSTREAM",
+      "code": "02-100-6603-UPSTREAM",
+      "name": "大庆油田-财务费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-6603-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-6603",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    },
+    {
+      "id": "02-100-6801-UPSTREAM",
+      "code": "02-100-6801-UPSTREAM",
+      "name": "大庆油田-所得税费用",
+      "status": 1,
+      "coa_structure_id": "CNPC_COA",
+      "concat_segments": "02-100-6801-UPSTREAM",
+      "company_segment": "CO-02",
+      "cost_center_segment": "CC-100",
+      "account_segment": "AC-6801",
+      "enabled_flag": 1,
+      "allow_posting": 1
+    }
+  ],
+  "journal_source": [
+    {
+      "id": "Manual",
+      "code": "Manual",
+      "name": "手工",
+      "status": 1
+    },
+    {
+      "id": "Receivables",
+      "code": "Receivables",
+      "name": "应收",
+      "status": 1
+    },
+    {
+      "id": "Payables",
+      "code": "Payables",
+      "name": "应付",
+      "status": 1
+    },
+    {
+      "id": "Assets",
+      "code": "Assets",
+      "name": "资产",
+      "status": 1
+    },
+    {
+      "id": "Inventory",
+      "code": "Inventory",
+      "name": "存货",
+      "status": 1
+    },
+    {
+      "id": "Payroll",
+      "code": "Payroll",
+      "name": "薪资",
+      "status": 1
+    }
+  ],
+  "journal_category": [
+    {
+      "id": "Sales Invoices",
+      "code": "Sales Invoices",
+      "name": "销售发票",
+      "status": 1
+    },
+    {
+      "id": "Purchase Invoices",
+      "code": "Purchase Invoices",
+      "name": "采购发票",
+      "status": 1
+    },
+    {
+      "id": "Payments",
+      "code": "Payments",
+      "name": "付款",
+      "status": 1
+    },
+    {
+      "id": "Receipts",
+      "code": "Receipts",
+      "name": "收款",
+      "status": 1
+    },
+    {
+      "id": "Adjustment",
+      "code": "Adjustment",
+      "name": "调整",
+      "status": 1
+    },
+    {
+      "id": "Accrual",
+      "code": "Accrual",
+      "name": "应计",
+      "status": 1
+    }
+  ],
+  "balance_type": [
+    {
+      "id": "A",
+      "code": "A",
+      "name": "实际",
+      "status": 1
+    },
+    {
+      "id": "B",
+      "code": "B",
+      "name": "预算",
+      "status": 1
+    },
+    {
+      "id": "E",
+      "code": "E",
+      "name": "承诺",
+      "status": 1
+    }
+  ],
+  "currency_type": [
+    {
+      "id": "Entered",
+      "code": "Entered",
+      "name": "输入币",
+      "status": 1
+    },
+    {
+      "id": "Functional",
+      "code": "Functional",
+      "name": "功能币",
+      "status": 1
+    },
+    {
+      "id": "STAT",
+      "code": "STAT",
+      "name": "统计",
+      "status": 1
+    }
+  ],
+  "conversion_rate_type": [
+    {
+      "id": "Corporate",
+      "code": "Corporate",
+      "name": "公司汇率",
+      "status": 1
+    },
+    {
+      "id": "Spot",
+      "code": "Spot",
+      "name": "即期汇率",
+      "status": 1
+    },
+    {
+      "id": "User",
+      "code": "User",
+      "name": "用户汇率",
+      "status": 1
+    }
+  ],
+  "currency": [
+    {
+      "id": "CNY",
+      "code": "CNY",
+      "name": "人民币",
+      "status": 1,
+      "symbol": "¥",
+      "precision": 2
+    },
+    {
+      "id": "USD",
+      "code": "USD",
+      "name": "美元",
+      "status": 1,
+      "symbol": "$",
+      "precision": 2
+    },
+    {
+      "id": "EUR",
+      "code": "EUR",
+      "name": "欧元",
+      "status": 1,
+      "symbol": "€",
+      "precision": 2
+    },
+    {
+      "id": "KZT",
+      "code": "KZT",
+      "name": "坚戈",
+      "status": 1,
+      "symbol": "₸",
+      "precision": 2
+    }
+  ],
+  "accounting_calendar": [
+    {
+      "id": "CAL_CN",
+      "code": "CAL_CN",
+      "name": "中国会计日历",
+      "status": 1,
+      "period_type": "月",
+      "periods_per_year": 12
+    }
+  ],
+  "gl_period": [
+    {
+      "id": "2026-01",
+      "code": "2026-01",
+      "name": "2026年1月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "JAN-26",
+      "period_year": "2026",
+      "period_num": 1,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-02",
+      "code": "2026-02",
+      "name": "2026年2月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "FEB-26",
+      "period_year": "2026",
+      "period_num": 2,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-03",
+      "code": "2026-03",
+      "name": "2026年3月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "MAR-26",
+      "period_year": "2026",
+      "period_num": 3,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-04",
+      "code": "2026-04",
+      "name": "2026年4月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "APR-26",
+      "period_year": "2026",
+      "period_num": 4,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-05",
+      "code": "2026-05",
+      "name": "2026年5月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "MAY-26",
+      "period_year": "2026",
+      "period_num": 5,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-06",
+      "code": "2026-06",
+      "name": "2026年6月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "JUN-26",
+      "period_year": "2026",
+      "period_num": 6,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-07",
+      "code": "2026-07",
+      "name": "2026年7月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "JUL-26",
+      "period_year": "2026",
+      "period_num": 7,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-08",
+      "code": "2026-08",
+      "name": "2026年8月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "AUG-26",
+      "period_year": "2026",
+      "period_num": 8,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-09",
+      "code": "2026-09",
+      "name": "2026年9月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "SEP-26",
+      "period_year": "2026",
+      "period_num": 9,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-10",
+      "code": "2026-10",
+      "name": "2026年10月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "OCT-26",
+      "period_year": "2026",
+      "period_num": 10,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-11",
+      "code": "2026-11",
+      "name": "2026年11月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "NOV-26",
+      "period_year": "2026",
+      "period_num": 11,
+      "period_status": "O"
+    },
+    {
+      "id": "2026-12",
+      "code": "2026-12",
+      "name": "2026年12月",
+      "status": 1,
+      "accounting_calendar_id": "CAL_CN",
+      "period_name": "DEC-26",
+      "period_year": "2026",
+      "period_num": 12,
+      "period_status": "O"
+    }
+  ],
+  "tax_rate": [
+    {
+      "id": "J1",
+      "code": "J1",
+      "name": "销项税13%",
+      "status": 1,
+      "tax_regime": "CN-VAT",
+      "tax_type": "销项",
+      "tax_rate_percent": 13.0,
+      "tax_account_ccid": "21-500-2221-MARKETING"
+    },
+    {
+      "id": "J2",
+      "code": "J2",
+      "name": "销项税9%",
+      "status": 1,
+      "tax_regime": "CN-VAT",
+      "tax_type": "销项",
+      "tax_rate_percent": 9.0,
+      "tax_account_ccid": "21-500-2221-MARKETING"
+    },
+    {
+      "id": "V1",
+      "code": "V1",
+      "name": "进项税13%",
+      "status": 1,
+      "tax_regime": "CN-VAT",
+      "tax_type": "进项",
+      "tax_rate_percent": 13.0,
+      "tax_account_ccid": "21-500-2221-MARKETING"
+    },
+    {
+      "id": "V2",
+      "code": "V2",
+      "name": "进项税9%",
+      "status": 1,
+      "tax_regime": "CN-VAT",
+      "tax_type": "进项",
+      "tax_rate_percent": 9.0,
+      "tax_account_ccid": "21-500-2221-MARKETING"
+    },
+    {
+      "id": "J0",
+      "code": "J0",
+      "name": "免税",
+      "status": 1,
+      "tax_regime": "CN-VAT",
+      "tax_type": "销项",
+      "tax_rate_percent": 0.0,
+      "tax_account_ccid": "21-500-2221-MARKETING"
+    }
+  ],
+  "supplier": [
+    {
+      "id": "S-OILFIELD",
+      "code": "S-OILFIELD",
+      "name": "大庆采油供应",
+      "status": 1,
+      "vendor_type": "原材料",
+      "liability_ccid": "21-500-2202-MARKETING",
+      "payment_terms": "NET30",
+      "tax_registration_no": "9100S-OILFIELD"
+    },
+    {
+      "id": "S-EQUIP",
+      "code": "S-EQUIP",
+      "name": "宝石机械(设备)",
+      "status": 1,
+      "vendor_type": "原材料",
+      "liability_ccid": "21-500-2202-MARKETING",
+      "payment_terms": "NET30",
+      "tax_registration_no": "9100S-EQUIP"
+    },
+    {
+      "id": "S-CHEM",
+      "code": "S-CHEM",
+      "name": "巴斯夫(化工料)",
+      "status": 1,
+      "vendor_type": "原材料",
+      "liability_ccid": "21-500-2202-MARKETING",
+      "payment_terms": "NET30",
+      "tax_registration_no": "9100S-CHEM"
+    },
+    {
+      "id": "S-LOGIS",
+      "code": "S-LOGIS",
+      "name": "中油物流",
+      "status": 1,
+      "vendor_type": "原材料",
+      "liability_ccid": "21-500-2202-MARKETING",
+      "payment_terms": "NET30",
+      "tax_registration_no": "9100S-LOGIS"
+    },
+    {
+      "id": "S-IMPORT",
+      "code": "S-IMPORT",
+      "name": "沙特阿美(进口原油)",
+      "status": 1,
+      "vendor_type": "原材料",
+      "liability_ccid": "21-500-2202-MARKETING",
+      "payment_terms": "NET30",
+      "tax_registration_no": "9100S-IMPORT"
+    },
+    {
+      "id": "S-SERVICE",
+      "code": "S-SERVICE",
+      "name": "斯伦贝谢(油服)",
+      "status": 1,
+      "vendor_type": "原材料",
+      "liability_ccid": "21-500-2202-MARKETING",
+      "payment_terms": "NET30",
+      "tax_registration_no": "9100S-SERVICE"
+    }
+  ],
+  "customer": [
+    {
+      "id": "C-SINOPEC",
+      "code": "C-SINOPEC",
+      "name": "中石化华东分销",
+      "status": 1,
+      "customer_type": "批发",
+      "receivable_ccid": "21-500-1122-MARKETING",
+      "payment_terms": "NET30",
+      "profile_class": "标准"
+    },
+    {
+      "id": "C-CNOOC",
+      "code": "C-CNOOC",
+      "name": "中海油贸易",
+      "status": 1,
+      "customer_type": "批发",
+      "receivable_ccid": "21-500-1122-MARKETING",
+      "payment_terms": "NET30",
+      "profile_class": "标准"
+    },
+    {
+      "id": "C-SHELL",
+      "code": "C-SHELL",
+      "name": "壳牌(中国)",
+      "status": 1,
+      "customer_type": "批发",
+      "receivable_ccid": "21-500-1122-MARKETING",
+      "payment_terms": "NET30",
+      "profile_class": "标准"
+    },
+    {
+      "id": "C-LOCAL01",
+      "code": "C-LOCAL01",
+      "name": "南京加油站客户",
+      "status": 1,
+      "customer_type": "批发",
+      "receivable_ccid": "21-500-1122-MARKETING",
+      "payment_terms": "NET30",
+      "profile_class": "标准"
+    },
+    {
+      "id": "C-AVIA",
+      "code": "C-AVIA",
+      "name": "东方航空(航煤)",
+      "status": 1,
+      "customer_type": "批发",
+      "receivable_ccid": "21-500-1122-MARKETING",
+      "payment_terms": "NET30",
+      "profile_class": "标准"
+    },
+    {
+      "id": "C-POWER",
+      "code": "C-POWER",
+      "name": "华能电力(燃料油)",
+      "status": 1,
+      "customer_type": "批发",
+      "receivable_ccid": "21-500-1122-MARKETING",
+      "payment_terms": "NET30",
+      "profile_class": "标准"
+    }
+  ],
+  "payment_terms": [
+    {
+      "id": "IMMEDIATE",
+      "code": "IMMEDIATE",
+      "name": "立即",
+      "status": 1,
+      "net_due_days": 0,
+      "discount_percent": 0,
+      "discount_days": 0
+    },
+    {
+      "id": "NET30",
+      "code": "NET30",
+      "name": "30天",
+      "status": 1,
+      "net_due_days": 30,
+      "discount_percent": 2,
+      "discount_days": 10
+    }
+  ],
+  "employee": [
+    {
+      "id": "E001",
+      "code": "E001",
+      "name": "张伟",
+      "status": 1,
+      "department": "CC-JS-NJ",
+      "role": "会计"
+    },
+    {
+      "id": "E002",
+      "code": "E002",
+      "name": "李娜",
+      "status": 1,
+      "department": "CC-JS-NJ",
+      "role": "出纳"
+    },
+    {
+      "id": "E003",
+      "code": "E003",
+      "name": "王强",
+      "status": 1,
+      "department": "CC-DQ-PROD",
+      "role": "采油工程师"
+    },
+    {
+      "id": "E004",
+      "code": "E004",
+      "name": "刘洋",
+      "status": 1,
+      "department": "CC-DL-PROD",
+      "role": "炼化主管"
+    },
+    {
+      "id": "E005",
+      "code": "E005",
+      "name": "陈静",
+      "status": 1,
+      "department": "CC-BH-RIG7",
+      "role": "钻井队长"
+    },
+    {
+      "id": "E006",
+      "code": "E006",
+      "name": "赵敏",
+      "status": 1,
+      "department": "CC-GD-NJ",
+      "role": "销售经理"
+    }
+  ],
+  "country": [
+    {
+      "id": "CN",
+      "code": "CN",
+      "name": "中国",
+      "status": 1,
+      "currency": "CNY"
+    },
+    {
+      "id": "US",
+      "code": "US",
+      "name": "美国",
+      "status": 1,
+      "currency": "USD"
+    },
+    {
+      "id": "KZ",
+      "code": "KZ",
+      "name": "哈萨克斯坦",
+      "status": 1,
+      "currency": "KZT"
+    },
+    {
+      "id": "SD",
+      "code": "SD",
+      "name": "苏丹",
+      "status": 1,
+      "currency": "USD"
+    },
+    {
+      "id": "SG",
+      "code": "SG",
+      "name": "新加坡",
+      "status": 1,
+      "currency": "USD"
+    }
+  ]
+}

@@ -24,7 +24,7 @@ use cmx_database_pg::{get_default_pg_db_manager, DatabaseManager};
 use cmx_mdm_model::survivorship::SurvivorRule;
 use cmx_mdm_store_pg as store;
 
-use super::dedup::{line_tables, resolve_dict_meta};
+use super::dedup::{line_tables, load_match_config_defaults, resolve_dict_meta};
 use super::{default_page, default_page_size};
 
 /// 合并请求列表（默认排除 pending）。
@@ -105,15 +105,15 @@ async fn enrich_group_names(
         }
     }
 
-    // 每字典查一次（dict→table 映射仍用注册表；通用化后 target_table 由配置带，此处兜底 supplier）
+    // 每字典查一次：头表名走 DCT dict_meta（替代硬编码 dict→table 映射）
     let mut name_cache: HashMap<(String, i64), (String, String)> = HashMap::new(); // (dict,id) -> (name,code)
     for (dict_code, ids) in &by_dict {
-        let table = match dict_code.as_str() {
-            "supplier" => "cm_supplier",
-            _ => continue, // 未知字典跳过（名称留空）
+        let table = match resolve_dict_meta(dict_code).await {
+            Ok(meta) => meta.table_name.clone(),
+            Err(_) => continue, // dict 未注册，跳过（名称留空）
         };
         let cols = ["id", "name", "code"];
-        if let Ok(rows) = store::load_by_ids(mm, db_id, None, table, &cols, ids).await {
+        if let Ok(rows) = store::load_by_ids(mm, db_id, None, &table, &cols, ids).await {
             for r in rows {
                 let get = |k: &str| {
                     r.fields
@@ -168,14 +168,31 @@ pub async fn mdm_merge_requests_create(
     State(_s): State<CmxAppState>,
     svr_ctx: CmxSvrContext,
     headers: HeaderMap,
-    Json(body): Json<MergeBody>,
+    Json(mut body): Json<MergeBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
-    // 头表名由 body.targetTable 传入（来自查重规则，替代硬编码 dict_tables 头表）；
-    // line_tables（明细表 reparent）仍由 dict_tables 解析，未知字典给空明细。
+    // 回填：target_table/survive_fields 缺失时从 match_config 读默认
+    // （steward 工作台/发现项合并可能不传，由后端兜底）
+    if (body.target_table.is_empty() || body.survive_fields.is_empty())
+        && let Some(d) = load_match_config_defaults(mm, &db_id, &body.dict_code).await?
+    {
+        if body.target_table.is_empty() {
+            body.target_table = d.target_table;
+        }
+        if body.survive_fields.is_empty() {
+            body.survive_fields = d.survive_fields;
+        }
+    }
+    // 头表名由 body.targetTable 传入（或 match_config 回填）；
+    // line_tables（明细表 reparent）从 cmx_mdm_activation.line_mappings 按 target_dict 聚合。
     let head_table = body.target_table.clone();
-    let line_tables: Vec<(String, String)> = line_tables(&body.dict_code);
+    if head_table.is_empty() {
+        return Err(store::api_err(
+            "target_table 不能为空（body 未传且 match_config 无配置）",
+        ));
+    }
+    let line_tables = line_tables(mm, &db_id, &body.dict_code).await?;
     let operated_by = actor_id_i64(&svr_ctx);
 
     // 审查 C1：管家路径带 mergeId 复用 group（不新插）；否则新插 pending
@@ -222,7 +239,7 @@ pub async fn mdm_merge_requests_create(
 
     // 存活字段由 body.survive_fields 传入（来自查重规则）；空则 master 原值全保留
     let survive_fields: Vec<String> = body.survive_fields.clone();
-    let master_id = store::merge(
+    let stats = store::merge(
         mm,
         &db_id,
         &body.dict_code,
@@ -238,9 +255,41 @@ pub async fn mdm_merge_requests_create(
     )
     .await?;
 
-    Ok(Json(ApiResp::ok(
-        json!({ "masterId": master_id, "matchGroupId": group_id }),
-    )))
+    // 联动 scan 发现项 resolved（merge 已 commit；此处失败仅 log warn 不阻断，
+    // scan 仍 pending 管家可再次处理——数据已合并不会重复入库）
+    if let Some(scan_id) = body.scan_id {
+        match store::transition_scan_status(
+            mm,
+            &db_id,
+            None,
+            scan_id,
+            "pending",
+            "resolved",
+            operated_by,
+        )
+        .await
+        {
+            Ok(n) if n > 0 => {}
+            Ok(_) => tracing::warn!(
+                target: "cmx_mdm::scan",
+                scan_id,
+                "scan 发现项非 pending，未联动 resolved（可能已被处理）"
+            ),
+            Err(e) => tracing::warn!(
+                target: "cmx_mdm::scan",
+                scan_id,
+                error = %e,
+                "联动 scan resolved 失败（merge 已成功，scan 仍 pending）"
+            ),
+        }
+    }
+
+    Ok(Json(ApiResp::ok(json!({
+        "masterId": stats.master_id,
+        "matchGroupId": group_id,
+        "reparentedTotal": stats.reparented_total,
+        "dedupedTotal": stats.deduped_total,
+    }))))
 }
 
 /// 合并请求详情（红线 diff 用）。GET `?mergeId=`。返回 group + master + victims。
@@ -265,7 +314,7 @@ pub async fn mdm_merge_request_detail(
     let dict_code = group
         .get("dict_code")
         .and_then(|v| v.as_str())
-        .unwrap_or("supplier")
+        .ok_or_else(|| store::api_err("合并记录 dict_code 缺失"))?
         .to_string();
     let master_id = group.get("master_id").and_then(|v| v.as_i64()).unwrap_or(0);
     // 头表名 + 列清单走 DCT dict_meta（替代硬编码 dict_tables/load_columns）
@@ -355,13 +404,13 @@ pub async fn mdm_merge_requests_undo(
     let dict_code = group
         .get("dict_code")
         .and_then(|v| v.as_str())
-        .unwrap_or("supplier")
+        .ok_or_else(|| store::api_err("合并记录 dict_code 缺失"))?
         .to_string();
     let master_id = group.get("master_id").and_then(|v| v.as_i64()).unwrap_or(0);
-    // 头表名走 DCT dict_meta（替代硬编码 dict_tables 头表）；明细表清单用注册表
+    // 头表名走 DCT dict_meta（替代硬编码 dict_tables 头表）；明细表清单从 line_mappings 聚合
     let meta = resolve_dict_meta(&dict_code).await?;
     let head_table = meta.table_name.clone();
-    let line_tables = line_tables(&dict_code);
+    let line_tables = line_tables(mm, &db_id, &dict_code).await?;
     // victim = member_ids 中非 master 的第一个（JSONB 列 to_json_value 为转义字符串，需 parse）
     let members_raw = group.get("member_ids").cloned().unwrap_or(Value::Null);
     let members = match members_raw {
@@ -435,6 +484,9 @@ pub struct MergeBody {
     /// 人工裁决显式真值（选 victim/手填，审查 A1/A2）；键 ⊆ survive_fields。
     #[serde(default)]
     pub overrides: Option<serde_json::Map<String, Value>>,
+    /// 联动的查重发现项 id（match-scan 工作台确认合并时传入；合并成功后 CAS pending→resolved）。
+    #[serde(default, alias = "scanId")]
+    pub scan_id: Option<i64>,
 }
 
 /// undo / detail 查询体。

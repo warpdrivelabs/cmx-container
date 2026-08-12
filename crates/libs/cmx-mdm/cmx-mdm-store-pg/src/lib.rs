@@ -10,6 +10,7 @@
 //! - [`cr_service`]：CR 变更请求服务（状态校验 / 列表 / 详情 / 克隆复活 / 作废）。
 //! - [`match_store`]：匹配组 / 交叉引用 / 治理查询 store。
 //! - [`match_config_store`]：查重规则配置 store。
+//! - [`scan_store`]：查重发现项 store（md_match_scan，全库扫描结果载体）。
 //! - [`error`]：错误助手（api_err / api_err_db / parse_jsonb_field）。
 //!
 //! 惯例（对齐 cmx-dct-store-pg）：store 是模块级自由 async 函数，DB 连接走
@@ -31,21 +32,27 @@ mod error;
 mod match_config_store;
 /// 匹配组 / 交叉引用 / 治理查询 store。
 mod match_store;
+/// md_match_scan 查重发现项 store（全库扫描结果载体，管家评审）。
+mod scan_store;
 /// md_audit / md_event_log 治理表写入 + CR 状态归档。
 mod md_accessor;
 /// cm_* 写入的 SQL 构造与列值转换工具（dct_accessor 内部用）。
 mod sql_builder;
 
-pub use activation_store::{find_by_doc_type, list, upsert, delete_by_code};
+pub use activation_store::{find_by_doc_type, line_tables_for_dict, list, upsert, delete_by_code, LineTableInfo};
 pub use cr_service::{abort_cr, check_status, clone_revise, get_cr_detail, list_cr};
 pub use error::{api_err, api_err_db};
 // 激活器主流程对 api 层暴露（M1 activate + M3 merge/unmerge）
-pub use activation_service::{activate, merge, unmerge};
+pub use activation_service::{activate, merge, unmerge, MergeStats};
 // M3 匹配/合并 store 对 api 层暴露
 pub use match_store::{
     get_match_group, insert_match_group, list_audit, list_events, list_match_groups,
-    list_subscriptions, load_by_ids, load_published, transition_match_group, update_match_group,
-    upsert_subscription,
+    list_subscriptions, load_by_ids, load_published, load_suspects, transition_match_group,
+    update_match_group, upsert_subscription,
+};
+// M3.5 查重发现项 store（全库扫描 / 评审队列，cluster_hash 去重）
+pub use scan_store::{
+    get_scan, insert_findings, list_scans, transition_scan_status, InsertStats, PreparedCluster,
 };
 // 查重规则配置 store 对 api 层暴露（查重界面内维护）
 pub use match_config_store::{

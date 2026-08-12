@@ -1,9 +1,15 @@
--- =====================================================
--- cmx-code 编码引擎（两张表合并迁移）
--- 1. cmx_code_rule  —— 编码规则库（纯算法：段序列，不带 target，可被多处复用）
--- 2. cmx_code_gap   —— 编码断号表（连号域空缺号回收，只存空缺 ≠ 已分配）
+-- =============================================
+-- 迁移说明：cmx-code 编码引擎建表（整合原 20260805_001_cmx_code_engine + 20260807_001_cmx_code_seq 两份迁移）
+-- 影响表：cmx_code_rule, cmx_code_gap, cmx_code_seq
+-- 操作类型：CREATE TABLE / CREATE INDEX
+-- 回滚方式：20260812_002_cmx_code_编码引擎.down.sql
+-- =============================================
+
+-- cmx-code 编码引擎（三张表）
+-- 1. cmx_code_rule —— 编码规则库（纯算法：段序列，不带 target，可被多处复用）
+-- 2. cmx_code_gap  —— 编码断号表（连号域空缺号回收，只存空缺 ≠ 已分配）
+-- 3. cmx_code_seq  —— 编码发号序列表（serial/dateSerial 段的集群安全发号源）
 -- 规则按域/应用/模块（DAM）隔离，既有规则无 DAM 默认空串，兼容存量
--- =====================================================
 
 -- ─────────────────────────────────────────────────────
 -- 1. 编码规则库
@@ -82,3 +88,29 @@ COMMENT ON COLUMN cmx_code_gap.id IS '主键ID（pk52）';
 COMMENT ON COLUMN cmx_code_gap.prefix IS '断号所属前缀（如 FV20260804）';
 COMMENT ON COLUMN cmx_code_gap.serial_val IS '断号流水值（如 8）';
 COMMENT ON COLUMN cmx_code_gap.width IS '流水宽度（补零用）';
+
+-- ─────────────────────────────────────────────────────
+-- 3. 编码发号序列表（集群安全发号源）
+--    一个 (rule_code, prefix) 一行，存当前已发到的最大流水值。
+--    发号时 SELECT ... FOR UPDATE SKIP LOCKED 行级锁取号段，集群安全（AGENTS.md §五红线）。
+--    由 cmx_code_rule.use_sequence=true 开启；默认 false 走"反查业务表 max"老路径。
+-- ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cmx_code_seq (
+    id              BIGINT                  NOT NULL,
+    rule_code       VARCHAR(64)             NOT NULL,
+    prefix          VARCHAR(128)            NOT NULL,
+    current_val     BIGINT                  NOT NULL DEFAULT 0,
+    width           INT4                    NOT NULL DEFAULT 4,
+    update_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id)
+);
+
+-- 发号分组键唯一：一个 (规则, 前缀) 只有一行当前值
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_code_seq_prefix ON cmx_code_seq (rule_code, prefix);
+
+COMMENT ON TABLE cmx_code_seq IS '编码发号序列表（集群安全发号源，use_sequence=true 才启用）';
+COMMENT ON COLUMN cmx_code_seq.id IS '主键ID（pk52）';
+COMMENT ON COLUMN cmx_code_seq.rule_code IS '关联 cmx_code_rule.rule_code';
+COMMENT ON COLUMN cmx_code_seq.prefix IS '发号分组键（含 reset_key，如 FV20260804）';
+COMMENT ON COLUMN cmx_code_seq.current_val IS '已发到的最大流水值（0=首启未探测）';
+COMMENT ON COLUMN cmx_code_seq.width IS '流水宽度（补零用，记录首次发号时的宽度）';

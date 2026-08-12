@@ -227,6 +227,94 @@ pub async fn reparent_lines_by_ids(
     Ok(n)
 }
 
+/// 查某 parent 名下全部 published 明细的 id + 指定业务键列值（合并去重用，一次查询）。
+///
+/// 合并去重需比对 master 与 victim 的明细业务键是否相同：本函数一次查出某 parent 名下
+/// 全部 `published` 明细行的 id 及其业务键列值，供应用层内存比对（避免逐行查库）。
+/// `key_cols` 为业务键列名（如 `["account_no"]`），全部过 [`validate_ident`] 防注入。
+/// 返回 `(行 id, 业务键值向量)`，值向量顺序与 `key_cols` 一致；`key_cols` 为空时只查 id。
+pub async fn select_line_keys(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: &str,
+    detail_table: &str,
+    parent_field: &str,
+    parent_id: i64,
+    key_cols: &[&str],
+) -> Result<Vec<(i64, Vec<Value>)>, cmx_api_types::Error> {
+    validate_ident(detail_table)?;
+    validate_ident(parent_field)?;
+    for k in key_cols {
+        validate_ident(k)?;
+    }
+    // SELECT id, k1, k2, ... FROM {table} WHERE {parent_field}=$1 AND lifecycle_status='published'
+    let cols = std::iter::once("id".to_string())
+        .chain(key_cols.iter().map(|s| s.to_string()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT {cols} FROM {detail_table} \
+         WHERE {parent_field} = $1 AND lifecycle_status = 'published' ORDER BY id"
+    );
+    let ds = mm
+        .query_sql_with_datavalues(
+            db_id,
+            Some(txn_id),
+            &sql,
+            vec![DataValue::Int(parent_id)],
+            "mdm_line_keys",
+        )
+        .await
+        .map_err(|e| api_err_db(&format!("查 {detail_table} 业务键失败: {e}")))?;
+    let schema = ds.schema.as_ref();
+    let mut out = Vec::with_capacity(ds.rows.len());
+    for row in &ds.rows {
+        let v = row.to_json_value(schema);
+        let Some(id) = v.get("id").and_then(|x| x.as_i64()) else { continue };
+        let vals = key_cols
+            .iter()
+            .map(|k| v.get(*k).cloned().unwrap_or(Value::Null))
+            .collect();
+        out.push((id, vals));
+    }
+    Ok(out)
+}
+
+/// 按 id 批量改 lifecycle（合并去重软删 victim 重复明细用）。
+///
+/// 语义对齐单条 [`set_lifecycle`]：CAS `expected→next` + `published_version+1`，只是作用于一组
+/// id（IN 列表参数化，参考 [`reparent_lines_by_ids`]）。去重时把 victim 与 master 业务键
+/// 冲突的明细行批量置 `merged`（软删，parent 仍是 victim，unmerge 时 CAS 回 published 即恢复）。
+/// 返回受影响行数。
+pub async fn set_lifecycle_by_ids(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: &str,
+    table: &str,
+    ids: &[i64],
+    expected: &str,
+    next: &str,
+) -> Result<u64, cmx_api_types::Error> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    validate_ident(table)?;
+    // $1=next, $2=expected, $3..$N+2=ids
+    let placeholders: Vec<String> = (3..=ids.len() + 2).map(|i| format!("${i}")).collect();
+    let sql = format!(
+        "UPDATE {table} SET lifecycle_status = $1, published_version = published_version + 1, \
+         update_time = now() WHERE lifecycle_status = $2 AND id IN ({})",
+        placeholders.join(", ")
+    );
+    let mut params = vec![DataValue::String(next.into()), DataValue::String(expected.into())];
+    params.extend(ids.iter().map(|i| DataValue::Int(*i)));
+    let n = mm
+        .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
+        .await
+        .map_err(|e| api_err_db(&format!("批量改 {table} lifecycle 失败: {e}")))?;
+    Ok(n)
+}
+
 /// 锁行（M3 merge，审查重要-4）：事务内 `SELECT ... FOR UPDATE` 占行锁，
 /// 串行化交叉 merge（X⇄Y 互并）。返回行是否存在。
 pub async fn lock_record(

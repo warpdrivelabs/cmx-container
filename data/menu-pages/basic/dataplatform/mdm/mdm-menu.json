@@ -117,7 +117,7 @@
                     "caption": "数据管家工作台",
                     "type": "workspace-node",
                     "permissionId": null,
-                    "visible": 0,
+                    "visible": 1,
                     "icon": "tabler-outline/user-check",
                     "workspace": {
                         "id": "mdm_steward",

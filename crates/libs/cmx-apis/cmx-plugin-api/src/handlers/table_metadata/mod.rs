@@ -28,9 +28,14 @@ impl ModuleRoutes for TableMetadataModule {
 
 fn inner_routes() -> Router<CmxAppState> {
     Router::new()
+        // 按主键 id 查询表元数据定义
         .route("/get", get(handler::table_metadata_get_by_id))
+        // 按表名查询表元数据定义
         .route("/get-by-name", get(handler::table_metadata_get_by_name))
+        // 判断指定表名的元数据是否已登记
         .route("/exists", get(handler::table_metadata_exists))
+        // 列表查询表元数据（按条件）
         .route("/list", post(handler::table_metadata_list))
+        // 分页查询表元数据
         .route("/page", post(handler::table_metadata_page))
 }

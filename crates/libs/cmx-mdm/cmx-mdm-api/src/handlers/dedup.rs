@@ -7,7 +7,7 @@
 //! 本模块还提供：
 //! - [`resolve_dict_meta`]：按 dict_code 调 DCT `dict_meta` 拿 DictMeta（头表名 + 列清单），
 //!   供 [`super::merge`] 的 detail/undo 取头表名、详情取列清单（替代硬编码 load_columns）。
-//! - [`line_tables`]：明细表清单注册表（merge/undo 的明细 reparent 用，待主从元数据方案通用化）。
+//! - [`line_tables`]：明细表清单（merge/undo 的明细 reparent 用，从 cmx_mdm_activation.line_mappings 按 target_dict 聚合）。
 
 use axum::Json;
 use axum::extract::State;
@@ -19,7 +19,7 @@ use cmx_api_core::db_id::resolve_db_id_from_headers;
 use cmx_api_core::middleware::CmxSvrContext;
 use cmx_api_core::{ApiResp, Result};
 
-use cmx_database_pg::get_default_pg_db_manager;
+use cmx_database_pg::{get_default_pg_db_manager, DatabaseManager};
 use cmx_dct_store_pg::{DctQuery, DictMeta, dict_meta};
 use cmx_mdm_model::match_algo::{find_candidates, MatchRecord};
 use cmx_mdm_store_pg as store;
@@ -38,15 +38,106 @@ pub(crate) async fn resolve_dict_meta(dict_code: &str) -> Result<DictMeta> {
     dict_meta(&DctQuery::by_code(dict_code)).await
 }
 
-/// dict → 明细表清单（merge/undo 的明细 reparent 用）。
+/// dict → 明细表清单（含去重键，merge/undo 的明细 reparent + 去重用）。
 ///
-/// 头表名现由 [`resolve_dict_meta`].table_name 获取；本函数只返回明细表 reparent 映射。
-/// 返回元素为 `(明细表名, 外键列名)`；未知字典返回空 Vec。
-pub(crate) fn line_tables(dict_code: &str) -> Vec<(String, String)> {
-    match dict_code {
-        "supplier" => vec![("cm_bank_account".into(), "supplier_id".into())],
-        _ => Vec::new(),
+/// 流程：从 `cmx_mdm_activation.line_mappings` 按 `target_dict` 聚合明细表
+/// `(table, parent_field, target_dict)`；再对每个 `target_dict` 调 [`resolve_dict_meta`] 读
+/// DCT `uniqueKeys`，去掉外键列（`parent_field`）后剩余字段即该表的去重业务键。
+/// 未注册字典或无 uniqueKeys 的表 `dedup_keys` 为空（合并不去重，全量 reparent）。
+pub(crate) async fn line_tables(
+    mm: &DatabaseManager,
+    db_id: &str,
+    dict_code: &str,
+) -> Result<Vec<store::LineTableInfo>> {
+    let raw = store::line_tables_for_dict(mm, db_id, dict_code).await?;
+    let mut out = Vec::with_capacity(raw.len());
+    for (table, parent_field, target_dict) in raw {
+        // 从 DCT uniqueKeys 推导去重键；target_dict 缺失或未注册则不去重
+        let dedup_keys = if target_dict.is_empty() {
+            Vec::new()
+        } else {
+            resolve_dict_meta(&target_dict)
+                .await
+                .ok()
+                .map(|meta| dedup_keys_from(&meta.unique_keys, &parent_field))
+                .unwrap_or_default()
+        };
+        out.push(store::LineTableInfo { table, parent_field, dedup_keys });
     }
+    Ok(out)
+}
+
+/// 从 uniqueKeys 推导明细去重键：取第一组唯一键，去掉外键列（parent_field）后剩余字段。
+///
+/// 如 cm_bank_account 的 `[["supplier_id","account_no"]]` 去掉 `supplier_id` → `["account_no"]`。
+/// 无 uniqueKeys 或只剩外键列时返回空 Vec（该表不去重）。
+fn dedup_keys_from(unique_keys: &[Vec<String>], parent_field: &str) -> Vec<String> {
+    unique_keys
+        .iter()
+        .next()
+        .map(|grp| grp.iter().filter(|k| *k != parent_field).cloned().collect())
+        .unwrap_or_default()
+}
+
+/// 查重规则默认值（从 md_match_config 按 dictCode 读）。
+///
+/// [`find_duplicates`](mdm_find_duplicates) / [`check_key`](mdm_check_key) /
+/// match-scan/run 在 body 字段缺失时用它兜底。
+#[derive(Debug, Clone)]
+pub(crate) struct MatchConfigDefaults {
+    /// 目标头物理表。
+    pub target_table: String,
+    /// 比较字段规则。
+    pub specs: Vec<SpecDto>,
+    /// 分块簇键。
+    pub cluster_keys: Vec<String>,
+    /// 存活字段。
+    pub survive_fields: Vec<String>,
+}
+
+/// 按 dictCode 从 md_match_config 读第一条 active 规则作默认。
+///
+/// 返回 `None` 表示无配置，或配置缺 target_table（视为无效）。
+/// specs/cluster_keys/survive_fields 是 JSONB 数组，已由 store 层 parse 成对象。
+///
+/// # Errors
+///
+/// DB 查询失败时返回错误。
+pub(crate) async fn load_match_config_defaults(
+    mm: &DatabaseManager,
+    db_id: &str,
+    dict_code: &str,
+) -> Result<Option<MatchConfigDefaults>> {
+    let list = store::list_match_config(mm, db_id, Some(dict_code)).await?;
+    let cfg = match list.into_iter().next() {
+        Some(c) => c,
+        None => return Ok(None),
+    };
+    let target_table = cfg
+        .get("target_table")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if target_table.is_empty() {
+        return Ok(None);
+    }
+    let specs = parse_array_field::<SpecDto>(&cfg, "specs");
+    let cluster_keys = parse_array_field::<String>(&cfg, "cluster_keys");
+    let survive_fields = parse_array_field::<String>(&cfg, "survive_fields");
+    Ok(Some(MatchConfigDefaults {
+        target_table,
+        specs,
+        cluster_keys,
+        survive_fields,
+    }))
+}
+
+/// 从 JSON 对象的指定字段反序列化数组（缺失或类型不符返回空 Vec）。
+fn parse_array_field<T: serde::de::DeserializeOwned>(v: &Value, field: &str) -> Vec<T> {
+    v.get(field)
+        .filter(|v| v.is_array())
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default()
 }
 
 /// 实时查重（纯查询，不落库）。body `{ dictCode, recordId, targetTable, specs, clusterKeys, surviveFields }`。
@@ -57,10 +148,31 @@ pub async fn mdm_find_duplicates(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
     headers: HeaderMap,
-    Json(body): Json<FindDupBody>,
+    Json(mut body): Json<FindDupBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
+
+    // 回填：target_table/specs/cluster_keys/survive_fields 任一缺失，从 match_config 读默认
+    if (body.target_table.is_empty()
+        || body.specs.is_empty()
+        || body.cluster_keys.is_empty()
+        || body.survive_fields.is_empty())
+        && let Some(d) = load_match_config_defaults(mm, &db_id, &body.dict_code).await?
+    {
+        if body.target_table.is_empty() {
+            body.target_table = d.target_table;
+        }
+        if body.specs.is_empty() {
+            body.specs = d.specs;
+        }
+        if body.cluster_keys.is_empty() {
+            body.cluster_keys = d.cluster_keys;
+        }
+        if body.survive_fields.is_empty() {
+            body.survive_fields = d.survive_fields;
+        }
+    }
 
     // 把 DTO specs 转成 MatchFieldSpec（校验 kind 合法）
     let specs: Vec<_> = body
@@ -69,9 +181,15 @@ pub async fn mdm_find_duplicates(
         .map(|s| s.to_match_spec())
         .collect::<Result<Vec<_>>>()?;
     if specs.is_empty() {
-        return Err(store::api_err("查重字段（specs）不能为空"));
+        return Err(store::api_err("查重字段（specs）不能为空（body 未传且 match_config 无配置）"));
+    }
+    if body.target_table.is_empty() {
+        return Err(store::api_err("target_table 不能为空（body 未传且 match_config 无配置）"));
     }
     let cluster_keys: Vec<&str> = body.cluster_keys.iter().map(|s| s.as_str()).collect();
+    if cluster_keys.is_empty() {
+        return Err(store::api_err("cluster_keys 不能为空（body 未传且 match_config 无配置）"));
+    }
 
     // 装载列 = id ∪ specs 字段 ∪ surviveFields ∪ displayFields ∪ {update_time}
     // （防注入经 load_published validate_ident；displayFields 仅展示用，如 label/code）
@@ -89,7 +207,7 @@ pub async fn mdm_find_duplicates(
     col_set.dedup();
     let columns: Vec<&str> = col_set.iter().map(|s| s.as_str()).collect();
 
-    let all = store::load_published(mm, &db_id, &body.target_table, &columns).await?;
+    let all = store::load_suspects(mm, &db_id, &body.target_table, &columns, &cluster_keys).await?;
     let target = all
         .iter()
         .find(|r| r.id == body.record_id)
@@ -129,10 +247,25 @@ pub async fn mdm_check_key(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
     headers: HeaderMap,
-    Json(body): Json<CheckKeyBody>,
+    Json(mut body): Json<CheckKeyBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
+
+    // 回填：target_table/specs/cluster_keys 任一缺失，从 match_config 读默认
+    if (body.target_table.is_empty() || body.specs.is_empty() || body.cluster_keys.is_empty())
+        && let Some(d) = load_match_config_defaults(mm, &db_id, &body.dict_code).await?
+    {
+        if body.target_table.is_empty() {
+            body.target_table = d.target_table;
+        }
+        if body.specs.is_empty() {
+            body.specs = d.specs;
+        }
+        if body.cluster_keys.is_empty() {
+            body.cluster_keys = d.cluster_keys;
+        }
+    }
 
     // specs → MatchFieldSpec（校验 kind 合法）
     let specs: Vec<_> = body
@@ -141,9 +274,15 @@ pub async fn mdm_check_key(
         .map(|s| s.to_match_spec())
         .collect::<Result<Vec<_>>>()?;
     if specs.is_empty() {
-        return Err(store::api_err("查重字段（specs）不能为空"));
+        return Err(store::api_err("查重字段（specs）不能为空（body 未传且 match_config 无配置）"));
+    }
+    if body.target_table.is_empty() {
+        return Err(store::api_err("target_table 不能为空（body 未传且 match_config 无配置）"));
     }
     let cluster_keys: Vec<&str> = body.cluster_keys.iter().map(|s| s.as_str()).collect();
+    if cluster_keys.is_empty() {
+        return Err(store::api_err("cluster_keys 不能为空（body 未传且 match_config 无配置）"));
+    }
 
     // 装载列 = id ∪ specs 字段 ∪ {code, name, update_time}（code/name 用于返回给前端展示）
     let mut col_set: Vec<String> = vec!["id".into(), "code".into(), "name".into(), "update_time".into()];
@@ -154,8 +293,8 @@ pub async fn mdm_check_key(
     col_set.dedup();
     let columns: Vec<&str> = col_set.iter().map(|s| s.as_str()).collect();
 
-    // 拉激活区全量已发布记录
-    let all = store::load_published(mm, &db_id, &body.target_table, &columns).await?;
+    // 拉嫌疑记录（DB 内分块下推，避免全量装载）
+    let all = store::load_suspects(mm, &db_id, &body.target_table, &columns, &cluster_keys).await?;
 
     // 构造虚拟 target：id=0（表示未落库），fields = keyValue
     let target = MatchRecord {

@@ -7,6 +7,7 @@
 //! - [`merge`]：M3 合并请求（确认 / 详情 / 驳回 / 还原）。
 //! - [`governance`]：MDM 治理端点（审计 / 事件 / 订阅 / 发布）。
 //! - [`match_config`]：查重规则配置。
+//! - [`scan`]：M3.5 全库扫描查重（扫描 / 列表 / 详情 / 忽略）。
 //!
 //! 提取器惯例（对齐 cmx-dct-api/src/handlers.rs:14-27）：
 //!   - `State(_s): State<CmxAppState>`：状态（DB 走全局单例，常忽略为 `_s`）
@@ -26,6 +27,8 @@ mod governance;
 mod match_config;
 /// M3 合并请求 handler（确认 / 详情 / 驳回 / 还原）。
 mod merge;
+/// M3.5 全库扫描查重 handler（扫描 / 列表 / 详情 / 忽略）。
+mod scan;
 
 use axum::Json;
 use axum::extract::State;
@@ -42,7 +45,7 @@ use cmx_mdm_store_pg as store;
 ///
 /// 序列化形态示例：`{ "field": "name", "weight": 100, "kind": "EditDistance" }`。
 /// 经 [`SpecDto::to_match_spec`] 转成 [`MatchFieldSpec`] 供匹配算法使用。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug, Clone)]
 pub struct SpecDto {
     pub field: String,
     #[serde(default = "default_weight")]
@@ -108,3 +111,4 @@ pub use dedup::*;
 pub use governance::*;
 pub use match_config::*;
 pub use merge::*;
+pub use scan::*;

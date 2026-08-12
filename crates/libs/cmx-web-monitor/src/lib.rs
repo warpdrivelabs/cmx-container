@@ -32,14 +32,21 @@ use axum::routing::get;
 
 /// 技术监控路由（挂根级，与业务页并列；免认证）。
 ///
-/// 提供 `GET /_mon`（页）+ `GET /_mon/tech-stats`（合并数据）。页面 JS 从自身路径推导数据 URL，
-/// 故整组一起 nest 到别处也能工作。
+/// 提供：
+/// - `GET /_mon`：技术监控大盘 HTML 页面（自包含，业务无关）；
+/// - `GET /_mon/tech-stats`：合并监控数据（服务标识 + 请求遥测 + 系统指标 + DB 池 + 依赖拓扑），页面 JS 轮询；
+/// - `GET /_mon/deps`：仅服务依赖拓扑（比全量 tech-stats 轻，供门户集成状态页单独轮询）。
+///
+/// 页面 JS 从自身路径推导数据 URL，故整组一起 nest 到别处也能工作。
 pub fn monitor_routes<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
     Router::new()
+        // 技术监控大盘页面（HTML，编译期内嵌，免认证）
         .route("/_mon", get(handlers::tech_dashboard))
+        // 合并监控数据：服务标识 + 请求遥测 + 系统指标 + DB 池 + 依赖拓扑
         .route("/_mon/tech-stats", get(handlers::tech_stats))
+        // 仅服务依赖拓扑（轻量版，供状态页单独轮询）
         .route("/_mon/deps", get(handlers::deps_stats))
 }

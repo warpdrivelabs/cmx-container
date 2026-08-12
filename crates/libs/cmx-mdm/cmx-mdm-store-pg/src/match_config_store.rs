@@ -1,4 +1,4 @@
-//! md_match_config 查重规则配置读写（治理表，md_ 前缀 + BIGINT 主键，对齐 md_match_group）。
+//! md_match_config 查重规则配置读写（治理表，md_ 前缀 + BIGINT 主键，对齐 md_merge_record）。
 //!
 //! - [`list_match_config`]：查重界面按字典列规则（下拉「已有规则」用）。
 //! - [`get_match_config`]：按 id 取单条。

@@ -4,11 +4,11 @@
 //! ② 读 master/victims（须 published）
 //! ③ survive 逐字段（多 victim 顺序累积到 master）
 //! ④ victim set_lifecycle(published→merged, CAS+version+1)，n=0 冲突报错
-//! ⑤ reparent_lines（各明细表 victim→master，先快照行 id 供 unmerge）
+//! ⑤ 明细迁移 + 去重（各明细表：dedup_keys 空=全量 reparent；非空=按业务键比对，重复软删）
 //! ⑥ update_header(master, 存活值+version+1, CAS)
 //! ⑦ deactivate_xref(victim)
 //! ⑧ write_audit(merge) ⑨ write_event(merged, payload 带追溯)
-//! ⑩ update_match_group(status, survivorship_log{fields+reparented}, master_id)
+//! ⑩ update_match_group(status, survivorship_log{fields+reparented+deduped}, master_id)
 
 use std::collections::HashMap;
 
@@ -17,10 +17,21 @@ use cmx_mdm_model::survivorship::{survive, SurvivorRule};
 use serde_json::{json, Value};
 
 use crate::{
-    dct_accessor, error::api_err, match_store, md_accessor,
+    activation_store::LineTableInfo, dct_accessor, error::api_err, match_store, md_accessor,
 };
 
 use super::{lifecycle_of, master_record};
+
+/// 合并结果统计（供 handler 回传前端展示「迁移 X 条 / 去重 Y 条明细」）。
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct MergeStats {
+    /// 主记录 id（存活方）。
+    pub master_id: i64,
+    /// 迁移的明细行总数（reparent 到 master）。
+    pub reparented_total: u64,
+    /// 去重软删的明细行总数（与 master 业务键冲突，set lifecycle=merged）。
+    pub deduped_total: u64,
+}
 
 /// 合并：master + victims → 单事务（审查修订版流程）。
 ///
@@ -36,13 +47,13 @@ use super::{lifecycle_of, master_record};
 /// * `survive_fields` - 参与存活的字段清单。
 /// * `rules` - 字段级存活策略（键 ⊆ survive_fields）。
 /// * `overrides` - 人工裁决显式真值（键 ⊆ survive_fields）。
-/// * `line_tables` - 明细表 reparent 映射 `(表名, 外键列名)`。
+/// * `line_tables` - 明细表清单（含去重键 `dedup_keys`，见 [`LineTableInfo]`）。
 /// * `operated_by` - 操作人 id。
 /// * `match_group_id` - 合并请求 group id（CAS pending→reviewed）。
 ///
 /// # Returns
 ///
-/// master 记录 id（即 `master_id`）。
+/// [`MergeStats`]：master_id + 迁移/去重明细计数（供前端展示）。
 ///
 /// # Errors
 ///
@@ -58,10 +69,10 @@ pub async fn merge(
     survive_fields: &[String],
     rules: &HashMap<String, SurvivorRule>,
     overrides: &serde_json::Map<String, Value>,
-    line_tables: &[(String, String)],
+    line_tables: &[LineTableInfo],
     operated_by: i64,
     match_group_id: i64,
-) -> Result<i64, cmx_api_types::Error> {
+) -> Result<MergeStats, cmx_api_types::Error> {
     let txn_ctx = mm.get_transaction_context();
     let guard = txn_ctx
         .begin_with_guard(db_id)
@@ -76,12 +87,12 @@ pub async fn merge(
     .await;
 
     match result {
-        Ok(id) => {
+        Ok(stats) => {
             guard
                 .commit()
                 .await
                 .map_err(|e| api_err(&format!("提交事务失败: {e}")))?;
-            Ok(id)
+            Ok(stats)
         }
         Err(e) => {
             tracing::error!(target: "cmx_mdm::merge", master_id, error = %e, "合并失败,事务已回滚");
@@ -103,10 +114,10 @@ async fn merge_inner(
     survive_fields: &[String],
     rules: &HashMap<String, SurvivorRule>,
     overrides: &serde_json::Map<String, Value>,
-    line_tables: &[(String, String)],
+    line_tables: &[LineTableInfo],
     operated_by: i64,
     match_group_id: i64,
-) -> Result<i64, cmx_api_types::Error> {
+) -> Result<MergeStats, cmx_api_types::Error> {
     // overrides 键必须 ⊆ survive_fields（审查 A2，超范围静默丢弃→改报错）
     for k in overrides.keys() {
         if !survive_fields.contains(k) {
@@ -154,6 +165,7 @@ async fn merge_inner(
     let mut master_row = master.fields.clone();
     let mut all_log = Vec::new();
     let mut reparented = json!({});
+    let mut deduped = json!({});
     let current_v = master
         .fields
         .get("published_version")
@@ -174,13 +186,54 @@ async fn merge_inner(
             return Err(api_err(&format!("victim {} 状态冲突（双 merge 拦截）", v.id)));
         }
 
-        // ⑤ re-parent 明细（快照行 id 供 unmerge）
-        for (table, parent_field) in line_tables {
-            let ids = dct_accessor::select_line_ids(mm, db_id, txn_id, table, parent_field, v.id)
+        // ⑤ 明细迁移 + 去重（dedup_keys 空=全量 reparent；非空=按业务键比对，重复软删）
+        for lt in line_tables {
+            let table = lt.table.as_str();
+            let parent_field = lt.parent_field.as_str();
+            if lt.dedup_keys.is_empty() {
+                // 无去重键：全部 reparent（原逻辑），快照行 id 供 unmerge
+                let ids = dct_accessor::select_line_ids(mm, db_id, txn_id, table, parent_field, v.id)
+                    .await?;
+                dct_accessor::reparent_lines(mm, db_id, txn_id, table, parent_field, v.id, master_id)
+                    .await?;
+                reparented[table.to_string()] = json!(ids);
+                continue;
+            }
+            // 有去重键：拉 victim + master 的明细业务键（各一次查询），内存比对。
+            // 命中 master 已有同业务键 → victim 这条软删（parent 不动）；否则 reparent 到 master。
+            let key_cols: Vec<&str> = lt.dedup_keys.iter().map(|s| s.as_str()).collect();
+            let victim_lines = dct_accessor::select_line_keys(
+                mm, db_id, txn_id, table, parent_field, v.id, &key_cols,
+            )
+            .await?;
+            let master_lines = dct_accessor::select_line_keys(
+                mm, db_id, txn_id, table, parent_field, master_id, &key_cols,
+            )
+            .await?;
+            let master_keyset: Vec<&Vec<Value>> = master_lines.iter().map(|(_, k)| k).collect();
+            let mut reparent_ids = Vec::new();
+            let mut dedup_ids = Vec::new();
+            for (lid, keys) in &victim_lines {
+                if master_keyset.contains(&keys) {
+                    dedup_ids.push(*lid); // 重复：软删 victim 这条
+                } else {
+                    reparent_ids.push(*lid); // 不重复：迁移到 master
+                }
+            }
+            if !reparent_ids.is_empty() {
+                dct_accessor::reparent_lines_by_ids(
+                    mm, db_id, txn_id, table, parent_field, &reparent_ids, master_id,
+                )
                 .await?;
-            dct_accessor::reparent_lines(mm, db_id, txn_id, table, parent_field, v.id, master_id)
+            }
+            if !dedup_ids.is_empty() {
+                dct_accessor::set_lifecycle_by_ids(
+                    mm, db_id, txn_id, table, &dedup_ids, "published", "merged",
+                )
                 .await?;
-            reparented[table.clone()] = json!(ids);
+            }
+            reparented[table.to_string()] = json!(reparent_ids);
+            deduped[table.to_string()] = json!(dedup_ids);
         }
 
         // ⑦ xref inactive
@@ -245,11 +298,20 @@ async fn merge_inner(
             return Err(api_err(&format!("group {match_group_id} 已被驳回，不可合并")));
         }
     }
-    let slog = json!({ "fields": all_log, "reparented": reparented });
+    let slog = json!({ "fields": all_log, "reparented": reparented, "deduped": deduped });
     match_store::update_match_group(
         mm, db_id, Some(txn_id), match_group_id, "reviewed", Some(&slog), Some(master_id),
     )
     .await?;
 
-    Ok(master_id)
+    // 统计迁移/去重明细数（reparented + deduped 各表 ids 长度求和），回传前端展示
+    let reparented_total = reparented
+        .as_object()
+        .map(|o| o.values().filter_map(|v| v.as_array().map(|a| a.len() as u64)).sum())
+        .unwrap_or(0);
+    let deduped_total = deduped
+        .as_object()
+        .map(|o| o.values().filter_map(|v| v.as_array().map(|a| a.len() as u64)).sum())
+        .unwrap_or(0);
+    Ok(MergeStats { master_id, reparented_total, deduped_total })
 }

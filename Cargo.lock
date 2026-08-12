@@ -1114,7 +1114,6 @@ dependencies = [
  "cmx-database",
  "cmx-database-pg",
  "cmx-debug",
- "cmx-iam",
  "cmx-metadata",
  "cmx-plugin",
  "cmx-portal",
@@ -1712,6 +1711,7 @@ dependencies = [
  "cmx-utils",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
  "tracing",
 ]

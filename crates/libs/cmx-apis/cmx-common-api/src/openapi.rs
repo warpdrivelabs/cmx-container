@@ -62,66 +62,7 @@ use utoipa::OpenApi;
             crate::handlers::service::models::ServiceDetailResponse,
             // Marketplace schemas 已迁至 cmx-plugin-api（PluginApiDoc）。
             // Storage schemas 已迁至 cmx-storage-api（StorageApiDoc）。
-            // Auth schemas
-            // API Key 管理 schemas
-            // OAuth2 客户端管理 schemas
-            // OAuth2 schemas
-            // IAM schemas
-            cmx_core::model::iam::User,
-            cmx_core::model::iam::Role,
-            cmx_core::model::iam::RoleGroup,
-            cmx_core::model::iam::RoleGroupTreeNode,
-            cmx_core::model::iam::Permission,
-            cmx_core::model::iam::PermissionTreeNode,
-            cmx_iam::user::UserForCreate,
-            cmx_iam::user::UserForUpdate,
-            cmx_iam::user::AssignRolesRequest,
-            cmx_iam::role::RoleForCreate,
-            cmx_iam::role::RoleForUpdate,
-            cmx_iam::role::AssignPermissionsRequest,
-            cmx_iam::role::AssignRoleUsersRequest,
-            cmx_iam::role::RoleUserSummary,
-            cmx_iam::role_group::RoleGroupForCreate,
-            cmx_iam::role_group::RoleGroupForUpdate,
-            cmx_iam::permission::PermissionForCreate,
-            cmx_iam::permission::PermissionForUpdate,
-            cmx_iam::permission::BlockedRoleInfo,
-            cmx_iam::permission::BlockedPermissionInfo,
-            cmx_iam::permission::DeletePermissionOutcome,
-            cmx_iam::permission::DeletePermissionResult,
-            cmx_iam::permission::DeletePermissionBlocked,
-            crate::ApiResp<cmx_core::model::iam::User>,
-            crate::ApiResp<cmx_core::model::iam::Role>,
-            crate::ApiResp<cmx_core::model::iam::RoleGroup>,
-            crate::ApiResp<Vec<cmx_core::model::iam::RoleGroupTreeNode>>,
-            crate::ApiResp<cmx_core::model::iam::Permission>,
-            crate::ApiResp<Vec<cmx_core::model::iam::PermissionTreeNode>>,
-            crate::ApiResp<Vec<cmx_core::model::iam::Role>>,
-            crate::ApiResp<Vec<cmx_core::model::iam::RoleGroup>>,
-            crate::ApiResp<Vec<cmx_core::model::iam::Permission>>,
-            // IAM temp role schemas（阶段1新增）
-            cmx_iam::service_traits::UserRoleAssignment,
-            crate::ApiResp<cmx_iam::service_traits::UserRoleAssignment>,
-            crate::ApiResp<Vec<cmx_iam::service_traits::UserRoleAssignment>>,
-            // IAM rule schemas（阶段2新增）
-            cmx_iam::rule::entity::ExclusionRule,
-            cmx_iam::rule::entity::UpdateExclusionRuleRequest,
-            cmx_iam::rule::entity::CreateExclusionRuleRequest,
-            cmx_iam::rule::entity::ExclusionRuleItem,
-            cmx_iam::rule::entity::ValidateRuleRequest,
-            cmx_iam::rule::entity::ValidateRuleResponse,
-            crate::ApiResp<cmx_iam::rule::entity::ExclusionRule>,
-            crate::ApiResp<Vec<cmx_iam::rule::entity::ExclusionRule>>,
-            crate::ApiResp<cmx_iam::rule::entity::ValidateRuleResponse>,
-            // IAM audit schemas（阶段5新增）
-            cmx_iam::service_traits::EffectivePermissionsResponse,
-            cmx_iam::service_traits::RoleSummary,
-            cmx_iam::service_traits::PermissionSummary,
-            cmx_iam::service_traits::PermissionDiffResponse,
-            cmx_iam::service_traits::PermissionUsageStat,
-            crate::ApiResp<cmx_iam::service_traits::EffectivePermissionsResponse>,
-            crate::ApiResp<cmx_iam::service_traits::PermissionDiffResponse>,
-            crate::ApiResp<Vec<cmx_iam::service_traits::PermissionUsageStat>>,
+            // Auth / API Key / OAuth2 / IAM schemas 已迁至 cmx-iam-api（IamApiDoc）。
             // Dev schemas 已 feature-gate（dev-tools），不进 Swagger。
             // AI schemas 已迁至 cmx-ai-api（AiApiDoc）。
         )

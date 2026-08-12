@@ -11,11 +11,12 @@
 const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
 
 function unwrap(res, body) {
+  // 后端错误响应有两种字段名：ApiResp 用 msg，cmx_api_types::Error 用 error；两者都兼容。
   if (body && typeof body === 'object' && typeof body.code === 'number') {
-    if (body.code !== 0) { const e = new Error(body.msg || `业务错误 ${body.code}`); e.body = body; throw e }
+    if (body.code !== 0) { const e = new Error(body.msg || body.error || `业务错误 ${body.code}`); e.body = body; throw e }
     return body.data
   }
-  if (!res.ok) { const e = new Error((body && body.error) || `HTTP ${res.status}`); e.status = res.status; throw e }
+  if (!res.ok) { const e = new Error((body && (body.msg || body.error)) || `HTTP ${res.status}`); e.status = res.status; throw e }
   return body
 }
 async function apiGet(url, dbId) {
@@ -256,7 +257,7 @@ async function doAction(act, id) {
       const ok = await M.cmxConfirm?.({ title: '作废', message: `确认作废 CR-${crId}？`, danger: true })
       if (ok === false) return
       await apiPost('/api/mdm/change-requests/abort', { crId }, state.dbId); M.cmxInfo?.(`CR-${crId} 已作废`)
-    } else if (act === 'view') { openTab(currentHost, `单据·CR-${crId}`, 'portal.mdm.cr-detail', { crId }); return }
+    } else if (act === 'view') { openTab(currentHost, `单据·CR-${crId}`, 'portal.mdm.cr-form', { mode: 'view', crId, domain: state.domain, application: state.application, dbId: state.dbId }); return }
     await load(); refresh()
   } catch (e) { cmx().cmxError?.(`操作失败：${e.message}`) }
 }

@@ -59,11 +59,16 @@ impl ModuleRoutes for DocModule {
             )
             // 业务单据**显示元数据**(层序/各层列 caption·类型/父子关系)——通用单据前端页动态建表用
             .route("/doc/meta", get(doc::doc_meta))
+            // 基于 changeset 回存单据（ChangeSetCollector + DocSaver）
             .route("/doc/save", post(doc::doc_save))
+            // 批量回存多张单据（一次事务内多份 changeset）
             .route("/doc/save/batch", post(doc::doc_save_batch))
             // 业务单据版本化（方案 §6A / Phase 8）
+            // 列出指定单据的历史版本清单
             .route("/doc/revisions", get(doc::doc_revisions))
+            // 取某个历史版本详情（按 revision id）
             .route("/doc/revision", get(doc::doc_revision))
+            // 将单据回滚到指定历史版本
             .route("/doc/restore", post(doc::doc_restore))
     }
 

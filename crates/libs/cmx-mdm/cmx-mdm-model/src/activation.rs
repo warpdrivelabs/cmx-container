@@ -85,6 +85,20 @@ pub struct ActivationPlan {
     pub line_rows: Vec<(String, String, Map<String, Value>)>,
 }
 
+/// 「未填」判断：`null` 或空字符串视作未提供（与 `cmx-biz` NOT NULL 校验「空串=missing」语义一致）。
+///
+/// 激活器搬运时跳过这些值——让目标表 DEFAULT / 服务端 backfill（如 status=1、sort_no=0）生效，
+/// 避免空串写入 INT/DATE 等强类型列触发「类型不匹配」校验失败或 DB 绑定错误。
+/// （前端表单数值框留空时回传空串，是业务最常见的「未填」形态。）
+fn is_unfilled(v: &Value) -> bool {
+    v.is_null() || v.as_str().is_some_and(str::is_empty)
+}
+
+/// 仅空字符串判断（update 场景：null 是显式清空意图，须保留给落库层 SET col=NULL）。
+fn is_empty_str(v: &Value) -> bool {
+    v.as_str().is_some_and(str::is_empty)
+}
+
 /// 按 mapping 把 CR 头字段搬运成 cm_* 头行(create 分支)。
 ///
 /// - `cfg`:激活映射配置
@@ -98,8 +112,11 @@ pub fn plan_create(cfg: &ActivationConfig, cr_head: &Map<String, Value>, new_cod
         let val = payload_obj
             .and_then(|p| p.get(src_field))
             .or_else(|| cr_head.get(src_field));
+        // null/空串跳过：未填字段不搬运，让目标表 DEFAULT / backfill（status=1、sort_no=0）兜底，
+        // 避免空串落 INT/DATE 列触发「类型不匹配」（见 build_upsert_sql_dv 的 backfill 仅对未提供列生效）。
         if let Some(tgt) = tgt_col.as_str()
             && let Some(v) = val
+            && !is_unfilled(v)
         {
             header_row.insert(tgt.to_string(), v.clone());
         }
@@ -129,7 +146,9 @@ pub fn plan_update(
             if let Some(tgt) = tgt_col.as_str()
                 && let Some(delta) = deltas.get(src_field)
                 && let Some(new_val) = delta.get("new")
+                && !is_empty_str(new_val)
             {
+                // 空串跳过（前端表单未改的空串）；null 保留——update 时是显式清空意图，落库 SET col=NULL。
                 header_row.insert(tgt.to_string(), new_val.clone());
             }
         }
@@ -167,8 +186,10 @@ pub fn plan_lines(
         let mut row = Map::new();
         if let Some(payload) = line_obj.get("line_payload").and_then(|v| v.as_object()) {
             for (src, tgt) in &lm.fields {
+                // null/空串跳过（同 plan_create）：让明细表 DEFAULT / backfill 兜底，避免空串落强类型列。
                 if let Some(t) = tgt.as_str()
                     && let Some(v) = payload.get(src)
+                    && !is_unfilled(v)
                 {
                     row.insert(t.to_string(), v.clone());
                 }
@@ -226,6 +247,46 @@ mod tests {
         // 闸口:强制 published
         assert_eq!(plan.header_row.get("lifecycle_status").and_then(|v| v.as_str()), Some("published"));
         assert_eq!(plan.header_row.get("published_version").and_then(|v| v.as_i64()), Some(1));
+    }
+
+    #[test]
+    fn plan_create_skips_empty_and_null_fields() {
+        // 前端表单数值框留空时回传空串（业务最常见的「未填」形态）。
+        // 激活器搬运时须跳过空串/null，让目标表 DEFAULT / 服务端 backfill（status=1、sort_no=0）生效，
+        // 否则空串落 INT 列会触发「类型不匹配」校验失败。
+        let mut cfg = sample_cfg();
+        cfg.header_mapping = serde_json::from_value(json!({
+            "name": "name", "tax_no": "tax_no", "status": "status", "sort_no": "sort_no"
+        })).unwrap();
+        let cr_head = serde_json::from_value(json!({
+            "payload": { "name": "A公司", "tax_no": "911", "status": "", "sort_no": null }
+        })).unwrap();
+        let plan = plan_create(&cfg, &cr_head, "SUPPLI-x");
+        // 有值字段正常搬运
+        assert_eq!(plan.header_row.get("name").and_then(|v| v.as_str()), Some("A公司"));
+        assert_eq!(plan.header_row.get("tax_no").and_then(|v| v.as_str()), Some("911"));
+        // 空串 / null 字段不搬运（交给 backfill）
+        assert!(plan.header_row.get("status").is_none(), "空串 status 应跳过");
+        assert!(plan.header_row.get("sort_no").is_none(), "null sort_no 应跳过");
+    }
+
+    #[test]
+    fn plan_update_skips_empty_str_but_keeps_null() {
+        // update 场景：空串=前端未改（跳过）；null=显式清空（保留落库 SET col=NULL）。
+        let mut cfg = sample_cfg();
+        cfg.header_mapping = serde_json::from_value(json!({
+            "tax_no": "tax_no", "status": "status"
+        })).unwrap();
+        let cr_head = Map::new();
+        let deltas = json!({
+            "tax_no": { "old": "911", "new": "" },
+            "status": { "old": 1, "new": null }
+        });
+        let plan = plan_update(&cfg, &cr_head, &deltas, 1);
+        // 空串跳过（不更新）
+        assert!(plan.header_row.get("tax_no").is_none(), "空串 new 应跳过不更新");
+        // null 保留（显式清空）
+        assert!(plan.header_row.get("status").and_then(|v| v.as_null()).is_some(), "null new 应保留");
     }
 
     #[test]

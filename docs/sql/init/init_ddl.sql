@@ -3062,8 +3062,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_md_match_config_dict_rule ON md_match_confi
 CREATE        INDEX IF NOT EXISTS idx_md_match_config_dict      ON md_match_config (dict_code);
 
 -- 6. 匹配组/存活裁决
-DROP TABLE IF EXISTS md_match_group;
-CREATE TABLE md_match_group (
+DROP TABLE IF EXISTS md_merge_record;
+CREATE TABLE md_merge_record (
     id               BIGINT       NOT NULL,
     dict_code        VARCHAR(64)  NOT NULL,
     group_key        VARCHAR(256) NOT NULL,
@@ -3076,12 +3076,46 @@ CREATE TABLE md_match_group (
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-COMMENT ON TABLE  md_match_group IS '匹配组/存活裁决';
-COMMENT ON COLUMN md_match_group.id     IS '主键（应用层生成）';
-COMMENT ON COLUMN md_match_group.status IS 'pending/auto_merged/reviewed/rejected';
-CREATE INDEX IF NOT EXISTS idx_md_match_group_dict ON md_match_group (dict_code, status);
+COMMENT ON TABLE  md_merge_record IS '合并事务记录（管家确认合并的载体；承载 survivorship_log 存活留痕 + 状态流转。与 md_match_scan 职责分离：scan=系统扫描的嫌疑重复，group=确认执行的合并事务）';
+COMMENT ON COLUMN md_merge_record.id               IS '主键（应用层生成）';
+COMMENT ON COLUMN md_merge_record.dict_code        IS 'cm_* 字典码';
+COMMENT ON COLUMN md_merge_record.group_key        IS '合并组业务键，如 merge:{master_id}';
+COMMENT ON COLUMN md_merge_record.member_ids       IS '簇内记录 id 数组 [master_id, ...victim_ids]';
+COMMENT ON COLUMN md_merge_record.master_id        IS '主记录 id（合并后保留的一方）';
+COMMENT ON COLUMN md_merge_record.score            IS '合并时簇内最高匹配分（0-100）';
+COMMENT ON COLUMN md_merge_record.decision         IS '裁决结果 AutoMerge/Review（查重阶段判定）';
+COMMENT ON COLUMN md_merge_record.survivorship_log IS '存活留痕 JSONB {fields:[{field,from,value}],reparented:{明细表:[行id]}}';
+COMMENT ON COLUMN md_merge_record.status           IS 'pending/reviewed/rejected/unmerged（待审/已合并/已驳回/已还原）';
+CREATE INDEX IF NOT EXISTS idx_md_merge_record_dict ON md_merge_record (dict_code, status);
 
--- 7. 分发订阅
+-- 7. 查重发现项（全库扫描结果载体，管家评审用；与 md_merge_record 职责分离）
+DROP TABLE IF EXISTS md_match_scan;
+CREATE TABLE md_match_scan (
+    id            BIGINT       NOT NULL,
+    dict_code     VARCHAR(64)  NOT NULL,
+    cluster_key   VARCHAR(255) NOT NULL,
+    cluster_hash  VARCHAR(64)  NOT NULL,
+    member_ids    JSONB        NOT NULL,
+    member_count  SMALLINT     NOT NULL,
+    max_score     SMALLINT     NOT NULL,
+    status        VARCHAR(16)  NOT NULL DEFAULT 'pending',
+    scaned_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    resolved_at   TIMESTAMPTZ,
+    resolved_by   BIGINT,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_match_scan IS '查重发现项（系统扫描出的重复簇，管家评审载体）';
+COMMENT ON COLUMN md_match_scan.id            IS '主键（应用层生成）';
+COMMENT ON COLUMN md_match_scan.cluster_key   IS '簇键标识，如 credit_code:C1';
+COMMENT ON COLUMN md_match_scan.cluster_hash  IS 'member_ids 升序后 hash，去重用';
+COMMENT ON COLUMN md_match_scan.member_ids    IS '簇内记录 id 数组 [id1,id2,...]';
+COMMENT ON COLUMN md_match_scan.max_score     IS '簇内最高配对分';
+COMMENT ON COLUMN md_match_scan.status        IS 'pending/resolved/ignored';
+CREATE INDEX IF NOT EXISTS idx_md_match_scan_dict_status ON md_match_scan (dict_code, status);
+CREATE INDEX IF NOT EXISTS idx_md_match_scan_hash        ON md_match_scan (dict_code, cluster_hash);
+
+-- 8. 分发订阅
 DROP TABLE IF EXISTS md_subscription;
 CREATE TABLE md_subscription (
     id          BIGINT       NOT NULL,
@@ -3098,7 +3132,7 @@ COMMENT ON TABLE  md_subscription IS '分发订阅配置';
 COMMENT ON COLUMN md_subscription.id      IS '主键（应用层生成）';
 COMMENT ON COLUMN md_subscription.channel IS '通道 event/rest/batch';
 
--- 8. 分发事件日志（激活器激活成功时写入；主键 VARCHAR(64) snowflake，seq 为有序拉取列非主键）
+-- 9. 分发事件日志（激活器激活成功时写入；主键 VARCHAR(64) snowflake，seq 为有序拉取列非主键）
 DROP TABLE IF EXISTS md_event_log;
 CREATE TABLE md_event_log (
     id          VARCHAR(64)  NOT NULL,

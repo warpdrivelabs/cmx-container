@@ -32,10 +32,12 @@ impl ModuleRoutes for RuleModule {
                 post(handler::toggle_rule_status),
             )
             // 互斥对象管理
+            // 向规则批量添加互斥对象（角色 / 权限等）
             .route(
                 "/iam/exclusion-rules/items/add",
                 post(handler::add_rule_items),
             )
+            // 从规则移除互斥对象
             .route(
                 "/iam/exclusion-rules/items/remove",
                 post(handler::remove_rule_items),
