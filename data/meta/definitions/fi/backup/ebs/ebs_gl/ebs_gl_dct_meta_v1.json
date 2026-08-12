@@ -1,0 +1,1653 @@
+{
+  "moduleMeta": {
+    "metaName": "Oracle EBS GL 会计凭证数据字典元数据",
+    "metaKind": "DCT",
+    "moduleCode": "ebs_gl",
+    "moduleName": "总账(Oracle EBS)",
+    "version": 1,
+    "designStyle": "separate-dictionary-tables",
+    "remark": "Oracle E-Business Suite GL 模块会计凭证(GL_JE_BATCHES/HEADERS/LINES)所引用的全部主数据与配置字典:账本组织(账本Ledger/法律实体/经营单位/库存组织)、会计弹性域(结构/段/值集/段值/代码组合CCID/自然账户类型)、凭证控制(来源/类别/余额类型/币种类别)、币种期间(币种/汇率类型/会计日历/会计期间)、税务往来(税率/供应商/客户/付款条件/人员/国家)。通用列引用 base_dct_meta_v1.json。"
+  },
+  "baseDctMetaRef": {
+    "file": "base_dct_meta_v1.json",
+    "version": 1,
+    "fieldSets": [
+      "dictionaryCommonFields",
+      "dictionaryCommonNoIDFields",
+      "dictionaryHierarchyFields",
+      "dictionaryAuditFields",
+      "dictionaryScopeFields",
+      "dictionaryEffectiveFields",
+      "dictionaryDisableFields",
+      "dictionarySystemFields",
+      "relationCommonFields"
+    ],
+    "remark": "复用 base_dct_meta_v1.json 中的基础 fieldSet;各字典表的 *FieldSet 字段均引用该文件。"
+  },
+  "dictionaryTableConventions": {
+    "remark": "EBS GL 架构核心:账本(Ledger,4C=科目表/日历/币种/会计方法)+ 会计弹性域(段 bound 值集,段值组成代码组合 CCID)+ 凭证来源/类别。dictCode 为引用编码;通用列走 *FieldSet,fields 仅 EBS 业务扩展列。"
+  },
+  "dictionaryTables": [
+    {
+      "dictMeta": {
+        "dictCode": "coa_structure",
+        "dictName": "会计弹性域结构",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_coa_structure",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Accounting Flexfield Structure(FND_ID_FLEX_STRUCTURES)：定义科目表由哪些段(公司-成本中心-科目-…)组成"
+      },
+      "fields": [
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "segment_count",
+          "name": "segment_count",
+          "caption": {
+            "zh_CN": "段数量"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "structure_code",
+          "name": "structure_code",
+          "caption": {
+            "zh_CN": "结构代码"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "ledger",
+        "dictName": "账本(Ledger/SOB)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_ledger",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Ledger(R12 GL_LEDGERS,11i Set of Books)：4C 配置(科目表/日历/币种/会计方法),记账主体"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "coa_structure",
+          "refField": "code",
+          "displayField": "name",
+          "id": "coa_structure_id",
+          "name": "coa_structure_id",
+          "caption": {
+            "zh_CN": "会计弹性域结构"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "accounting_calendar",
+          "refField": "code",
+          "displayField": "name",
+          "id": "accounting_calendar",
+          "name": "accounting_calendar",
+          "caption": {
+            "zh_CN": "会计日历"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 15,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "currency",
+          "name": "currency",
+          "caption": {
+            "zh_CN": "功能币种"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "accounting_method",
+          "name": "accounting_method",
+          "caption": {
+            "zh_CN": "会计核算方法(SLA)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "ledger_category",
+          "name": "ledger_category",
+          "caption": {
+            "zh_CN": "账本类别(主/从/报告)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "retained_earnings_ccid",
+          "name": "retained_earnings_ccid",
+          "caption": {
+            "zh_CN": "留存收益科目组合"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "legal_entity",
+        "dictName": "法律实体",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_legal_entity",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Legal Entity(XLE_ENTITY_PROFILES)：法律纳税主体,挂在账本下"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "ledger",
+          "refField": "code",
+          "displayField": "name",
+          "id": "ledger_id",
+          "name": "ledger_id",
+          "caption": {
+            "zh_CN": "所属账本"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 3,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "country",
+          "id": "country",
+          "name": "country",
+          "caption": {
+            "zh_CN": "国家"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 60,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "registration_no",
+          "name": "registration_no",
+          "caption": {
+            "zh_CN": "法律注册号"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 60,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_registration_no",
+          "name": "tax_registration_no",
+          "caption": {
+            "zh_CN": "税务登记号"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "operating_unit",
+        "dictName": "经营单位(OU)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_operating_unit",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Operating Unit(HR_OPERATING_UNITS)：多组织 MOAC 的事务处理边界(AP/AR/采购等子模块)"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "ledger",
+          "refField": "code",
+          "displayField": "name",
+          "id": "ledger_id",
+          "name": "ledger_id",
+          "caption": {
+            "zh_CN": "所属账本"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "legal_entity",
+          "refField": "code",
+          "displayField": "name",
+          "id": "legal_entity_id",
+          "name": "legal_entity_id",
+          "caption": {
+            "zh_CN": "默认法律实体"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "business_group",
+          "name": "business_group",
+          "caption": {
+            "zh_CN": "业务组"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "inventory_org",
+        "dictName": "库存组织",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_inventory_org",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Inventory Organization(ORG_ORGANIZATION_DEFINITIONS)：物料/成本核算组织"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "operating_unit",
+          "refField": "code",
+          "displayField": "name",
+          "id": "operating_unit_id",
+          "name": "operating_unit_id",
+          "caption": {
+            "zh_CN": "所属经营单位"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "org_type",
+          "name": "org_type",
+          "caption": {
+            "zh_CN": "组织类型"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "flex_segment",
+        "dictName": "弹性域段",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_flex_segment",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Flexfield Segment(FND_ID_FLEX_SEGMENTS)：科目表的一个段(公司/成本中心/科目/产品/区域…),绑定一个值集"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "coa_structure",
+          "refField": "code",
+          "displayField": "name",
+          "id": "coa_structure_id",
+          "name": "coa_structure_id",
+          "caption": {
+            "zh_CN": "所属弹性域结构"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "segment_num",
+          "name": "segment_num",
+          "caption": {
+            "zh_CN": "段序号"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "column_name",
+          "name": "column_name",
+          "caption": {
+            "zh_CN": "物理列(SEGMENT1..n)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "value_set",
+          "refField": "code",
+          "displayField": "name",
+          "id": "value_set_id",
+          "name": "value_set_id",
+          "caption": {
+            "zh_CN": "绑定值集"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "qualifier",
+          "name": "qualifier",
+          "caption": {
+            "zh_CN": "段限定符(平衡段/自然账户/成本中心)"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "value_set",
+        "dictName": "值集",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_value_set",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Value Set(FND_FLEX_VALUE_SETS)：段的取值范围与校验类型(独立/从属/表校验)"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "validation_type",
+          "name": "validation_type",
+          "caption": {
+            "zh_CN": "校验类型(独立/从属/表/无)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "format_type",
+          "name": "format_type",
+          "caption": {
+            "zh_CN": "格式(字符/数字)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 3,
+          "intDigits": 3,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "max_length",
+          "name": "max_length",
+          "caption": {
+            "zh_CN": "最大长度"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{1,60}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "flex_value",
+        "dictName": "弹性域段值",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "ebs_flex_value",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "EBS Flexfield Value(FND_FLEX_VALUES)：某值集下的具体取值(如公司01,科目1110),可父子汇总(汇总科目)"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 60,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "value_set",
+          "refField": "code",
+          "displayField": "name",
+          "id": "value_set_id",
+          "name": "value_set_id",
+          "caption": {
+            "zh_CN": "所属值集"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "summary_flag",
+          "name": "summary_flag",
+          "caption": {
+            "zh_CN": "是否汇总值"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "natural_account_type",
+          "refField": "code",
+          "displayField": "name",
+          "id": "account_type",
+          "name": "account_type",
+          "caption": {
+            "zh_CN": "账户类型(资产A/负债L/所有者权益O/收入R/费用E)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "allow_posting",
+          "name": "allow_posting",
+          "caption": {
+            "zh_CN": "允许过账(明细值)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "allow_budgeting",
+          "name": "allow_budgeting",
+          "caption": {
+            "zh_CN": "允许预算"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_-]{1,40}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "code_combination",
+        "dictName": "会计科目代码组合(CCID)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_code_combination",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Code Combination(GL_CODE_COMBINATIONS,CCID)：所有弹性域段值的合法组合,凭证行 CODE_COMBINATION_ID 指向它"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "coa_structure",
+          "refField": "code",
+          "displayField": "name",
+          "id": "coa_structure_id",
+          "name": "coa_structure_id",
+          "caption": {
+            "zh_CN": "弹性域结构"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 240,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "concat_segments",
+          "name": "concat_segments",
+          "caption": {
+            "zh_CN": "段拼接串(01-000-1110-…)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 40,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "flex_value",
+          "refField": "code",
+          "displayField": "name",
+          "id": "company_segment",
+          "name": "company_segment",
+          "caption": {
+            "zh_CN": "公司段值"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 40,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "flex_value",
+          "refField": "code",
+          "displayField": "name",
+          "id": "cost_center_segment",
+          "name": "cost_center_segment",
+          "caption": {
+            "zh_CN": "成本中心段值"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 40,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "flex_value",
+          "refField": "code",
+          "displayField": "name",
+          "id": "account_segment",
+          "name": "account_segment",
+          "caption": {
+            "zh_CN": "自然账户段值"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "enabled_flag",
+          "name": "enabled_flag",
+          "caption": {
+            "zh_CN": "是否启用"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "allow_posting",
+          "name": "allow_posting",
+          "caption": {
+            "zh_CN": "允许过账"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_.-]{1,120}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "natural_account_type",
+        "dictName": "自然账户类型",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "ebs_natural_account_type",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS 自然账户类型(GL_CODE_COMBINATIONS.ACCOUNT_TYPE)：A 资产/L 负债/O 所有者权益/R 收入/E 费用"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[ALORE]$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "journal_source",
+        "dictName": "凭证来源",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_journal_source",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Journal Source(GL_JE_SOURCES):Manual手工/Payables应付/Receivables应收/Assets资产/Inventory等,标识凭证来自哪个子模块"
+      },
+      "fields": [
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "import_flag",
+          "name": "import_flag",
+          "caption": {
+            "zh_CN": "可导入"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "freeze_journals",
+          "name": "freeze_journals",
+          "caption": {
+            "zh_CN": "冻结来自该来源的凭证"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_ ]{1,25}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "journal_category",
+        "dictName": "凭证类别",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_journal_category",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Journal Category(GL_JE_CATEGORIES):Adjustment调整/Accrual应计/Payments付款/Purchase Invoices采购发票等业务分类"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_ ]{1,25}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "balance_type",
+        "dictName": "余额类型",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "ebs_balance_type",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Balance Type(ACTUAL_FLAG):A 实际/B 预算/E 编制(Encumbrance承诺)"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[ABE]$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "currency_type",
+        "dictName": "凭证币种类别",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "ebs_currency_type",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS 凭证币种类别:Entered输入币/Functional功能币/STAT统计"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z_]{1,16}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "currency",
+        "dictName": "币种",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_currency",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Currency(FND_CURRENCIES):ISO 币种;凭证输入币与账本功能币"
+      },
+      "fields": [
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "precision",
+          "name": "precision",
+          "caption": {
+            "zh_CN": "精度(小数位)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "symbol",
+          "name": "symbol",
+          "caption": {
+            "zh_CN": "符号"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z]{3}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "conversion_rate_type",
+        "dictName": "汇率类型",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "ebs_conversion_rate_type",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Conversion Rate Type(GL_DAILY_CONVERSION_TYPES):Corporate公司/Spot即期/User用户/EMU"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_ ]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "accounting_calendar",
+        "dictName": "会计日历",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_accounting_calendar",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Accounting Calendar(GL_PERIOD_SETS):定义期间集(月历/4-4-5等),账本引用"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 15,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "period_type",
+          "name": "period_type",
+          "caption": {
+            "zh_CN": "期间类型(月/季/周)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "periods_per_year",
+          "name": "periods_per_year",
+          "caption": {
+            "zh_CN": "每年期间数"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{1,15}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "gl_period",
+        "dictName": "会计期间",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "ebs_gl_period",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "EBS GL Period(GL_PERIODS,期间状态 GL_PERIOD_STATUSES):会计年度→期间(含调整期),自分级;凭证 PERIOD_NAME 来源"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 15,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "accounting_calendar",
+          "refField": "code",
+          "displayField": "name",
+          "id": "accounting_calendar_id",
+          "name": "accounting_calendar_id",
+          "caption": {
+            "zh_CN": "所属会计日历"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 15,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "period_name",
+          "name": "period_name",
+          "caption": {
+            "zh_CN": "期间名(JAN-26)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": false,
+          "dimType": "dimension",
+          "id": "period_year",
+          "name": "period_year",
+          "caption": {
+            "zh_CN": "会计年度"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "period_num",
+          "name": "period_num",
+          "caption": {
+            "zh_CN": "期间号"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "quarter_num",
+          "name": "quarter_num",
+          "caption": {
+            "zh_CN": "季度号"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "start_date",
+          "name": "start_date",
+          "caption": {
+            "zh_CN": "期间起始日"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "end_date",
+          "name": "end_date",
+          "caption": {
+            "zh_CN": "期间截止日"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "adjustment_period",
+          "name": "adjustment_period",
+          "caption": {
+            "zh_CN": "是否调整期"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "period_status",
+          "name": "period_status",
+          "caption": {
+            "zh_CN": "期间状态(O开/C关/F未来可输/P永久关)"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9-]{1,15}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "tax_rate",
+        "dictName": "税率代码",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_tax_rate",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS E-Business Tax Rate(ZX_RATES_B):税种/税率/税科目,凭证及子模块发票引用"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_regime",
+          "name": "tax_regime",
+          "caption": {
+            "zh_CN": "税务体系(Regime)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_type",
+          "name": "tax_type",
+          "caption": {
+            "zh_CN": "税种(进项/销项)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 7,
+          "intDigits": 5,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_rate_percent",
+          "name": "tax_rate_percent",
+          "caption": {
+            "zh_CN": "税率(%)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_account_ccid",
+          "name": "tax_account_ccid",
+          "caption": {
+            "zh_CN": "税额科目组合"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "supplier",
+        "dictName": "供应商",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_supplier",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Supplier(AP_SUPPLIERS,R12 合并到 TCA):应付来源凭证的往来对象"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "vendor_type",
+          "name": "vendor_type",
+          "caption": {
+            "zh_CN": "供应商类型"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "code_combination",
+          "refField": "code",
+          "displayField": "name",
+          "id": "liability_ccid",
+          "name": "liability_ccid",
+          "caption": {
+            "zh_CN": "默认负债科目组合"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "payment_terms",
+          "refField": "code",
+          "displayField": "name",
+          "id": "payment_terms",
+          "name": "payment_terms",
+          "caption": {
+            "zh_CN": "付款条件"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 60,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_registration_no",
+          "name": "tax_registration_no",
+          "caption": {
+            "zh_CN": "税务登记号"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_-]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "customer",
+        "dictName": "客户",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_customer",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Customer(HZ_PARTIES/HZ_CUST_ACCOUNTS,TCA):应收来源凭证的往来对象"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "customer_type",
+          "name": "customer_type",
+          "caption": {
+            "zh_CN": "客户类型"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "code_combination",
+          "refField": "code",
+          "displayField": "name",
+          "id": "receivable_ccid",
+          "name": "receivable_ccid",
+          "caption": {
+            "zh_CN": "默认应收科目组合"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "payment_terms",
+          "refField": "code",
+          "displayField": "name",
+          "id": "payment_terms",
+          "name": "payment_terms",
+          "caption": {
+            "zh_CN": "付款条件"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "profile_class",
+          "name": "profile_class",
+          "caption": {
+            "zh_CN": "客户档案分类"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_-]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "payment_terms",
+        "dictName": "付款条件",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_payment_terms",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Payment Terms(AP_TERMS):账期与折扣,供应商/客户/发票引用"
+      },
+      "fields": [
+        {
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "net_due_days",
+          "name": "net_due_days",
+          "caption": {
+            "zh_CN": "净额到期天数"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 5,
+          "intDigits": 3,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "discount_percent",
+          "name": "discount_percent",
+          "caption": {
+            "zh_CN": "折扣率(%)"
+          }
+        },
+        {
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "discount_days",
+          "name": "discount_days",
+          "caption": {
+            "zh_CN": "折扣天数"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_ -]{1,50}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "employee",
+        "dictName": "人员",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "ebs_employee",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Employee/User:凭证创建人/过账人/审批人"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 60,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "department",
+          "name": "department",
+          "caption": {
+            "zh_CN": "部门"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "role",
+          "name": "role",
+          "caption": {
+            "zh_CN": "财务角色"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_-]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "country",
+        "dictName": "国家",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "ebs_country",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "EBS Territory(FND_TERRITORIES):ISO 国家代码"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 3,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "currency",
+          "name": "currency",
+          "caption": {
+            "zh_CN": "本国货币"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z]{2,3}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    }
+  ],
+  "updatedAt": "2026-06-16T00:00:00.000Z"
+}
