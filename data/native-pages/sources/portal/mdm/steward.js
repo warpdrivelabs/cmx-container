@@ -291,6 +291,14 @@ function bindHistoryDiff(scope) {
 }
 
 // ─── 操作 ─────────────────────────────────────────────────────────────────
+// 合并结果摘要文案（迁移/去重明细数，来自后端 MergeStats 响应）
+function mergeSummary(d) {
+  const r = (d && typeof d === 'object') ? d : {}
+  const rep = r.reparentedTotal ?? 0
+  const ded = r.dedupedTotal ?? 0
+  return (rep === 0 && ded === 0) ? '合并成功' : `合并成功：迁移 ${rep} 条明细，去重 ${ded} 条`
+}
+
 async function doFindingMerge() {
   const M = cmx()
   const scan = (state.findingDetail || {}).scan || {}
@@ -299,10 +307,10 @@ async function doFindingMerge() {
   const masterId = members[0].id
   const victimIds = members.slice(1).map((m) => m.id)
   // targetTable/surviveFields 不传，后端从 match_config 回填；survivorship 默认 master 优先
-  await apiPost('/api/mdm/merge-requests', {
+  const d = await apiPost('/api/mdm/merge-requests', {
     dictCode: state.dictCode, masterId, victimIds, scanId: scan.id,
   }, state.dbId)
-  M.cmxInfo?.('合并成功'); closeDiff(); state.findingDetail = null; await loadFindings(); refresh()
+  M.cmxInfo?.(mergeSummary(d)); closeDiff(); state.findingDetail = null; await loadFindings(); refresh()
 }
 async function doFindingIgnore(scanId) {
   const M = cmx()
@@ -327,10 +335,10 @@ async function doMerge() {
   const { survivorship, overrides } = collectRulings()
   const masterId = g.master_id
   const victimIds = (g.member_ids || []).filter((id) => id !== masterId)
-  await apiPost('/api/mdm/merge-requests', {
+  const d = await apiPost('/api/mdm/merge-requests', {
     dictCode: state.dictCode, masterId, victimIds, mergeId: g.id, survivorship, overrides,
   }, state.dbId)
-  M.cmxInfo?.('合并成功'); closeDiff(); state.detail = null; await loadGroups(); refresh()
+  M.cmxInfo?.(mergeSummary(d)); closeDiff(); state.detail = null; await loadGroups(); refresh()
 }
 async function doReject(id) {
   const M = cmx()

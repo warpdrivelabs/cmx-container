@@ -192,7 +192,7 @@ pub async fn mdm_merge_requests_create(
             "target_table 不能为空（body 未传且 match_config 无配置）",
         ));
     }
-    let line_tables: Vec<(String, String)> = line_tables(mm, &db_id, &body.dict_code).await?;
+    let line_tables = line_tables(mm, &db_id, &body.dict_code).await?;
     let operated_by = actor_id_i64(&svr_ctx);
 
     // 审查 C1：管家路径带 mergeId 复用 group（不新插）；否则新插 pending
@@ -239,7 +239,7 @@ pub async fn mdm_merge_requests_create(
 
     // 存活字段由 body.survive_fields 传入（来自查重规则）；空则 master 原值全保留
     let survive_fields: Vec<String> = body.survive_fields.clone();
-    let master_id = store::merge(
+    let stats = store::merge(
         mm,
         &db_id,
         &body.dict_code,
@@ -284,9 +284,12 @@ pub async fn mdm_merge_requests_create(
         }
     }
 
-    Ok(Json(ApiResp::ok(
-        json!({ "masterId": master_id, "matchGroupId": group_id }),
-    )))
+    Ok(Json(ApiResp::ok(json!({
+        "masterId": stats.master_id,
+        "matchGroupId": group_id,
+        "reparentedTotal": stats.reparented_total,
+        "dedupedTotal": stats.deduped_total,
+    }))))
 }
 
 /// 合并请求详情（红线 diff 用）。GET `?mergeId=`。返回 group + master + victims。

@@ -168,19 +168,35 @@ pub async fn delete_by_code(
     Ok(n)
 }
 
+/// 明细表清单条目（合并去重用，api 层组装后传给合并/还原服务）。
+///
+/// `dedup_keys` 由 api 层从 DCT `uniqueKeys` 去掉 `parent_field` 后推导；为空表示该表
+/// 不去重（合并时全部 reparent）。
+#[derive(Debug, Clone)]
+pub struct LineTableInfo {
+    /// 明细物理表名（如 cm_bank_account）。
+    pub table: String,
+    /// 外键列名（如 supplier_id）。
+    pub parent_field: String,
+    /// 去重业务键列名（如 ["account_no"]）；空 Vec=不去重。
+    pub dedup_keys: Vec<String>,
+}
+
 /// 按 target_dict 聚合所有激活映射的明细表清单（合并/还原 reparent 用）。
 ///
 /// 告诉合并引擎「这个主数据有哪些子表、子表通过哪个外键列挂在头表上」，以便 victim 的
 /// 明细行 reparent 到 master。数据源是 `cmx_mdm_activation.line_mappings`（JSONB 数组，
-/// 元素含 `{targetTable, parentIdField}`），按 `target_dict` 过滤所有激活配置聚合。
+/// 元素含 `{targetTable, parentIdField, targetDict}`），按 `target_dict` 过滤所有激活配置聚合。
 ///
-/// 一个 target_dict 可能被多个 activation 引用（create/update/block 各一条），各自带 line_mappings，
-/// 故按 `(table, field)` 去重。未配置明细或 line_mappings 非数组时返回空 Vec（合并不 reparent 明细）。
+/// 返回 `(明细表名, 外键列名, 明细字典码)` 三元组：target_dict 供调用方查 DCT uniqueKeys
+/// 推导去重键。一个 target_dict 可能被多个 activation 引用（create/update/block 各一条），
+/// 故按 `(table, field)` 去重（target_dict 取首次出现值，同表同列归属应一致）。
+/// 未配置明细或 line_mappings 非数组时返回空 Vec（合并不 reparent 明细）。
 pub async fn line_tables_for_dict(
     mm: &DatabaseManager,
     db_id: &str,
     dict_code: &str,
-) -> Result<Vec<(String, String)>, cmx_api_types::Error> {
+) -> Result<Vec<(String, String, String)>, cmx_api_types::Error> {
     let sql = "SELECT line_mappings FROM cmx_mdm_activation WHERE target_dict = $1 AND is_active = TRUE";
     let ds = mm
         .query_sql_with_datavalues(
@@ -193,7 +209,8 @@ pub async fn line_tables_for_dict(
         .await
         .map_err(|e| api_err_db(&format!("查 {dict_code} 明细表清单失败: {e}")))?;
     let schema = ds.schema.as_ref();
-    let mut out: Vec<(String, String)> = Vec::new();
+    // (table, parent_field, target_dict)；按 (table, parent_field) 去重
+    let mut out: Vec<(String, String, String)> = Vec::new();
     for row in &ds.rows {
         let mut v = row.to_json_value(schema);
         parse_jsonb_field(&mut v, "line_mappings");
@@ -203,11 +220,12 @@ pub async fn line_tables_for_dict(
         for item in items {
             let table = item.get("targetTable").and_then(|x| x.as_str()).unwrap_or("");
             let field = item.get("parentIdField").and_then(|x| x.as_str()).unwrap_or("");
-            if !table.is_empty() && !field.is_empty() {
-                let pair = (table.to_string(), field.to_string());
-                if !out.contains(&pair) {
-                    out.push(pair);
-                }
+            let tdict = item.get("targetDict").and_then(|x| x.as_str()).unwrap_or("");
+            if !table.is_empty() && !field.is_empty()
+                && !out.iter().any(|(t, f, _)| t == table && f == field)
+            {
+                // 按 (table, field) 去重（同一明细表字典码应一致，取首次）
+                out.push((table.to_string(), field.to_string(), tdict.to_string()));
             }
         }
     }

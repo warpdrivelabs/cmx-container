@@ -18,7 +18,7 @@ use cmx_mdm_model::match_algo::MatchRecord;
 use serde_json::{Map, Value};
 
 pub use activate::activate;
-pub use merge::merge;
+pub use merge::{merge, MergeStats};
 pub use unmerge::unmerge;
 
 /// 取记录 `lifecycle_status` 字符串（缺省返回空串）。

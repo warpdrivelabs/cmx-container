@@ -306,6 +306,7 @@ mod tests {
                 order: vec![],
             }),
             code_rule: None,
+            unique_keys: vec![],
         }
     }
 

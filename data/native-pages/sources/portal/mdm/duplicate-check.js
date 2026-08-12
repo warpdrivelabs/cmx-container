@@ -518,6 +518,7 @@ function histDetailHtml() {
       <td>${from ? `<cmx-status-tag tone="${log.from === 'master' ? 'info' : (log.from === 'override' ? 'warning' : 'positive')}" variant="subtle" size="sm">${from}</cmx-status-tag>` : ''}</td></tr>`
   }).join('')
   const reparented = slog.reparented ? Object.entries(slog.reparented).map(([t, ids]) => `${t}: ${(ids || []).length} 行`).join('，') : ''
+  const deduped = slog.deduped ? Object.entries(slog.deduped).map(([t, ids]) => `${t}: ${(ids || []).length} 行`).join('，') : ''
   const lblF = state.dictMeta ? (state.dictMeta.labelField || 'name') : 'name'
   const masterLabel = master[lblF] || master.id || ''
   const victimLabels = victims.map((v) => v[lblF] || v.id).join('、')
@@ -525,8 +526,17 @@ function histDetailHtml() {
     <div class="cmp-tip">合并详情：主记录「${masterLabel}」vs 被合并方（${victimLabels}）。来源列说明存活值取自 master/victim/override。</div>
     <table class="tbl"><thead><tr><th>字段</th><th>主记录</th><th>被合并方</th><th>存活来源</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">无字段差异</td></tr>'}</tbody></table>
     ${reparented ? `<div class="cmp-tip">明细行迁移：${reparented}</div>` : ''}
+    ${deduped ? `<div class="cmp-tip">明细去重（软删重复行）：${deduped}</div>` : ''}
   </div>`
 }
+// 合并结果摘要文案（迁移/去重明细数，来自后端 MergeStats 响应）
+function mergeSummary(d) {
+  const r = (d && typeof d === 'object') ? d : {}
+  const rep = r.reparentedTotal ?? 0
+  const ded = r.dedupedTotal ?? 0
+  return (rep === 0 && ded === 0) ? '合并成功' : `合并成功：迁移 ${rep} 条明细，去重 ${ded} 条`
+}
+
 const fmtTime = (s) => { if (!s) return ''; try { return new Date(s).toLocaleString('zh-CN', { hour12: false }) } catch { return s } }
 
 function viewHtml() {
@@ -867,11 +877,11 @@ async function doMerge() {
     message: `确认执行合并？\n\n保留为主记录(master)：${targetName}\n将被废弃标记已合并(victim)：${victims.join('、')}\n\n说明：被合并方可完整还原；主记录被合并带过来的字段值不会回退，如需修正请走变更单。`,
   })
   if (ok === false) return
-  await apiPost('/api/mdm/merge-requests', {
+  const d = await apiPost('/api/mdm/merge-requests', {
     dictCode: state.dictCode, masterId: Number(state.targetId), victimIds: state.victimIds,
     targetTable: r.targetTable, surviveFields: r.surviveFields,
   }, coord && coord.dbId)
-  M.cmxInfo?.('合并成功')
+  M.cmxInfo?.(mergeSummary(d))
   // 刷新候选（剔除已合并）+ 历史
   state.victimIds = []; state.selCand = null
   await runFind().catch(() => {})

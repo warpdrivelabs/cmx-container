@@ -90,6 +90,9 @@ pub struct DictView {
     pub spec: std::sync::Arc<cmx_biz::validation::TableSpec>,
     /// 编码规则挂载点声明（来自 dictMeta.codeRule，None=未配置编码引擎）。
     pub code_rule: Option<serde_json::Value>,
+    /// 业务唯一键清单（来自 dictionaryTables[i].uniqueKeys，如 `[["supplier_id","account_no"]]`）。
+    /// 合并去重用：去掉外键列后剩余字段即明细去重键。空 Vec=该表无声明唯一键（不去重）。
+    pub unique_keys: Vec<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -731,6 +734,7 @@ mod tests {
                 order: vec![],
             }),
             code_rule: None,
+            unique_keys: vec![],
         }
     }
 

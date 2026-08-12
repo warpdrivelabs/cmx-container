@@ -38,18 +38,45 @@ pub(crate) async fn resolve_dict_meta(dict_code: &str) -> Result<DictMeta> {
     dict_meta(&DctQuery::by_code(dict_code)).await
 }
 
-/// dict → 明细表清单（merge/undo 的明细 reparent 用）。
+/// dict → 明细表清单（含去重键，merge/undo 的明细 reparent + 去重用）。
 ///
-/// 从 `cmx_mdm_activation.line_mappings` 按 `target_dict` 聚合所有激活配置的明细表
-/// （元素含 `{targetTable, parentIdField}`），按 `(表名, 外键列)` 去重。
-/// 头表名由 [`resolve_dict_meta`].table_name 获取；本函数只返回明细表 reparent 映射。
-/// 返回元素为 `(明细表名, 外键列名)`；未配置明细的字典返回空 Vec（合并不 reparent）。
+/// 流程：从 `cmx_mdm_activation.line_mappings` 按 `target_dict` 聚合明细表
+/// `(table, parent_field, target_dict)`；再对每个 `target_dict` 调 [`resolve_dict_meta`] 读
+/// DCT `uniqueKeys`，去掉外键列（`parent_field`）后剩余字段即该表的去重业务键。
+/// 未注册字典或无 uniqueKeys 的表 `dedup_keys` 为空（合并不去重，全量 reparent）。
 pub(crate) async fn line_tables(
     mm: &DatabaseManager,
     db_id: &str,
     dict_code: &str,
-) -> Result<Vec<(String, String)>> {
-    store::line_tables_for_dict(mm, db_id, dict_code).await
+) -> Result<Vec<store::LineTableInfo>> {
+    let raw = store::line_tables_for_dict(mm, db_id, dict_code).await?;
+    let mut out = Vec::with_capacity(raw.len());
+    for (table, parent_field, target_dict) in raw {
+        // 从 DCT uniqueKeys 推导去重键；target_dict 缺失或未注册则不去重
+        let dedup_keys = if target_dict.is_empty() {
+            Vec::new()
+        } else {
+            resolve_dict_meta(&target_dict)
+                .await
+                .ok()
+                .map(|meta| dedup_keys_from(&meta.unique_keys, &parent_field))
+                .unwrap_or_default()
+        };
+        out.push(store::LineTableInfo { table, parent_field, dedup_keys });
+    }
+    Ok(out)
+}
+
+/// 从 uniqueKeys 推导明细去重键：取第一组唯一键，去掉外键列（parent_field）后剩余字段。
+///
+/// 如 cm_bank_account 的 `[["supplier_id","account_no"]]` 去掉 `supplier_id` → `["account_no"]`。
+/// 无 uniqueKeys 或只剩外键列时返回空 Vec（该表不去重）。
+fn dedup_keys_from(unique_keys: &[Vec<String>], parent_field: &str) -> Vec<String> {
+    unique_keys
+        .iter()
+        .next()
+        .map(|grp| grp.iter().filter(|k| *k != parent_field).cloned().collect())
+        .unwrap_or_default()
 }
 
 /// 查重规则默认值（从 md_match_config 按 dictCode 读）。

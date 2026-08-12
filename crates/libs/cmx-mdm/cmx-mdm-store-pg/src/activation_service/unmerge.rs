@@ -6,7 +6,7 @@ use cmx_database_pg::DatabaseManager;
 use serde_json::{json, Value};
 
 use crate::{
-    dct_accessor, error::api_err, match_store, md_accessor,
+    activation_store::LineTableInfo, dct_accessor, error::api_err, match_store, md_accessor,
 };
 
 /// unmerge：反向还原（victim merged→published、明细指回、xref active、group=unmerged）。
@@ -20,7 +20,7 @@ use crate::{
 /// * `head_table` - 目标头物理表。
 /// * `master_id` - 存活记录 id（审计留痕用）。
 /// * `victim_id` - 待还原的 victim 记录 id。
-/// * `line_tables` - 明细表 reparent 映射 `(表名, 外键列名)`，用于按 id 指回 victim。
+/// * `line_tables` - 明细表清单（[`LineTableInfo`]），用于还原 reparent + 去重软删。
 /// * `operated_by` - 操作人 id。
 /// * `match_group_id` - 合并请求 group id（→ unmerged）。
 ///
@@ -35,7 +35,7 @@ pub async fn unmerge(
     head_table: &str,
     master_id: i64,
     victim_id: i64,
-    line_tables: &[(String, String)],
+    line_tables: &[LineTableInfo],
     operated_by: i64,
     match_group_id: i64,
 ) -> Result<(), cmx_api_types::Error> {
@@ -77,7 +77,7 @@ async fn unmerge_inner(
     head_table: &str,
     master_id: i64,
     victim_id: i64,
-    line_tables: &[(String, String)],
+    line_tables: &[LineTableInfo],
     operated_by: i64,
     match_group_id: i64,
 ) -> Result<(), cmx_api_types::Error> {
@@ -97,19 +97,27 @@ async fn unmerge_inner(
         Some(v) => v,
         None => Value::Null,
     };
-    let reparented = slog
-        .get("reparented")
-        .cloned()
-        .unwrap_or(json!({}));
-    for (table, _parent_field) in line_tables {
+    let reparented = slog.get("reparented").cloned().unwrap_or(json!({}));
+    let deduped = slog.get("deduped").cloned().unwrap_or(json!({}));
+    for lt in line_tables {
+        let table = lt.table.as_str();
+        let pf = lt.parent_field.as_str();
+        // 还原 reparent：迁移到 master 的行指回 victim
         let ids: Vec<i64> = reparented
             .get(table)
             .and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_default();
         if !ids.is_empty() {
-            // parent_field 从 line_tables 取
-            let pf = line_tables.iter().find(|(t, _)| t == table).map(|(_, p)| p.as_str()).unwrap_or("");
             dct_accessor::reparent_lines_by_ids(mm, db_id, txn_id, table, pf, &ids, victim_id)
+                .await?;
+        }
+        // 还原 dedup：去重时软删(merged)的行 CAS 回 published（parent 仍是 victim，无需 reparent）
+        let dids: Vec<i64> = deduped
+            .get(table)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+        if !dids.is_empty() {
+            dct_accessor::set_lifecycle_by_ids(mm, db_id, txn_id, table, &dids, "merged", "published")
                 .await?;
         }
     }

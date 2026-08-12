@@ -33,6 +33,9 @@ pub struct DictMeta {
     pub code_rule: Option<Value>,
     /// 已投影的列对象数组（每个元素含 name/caption/dataType/isPrimaryKey/...）。
     pub columns: Vec<Value>,
+    /// 业务唯一键清单（投影自 DictView.unique_keys，如 `[["supplier_id","account_no"]]`）。
+    /// 合并明细去重时用：去掉外键列后剩余字段即去重键。
+    pub unique_keys: Vec<Vec<String>>,
 }
 
 impl DictMeta {
@@ -297,6 +300,7 @@ mod tests {
                 serde_json::json!({"name": "id", "dataType": "BIGINT"}),
                 serde_json::json!({"name": "code", "dataType": "VARCHAR"}),
             ],
+            unique_keys: vec![],
         };
         assert_eq!(meta.column_names(), vec!["id", "code"]);
     }
@@ -315,6 +319,7 @@ mod tests {
             self_hierarchy: true,
             code_rule: None,
             columns: vec![],
+            unique_keys: vec![],
         };
         let v = serde_json::to_value(&meta).unwrap();
         assert_eq!(v.get("dictCode").unwrap().as_str(), Some("x"));

@@ -349,6 +349,7 @@ pub async fn dict_meta(q: &DctQuery) -> Result<DictMeta> {
         self_hierarchy: view.self_hierarchy,
         code_rule: view.code_rule,
         columns,
+        unique_keys: view.unique_keys.clone(),
     })
 }
 
@@ -447,7 +448,28 @@ pub(crate) async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictV
         pk,
         spec,
         code_rule: dm.get("codeRule").cloned(),
+        unique_keys: parse_unique_keys(t),
     })
+}
+
+/// 解析字典表定义的 uniqueKeys（`[["supplier_id","account_no"]]` 形态）。
+///
+/// 数据源是 `dictionaryTables[i].uniqueKeys`（与 dictMeta 同级的数组），供合并去重推导
+/// 去重键：调用方去掉外键列后剩余字段即为该明细表的去重业务键。缺失或非数组时返回空 Vec。
+fn parse_unique_keys(t: &Value) -> Vec<Vec<String>> {
+    t.get("uniqueKeys")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|grp| grp.as_array())
+                .map(|grp| {
+                    grp.iter()
+                        .filter_map(|f| f.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// 按显示约定重排列顺序：baseFieldSet（Common 字段集）置前、auditFieldSet（Audit 字段集）
