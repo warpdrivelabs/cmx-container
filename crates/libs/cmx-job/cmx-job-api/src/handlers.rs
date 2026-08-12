@@ -12,8 +12,8 @@ use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::{ApiResp, CmxAppState, Result};
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, CmxAppState, Result};
 
 use cmx_job_core::{
     ControlOutcome, Job, JobOrigin, JobStatus, SubmitRequest, manager as job_manager,
@@ -24,7 +24,7 @@ use cmx_job_core::{
 /// 取全局 JobManager；未初始化返回 503。
 fn require_manager() -> Result<&'static cmx_job_core::JobManager> {
     job_manager().ok_or_else(|| {
-        cmx_api::Error::ServiceUnavailable("任务中心未初始化（init_job_subsystem 未调用）".into())
+        cmx_api_core::Error::ServiceUnavailable("任务中心未初始化（init_job_subsystem 未调用）".into())
     })
 }
 
@@ -93,7 +93,7 @@ fn kinds_meta_json(mgr: &cmx_job_core::JobManager) -> Value {
 /// 解析路径里的 job id（非法 → 400）。
 fn parse_id(raw: &str) -> Result<i64> {
     raw.parse::<i64>()
-        .map_err(|_| cmx_api::Error::BadRequest(format!("非法作业 id: {raw}")))
+        .map_err(|_| cmx_api_core::Error::BadRequest(format!("非法作业 id: {raw}")))
 }
 
 // ───────────────────────── 提交 / 查询 ─────────────────────────
@@ -116,8 +116,8 @@ pub async fn submit_job(
         .submit(req, JobOrigin::Frontend { user })
         .await
         .map_err(|e| match e.code {
-            409 => cmx_api::Error::Conflict(e.message),   // 单例约束：已有活跃实例
-            _ => cmx_api::Error::BadRequest(e.message),
+            409 => cmx_api_core::Error::Conflict(e.message),   // 单例约束：已有活跃实例
+            _ => cmx_api_core::Error::BadRequest(e.message),
         })?;
     Ok(Json(ApiResp::ok(json!({ "id": id.to_string() }))))
 }
@@ -162,7 +162,7 @@ pub async fn get_job(
     let id = parse_id(&id)?;
     match mgr.get(id).await {
         Some(j) => Ok(Json(ApiResp::ok(job_json(&j, mgr)))),
-        None => Err(cmx_api::Error::NotFound(format!("作业 {id} 不存在"))),
+        None => Err(cmx_api_core::Error::NotFound(format!("作业 {id} 不存在"))),
     }
 }
 
@@ -316,7 +316,7 @@ pub async fn get_history(
     let id = parse_id(&id)?;
     match mgr.get_history(id).await {
         Some(j) => Ok(Json(ApiResp::ok(job_json(&j, mgr)))),
-        None => Err(cmx_api::Error::NotFound(format!("历史作业 {id} 不存在"))),
+        None => Err(cmx_api_core::Error::NotFound(format!("历史作业 {id} 不存在"))),
     }
 }
 

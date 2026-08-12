@@ -9,8 +9,8 @@
 
 use axum::Router;
 
-use cmx_api::CmxAppState;
-use cmx_api::routes::traits::ModuleRoutes;
+use cmx_api_core::CmxAppState;
+use cmx_api_core::routes::traits::ModuleRoutes;
 
 // 引擎定时器 poller 由 core 提供；main.rs 直接调 cmx_flow_api::spawn_timer_poller()。
 pub use cmx_flow_app::spawn_timer_poller;

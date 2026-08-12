@@ -18,7 +18,7 @@ cmx-rpt-store-pg = { workspace = true }
 cmx-rpt-formula = { workspace = true }
 # 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / routes::traits::ModuleRoutes /
 #   ApiResp/Result/Error）。单向依赖：cmx-rpt-api → cmx-api。
-cmx-api = { workspace = true }
+cmx-api-core = { workspace = true }
 
 # Web 框架（handler 提取器 + Router + 409 裸响应）
 axum = { workspace = true }

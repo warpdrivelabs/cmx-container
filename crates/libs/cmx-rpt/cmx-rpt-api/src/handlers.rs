@@ -9,9 +9,9 @@ use axum::http::HeaderMap;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use cmx_api::CmxAppState;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::{ApiResp, Result};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, Result};
 
 use cmx_rpt_model::{CreateVersionBody, LayoutQuery, ReportDetailQuery, ReportListQuery};
 use cmx_rpt_store_pg as store;

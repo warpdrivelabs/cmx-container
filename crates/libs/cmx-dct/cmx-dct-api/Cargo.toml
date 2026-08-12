@@ -14,7 +14,7 @@ authors.workspace = true
 # 内部依赖 - DCT 持久化/服务层（场景入口 dict_meta/dict_search/dict_upsert/... + DctQuery/BatchConflictMode re-export）
 cmx-dct-store-pg = { workspace = true }
 # 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / ModuleRoutes / ApiResp/Result/Error）
-cmx-api = { workspace = true }
+cmx-api-core = { workspace = true }
 # 内部依赖 - 业务错误码（Violation：校验失败结构化响应）
 cmx-biz = { workspace = true }
 

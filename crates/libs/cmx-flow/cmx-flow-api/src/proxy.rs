@@ -21,8 +21,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::any;
 use axum::Router;
 
-use cmx_api::CmxAppState;
-use cmx_api::routes::traits::ModuleRoutes;
+use cmx_api_core::CmxAppState;
+use cmx_api_core::routes::traits::ModuleRoutes;
 
 /// 反代模块：持远程 flow-server 基址 + 出站服务凭证 + 复用的 HTTP 客户端。
 #[derive(Clone)]

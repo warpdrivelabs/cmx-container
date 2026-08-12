@@ -13,7 +13,7 @@ authors.workspace = true
 # 内部依赖 - 任务中心内核（JobManager 单例 + 事件 + 模型）
 cmx-job-core = { workspace = true }
 # 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / routes::traits::ModuleRoutes / ApiResp/Result/Error）
-cmx-api = { workspace = true }
+cmx-api-core = { workspace = true }
 
 # Web 框架（handler 提取器 + Router + SSE）
 axum = { workspace = true }

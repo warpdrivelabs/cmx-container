@@ -19,8 +19,11 @@
 //! 零改动解析。
 
 // —— 从 cmx-api 迁入的骨架模块 ——
+pub mod actor;
 pub mod app_state;
+pub mod db_id;
 pub mod middleware;
+pub mod msgpack;
 pub mod rest;
 pub mod routes;
 

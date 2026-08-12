@@ -22,6 +22,8 @@ cmx-api-types = { workspace = true }
 
 # —— rest/handler 必须 ——
 cmx-database = { workspace = true }
+# —— db_id.rs 用（PG 库路由回退，infra 非 business）——
+cmx-database-pg = { workspace = true }
 modql = { workspace = true }
 
 # —— mw_auth（OAuth2Policy/Registry 具体类型）/ app_state（IamState/storage_service）——
@@ -37,6 +39,8 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }
+# msgpack.rs 二进制信封编码
+rmp = { workspace = true }
 
 # —— CRUD 宏的 #[utoipa::path] 属性 ——
 utoipa = { workspace = true }

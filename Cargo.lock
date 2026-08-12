@@ -939,12 +939,14 @@ dependencies = [
  "cmx-auth",
  "cmx-core",
  "cmx-database",
+ "cmx-database-pg",
  "cmx-iam",
  "cmx-storage",
  "cmx-traits",
  "cmx-utils",
  "modql",
  "regex",
+ "rmp",
  "serde",
  "serde_json",
  "tower-http",
@@ -1119,7 +1121,7 @@ version = "0.1.12"
 dependencies = [
  "async-trait",
  "axum",
- "cmx-api",
+ "cmx-api-core",
  "cmx-api-types",
  "cmx-code-model",
  "cmx-core",
@@ -1272,7 +1274,7 @@ version = "0.1.12"
 dependencies = [
  "axum",
  "bytes",
- "cmx-api",
+ "cmx-api-core",
  "cmx-biz",
  "cmx-dct-store-pg",
  "futures",
@@ -1339,7 +1341,7 @@ version = "0.1.12"
 dependencies = [
  "axum",
  "bytes",
- "cmx-api",
+ "cmx-api-core",
  "cmx-biz",
  "cmx-core",
  "cmx-database",
@@ -1419,7 +1421,7 @@ name = "cmx-flow-api"
 version = "0.1.12"
 dependencies = [
  "axum",
- "cmx-api",
+ "cmx-api-core",
  "cmx-flow-app",
  "cmx-traits",
  "reqwest",
@@ -1589,7 +1591,7 @@ name = "cmx-job-api"
 version = "0.1.12"
 dependencies = [
  "axum",
- "cmx-api",
+ "cmx-api-core",
  "cmx-job-core",
  "futures",
  "serde",
@@ -1672,7 +1674,7 @@ name = "cmx-mdm-api"
 version = "0.1.12"
 dependencies = [
  "axum",
- "cmx-api",
+ "cmx-api-core",
  "cmx-biz",
  "cmx-database-pg",
  "cmx-dct-store-pg",
@@ -1738,7 +1740,7 @@ name = "cmx-model-api"
 version = "0.1.12"
 dependencies = [
  "axum",
- "cmx-api",
+ "cmx-api-core",
  "cmx-api-types",
  "cmx-core",
  "cmx-model-deploy",
@@ -2031,7 +2033,7 @@ name = "cmx-rpt-api"
 version = "0.1.12"
 dependencies = [
  "axum",
- "cmx-api",
+ "cmx-api-core",
  "cmx-rpt-formula",
  "cmx-rpt-model",
  "cmx-rpt-store-pg",

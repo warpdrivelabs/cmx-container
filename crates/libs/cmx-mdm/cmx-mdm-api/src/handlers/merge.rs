@@ -14,11 +14,11 @@ use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use serde_json::{json, Value};
 
-use cmx_api::CmxAppState;
-use cmx_api::actor::actor_id_i64;
-use cmx_api::db_id::resolve_db_id_from_headers;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::{ApiResp, Result};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::actor::actor_id_i64;
+use cmx_api_core::db_id::resolve_db_id_from_headers;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, Result};
 
 use cmx_database_pg::{get_default_pg_db_manager, DatabaseManager};
 use cmx_mdm_model::survivorship::SurvivorRule;

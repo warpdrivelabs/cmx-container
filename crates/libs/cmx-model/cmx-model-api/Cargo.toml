@@ -9,7 +9,7 @@ authors.workspace = true
 
 [dependencies]
 # 内部依赖 - API 框架（ModuleRoutes trait + ApiResp + CmxAppState + CmxSvrContext）
-cmx-api = { workspace = true }
+cmx-api-core = { workspace = true }
 # 内部依赖 - 模型中心元数据层（definitions / flexible_combination）
 cmx-model-meta = { workspace = true }
 # 内部依赖 - 模型中心部署层（db_state / init / deploy）

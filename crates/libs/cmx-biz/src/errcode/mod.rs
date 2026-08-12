@@ -358,3 +358,15 @@ mod tests {
         );
     }
 }
+
+/// 构造校验失败响应：`{code:422, msg, data:{violations:[...]}}`（结构化，前端逐行逐列高亮）。
+///
+/// doc/dct 等回存 handler 在 changeset 校验失败时统一调用，保证 422 信封形态一致。
+/// 从 cmx-api/src/validation.rs 迁入（避免 cmx-api-core 反向依赖 cmx-biz）。
+pub fn validation_fail_resp(violations: &[Violation]) -> cmx_api_types::ApiResp<serde_json::Value> {
+    cmx_api_types::ApiResp::fail_with_data(
+        422,
+        format!("数据校验未通过（{} 处）", violations.len()),
+        serde_json::json!({ "violations": violations }),
+    )
+}

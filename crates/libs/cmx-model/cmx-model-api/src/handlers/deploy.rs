@@ -4,9 +4,9 @@ use axum::Json;
 use axum::extract::{Query, State};
 use serde::Deserialize;
 
-use cmx_api::CmxAppState;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::{ApiResp, Result};
+use cmx_api_core::CmxAppState;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::{ApiResp, Result};
 
 /// 从认证上下文取 (user_id, user_name)；缺省用占位，避免未登录环境（如本地）阻塞演示。
 fn model_operator(c: &cmx_core::model::service::context::SVRContext) -> (String, String) {
