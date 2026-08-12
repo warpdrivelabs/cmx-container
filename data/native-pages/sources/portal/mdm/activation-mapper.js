@@ -455,7 +455,6 @@ function cardHeader() {
       <span class="card-hint">CR 源字段 → cm_* 目标列 · 分组仅 UI 展示，落库仍扁平 {源:目标}</span></div>
     <div class="card-body">
       <div class="hg-tool">
-        <ui5-button design="Default" icon="add" id="amAddRow">增行</ui5-button>
         <ui5-button design="Transparent" icon="group" id="amAddGroup">+ 添加分组</ui5-button>
         <span style="flex:1"></span>
         <span class="muted" style="font-size:11px">展示：</span>
@@ -513,32 +512,43 @@ function viewHtml() {
 
 // ── 头映射表（普通可编辑表格，规避 revo-grid 弹层/页内时序不渲染问题）──────────
 const mappingToRows = (hm) => Object.entries(hm || {}).map(([sourceField, targetField]) => ({ sourceField, targetField }))
-function syncHeaderRowsFromMapping() { state.headerRows = mappingToRows(state.current?.header_mapping) }
+// 行的分组归属由行自带 gi 承载（-1 = 未分组，>=0 = 分组下标），不再靠 headerGroups.fields 反查 sourceField。
+// 这样空 sourceField 的新行也能稳定归属某分组，支持「在分组内直接增行」；headerGroups 运行时只存组定义，
+// 其 fields 在 collectForm 时由各行 gi 推导落库（扁平 header_mapping 形态不变）。
+function syncHeaderRowsFromMapping() {
+  const rows = mappingToRows(state.current?.header_mapping)
+  const hg = state.current?.header_groups ?? state.current?.headerGroups
+  const groups = Array.isArray(hg) ? hg : []
+  const fieldToGi = new Map()
+  groups.forEach((g, gi) => (Array.isArray(g.fields) ? g.fields : []).forEach((f) => fieldToGi.set(f, gi)))
+  rows.forEach((r) => { r.gi = fieldToGi.has(r.sourceField) ? fieldToGi.get(r.sourceField) : -1 })
+  state.headerRows = rows
+}
 function headerRowsToMapping() {
   const m = {}; for (const r of state.headerRows) if (r.sourceField && r.targetField) m[r.sourceField] = r.targetField
   return m
 }
 const optHtml = (opts, val) => `<ui5-option value=""></ui5-option>` + opts.map((o) => `<ui5-option value="${esc(o.value)}" ${o.value === val ? 'selected' : ''}>${esc(o.label)}</ui5-option>`).join('')
-// 从 current.header_groups 同步到 state.headerGroups（list 返 snake；兼容历史 camel 数据）
+// 从 current.header_groups 同步分组定义（仅组元信息；行归属在 syncHeaderRowsFromMapping 里标 gi）
 function syncHeaderGroups() {
-  // list 返回 DB row（snake: header_groups）；save 后 current 可能带 header_groups。统一读 snake。
   const hg = state.current?.header_groups ?? state.current?.headerGroups
   state.headerGroups = Array.isArray(hg) ? hg.map((g) => ({
     groupCode: g.groupCode || g.group_code || '',
     groupName: g.groupName || g.group_name || g.groupCode || g.group_code || '',
-    fields: Array.isArray(g.fields) ? [...g.fields] : [],
   })) : []
 }
-// 查 sourceField 所属组下标（-1 = 未分组）。空 sourceField 视为未分组。
-function groupIndexOf(sourceField) {
-  if (!sourceField) return -1
-  return state.headerGroups.findIndex((g) => Array.isArray(g.fields) && g.fields.includes(sourceField))
-}
-// 把 sourceField 从所有组移除，再加入 toGi（-1 = 仅移除/归未分组）
-function moveRowGroup(sourceField, toGi) {
-  if (!sourceField) return
-  state.headerGroups.forEach((g) => { const k = g.fields.indexOf(sourceField); if (k >= 0) g.fields.splice(k, 1) })
-  if (toGi >= 0 && state.headerGroups[toGi]) state.headerGroups[toGi].fields.push(sourceField)
+// 行的分组下标（直接读 r.gi；-1 = 未分组）
+const groupIndexOfRow = (r) => (r && r.gi != null && r.gi >= 0 ? r.gi : -1)
+// 设置行分组（gi = -1 归未分组）
+function setRowGroup(i, gi) { if (state.headerRows[i]) state.headerRows[i].gi = gi < 0 ? -1 : gi }
+// 删除分组：该组行归未分组，后续分组下标前移（保证其余行 gi 仍指向正确组）
+function removeHeaderGroup(gi) {
+  if (gi < 0 || gi >= state.headerGroups.length) return
+  state.headerGroups.splice(gi, 1)
+  state.headerRows.forEach((r) => {
+    if (r.gi === gi) r.gi = -1
+    else if (r.gi != null && r.gi > gi) r.gi -= 1
+  })
 }
 // 字段排序：调整 headerRows 数组顺序。dir=-1 上移 / +1 下移。
 // 扁平模式：纯相邻交换；分组模式：只在同一分组（含「未分组」）内找相邻同组行交换，
@@ -550,52 +560,60 @@ function moveHeaderRow(i, dir) {
   if (!grouped) {
     j = dir < 0 ? i - 1 : i + 1
   } else {
-    const gi = groupIndexOf(rows[i].sourceField)
-    if (dir < 0) { for (let k = i - 1; k >= 0; k--) { if (groupIndexOf(rows[k].sourceField) === gi) { j = k; break } } }
-    else { for (let k = i + 1; k < rows.length; k++) { if (groupIndexOf(rows[k].sourceField) === gi) { j = k; break } } }
+    const gi = groupIndexOfRow(rows[i])
+    if (dir < 0) { for (let k = i - 1; k >= 0; k--) { if (groupIndexOfRow(rows[k]) === gi) { j = k; break } } }
+    else { for (let k = i + 1; k < rows.length; k++) { if (groupIndexOfRow(rows[k]) === gi) { j = k; break } } }
   }
   if (j < 0 || j >= rows.length) return
   const tmp = rows[i]; rows[i] = rows[j]; rows[j] = tmp
 }
-// 渲染单行（4 列：源 | 目标 | 分组 | 操作）。分组列按归组状态显示标签/移出/加入组下拉。
+// 渲染单行（源 | 目标 | [分组] | 操作）。分组列统一为下拉，分组内行与未分组行同风格——
+// 选「未分组」即移出，选某组即归组，不再有「移出」按钮与「加入组」两套交互。
 function headerRowHtml(r, i) {
-  const gi = groupIndexOf(r.sourceField)
-  let grpCell
-  if (!r.sourceField) {
-    grpCell = '<span class="muted" style="font-size:11px">填源字段后可归组</span>'
-  } else if (gi >= 0) {
-    grpCell = `<span class="hg-tag">${esc(state.headerGroups[gi].groupName)}</span> <span class="add-btn" data-mvout="${i}" title="移到未分组">移出</span>`
-  } else if (state.headerGroups.length) {
-    grpCell = `<ui5-select class="hm-grp" data-i="${i}"><ui5-option value="">加入组…</ui5-option>${state.headerGroups.map((g, x) => `<ui5-option value="${x}">${esc(g.groupName)}</ui5-option>`).join('')}</ui5-select>`
-  } else {
-    grpCell = '<span class="muted" style="font-size:11px">未分组</span>'
-  }
+  const hasGroups = state.headerGroups.length > 0
+  const gi = groupIndexOfRow(r)
+  const grpCell = hasGroups
+    ? `<ui5-select class="hm-grp" data-i="${i}">
+         <ui5-option value="-1" ${gi < 0 ? 'selected' : ''}>未分组</ui5-option>
+         ${state.headerGroups.map((g, x) => `<ui5-option value="${x}" ${x === gi ? 'selected' : ''}>${esc(g.groupName)}</ui5-option>`).join('')}
+       </ui5-select>`
+    : ''
   return `<tr data-i="${i}">
     <td><ui5-select class="hm-src" data-i="${i}">${optHtml(crOptions(), r.sourceField)}</ui5-select></td>
     <td><ui5-select class="hm-tgt" data-i="${i}">${optHtml(cmOptions(), r.targetField)}</ui5-select></td>
-    <td style="white-space:nowrap">${grpCell}</td>
+    ${hasGroups ? `<td style="white-space:nowrap">${grpCell}</td>` : ''}
     <td style="white-space:nowrap"><span class="row-move" data-up="${i}" title="上移">↑</span><span class="row-move" data-down="${i}" title="下移">↓</span><span class="del-btn" data-hdel="${i}" title="删除">✕</span></td></tr>`
+}
+// 通用表格渲染：扁平模式 / 各分组卡片内的表格共用。底部「增行」按 gi 决定新行归属。
+function headerTableHtml(rowList, gi) {
+  const hasGroups = state.headerGroups.length > 0
+  const addLabel = hasGroups
+    ? (gi >= 0 ? `+ 在「${esc(state.headerGroups[gi].groupName)}」内增行` : '+ 增行（未分组）')
+    : '+ 增行'
+  return `<table class="tbl"><thead><tr>
+      <th style="width:36%">源字段（CR 侧）</th>
+      <th style="width:34%">目标列（${esc(state.current?.target_table || 'cm_*')}）</th>
+      ${hasGroups ? '<th style="width:20%">分组</th>' : ''}
+      <th style="width:80px"></th></tr></thead><tbody>
+    ${rowList.map(({ r, i }) => headerRowHtml(r, i)).join('')
+      || `<tr><td colspan="${hasGroups ? 4 : 3}" class="muted" style="padding:8px">暂无字段，点击下方增行</td></tr>`}
+    </tbody></table>
+    <div class="add-row"><span class="add-btn" data-grpadd="${gi}">${addLabel}</span></div>`
 }
 function renderHeaderTable() {
   const wrap = q('amHeaderTable'); if (!wrap) return
-  const rows = state.headerRows
-  if (!rows.length) {
-    const empty = !state.cmFields.length
-    wrap.innerHTML = `<div class="muted" style="padding:8px">${empty ? '目标字典为空，先选目标字典加载字段' : '暂无头映射，点击「增行」添加'}</div>`; return
+  if (!state.cmFields.length) {
+    wrap.innerHTML = `<div class="muted" style="padding:8px">目标字典为空，先选目标字典加载字段</div>`; return
   }
-  // 扁平模式（或无分组定义）：单表格，每行带分组操作列
+  const rows = state.headerRows
+  // 无分组定义或扁平展示：单表格（扁平，新行归未分组）
   if (state.groupBy === 'flat' || !state.headerGroups.length) {
-    wrap.innerHTML = `<table class="tbl"><thead><tr>
-        <th style="width:36%">源字段（CR 侧）</th>
-        <th style="width:34%">目标列（${esc(state.current?.target_table || 'cm_*')}）</th>
-        <th style="width:20%">分组</th>
-        <th style="width:80px"></th></tr></thead><tbody>
-      ${rows.map((r, i) => headerRowHtml(r, i)).join('')}</tbody></table>`
+    wrap.innerHTML = headerTableHtml(rows.map((r, i) => ({ r, i })), -1)
     bindHeaderEvents(wrap); return
   }
-  // 分组模式：各分组折叠卡片 + 未分组区
+  // 分组模式：各分组折叠卡片 + 未分组区，每区独立增行（归属该区 gi）
   const groupsHtml = state.headerGroups.map((g, gi) => {
-    const grpRows = rows.map((r, i) => ({ r, i })).filter(({ r }) => groupIndexOf(r.sourceField) === gi)
+    const grpRows = rows.map((r, i) => ({ r, i })).filter(({ r }) => groupIndexOfRow(r) === gi)
     return `<div class="hg expanded" data-gi="${gi}">
       <div class="hg-head">
         <div class="hg-title">
@@ -606,52 +624,54 @@ function renderHeaderTable() {
         </div>
         <div class="hg-actions"><span class="del-btn" data-gdel="${gi}" title="删除整组（字段回到未分组）">✕</span></div>
       </div>
-      <div class="hg-body">${grpRows.length
-        ? `<table class="tbl"><tbody>${grpRows.map(({ r, i }) => headerRowHtml(r, i)).join('')}</tbody></table>`
-        : '<div class="muted" style="padding:6px;font-size:11px">空组：把未分组字段「加入组」即可</div>'}</div>
+      <div class="hg-body">${headerTableHtml(grpRows, gi)}</div>
     </div>`
   }).join('')
-  const unassigned = rows.map((r, i) => ({ r, i })).filter(({ r }) => groupIndexOf(r.sourceField) < 0)
-  const ungrpHtml = unassigned.length ? `<div class="hg expanded" data-gi="-1">
+  const unassigned = rows.map((r, i) => ({ r, i })).filter(({ r }) => groupIndexOfRow(r) < 0)
+  const ungrpHtml = `<div class="hg expanded" data-gi="-1">
     <div class="hg-head"><div class="hg-title">
       <span class="chev">▸</span>
       <span class="hg-tag" style="background:color-mix(in srgb,var(--sapContent_LabelColor) 16%,transparent);color:var(--sapContent_LabelColor)">未分组</span>
       <span class="hg-count">${unassigned.length} 字段</span>
     </div></div>
-    <div class="hg-body"><table class="tbl"><tbody>${unassigned.map(({ r, i }) => headerRowHtml(r, i)).join('')}</tbody></table></div>
-  </div>` : ''
+    <div class="hg-body">${headerTableHtml(unassigned, -1)}</div>
+  </div>`
   wrap.innerHTML = groupsHtml + ungrpHtml
   bindHeaderEvents(wrap)
+}
+// 头映射事件（扁平 / 分组模式共用）：源/目标/归组下拉、删行、区内增行、上下移、
+// 折叠、组名编辑、删组。归属完全由行 gi 承载，下拉改值即迁移。
+function bindHeaderEvents(wrap) {
+  wrap.querySelectorAll('ui5-select.hm-src').forEach((s) => s.addEventListener('change', () => {
+    state.headerRows[+s.dataset.i].sourceField = s.value; renderHeaderTable()
+  }))
+  wrap.querySelectorAll('ui5-select.hm-tgt').forEach((s) => s.addEventListener('change', () => { state.headerRows[+s.dataset.i].targetField = s.value }))
+  wrap.querySelectorAll('ui5-select.hm-grp').forEach((s) => s.addEventListener('change', () => {
+    setRowGroup(+s.dataset.i, parseInt(s.value, 10)); renderHeaderTable()
+  }))
+  wrap.querySelectorAll('[data-hdel]').forEach((el) => el.addEventListener('click', () => {
+    state.headerRows.splice(+el.dataset.hdel, 1); renderHeaderTable()
+  }))
+  // 区内增行：data-grpadd = 新行归属组（-1 = 未分组 / 扁平）
+  wrap.querySelectorAll('[data-grpadd]').forEach((el) => el.addEventListener('click', () => {
+    const gi = parseInt(el.dataset.grpadd, 10)
+    state.headerRows.push({ sourceField: '', targetField: '', gi: Number.isNaN(gi) ? -1 : gi })
+    renderHeaderTable()
+  }))
+  wrap.querySelectorAll('[data-up]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.up, -1); renderHeaderTable() }))
+  wrap.querySelectorAll('[data-down]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.down, 1); renderHeaderTable() }))
+  wrap.querySelectorAll('[data-gdel]').forEach((el) => el.addEventListener('click', () => { removeHeaderGroup(+el.dataset.gdel); renderHeaderTable() }))
+  // 折叠头（跳过组名输入框 / 删组 / 增行，避免点这些触发折叠）
   wrap.querySelectorAll('.hg-head').forEach((h) => h.addEventListener('click', (e) => {
-    if (e.target.closest('[data-gdel]') || e.target.closest('.hg-name-input')) return
+    if (e.target.closest('[data-gdel]') || e.target.closest('.hg-name-input') || e.target.closest('[data-grpadd]')) return
     h.parentElement.classList.toggle('expanded')
   }))
   wrap.querySelectorAll('.hg-name-input').forEach((inp) => {
     inp.addEventListener('click', (e) => e.stopPropagation())
-    inp.addEventListener('change', () => { const gi = +inp.dataset.gi; if (state.headerGroups[gi]) { state.headerGroups[gi].groupName = inp.value.trim() || state.headerGroups[gi].groupName; renderHeaderTable() } })
+    inp.addEventListener('change', () => {
+      const gi = +inp.dataset.gi; if (state.headerGroups[gi]) { state.headerGroups[gi].groupName = inp.value.trim() || state.headerGroups[gi].groupName; renderHeaderTable() }
+    })
   })
-  wrap.querySelectorAll('[data-gdel]').forEach((el) => el.addEventListener('click', () => { state.headerGroups.splice(+el.dataset.gdel, 1); renderHeaderTable() }))
-}
-// 行级事件绑定（源/目标/归组/删行/移出）——扁平与分组模式共用
-function bindHeaderEvents(wrap) {
-  wrap.querySelectorAll('ui5-select.hm-src').forEach((s) => s.addEventListener('change', () => {
-    const i = +s.dataset.i; const old = state.headerRows[i].sourceField; const nxt = s.value
-    state.headerRows[i].sourceField = nxt
-    // 源字段变更：同步它在 headerGroups.fields 里的引用，保持归组
-    if (old && old !== nxt) { const gi = groupIndexOf(old); if (gi >= 0) { state.headerGroups[gi].fields = state.headerGroups[gi].fields.filter((f) => f !== old); if (nxt) state.headerGroups[gi].fields.push(nxt) } }
-    renderHeaderTable()
-  }))
-  wrap.querySelectorAll('ui5-select.hm-tgt').forEach((s) => s.addEventListener('change', () => { state.headerRows[+s.dataset.i].targetField = s.value }))
-  wrap.querySelectorAll('ui5-select.hm-grp').forEach((s) => s.addEventListener('change', () => { if (s.value !== '') { moveRowGroup(state.headerRows[+s.dataset.i].sourceField, +s.value); renderHeaderTable() } }))
-  wrap.querySelectorAll('[data-hdel]').forEach((el) => el.addEventListener('click', () => {
-    const i = +el.dataset.hdel; const sf = state.headerRows[i].sourceField
-    state.headerRows.splice(i, 1)
-    if (sf) state.headerGroups.forEach((g) => { const k = g.fields.indexOf(sf); if (k >= 0) g.fields.splice(k, 1) })
-    renderHeaderTable()
-  }))
-  wrap.querySelectorAll('[data-mvout]').forEach((el) => el.addEventListener('click', () => { moveRowGroup(state.headerRows[+el.dataset.mvout].sourceField, -1); renderHeaderTable() }))
-  wrap.querySelectorAll('[data-up]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.up, -1); renderHeaderTable() }))
-  wrap.querySelectorAll('[data-down]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.down, 1); renderHeaderTable() }))
 }
 
 // ── 行表映射（折叠组 + 结构化 fields 子表）────────────────────────────────────
@@ -780,7 +800,10 @@ function collectForm() {
   c.code_rule_code = val('amCrc') || null
   c.subject_name_field = val('amSnf') || null; c.subject_code_field = val('amScf') || null
   c.header_mapping = headerRowsToMapping()
-  c.header_groups = state.headerGroups.map((g) => ({ groupCode: g.groupCode, groupName: g.groupName, fields: g.fields.filter(Boolean) }))
+  c.header_groups = state.headerGroups.map((g, gi) => ({
+    groupCode: g.groupCode, groupName: g.groupName,
+    fields: state.headerRows.filter((r) => groupIndexOfRow(r) === gi && r.sourceField).map((r) => r.sourceField),
+  }))
   // 行表：把缓存行还原为 fields 扁平对象
   c.line_mappings = (c.line_mappings || []).map((lm, i) => ({
     lineType: lm.lineType || lm.line_type || '',
@@ -923,12 +946,11 @@ function bind(root) {
   })
   // 卡片1 目标字典：cmx-combo-box 帮助选择（选中自动带出 target_table + 加载字段）
   initCombo()
-  // 头映射
-  root.querySelector('#amAddRow')?.addEventListener('click', () => { state.headerRows.push({ sourceField: '', targetField: '' }); renderHeaderTable() })
-  // 添加分组：建一个默认名「新分组」，用户随后点组名输入框改名（免 prompt）。切到分组模式以便看到。
+  // 头映射：增行入口已下沉到每个分区底部（data-grpadd），顶部不再放全局增行
+  // 添加分组：默认名「分组N」，用户随后点组名输入框改名（免 prompt）。切到分组模式以便看到。
   root.querySelector('#amAddGroup')?.addEventListener('click', () => {
     const n = state.headerGroups.length + 1
-    state.headerGroups.push({ groupCode: 'group_' + Date.now(), groupName: `分组${n}`, fields: [] })
+    state.headerGroups.push({ groupCode: 'group_' + Date.now(), groupName: `分组${n}` })
     state.groupBy = 'group'; renderHeaderTable()
   })
   // 切换 分组/扁平 展示
