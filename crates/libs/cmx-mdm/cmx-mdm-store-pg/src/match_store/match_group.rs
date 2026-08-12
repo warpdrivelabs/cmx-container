@@ -1,6 +1,6 @@
-//! md_match_group 读写（合并请求生命周期）。
+//! md_merge_record 读写（合并请求生命周期）。
 //!
-//! 时间戳：md_match_group 仅 created_at（DEFAULT now()），update SQL **不 SET 时间戳**。
+//! 时间戳：md_merge_record 仅 created_at（DEFAULT now()），update SQL **不 SET 时间戳**。
 
 use cmx_core::dv;
 use cmx_core::model::cell::{DataValue, SqlTypeMarker};
@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::error::api_err_db;
 
-/// 写 md_match_group 一条。返回新建 id。
+/// 写 md_merge_record 一条。返回新建 id。
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_match_group(
     mm: &DatabaseManager,
@@ -26,7 +26,7 @@ pub async fn insert_match_group(
 ) -> Result<i64, cmx_api_types::Error> {
     let id = next_pk_id();
     // score 列 SMALLINT：DataValue::Int 走 PgInt 宽度自适应 INT2/4/8，可直绑
-    let sql = r#"INSERT INTO md_match_group
+    let sql = r#"INSERT INTO md_merge_record
         (id, dict_code, group_key, member_ids, master_id, score, decision, survivorship_log, status, created_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,now())"#;
     mm.execute_sql_with_datavalues(
@@ -45,11 +45,11 @@ pub async fn insert_match_group(
         ],
     )
     .await
-    .map_err(|e| api_err_db(&format!("写 md_match_group 失败: {e}")))?;
+    .map_err(|e| api_err_db(&format!("写 md_merge_record 失败: {e}")))?;
     Ok(id)
 }
 
-/// 更新 md_match_group（status / survivorship_log / master_id）。不 SET 时间戳。
+/// 更新 md_merge_record（status / survivorship_log / master_id）。不 SET 时间戳。
 pub async fn update_match_group(
     mm: &DatabaseManager,
     db_id: &str,
@@ -59,7 +59,7 @@ pub async fn update_match_group(
     survivorship_log: Option<&Value>,
     master_id: Option<i64>,
 ) -> Result<u64, cmx_api_types::Error> {
-    let sql = "UPDATE md_match_group SET status = $1, survivorship_log = $2, master_id = $3 WHERE id = $4";
+    let sql = "UPDATE md_merge_record SET status = $1, survivorship_log = $2, master_id = $3 WHERE id = $4";
     let n = mm
         .execute_sql_with_datavalues(
             db_id,
@@ -75,7 +75,7 @@ pub async fn update_match_group(
             ],
         )
         .await
-        .map_err(|e| api_err_db(&format!("更新 md_match_group 失败: {e}")))?;
+        .map_err(|e| api_err_db(&format!("更新 md_merge_record 失败: {e}")))?;
     Ok(n)
 }
 
@@ -90,7 +90,7 @@ pub async fn transition_match_group(
     from: &str,
     to: &str,
 ) -> Result<u64, cmx_api_types::Error> {
-    let sql = "UPDATE md_match_group SET status = $1 WHERE id = $2 AND status = $3";
+    let sql = "UPDATE md_merge_record SET status = $1 WHERE id = $2 AND status = $3";
     let n = mm
         .execute_sql_with_datavalues(
             db_id,
@@ -103,7 +103,7 @@ pub async fn transition_match_group(
             ],
         )
         .await
-        .map_err(|e| api_err_db(&format!("转换 md_match_group 状态失败: {e}")))?;
+        .map_err(|e| api_err_db(&format!("转换 md_merge_record 状态失败: {e}")))?;
     Ok(n)
 }
 
@@ -142,11 +142,11 @@ pub async fn list_match_groups(
     }
     let where_sql = clauses.join(" AND ");
     // 总数
-    let cnt_sql = format!("SELECT COUNT(*) AS c FROM md_match_group WHERE {where_sql}");
+    let cnt_sql = format!("SELECT COUNT(*) AS c FROM md_merge_record WHERE {where_sql}");
     let cds = mm
         .query_sql_with_datavalues(db_id, None, &cnt_sql, params.clone(), "mdm_match_count")
         .await
-        .map_err(|e| api_err_db(&format!("查 md_match_group 总数失败: {e}")))?;
+        .map_err(|e| api_err_db(&format!("查 md_merge_record 总数失败: {e}")))?;
     let total = cds
         .rows
         .first()
@@ -160,7 +160,7 @@ pub async fn list_match_groups(
     params.push(DataValue::Int(off));
     let sql = format!(
         "SELECT id, dict_code, group_key, member_ids, master_id, score, decision, status, created_at \
-         FROM md_match_group WHERE {where_sql} ORDER BY created_at DESC, id DESC \
+         FROM md_merge_record WHERE {where_sql} ORDER BY created_at DESC, id DESC \
          LIMIT ${} OFFSET ${}",
         n + 1,
         n + 2
@@ -168,7 +168,7 @@ pub async fn list_match_groups(
     let ds = mm
         .query_sql_with_datavalues(db_id, None, &sql, params, "mdm_match_list")
         .await
-        .map_err(|e| api_err_db(&format!("列表 md_match_group 失败: {e}")))?;
+        .map_err(|e| api_err_db(&format!("列表 md_merge_record 失败: {e}")))?;
     let schema = ds.schema.as_ref();
     Ok((
         ds.rows.iter().map(|r| r.to_json_value(schema)).collect(),
@@ -176,18 +176,18 @@ pub async fn list_match_groups(
     ))
 }
 
-/// 按 id 查 md_match_group。
+/// 按 id 查 md_merge_record。
 pub async fn get_match_group(
     mm: &DatabaseManager,
     db_id: &str,
     id: i64,
 ) -> Result<Option<Value>, cmx_api_types::Error> {
     let sql = "SELECT id, dict_code, group_key, member_ids, master_id, score, decision, status, survivorship_log \
-               FROM md_match_group WHERE id = $1";
+               FROM md_merge_record WHERE id = $1";
     let ds = mm
         .query_sql_with_datavalues(db_id, None, sql, dv![DataValue::Int(id)], "mdm_match_get")
         .await
-        .map_err(|e| api_err_db(&format!("查 md_match_group 失败: {e}")))?;
+        .map_err(|e| api_err_db(&format!("查 md_merge_record 失败: {e}")))?;
     let Some(row) = ds.rows.first() else {
         return Ok(None);
     };

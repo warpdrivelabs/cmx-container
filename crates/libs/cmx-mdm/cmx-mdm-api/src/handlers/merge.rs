@@ -24,7 +24,7 @@ use cmx_database_pg::{get_default_pg_db_manager, DatabaseManager};
 use cmx_mdm_model::survivorship::SurvivorRule;
 use cmx_mdm_store_pg as store;
 
-use super::dedup::{line_tables, resolve_dict_meta};
+use super::dedup::{line_tables, load_match_config_defaults, resolve_dict_meta};
 use super::{default_page, default_page_size};
 
 /// 合并请求列表（默认排除 pending）。
@@ -168,13 +168,30 @@ pub async fn mdm_merge_requests_create(
     State(_s): State<CmxAppState>,
     svr_ctx: CmxSvrContext,
     headers: HeaderMap,
-    Json(body): Json<MergeBody>,
+    Json(mut body): Json<MergeBody>,
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
-    // 头表名由 body.targetTable 传入（来自查重规则，替代硬编码 dict_tables 头表）；
-    // line_tables（明细表 reparent）仍由 dict_tables 解析，未知字典给空明细。
+    // 回填：target_table/survive_fields 缺失时从 match_config 读默认
+    // （steward 工作台/发现项合并可能不传，由后端兜底）
+    if (body.target_table.is_empty() || body.survive_fields.is_empty())
+        && let Some(d) = load_match_config_defaults(mm, &db_id, &body.dict_code).await?
+    {
+        if body.target_table.is_empty() {
+            body.target_table = d.target_table;
+        }
+        if body.survive_fields.is_empty() {
+            body.survive_fields = d.survive_fields;
+        }
+    }
+    // 头表名由 body.targetTable 传入（或 match_config 回填）；
+    // line_tables（明细表 reparent）仍由 line_tables 注册表解析，未知字典给空明细。
     let head_table = body.target_table.clone();
+    if head_table.is_empty() {
+        return Err(store::api_err(
+            "target_table 不能为空（body 未传且 match_config 无配置）",
+        ));
+    }
     let line_tables: Vec<(String, String)> = line_tables(&body.dict_code);
     let operated_by = actor_id_i64(&svr_ctx);
 
@@ -237,6 +254,35 @@ pub async fn mdm_merge_requests_create(
         group_id,
     )
     .await?;
+
+    // 联动 scan 发现项 resolved（merge 已 commit；此处失败仅 log warn 不阻断，
+    // scan 仍 pending 管家可再次处理——数据已合并不会重复入库）
+    if let Some(scan_id) = body.scan_id {
+        match store::transition_scan_status(
+            mm,
+            &db_id,
+            None,
+            scan_id,
+            "pending",
+            "resolved",
+            operated_by,
+        )
+        .await
+        {
+            Ok(n) if n > 0 => {}
+            Ok(_) => tracing::warn!(
+                target: "cmx_mdm::scan",
+                scan_id,
+                "scan 发现项非 pending，未联动 resolved（可能已被处理）"
+            ),
+            Err(e) => tracing::warn!(
+                target: "cmx_mdm::scan",
+                scan_id,
+                error = %e,
+                "联动 scan resolved 失败（merge 已成功，scan 仍 pending）"
+            ),
+        }
+    }
 
     Ok(Json(ApiResp::ok(
         json!({ "masterId": master_id, "matchGroupId": group_id }),
@@ -435,6 +481,9 @@ pub struct MergeBody {
     /// 人工裁决显式真值（选 victim/手填，审查 A1/A2）；键 ⊆ survive_fields。
     #[serde(default)]
     pub overrides: Option<serde_json::Map<String, Value>>,
+    /// 联动的查重发现项 id（match-scan 工作台确认合并时传入；合并成功后 CAS pending→resolved）。
+    #[serde(default, alias = "scanId")]
+    pub scan_id: Option<i64>,
 }
 
 /// undo / detail 查询体。

@@ -35,3 +35,5 @@ serde = { workspace = true }
 tokio = { workspace = true }
 # 日志追踪
 tracing = { workspace = true }
+# SHA256（cluster_hash 去重：member_ids 升序后稳定 hash，跨重启一致）
+sha2 = { workspace = true }
