@@ -1114,7 +1114,6 @@ dependencies = [
  "cmx-database",
  "cmx-database-pg",
  "cmx-debug",
- "cmx-iam",
  "cmx-metadata",
  "cmx-plugin",
  "cmx-portal",
