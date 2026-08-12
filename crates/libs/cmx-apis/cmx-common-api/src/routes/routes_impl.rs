@@ -63,10 +63,8 @@ pub fn api_routes() -> Router<CmxAppState> {
         router.merge(dev::DevModule.routes())
     };
 
-    // 注册健康检查路由（无需认证，供 Docker HEALTHCHECK 和负载均衡器使用）
-    let router = router.route("/health", get(health_check));
-
-    router
+    // 注册健康检查路由（无需认证，供 Docker HEALTHCHECK 和负载均衡器使用）并返回
+    router.route("/health", get(health_check))
     // 统一添加 /api 前缀
     // with_api_prefix(router)
 }
