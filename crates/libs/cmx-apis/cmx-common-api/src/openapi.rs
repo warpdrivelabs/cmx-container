@@ -29,19 +29,7 @@ use utoipa::OpenApi;
         crate::handlers::service::handler::get_openapi_spec,
 
         // Marketplace handlers 已迁至 cmx-plugin-api（PluginApiDoc）。
-        // Storage handlers
-        cmx_storage::handler::upload_handler,
-        cmx_storage::handler::download_handler,
-        cmx_storage::handler::batch_download_handler,
-        cmx_storage::handler::file_info_handler,
-        cmx_storage::handler::delete_handler,
-        cmx_storage::handler::page_handler,
-        cmx_storage::handler::presign_download_handler,
-        cmx_storage::handler::presign_upload_handler,
-        cmx_storage::handler::multipart_init_handler,
-        cmx_storage::handler::multipart_part_handler,
-        cmx_storage::handler::multipart_complete_handler,
-        cmx_storage::handler::multipart_abort_handler,
+        // Storage handlers 已迁至 cmx-storage-api（StorageApiDoc）。
         // Auth handlers
         // OAuth2 handlers
         // API Key 管理接口
@@ -73,30 +61,7 @@ use utoipa::OpenApi;
             crate::handlers::service::models::ServiceListItem,
             crate::handlers::service::models::ServiceDetailResponse,
             // Marketplace schemas 已迁至 cmx-plugin-api（PluginApiDoc）。
-            // Storage schemas
-            cmx_storage::types::FileInfo,
-            cmx_storage::types::FileQuery,
-            cmx_storage::types::FilePage,
-            cmx_storage::types::MultipartSession,
-            cmx_storage::types::PartInfo,
-            cmx_storage::types::PresignUploadResult,
-            cmx_storage::types::PresignUploadRequest,
-            cmx_storage::handler::ApiResp<cmx_storage::types::FileInfo>,
-            cmx_storage::handler::ApiResp<cmx_storage::types::FilePage>,
-            cmx_storage::handler::ApiResp<cmx_storage::types::MultipartSession>,
-            cmx_storage::handler::ApiResp<cmx_storage::types::PartInfo>,
-            cmx_storage::handler::ApiResp<cmx_storage::types::PresignUploadResult>,
-            cmx_storage::handler::ApiResp<String>,
-            cmx_storage::handler::DownloadQuery,
-            cmx_storage::handler::FileInfoQuery,
-            cmx_storage::handler::DeleteQuery,
-            cmx_storage::handler::BatchDownloadRequest,
-            cmx_storage::handler::PresignDownloadRequest,
-            cmx_storage::handler::PresignUploadBody,
-            cmx_storage::handler::MultipartInitBody,
-            cmx_storage::handler::MultipartPartBody,
-            cmx_storage::handler::MultipartCompleteBody,
-            cmx_storage::handler::MultipartAbortBody,
+            // Storage schemas 已迁至 cmx-storage-api（StorageApiDoc）。
             // Auth schemas
             // API Key 管理 schemas
             // OAuth2 客户端管理 schemas

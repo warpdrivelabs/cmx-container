@@ -24,7 +24,7 @@ use cmx_job_api::JobModule;
 use cmx_mdm_api::MdmModule;
 use cmx_model_api::ModelModule;
 use cmx_rpt_api::ReportModule;
-use cmx_storage_api::StorageModule;
+use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -152,6 +152,7 @@ pub fn routes() -> Router<CmxAppState> {
 fn merged_openapi() -> utoipa::openapi::OpenApi {
     let mut doc = ApiDoc::openapi();
     doc.merge(AiApiDoc::openapi());
+    doc.merge(StorageApiDoc::openapi());
     doc.merge(BizApiDoc::openapi());
     doc.merge(PluginApiDoc::openapi());
     doc.merge(IamApiDoc::openapi());

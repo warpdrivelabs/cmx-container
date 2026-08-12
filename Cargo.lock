@@ -2193,6 +2193,7 @@ dependencies = [
  "axum",
  "cmx-api-core",
  "cmx-storage",
+ "utoipa",
 ]
 
 [[package]]

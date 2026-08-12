@@ -6,8 +6,12 @@
 //! `FromRef<CmxAppState> for cmx_storage::handler::AppState` 由 cmx-api-core 实现
 //! （孤儿规则要求与 CmxAppState 同 crate），故本 crate 无需也不能再 impl。
 //!
-//! Swagger 路径（`cmx_storage::handler::*` 的 `#[utoipa::path]`）暂仍由 cmx-api 的 ApiDoc
-//! 聚合（路径引用 cmx_storage，与路由位置无关），阶段 3 统一整理时随 OpenApi 合并上移。
+//! StorageApiDoc 提供本域 OpenApi 切片（`cmx_storage::handler::*` 的 `#[utoipa::path]`），
+//! 由 platform-app 用 `OpenApi::merge()` 聚合。
+
+pub mod openapi;
+
+pub use openapi::StorageApiDoc;
 
 use axum::Router;
 use axum::routing::{delete, get, post};
