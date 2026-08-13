@@ -13,6 +13,10 @@ authors.workspace = true
 [dependencies]
 # 内部依赖 - DOC 中立模型（Filter/ColumnView/Scope 等 handler 直接引用的类型）
 cmx-doc-model = { workspace = true }
+# 内部依赖 - API 通用类型（ApiResp<T>：响应信封，OpenApi schema 引用）
+cmx-api-types = { workspace = true }
+# OpenAPI 文档生成（handler #[utoipa::path] + DocApiDoc）
+utoipa = { workspace = true }
 # 内部依赖 - DOC 持久化/服务层（DocLoader/DocSaver/Zmc*/DocRevision/cache）
 cmx-doc-store-pg = { workspace = true }
 # 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / ModuleRoutes / ApiResp/Result/Error）

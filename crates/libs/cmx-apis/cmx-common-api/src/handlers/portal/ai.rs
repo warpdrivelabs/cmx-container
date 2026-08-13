@@ -6,7 +6,20 @@ use axum::extract::Path;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 
-/// `POST /api/ai/chat` —— 转发到 DeepSeek/OpenAI 兼容服务。未配置返回 501 业务码。
+/// AI 对话中继。
+///
+/// `POST /api/ai/chat` —— 转发到 DeepSeek / OpenAI 兼容服务；未配置 API Key
+/// （CMX_AI_API_KEY / DEEPSEEK_API_KEY）时返回 501 业务码。body 为 OpenAI 兼容的
+/// chat 请求 JSON（model / messages / temperature 等），原样透传给上游。
+#[utoipa::path(
+    post,
+    path = "/api/ai/chat",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "上游 AI 服务响应（原样透传）；未配置时返回 501 业务码", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn ai_chat(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
@@ -22,14 +35,44 @@ pub async fn ai_chat(
 
 // ───────────────────────── AI 本地编辑代理 ─────────────────────────
 
-/// `GET /api/agent/capabilities` —— 代理能力 / 工具清单。
+/// 查询代理能力。
+///
+/// `GET /api/agent/capabilities` —— 本地编辑代理的能力 / 工具清单，前端据此渲染工具面板。
+#[utoipa::path(
+    get,
+    path = "/api/agent/capabilities",
+    responses(
+        (status = 200, description = "代理能力 / 工具清单", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn agent_capabilities(
     CmxSvrContext(_c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(cmx_portal::agent::flow::capabilities())))
 }
 
-/// `POST /api/agent/message` —— 一次性返回事件序列。
+/// 代理消息（一次性）。
+///
+/// `POST /api/agent/message` —— 向本地编辑代理发送消息，等流程跑完后一次性返回完整
+/// 事件序列（实时场景请用 `/api/agent/message/stream`）。body：
+///
+/// ```json
+/// {
+///   "messages": [ { "role": "user", "content": "..." } ],
+///   "context": {},
+///   "conversationId": "conv_x（可选，缺省自动生成）"
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/agent/message",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "完整事件序列（planner 决策 / plan / tool_call / tool_result / assistant 总结等）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn agent_message(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
@@ -39,11 +82,21 @@ pub async fn agent_message(
     )))
 }
 
-/// `POST /api/agent/message/stream` —— SSE 真流式事件。
+/// 代理消息（流式）。
 ///
-/// 每个 agent 事件（planner 决策、plan、tool_call/tool_result、assistant 总结…）在产生的当下
-/// 即经 mpsc 通道推送给客户端，而非跑完整个流程再一次性下发。flow 在独立 task 上运行，其 `emit`
-/// 回调把事件即时投递到通道；SSE 流从通道逐条读取并下发。协议与 Node 一致：meta / agent_event* / done|error。
+/// `POST /api/agent/message/stream` —— SSE 真流式：每个 agent 事件（planner 决策、
+/// plan、tool_call / tool_result、assistant 总结…）在产生的当下即推送给客户端，
+/// 而非跑完整个流程再一次性下发。协议与 Node 一致：meta / agent_event* / done|error。
+/// body 同 `/api/agent/message`（messages / context / conversationId）。
+#[utoipa::path(
+    post,
+    path = "/api/agent/message/stream",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "SSE 事件流：meta → agent_event* → done|error", content_type = "text/event-stream")
+    ),
+    tag = "门户接口"
+)]
 pub async fn agent_message_stream(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
@@ -111,7 +164,23 @@ pub async fn agent_message_stream(
         .into_response()
 }
 
-/// `POST /api/agent/approvals/:id` —— 审批决定。
+/// 代理审批决定。
+///
+/// `POST /api/agent/approvals/{id}` —— 对本地编辑代理的待审批请求做决定：
+/// body `{ "decision": "approve" }` 批准执行，其余值按拒绝处理。审批请求带 TTL，
+/// 不存在 / 已处理 / 已过期时返回错误。
+#[utoipa::path(
+    post,
+    path = "/api/agent/approvals/{id}",
+    params(
+        ("id" = String, Path, description = "待审批请求 id")
+    ),
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "审批决定后的后续事件序列（approval_decision / assistant 等）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn agent_approval(
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,

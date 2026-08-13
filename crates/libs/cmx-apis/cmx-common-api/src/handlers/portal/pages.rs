@@ -52,25 +52,35 @@ fn render_with_etag(headers: &HeaderMap, rev: &str, body: serde_json::Value) -> 
     resp
 }
 
-#[derive(Debug, Deserialize)]
+/// 表单页 / 原生页面列表分页参数。
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct PageQuery {
+    /// 页码（可选）。
     #[serde(default)]
     pub page: Option<i64>,
+    /// 每页条数（可选；query key `pageSize`，兼容 `page_size`）。
     #[serde(default, rename = "pageSize", alias = "page_size")]
     pub page_size: Option<i64>,
 }
 
 /// html-pages 列表查询：分页 + keyword 搜索 + domain/app/module 过滤。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct HtmlListQuery {
+    /// 页码（可选）。
     #[serde(default)]
     pub page: Option<i64>,
+    /// 每页条数（可选；query key `pageSize`，兼容 `page_size`）。
     #[serde(default, rename = "pageSize", alias = "page_size")]
     pub page_size: Option<i64>,
+    /// 域过滤（可选）。
     #[serde(default)]
     pub domain: Option<String>,
+    /// 应用过滤（可选；query key `app`，兼容 `application`）。
     #[serde(default)]
     pub app: Option<String>,
+    /// 模块过滤（可选）。
     #[serde(default)]
     pub module: Option<String>,
     /// 关键词：对 id/name/details 做不区分大小写的包含匹配。
@@ -78,7 +88,18 @@ pub struct HtmlListQuery {
     pub keyword: Option<String>,
 }
 
-/// `GET /api/form-pages?page=&pageSize=` —— 分页列表。
+/// 列出表单页。
+///
+/// `GET /api/form-pages?page=&pageSize=` —— 分页列表（索引信息，不含 form JSON 正文）。
+#[utoipa::path(
+    get,
+    path = "/api/form-pages",
+    params(PageQuery),
+    responses(
+        (status = 200, description = "分页列表（items / total 等）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn list_form_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<PageQuery>,
@@ -88,7 +109,27 @@ pub async fn list_form_pages(
     )))
 }
 
-/// `POST /api/form-pages` —— 保存。
+/// 保存表单页。
+///
+/// `POST /api/form-pages` —— upsert（新建 / 更新）。body：
+///
+/// ```json
+/// {
+///   "id": "页面 id（字母数字._-，1-128）",
+///   "name": "页面名称",
+///   "details": "页面描述",
+///   "form": "CMX 表单 JSON 字符串（必填）"
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/form-pages",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "保存后的页面记录", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn save_form_page(
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::pages::form::FormPageInput>,
@@ -98,7 +139,20 @@ pub async fn save_form_page(
     )))
 }
 
-/// `GET /api/form-pages/:id` —— 单条。
+/// 取单个表单页。
+///
+/// `GET /api/form-pages/{id}` —— 单条（含 form JSON）。
+#[utoipa::path(
+    get,
+    path = "/api/form-pages/{id}",
+    params(
+        ("id" = String, Path, description = "表单页 id")
+    ),
+    responses(
+        (status = 200, description = "表单页完整记录（含 form JSON）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn get_form_page(
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
@@ -108,7 +162,18 @@ pub async fn get_form_page(
     )))
 }
 
-/// `GET /api/native-pages?page=&pageSize=` —— 分页列表。
+/// 列出原生页面。
+///
+/// `GET /api/native-pages?page=&pageSize=` —— 分页列表（索引信息，不含源码）。
+#[utoipa::path(
+    get,
+    path = "/api/native-pages",
+    params(PageQuery),
+    responses(
+        (status = 200, description = "分页列表（items / total 等）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn list_native_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<PageQuery>,
@@ -118,7 +183,29 @@ pub async fn list_native_pages(
     )))
 }
 
-/// `POST /api/native-pages` —— 保存。
+/// 保存原生页面。
+///
+/// `POST /api/native-pages` —— upsert（新建 / 更新）。body：
+///
+/// ```json
+/// {
+///   "id": "页面 id（点分命名空间）",
+///   "name": "页面名称",
+///   "details": "页面描述",
+///   "sourceType": "js | html",
+///   "source": "源码文本（必填）",
+///   "relPath": "源文件相对路径（缺省由 id + sourceType 推导）"
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/native-pages",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "保存后的页面记录", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn save_native_page(
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::pages::native::NativePageInput>,
@@ -128,7 +215,19 @@ pub async fn save_native_page(
     )))
 }
 
-/// `POST /api/native-pages/batch` —— 批量取源码。
+/// 批量取原生页面。
+///
+/// `POST /api/native-pages/batch` —— 按 id 批量取页面（含源码）。body 为
+/// `{ "ids": ["id1", "id2"] }` 或顶层字符串数组 `["id1", "id2"]`。
+#[utoipa::path(
+    post,
+    path = "/api/native-pages/batch",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "批量页面（含源码）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn batch_native_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
@@ -138,9 +237,22 @@ pub async fn batch_native_pages(
     )))
 }
 
-/// `GET /api/native-pages/:id` —— 单条（含源码）。
+/// 取单个原生页面。
 ///
-/// 支持 `If-None-Match` → 304（rev 命中）；响应带 `ETag` / `Cache-Control`。
+/// `GET /api/native-pages/{id}` —— 单条（含源码）。支持 `If-None-Match` → 304
+/// （rev 命中）；响应带 `ETag` / `Cache-Control`（private, no-cache）。
+#[utoipa::path(
+    get,
+    path = "/api/native-pages/{id}",
+    params(
+        ("id" = String, Path, description = "原生页面 id")
+    ),
+    responses(
+        (status = 200, description = "页面完整记录（含源码）；响应头带 ETag / Cache-Control", body = ApiResp<serde_json::Value>),
+        (status = 304, description = "If-None-Match 命中（rev 未变），空 body")
+    ),
+    tag = "门户接口"
+)]
 pub async fn get_native_page(
     CmxSvrContext(_c): CmxSvrContext,
     headers: HeaderMap,
@@ -152,7 +264,19 @@ pub async fn get_native_page(
     Ok(render_with_etag(&headers, &rev, body))
 }
 
-/// `GET /api/html-pages?page=&pageSize=&domain=&app=&module=&keyword=` —— 分页列表。
+/// 列出 HTML 页面。
+///
+/// `GET /api/html-pages` —— 分页列表（索引信息，不含 html 正文），支持 keyword
+/// 搜索与 domain / app / module 过滤。
+#[utoipa::path(
+    get,
+    path = "/api/html-pages",
+    params(HtmlListQuery),
+    responses(
+        (status = 200, description = "分页列表（items / total 等）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn list_html_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<HtmlListQuery>,
@@ -169,7 +293,31 @@ pub async fn list_html_pages(
     Ok(Json(ApiResp::ok(doc)))
 }
 
-/// `POST /api/html-pages` —— 保存。
+/// 保存 HTML 页面。
+///
+/// `POST /api/html-pages` —— upsert（新建 / 更新，写源文件 + 列表双写）。body：
+///
+/// ```json
+/// {
+///   "id": "页面 id",
+///   "name": "页面名称",
+///   "details": "页面描述",
+///   "html": "HTML 源码（必填）",
+///   "domain": "缺省由 id 命名空间推导",
+///   "app": "缺省由 id 命名空间推导",
+///   "module": "缺省由 id 命名空间推导",
+///   "doc": "绑定的单据模块编码 moduleCode（可选）"
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/html-pages",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "保存后的页面记录", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn save_html_page(
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::pages::html::HtmlPageInput>,
@@ -179,7 +327,19 @@ pub async fn save_html_page(
     )))
 }
 
-/// `POST /api/html-pages/batch` —— 批量取完整页面。
+/// 批量取 HTML 页面。
+///
+/// `POST /api/html-pages/batch` —— 按 id 批量取完整页面（含 html）。body 为
+/// `{ "ids": ["id1", "id2"] }` 或顶层字符串数组 `["id1", "id2"]`。
+#[utoipa::path(
+    post,
+    path = "/api/html-pages/batch",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "批量页面（含 html）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn batch_html_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
@@ -189,9 +349,22 @@ pub async fn batch_html_pages(
     )))
 }
 
-/// `GET /api/html-pages/:id` —— 单页（含 html）。
+/// 取单个 HTML 页面。
 ///
-/// 支持 `If-None-Match` → 304（rev 命中）；响应带 `ETag` / `Cache-Control`。
+/// `GET /api/html-pages/{id}` —— 单页（含 html）。支持 `If-None-Match` → 304
+/// （rev 命中）；响应带 `ETag` / `Cache-Control`（private, no-cache）。
+#[utoipa::path(
+    get,
+    path = "/api/html-pages/{id}",
+    params(
+        ("id" = String, Path, description = "HTML 页面 id")
+    ),
+    responses(
+        (status = 200, description = "页面完整记录（含 html）；响应头带 ETag / Cache-Control", body = ApiResp<serde_json::Value>),
+        (status = 304, description = "If-None-Match 命中（rev 未变），空 body")
+    ),
+    tag = "门户接口"
+)]
 pub async fn get_html_page(
     CmxSvrContext(_c): CmxSvrContext,
     headers: HeaderMap,

@@ -144,6 +144,41 @@
           },
           "width": "120px",
           "align": "left"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "edit": {
+            "mode": "select",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": true,
+          "align": "center",
+          "enumValues": [
+            {
+              "value": "1",
+              "label": "启用"
+            },
+            {
+              "value": "0",
+              "label": "停用"
+            }
+          ],
+          "defaultValue": "1",
+          "_materializedFrom": "dictionaryCommonFields"
         }
       ],
       "baseFieldSet": "dictionaryCommonFields",
@@ -259,5 +294,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-07T03:25:02.561Z"
+  "updatedAt": "2026-08-13T06:12:26.189Z"
 }

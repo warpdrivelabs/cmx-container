@@ -7,24 +7,51 @@ use serde::Deserialize;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 
-#[derive(Debug, Deserialize)]
+/// 事实文件四段路径参数（domain / app / module / file）。
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Path)]
 pub struct FactPath {
+    /// 所属域 id。
     pub domain: String,
+    /// 所属应用 id。
     pub app: String,
+    /// 所属模块 id。
     pub module: String,
+    /// 事实文件名（须 `*.json`）。
     pub file: String,
 }
 
-/// 帮助文档路径参数（domain/app/module/file）。
-#[derive(Debug, Deserialize)]
+/// 帮助文档路径参数（domain / app / module / file）。
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Path)]
 pub struct HelpPath {
+    /// 所属域 id。
     pub domain: String,
+    /// 所属应用 id。
     pub app: String,
+    /// 所属模块 id。
     pub module: String,
+    /// 帮助文件名（须 `*.json`）。
     pub file: String,
 }
 
-/// `GET /api/fact/list?domain=&app=&module=` —— 列出事实文件。
+/// 列出事实文件。
+///
+/// `GET /api/fact/list?domain=&app=&module=` —— 事实文件索引列表；三级过滤均可选，
+/// 缺省则该级放宽。
+#[utoipa::path(
+    get,
+    path = "/api/fact/list",
+    params(
+        ("domain" = Option<String>, Query, description = "域 id 过滤（可选）"),
+        ("app" = Option<String>, Query, description = "应用 id 过滤（可选）"),
+        ("module" = Option<String>, Query, description = "模块 id 过滤（可选）")
+    ),
+    responses(
+        (status = 200, description = "事实文件索引 {items}", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn list_facts(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<cmx_portal::fact::store::FactQuery>,
@@ -33,7 +60,18 @@ pub async fn list_facts(
     Ok(Json(ApiResp::ok(serde_json::json!({ "items": items }))))
 }
 
-/// `POST /api/fact/get` —— 读取事实文件（请求体 { domain, app, module, file }）。
+/// 读取事实文件。
+///
+/// `POST /api/fact/get` —— body `{ domain, app, module, file }`（file 须 `*.json`）。
+#[utoipa::path(
+    post,
+    path = "/api/fact/get",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "事实文件内容 JSON", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn get_fact_post(
     CmxSvrContext(_c): CmxSvrContext,
     Json(r): Json<cmx_portal::fact::store::FactRef>,
@@ -43,7 +81,19 @@ pub async fn get_fact_post(
     )))
 }
 
-/// `GET /api/fact/:domain/:app/:module/:file` —— 读取事实文件（路径参数）。
+/// 读取事实文件。
+///
+/// `GET /api/fact/{domain}/{app}/{module}/{file}` —— 路径参数版，语义同
+/// `POST /api/fact/get`。既有接口，保留路径参数（新接口规范不再如此设计）。
+#[utoipa::path(
+    get,
+    path = "/api/fact/{domain}/{app}/{module}/{file}",
+    params(FactPath),
+    responses(
+        (status = 200, description = "事实文件内容 JSON", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn get_fact_path(
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<FactPath>,
@@ -59,7 +109,23 @@ pub async fn get_fact_path(
     )))
 }
 
-/// `GET /api/help/catalog?domain=&app=&module=` —— 帮助目录（轻量项，供 explorer 搜索建树）。
+/// 列出帮助目录。
+///
+/// `GET /api/help/catalog?domain=&app=&module=` —— 轻量目录项（不含正文 / 示例），
+/// 供 explorer 搜索建树；三级过滤均可选，缺省则该级放宽。
+#[utoipa::path(
+    get,
+    path = "/api/help/catalog",
+    params(
+        ("domain" = Option<String>, Query, description = "域 id 过滤（可选）"),
+        ("app" = Option<String>, Query, description = "应用 id 过滤（可选）"),
+        ("module" = Option<String>, Query, description = "模块 id 过滤（可选）")
+    ),
+    responses(
+        (status = 200, description = "帮助目录轻量项 {items}", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn help_catalog(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<cmx_portal::help::store::HelpQuery>,
@@ -68,7 +134,18 @@ pub async fn help_catalog(
     Ok(Json(ApiResp::ok(serde_json::json!({ "items": items }))))
 }
 
-/// `POST /api/help/get` —— 读取完整帮助文档（请求体 { domain, app, module, file }）。
+/// 读取帮助文档。
+///
+/// `POST /api/help/get` —— 完整文档（含正文 / 示例）；body `{ domain, app, module, file }`。
+#[utoipa::path(
+    post,
+    path = "/api/help/get",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "完整帮助文档（title / summary / content / examples 等）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn help_get_post(
     CmxSvrContext(_c): CmxSvrContext,
     Json(r): Json<cmx_portal::help::store::HelpRef>,
@@ -79,7 +156,19 @@ pub async fn help_get_post(
     )))
 }
 
-/// `GET /api/help/doc/:domain/:app/:module/:file` —— 读取完整帮助文档（路径参数）。
+/// 读取帮助文档。
+///
+/// `GET /api/help/doc/{domain}/{app}/{module}/{file}` —— 路径参数版，语义同
+/// `POST /api/help/get`。既有接口，保留路径参数（新接口规范不再如此设计）。
+#[utoipa::path(
+    get,
+    path = "/api/help/doc/{domain}/{app}/{module}/{file}",
+    params(HelpPath),
+    responses(
+        (status = 200, description = "完整帮助文档（title / summary / content / examples 等）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn help_get_path(
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<HelpPath>,
@@ -96,7 +185,30 @@ pub async fn help_get_path(
     )))
 }
 
-/// `POST /api/help/doc` —— 保存帮助文档（upsert）。
+/// 保存帮助文档。
+///
+/// `POST /api/help/doc` —— upsert（新建 / 更新）。body：
+///
+/// ```json
+/// {
+///   "domain": "fi", "app": "cmxfico", "module": "gl",
+///   "file": "缺省由 id 推导为 <id>.json",
+///   "id": "主题 id（缺省由 file 推导）",
+///   "path": "模块内分级路径（斜杠分级）",
+///   "title": "文档标题", "summary": "摘要",
+///   "keywords": ["搜索关键词"], "order": 1,
+///   "content": "markdown 正文", "examples": [], "actions": {}
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/help/doc",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "保存结果 {saved}", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn help_save_doc(
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::help::store::HelpDocInput>,
@@ -105,7 +217,19 @@ pub async fn help_save_doc(
     Ok(Json(ApiResp::ok(serde_json::json!({ "saved": saved }))))
 }
 
-/// `DELETE /api/help/doc/:domain/:app/:module/:file` —— 删除帮助文档。
+/// 删除帮助文档。
+///
+/// `DELETE /api/help/doc/{domain}/{app}/{module}/{file}` —— 按 DAM + file 删除。
+/// 既有接口，保留 DELETE 方法（新接口规范不再如此设计）。
+#[utoipa::path(
+    delete,
+    path = "/api/help/doc/{domain}/{app}/{module}/{file}",
+    params(HelpPath),
+    responses(
+        (status = 200, description = "删除结果 {ok}", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn help_delete_doc(
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<HelpPath>,

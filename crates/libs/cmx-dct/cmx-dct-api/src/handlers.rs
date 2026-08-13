@@ -65,6 +65,21 @@ impl futures::Stream for SafeReceiverStream {
 // 1) GET /api/dct/meta —— 字典显示元数据
 // ============================================================================
 
+/// 返回字典显示元数据。
+///
+/// `GET /api/dct/meta` —— 按 `DctQuery` 坐标解析字典定义（DAM / file 可缺省，后端自动反查补全），投影出列
+/// caption、类型、主键、是否自分级等显示元数据。`?with_props=true` 时
+/// `columns[].extra` 额外携带字段扁平属性（width / visible / pattern / enumValues /
+/// required / intDigits / decimalDigits 等），供字典数据维护页编辑、校验与布局使用。
+#[utoipa::path(
+    get,
+    path = "/api/dct/meta",
+    params(DctQuery),
+    responses(
+        (status = 200, description = "字典显示元数据（列 caption / 类型 / PK / 是否自分级）；with_props=true 时含完整扁平属性", body = ApiResp<Value>)
+    ),
+    tag = "DCT字典接口"
+)]
 pub async fn dct_meta(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -83,6 +98,35 @@ pub async fn dct_meta(
 // 2) GET|POST /api/dct/data/search —— 装载字典数据
 // ============================================================================
 
+/// 装载字典数据。
+///
+/// `GET|POST /api/dct/data/search` —— flat / 自分级 children，分页。
+/// GET 仅按 `DctQuery` 定位，使用默认分页（page=1、pageSize=500）；POST 时 body 为
+/// SearchQuery JSON：
+///
+/// ```json
+/// {
+///   "filters": { "code": "001", "status": ["active", "pending"], "remark": null },
+///   "q": "模糊搜索词",
+///   "sort": { "field": "code", "order": "desc" },
+///   "page": 1,
+///   "pageSize": 500,
+///   "parentId": "自分级字典的父行 id"
+/// }
+/// ```
+///
+/// `filters` 值语义：标量 = 等值、数组 = IN、null = IS NULL；`pageSize` 上限 5000。
+/// 自分级字典传 `parentId` 时装载该父行下的 children。
+#[utoipa::path(
+    post,
+    path = "/api/dct/data/search",
+    params(DctQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "字典数据：rows（行数组）+ total / page / pageSize 分页信息", body = ApiResp<Value>)
+    ),
+    tag = "DCT字典接口"
+)]
 pub async fn dct_search(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -107,6 +151,33 @@ pub async fn dct_search(
 //     + 列式 msgpack 二进制出口（对标 doc 的 tokio-zmc-msgpack）。
 // ============================================================================
 
+/// 零拷贝装载字典数据。
+///
+/// `GET|POST /api/dct/data/tokio-zmc-msgpack` —— 列式 msgpack 二进制出口。
+/// tokio-postgres + ZmcDataSet 零拷贝链路，装载语义与 `/api/dct/data/search` 一致，
+/// 仅出口不同：响应为列式 msgpack 二进制信封（`Content-Type: application/x-msgpack`）。
+/// GET 仅按 `DctQuery` 定位（默认分页）；POST 时 body 为 SearchQuery JSON：
+///
+/// ```json
+/// {
+///   "filters": { "code": "001", "status": ["active", "pending"], "remark": null },
+///   "q": "模糊搜索词",
+///   "sort": { "field": "code", "order": "desc" },
+///   "page": 1,
+///   "pageSize": 500,
+///   "parentId": "自分级字典的父行 id"
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/dct/data/tokio-zmc-msgpack",
+    params(DctQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "列式 msgpack 二进制信封：{code, msg, data}（data 为列式编码字节）", content_type = "application/x-msgpack")
+    ),
+    tag = "DCT字典接口"
+)]
 pub async fn dct_search_zmc_msgpack(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -129,6 +200,31 @@ pub async fn dct_search_zmc_msgpack(
 // 3) POST /api/dct/entries —— 回存（upsert，merge 语义）
 // ============================================================================
 
+/// 回存字典条目。
+///
+/// `POST /api/dct/entries` —— upsert，merge 语义。
+/// body 为行数组 JSON（或单行对象），每行是按字典列取值的扁平对象：带主键的行
+/// 更新，无主键（或临时 id）的行铸号插入：
+///
+/// ```json
+/// [
+///   { "id": "temp-1", "code": "CNY", "name": "人民币" },
+///   { "code": "USD", "name": "美元" }
+/// ]
+/// ```
+///
+/// 落库前做列级校验（类型 / 长度 / 精度 / 非空），一次回报全部违规；配置了编码
+/// 引擎（codeRule）的字典会为 code 为空的新行自动铸业务编码。
+#[utoipa::path(
+    post,
+    path = "/api/dct/entries",
+    params(DctQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "回存结果 {count, idMap}（idMap：临时 id → 真号）；校验失败返回结构化 violations", body = ApiResp<Value>)
+    ),
+    tag = "DCT字典接口"
+)]
 pub async fn dct_upsert(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -151,6 +247,23 @@ pub async fn dct_upsert(
 // 4) DELETE /api/dct/entries/{id} —— 删除一行
 // ============================================================================
 
+/// 删除一行字典条目。
+///
+/// `DELETE /api/dct/entries/{id}` —— 按路径参数 `id`（主键）删除 `DctQuery` 定位的字典表中的一行；连号域
+/// （enable_gap）字典删除前记录断号。既有接口，保留 DELETE 方法与路径参数
+/// （新接口规范不再如此设计）。
+#[utoipa::path(
+    delete,
+    path = "/api/dct/entries/{id}",
+    params(
+        ("id" = String, Path, description = "要删除的字典条目主键"),
+        DctQuery
+    ),
+    responses(
+        (status = 200, description = "删除结果 {ok, deleted}（deleted 为实际删除行数）", body = ApiResp<Value>)
+    ),
+    tag = "DCT字典接口"
+)]
 pub async fn dct_delete(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -172,6 +285,37 @@ pub async fn dct_delete(
 //     返回 { ok, mode, affected, updatedAt:[{id,updateTime}] }。
 // ============================================================================
 
+/// Changeset 回存字典。
+///
+/// `POST /api/dct/save` —— 事务 + 乐观锁。body 为 changeset JSON：
+///
+/// ```json
+/// {
+///   "saveMode": "merge",
+///   "changes": {
+///     "<字典表名>": {
+///       "inserted": [ { "id": "临时 id", "fields": { "code": "...", "name": "..." } } ],
+///       "updated": [ { "id": "...", "fields": { "name": "..." }, "baseline": { "update_time": "..." } } ],
+///       "deleted": [ "id1", "id2" ]
+///     }
+///   }
+/// }
+/// ```
+///
+/// `saveMode` 缺省 `merge`（按 changes 增量回存）；`replace` 时改用 `snapshot`
+/// 整表替换。`updated` 行以 `baseline.update_time` 做乐观锁，他人已修改时返回
+/// HTTP 409，前端提示刷新后重试。落库前做列级校验，一次回报全部违规。
+#[utoipa::path(
+    post,
+    path = "/api/dct/save",
+    params(DctQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "保存结果 {ok, mode, affected, updatedAt: [{id, updateTime}], idMap}", body = ApiResp<Value>),
+        (status = 409, description = "乐观锁冲突（update_time baseline 不匹配，他人已修改），前端提示刷新后重试", body = ApiResp<Value>)
+    ),
+    tag = "DCT字典接口"
+)]
 pub async fn dct_save(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -223,7 +367,8 @@ pub async fn dct_save(
 // ============================================================================
 
 /// 导出请求的 query 参数。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct ExportParams {
     /// 导出格式：`json`（默认，NDJSON）/ `csv`
     #[serde(default = "default_export_format")]
@@ -234,11 +379,23 @@ fn default_export_format() -> String {
     "json".to_string()
 }
 
-/// 流式导出字典全表数据。
+/// 流式导出字典全表。
 ///
-/// - 走 keyset 分页（`WHERE pk > $last_pk ORDER BY pk LIMIT N`）+ mpsc + `Body::from_stream`
-/// - 响应头：`Content-Type` + `Content-Disposition: attachment`
+/// `GET /api/dct/export` —— 支持 NDJSON / CSV 格式，附件下载。
+///
+/// - 走 keyset 分页（`WHERE pk > $last_pk ORDER BY pk LIMIT N`）+ mpsc +
+///   `Body::from_stream`，逐行流式吐出，服务端内存平稳
+/// - 响应头：`Content-Type`（随 format：NDJSON / CSV）+ `Content-Disposition: attachment`
 /// - 文件名 `{dict_code}_{table_name}.{ext}`（纯 ASCII，无乱码风险）
+#[utoipa::path(
+    get,
+    path = "/api/dct/export",
+    params(DctQuery, ExportParams),
+    responses(
+        (status = 200, description = "流式导出全表（format=json 为 NDJSON，format=csv 为 CSV）；Content-Disposition: attachment，文件名 {dictCode}_{tableName}.{ext}", content_type = "application/x-ndjson")
+    ),
+    tag = "DCT字典接口"
+)]
 pub async fn dct_export(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -305,11 +462,11 @@ pub async fn dct_export(
 // 7) POST /api/dct/import —— 流式导入（multipart/form-data：file + mode）
 // ============================================================================
 
-/// 导入请求的 query 参数（mode 通过 multipart field 传，不在这里）。
-/// 保留 DctQuery 用于定位字典。
-#[derive(serde::Deserialize)]
+/// 导入请求的 query 参数（字典定位仍走 `DctQuery`）。
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct ImportParams {
-    /// 写入语义：upsert（默认）/ replace / insert_only（multipart `mode` 字段覆盖）
+    /// 写入语义：upsert（默认）/ replace / insert_only；multipart `mode` 字段优先覆盖。
     #[serde(default = "default_import_mode")]
     pub mode: String,
 }
@@ -344,11 +501,22 @@ fn detect_format(filename: &str, content_type: &str) -> Result<store::ImportForm
 
 /// 流式导入字典数据。
 ///
-/// multipart/form-data：
-/// - `file`：文件字段（filename + content_type 用于格式识别）
-/// - `mode`：可选字符串字段（`upsert` / `replace` / `insert_only`，默认 `upsert`）
+/// `POST /api/dct/import` —— multipart/form-data 上传：
+/// - `file`：文件字段（filename + content_type 自动识别 CSV / JSON NDJSON）
+/// - `mode`：可选字符串字段（`upsert` / `replace` / `insert_only`，默认 `upsert`；
+///   URL query `?mode=` 亦可传，multipart 字段优先覆盖）
 ///
-/// 返回 `ImportSummary`：`{total, affected, skipped, errors}`
+/// 返回导入汇总 `ImportSummary`：`{total, affected, skipped, errors}`。
+#[utoipa::path(
+    post,
+    path = "/api/dct/import",
+    params(DctQuery, ImportParams),
+    request_body(content = Value, description = "multipart/form-data：file（文件字段，filename + content-type 用于格式识别）+ mode（可选字段：upsert / replace / insert_only，默认 upsert）。自动识别 .csv / .json / .ndjson", content_type = "multipart/form-data"),
+    responses(
+        (status = 200, description = "流式导入完成，返回 {total, affected, skipped, errors}", body = ApiResp<Value>)
+    ),
+    tag = "DCT字典接口"
+)]
 pub async fn dct_import(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,

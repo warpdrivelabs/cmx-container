@@ -23,6 +23,8 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 /// 全局反查补全（唯一命中即用；多 DAM 冲突返回 HTTP 409 + 候选列表；零命中报错）。
 /// `file` 可选：缺失时由 `resolve_dict_file` 在 DAM 下自动扫描含该 dictCode 的 DCT 文件
 /// （优先 isDefault、回退 version 最大）。
+#[cfg_attr(feature = "openapi", derive(utoipa::IntoParams))]
+#[cfg_attr(feature = "openapi", into_params(parameter_in = Query))]
 #[derive(Debug, Deserialize)]
 pub struct DctQuery {
     /// 域（如 basic/fi）；可选，缺失自动反查。

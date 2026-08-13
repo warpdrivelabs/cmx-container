@@ -1274,7 +1274,9 @@ dependencies = [
  "axum",
  "bytes",
  "cmx-api-core",
+ "cmx-api-types",
  "cmx-biz",
+ "cmx-dct-model",
  "cmx-dct-store-pg",
  "futures",
  "rmp",
@@ -1282,6 +1284,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "utoipa",
 ]
 
 [[package]]
@@ -1294,6 +1297,7 @@ dependencies = [
  "cmx-utils",
  "serde",
  "serde_json",
+ "utoipa",
 ]
 
 [[package]]
@@ -1341,6 +1345,7 @@ dependencies = [
  "axum",
  "bytes",
  "cmx-api-core",
+ "cmx-api-types",
  "cmx-biz",
  "cmx-core",
  "cmx-database",
@@ -1354,6 +1359,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "utoipa",
 ]
 
 [[package]]
