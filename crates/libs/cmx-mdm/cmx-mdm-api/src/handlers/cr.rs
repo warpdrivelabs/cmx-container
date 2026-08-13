@@ -6,7 +6,6 @@
 //! - `POST /mdm/change-requests/submit` → [`mdm_cr_submit`]
 //! - `POST /mdm/change-requests/approve` → [`mdm_cr_approve`]
 //! - `POST /mdm/change-requests/reject` → [`mdm_cr_reject`]
-//! - `POST /mdm/change-requests/clone-revise` → [`mdm_cr_clone_revise`]
 //! - `POST /mdm/change-requests/abort` → [`mdm_cr_abort`]
 //! - `GET /mdm/change-requests` → [`mdm_cr_list`]
 //! - `GET /mdm/change-requests/detail` → [`mdm_cr_detail`]
@@ -76,22 +75,6 @@ pub async fn mdm_cr_reject(
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "rejected" }))))
 }
 
-/// 驳回复活：rejected → 克隆新 draft（`source_cr_id` 指向旧）。
-pub async fn mdm_cr_clone_revise(
-    State(_s): State<CmxAppState>,
-    svr_ctx: CmxSvrContext,
-    headers: HeaderMap,
-    Json(body): Json<CrIdBody>,
-) -> Result<Json<ApiResp<Value>>> {
-    let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id_from_headers(&headers).await;
-    let operated_by = actor_id_i64(&svr_ctx);
-    let new_id = store::clone_revise(mm, &db_id, body.cr_id, operated_by).await?;
-    Ok(Json(ApiResp::ok(
-        json!({ "newCrId": new_id, "sourceCrId": body.cr_id, "status": "draft" }),
-    )))
-}
-
 /// 作废：draft → aborted。
 pub async fn mdm_cr_abort(
     State(_s): State<CmxAppState>,
@@ -135,7 +118,7 @@ pub async fn mdm_cr_detail(
     Ok(Json(ApiResp::ok(detail)))
 }
 
-/// 通用 CR id body（submit/approve/reject/clone-revise/abort 复用）。
+/// 通用 CR id body（submit/approve/reject/abort 复用）。
 #[derive(serde::Deserialize)]
 pub struct CrIdBody {
     /// CR id。

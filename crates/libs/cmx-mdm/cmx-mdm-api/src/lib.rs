@@ -39,7 +39,6 @@ impl ModuleRoutes for MdmModule {
             .route("/mdm/change-requests/submit", post(mdm::mdm_cr_submit))
             .route("/mdm/change-requests/approve", post(mdm::mdm_cr_approve))
             .route("/mdm/change-requests/reject", post(mdm::mdm_cr_reject))
-            .route("/mdm/change-requests/clone-revise", post(mdm::mdm_cr_clone_revise))
             .route("/mdm/change-requests/abort", post(mdm::mdm_cr_abort))
             .route("/mdm/change-requests", get(mdm::mdm_cr_list))
             .route("/mdm/change-requests/detail", get(mdm::mdm_cr_detail))

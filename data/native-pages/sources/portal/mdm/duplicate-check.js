@@ -801,7 +801,6 @@ async function deleteRule() {
 }
 
 async function onDictChange(detail) {
-  console.log(detail)
   const dictCode = (detail && (detail.id || detail.dictCode)) || ''
   state.dictCode = dictCode
   state.dictName = (detail && (detail.text || (detail.plain && detail.plain.dictName) || (detail.row && detail.row.dictName))) || dictCode

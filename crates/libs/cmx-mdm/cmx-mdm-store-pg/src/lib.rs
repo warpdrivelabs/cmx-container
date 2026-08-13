@@ -7,7 +7,7 @@
 //! - [`sql_builder`]：cm_* 写入的 SQL 构造与列值转换工具（dct_accessor 内部用）。
 //! - [`md_accessor`]：md_audit / md_event_log 治理表写入 + CR 状态归档。
 //! - [`activation_service`]：激活器 / 合并 / 还原三套主流程的单事务编排。
-//! - [`cr_service`]：CR 变更请求服务（状态校验 / 列表 / 详情 / 克隆复活 / 作废）。
+//! - [`cr_service`]：CR 变更请求服务（状态校验 / 列表 / 详情 / 作废）。
 //! - [`match_store`]：匹配组 / 交叉引用 / 治理查询 store。
 //! - [`match_config_store`]：查重规则配置 store。
 //! - [`scan_store`]：查重发现项 store（md_match_scan，全库扫描结果载体）。
@@ -20,7 +20,7 @@
 mod activation_service;
 /// cmx_mdm_activation 激活映射配置读写（激活器 + UI 配置器）。
 mod activation_store;
-/// CR 变更请求服务（状态校验 / 列表 / 详情 / 克隆复活 / 作废）。
+/// CR 变更请求服务（状态校验 / 列表 / 详情 / 作废）。
 mod cr_service;
 /// cm_* 主数据写入闸口（强制 lifecycle_status='published'，唯一入口）。
 mod dct_accessor;
@@ -40,7 +40,7 @@ mod md_accessor;
 mod sql_builder;
 
 pub use activation_store::{find_by_doc_type, line_tables_for_dict, list, upsert, delete_by_code, LineTableInfo};
-pub use cr_service::{abort_cr, check_status, check_status_in, clone_revise, get_cr_detail, list_cr};
+pub use cr_service::{abort_cr, check_status, check_status_in, get_cr_detail, list_cr};
 pub use error::{api_err, api_err_db};
 // 激活器主流程对 api 层暴露（M1 activate + M3 merge/unmerge）
 pub use activation_service::{activate, merge, unmerge, MergeStats};
