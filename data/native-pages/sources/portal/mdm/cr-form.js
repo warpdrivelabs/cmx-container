@@ -166,6 +166,12 @@ function styleCss() {
     box-shadow:inset 0 -2px 0 var(--neo-cyan,#00b4d8); }
   .loading { padding:40px; text-align:center; color:var(--sapContent_LabelColor); font-size:13px; }
   .load-err { padding:24px; color:var(--sapNegativeTextColor,#b00); font-size:13px; }
+  /* 关键信息查重引导提示条 */
+  .key-tip { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; padding:8px 12px;
+    border-radius:6px; font-size:12px; line-height:1.5; color:var(--sapContent_LabelColor);
+    background:color-mix(in srgb, var(--neo-cyan,#00b4d8) 8%, var(--sapList_Background,#fff));
+    border:1px solid color-mix(in srgb, var(--neo-cyan,#00b4d8) 24%, transparent); }
+  .key-tip ui5-icon { color:var(--neo-cyan,var(--sapInformativeTextColor,#00b4d8)); font-size:14px; flex-shrink:0; margin-top:1px; }
   /* view 模式左右分栏：左主内容 + 右固定操作区（操作按钮 + 流程占位） */
   .pg-view { flex-direction:row; align-items:stretch; overflow:hidden; }
   .pg-view .pg-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; overflow:auto; }
@@ -213,7 +219,11 @@ function viewHtml() {
         <ui5-icon name="add-document" design="Default" mode="Decorative"></ui5-icon>
         <ui5-title level="H6" size="H6" wrapping-type="Normal" class="sec-t">关键信息（查重）</ui5-title>
       </div></div>
-      <div class="sec-bd" id="fKeyForm"></div>
+      <div class="sec-bd">
+        <div class="key-tip"><ui5-icon name="message-information" mode="Decorative"></ui5-icon>
+          <span>填写关键信息后点击「下一步」，系统将自动查重——若已存在相似记录会提示确认，避免重复录入。</span></div>
+        <div id="fKeyForm"></div>
+      </div>
     </div>` : ''
   const fullVisible = !showSteps || step === 2
   const headHtml = fullVisible ? `<div id="fHeadForms"></div>` : ''
