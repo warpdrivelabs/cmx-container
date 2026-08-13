@@ -225,6 +225,8 @@ function styleCss() {
 
   /* 编辑头：标题 + 启用开关 */
   .ed-head { display:flex; align-items:center; justify-content:space-between; }
+  .ed-actions { display:flex; align-items:center; gap:10px; }
+  .ed-head-left { display:flex; align-items:center; gap:14px; }
   .ed-title { font-size:18px; font-weight:600; display:flex; align-items:center; gap:8px; }
   .ed-title .code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:14px;
     color:var(--neo-cyan,#00b4d8); }
@@ -283,10 +285,12 @@ function styleCss() {
   .add-row { padding:8px 10px; text-align:center; }
   .add-btn { color:var(--neo-cyan,#00b4d8); cursor:pointer; font-size:12px; font-weight:500; }
   .add-btn:hover { text-decoration:underline; }
-  .del-btn { color:var(--sapContent_LabelColor); cursor:pointer; font-size:12px; }
-  .del-btn:hover { color:var(--neo-red,#c53030); }
-  .row-move { color:var(--sapContent_LabelColor); cursor:pointer; font-size:13px; padding:0 2px; line-height:1; }
-  .row-move:hover { color:var(--neo-cyan,#00b4d8); }
+  .icon-btn { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--sapContent_IconColor,#6a6d70); cursor:pointer; transition:background-color .12s,color .12s; vertical-align:middle; }
+  .icon-btn ui5-icon { width:16px; height:16px; pointer-events:none; }
+  .icon-btn:hover { background:var(--sapButton_Hover_Background,rgba(0,0,0,.06)); color:var(--sapHighlightColor,#0070f2); }
+  .icon-btn:active { background:var(--sapButton_Active_Background,rgba(0,0,0,.12)); }
+  .icon-btn.danger:hover { background:rgba(187,0,0,.1); color:var(--sapNegativeColor,#bb0000); }
+  .icon-btn[disabled] { opacity:.4; cursor:default; background:transparent; color:var(--sapContent_NonInteractiveIconColor,#6a6d70); }
 
   /* 行表折叠组 */
   .lm { border:1px solid var(--sapList_BorderColor); border-radius:6px; margin-bottom:10px; overflow:hidden; }
@@ -375,16 +379,21 @@ function sideHtml() {
 // ── 卡片1：基本信息 ──────────────────────────────────────────────────────────
 function cardBasic() {
   const c = state.current || {}
+  // 已持久化（list 内能查到）→ 锁定 source_doc_type / cr_type（改这俩 = 换 activation_code = 另一条配置）
+  const isPersisted = !!c.activation_code && state.list.some((it) => it.activation_code === c.activation_code)
+  // activation_code 统一由 sdt+crt 派生（确定性 → upsert 幂等）
+  const derived = c.source_doc_type && c.cr_type ? `${c.source_doc_type}__${c.cr_type}` : ''
   return `<div class="card">
     <div class="card-head"><h3><span class="num">1</span> 基本信息</h3>
       <span class="card-hint">CR 路由键 → 目标字典定位</span></div>
     <div class="card-body"><div class="form-grid">
-      <div class="f-item"><label>激活编码 activation_code <span class="req">*</span></label>
-        <ui5-input id="amCode" class="mono" value="${esc(c.activation_code || '')}" placeholder="如 supplier_apply"></ui5-input></div>
-      <div class="f-item"><label>来源单据类型 source_doc_type <span class="req">*</span></label>
-        <ui5-input id="amSdt" class="mono" value="${esc(c.source_doc_type || '')}" placeholder="如 mdm_supplier_apply"></ui5-input></div>
-      <div class="f-item"><label>变更类型 cr_type <span class="req">*</span></label>
-        <ui5-select id="amCrt">${CR_TYPES.map((t) => `<ui5-option value="${t.value}" ${c.cr_type === t.value ? 'selected' : ''}>${esc(t.label)}</ui5-option>`).join('')}</ui5-select></div>
+      <div class="f-item readonly-field" style="display:none"><label>激活编码 activation_code · 自动生成</label>
+        <ui5-input id="amCode" class="mono" value="${esc(derived)}" placeholder="填入来源单据类型 + 变更类型后自动生成" readonly></ui5-input>
+        <span class="help">由「来源单据类型 + 变更类型」拼接，作配置主键；已保存记录不可改</span></div>
+      <div class="f-item ${isPersisted ? 'readonly-field' : ''}"><label>来源单据类型 source_doc_type <span class="req">*</span>${isPersisted ? ' · 已锁定' : ''}</label>
+        <ui5-input id="amSdt" class="mono" value="${esc(c.source_doc_type || '')}" placeholder="如 mdm_supplier_apply" ${isPersisted ? 'readonly' : ''}></ui5-input></div>
+      <div class="f-item ${isPersisted ? 'readonly-field' : ''}"><label>变更类型 cr_type <span class="req">*</span>${isPersisted ? ' · 已锁定' : ''}</label>
+        <ui5-select id="amCrt" ${isPersisted ? 'disabled' : ''}>${CR_TYPES.map((t) => `<ui5-option value="${t.value}" ${c.cr_type === t.value ? 'selected' : ''}>${esc(t.label)}</ui5-option>`).join('')}</ui5-select></div>
       <div class="f-item"><label>目标字典 target_dict <span class="req">*</span></label>
         <cmx-combo-box id="amTdCombo" data-cmx-mode="list" data-cmx-clearable="false"></cmx-combo-box>
         <span class="help">从同模块 DCT 字典目录选择</span></div>
@@ -454,16 +463,10 @@ function cardHeader() {
     <div class="card-head"><h3><span class="num">3</span> 头表字段映射 header_mapping</h3>
       <span class="card-hint">CR 源字段 → cm_* 目标列 · 分组仅 UI 展示，落库仍扁平 {源:目标}</span></div>
     <div class="card-body">
-      <div class="hg-tool">
-        <ui5-button design="Transparent" icon="group" id="amAddGroup">+ 添加分组</ui5-button>
-        <span style="flex:1"></span>
-        <span class="muted" style="font-size:11px">展示：</span>
-        <ui5-select id="amGroupBy" class="grp-sel">
-          <ui5-option value="group" ${state.groupBy === 'group' ? 'selected' : ''}>按分组</ui5-option>
-          <ui5-option value="flat" ${state.groupBy === 'flat' ? 'selected' : ''}>扁平</ui5-option>
-        </ui5-select>
-      </div>
       <div id="amHeaderTable"></div>
+      <div style="text-align:center; padding:6px">
+        <span class="add-btn" id="amAddGroup">+ 添加分组</span>
+      </div>
     </div>
   </div>`
 }
@@ -490,17 +493,19 @@ function formHtml() {
   <div class="main-scroll">
   <div class="banner info"><span class="ic">ℹ️</span><span><b>数据来源提示</b>：目标字典字段、源字段下拉均来自 <b>DCT 字典元数据</b>。先在「目标字典」选择字典，自动加载字段候选。</span></div>
   <div class="ed-head">
-    <div class="ed-title">激活映射 <span class="code">${esc(c.activation_code || '(新建)')}</span></div>
-    <div class="sw-wrap" id="amActiveWrap"><span>${c.is_active ? '已启用' : '已停用'}</span><span class="sw ${c.is_active ? '' : 'off'}" id="amActiveSw"></span></div>
+    <div class="ed-head-left">
+      <div class="ed-title">激活映射 <span class="code">${esc(c.activation_code || '(新建)')}</span></div>
+      <div class="sw-wrap" id="amActiveWrap"><span>${c.is_active ? '已启用' : '已停用'}</span><span class="sw ${c.is_active ? '' : 'off'}" id="amActiveSw"></span></div>
+    </div>
+    <div class="ed-actions">
+      <ui5-button design="Negative" icon="delete" id="amDelete" ${isPersisted ? '' : 'disabled'}>删除</ui5-button>
+      <ui5-button design="Emphasized" icon="save" id="amSave">保存配置</ui5-button>
+    </div>
   </div>
   ${cardBasic()}
   ${cardCodeSource()}
   ${cardHeader()}
   ${cardLines()}
-  </div>
-  <div class="ed-foot">
-    <ui5-button design="Negative" icon="delete" id="amDelete" ${isPersisted ? '' : 'disabled'}>删除</ui5-button>
-    <ui5-button design="Emphasized" icon="save" id="amSave">保存配置</ui5-button>
   </div>`
 }
 
@@ -511,7 +516,7 @@ function viewHtml() {
 }
 
 // ── 头映射表（普通可编辑表格，规避 revo-grid 弹层/页内时序不渲染问题）──────────
-const mappingToRows = (hm) => Object.entries(hm || {}).map(([sourceField, targetField]) => ({ sourceField, targetField }))
+const mappingToRows = (hm) => Object.entries(hm || {}).map(([sourceField, targetField]) => ({ sourceField, targetField: targetField || '' }))
 // 行的分组归属由行自带 gi 承载（-1 = 未分组，>=0 = 分组下标），不再靠 headerGroups.fields 反查 sourceField。
 // 这样空 sourceField 的新行也能稳定归属某分组，支持「在分组内直接增行」；headerGroups 运行时只存组定义，
 // 其 fields 在 collectForm 时由各行 gi 推导落库（扁平 header_mapping 形态不变）。
@@ -525,7 +530,8 @@ function syncHeaderRowsFromMapping() {
   state.headerRows = rows
 }
 function headerRowsToMapping() {
-  const m = {}; for (const r of state.headerRows) if (r.sourceField && r.targetField) m[r.sourceField] = r.targetField
+  // 只要求源字段有值；目标列留空时存 null（激活器 plan_create/plan_update 遇 null tgt 自动跳过，不搬运不报错）
+  const m = {}; for (const r of state.headerRows) if (r.sourceField) m[r.sourceField] = r.targetField || null
   return m
 }
 const optHtml = (opts, val) => `<ui5-option value=""></ui5-option>` + opts.map((o) => `<ui5-option value="${esc(o.value)}" ${o.value === val ? 'selected' : ''}>${esc(o.label)}</ui5-option>`).join('')
@@ -548,6 +554,18 @@ function removeHeaderGroup(gi) {
   state.headerRows.forEach((r) => {
     if (r.gi === gi) r.gi = -1
     else if (r.gi != null && r.gi > gi) r.gi -= 1
+  })
+}
+// 分组排序：交换相邻分组定义 + 同步行归属 gi（gi↔j 互换，行跟随组移动）。
+// 顺序由 header_groups 数组序持久化（collectForm 按当前数组序导出）。
+function moveHeaderGroup(gi, dir) {
+  const j = gi + dir
+  if (gi < 0 || gi >= state.headerGroups.length || j < 0 || j >= state.headerGroups.length) return
+  const tmp = state.headerGroups[gi]; state.headerGroups[gi] = state.headerGroups[j]; state.headerGroups[j] = tmp
+  // 行归属下标同步互换（同一 r.gi 只命中 gi 或 j 之一，if/elif 互斥，无 double-swap）
+  state.headerRows.forEach((r) => {
+    if (r.gi === gi) r.gi = j
+    else if (r.gi === j) r.gi = gi
   })
 }
 // 字段排序：调整 headerRows 数组顺序。dir=-1 上移 / +1 下移。
@@ -582,7 +600,7 @@ function headerRowHtml(r, i) {
     <td><ui5-select class="hm-src" data-i="${i}">${optHtml(crOptions(), r.sourceField)}</ui5-select></td>
     <td><ui5-select class="hm-tgt" data-i="${i}">${optHtml(cmOptions(), r.targetField)}</ui5-select></td>
     ${hasGroups ? `<td style="white-space:nowrap">${grpCell}</td>` : ''}
-    <td style="white-space:nowrap"><span class="row-move" data-up="${i}" title="上移">↑</span><span class="row-move" data-down="${i}" title="下移">↓</span><span class="del-btn" data-hdel="${i}" title="删除">✕</span></td></tr>`
+    <td style="white-space:nowrap"><button class="icon-btn" data-up="${i}" title="上移"><ui5-icon name="slim-arrow-up"></ui5-icon></button><button class="icon-btn" data-down="${i}" title="下移"><ui5-icon name="slim-arrow-down"></ui5-icon></button><button class="icon-btn danger" data-hdel="${i}" title="删除"><ui5-icon name="delete"></ui5-icon></button></td></tr>`
 }
 // 通用表格渲染：扁平模式 / 各分组卡片内的表格共用。底部「增行」按 gi 决定新行归属。
 function headerTableHtml(rowList, gi) {
@@ -622,7 +640,11 @@ function renderHeaderTable() {
           <input class="hg-name-input" data-gi="${gi}" value="${esc(g.groupName)}">
           <span class="hg-count">${grpRows.length} 字段</span>
         </div>
-        <div class="hg-actions"><span class="del-btn" data-gdel="${gi}" title="删除整组（字段回到未分组）">✕</span></div>
+        <div class="hg-actions">
+          <button class="icon-btn" data-gup="${gi}" ${gi === 0 ? 'disabled' : ''} title="上移分组"><ui5-icon name="slim-arrow-up"></ui5-icon></button>
+          <button class="icon-btn" data-gdown="${gi}" ${gi === state.headerGroups.length - 1 ? 'disabled' : ''} title="下移分组"><ui5-icon name="slim-arrow-down"></ui5-icon></button>
+          <button class="icon-btn danger" data-gdel="${gi}" title="删除整组（字段回到未分组）"><ui5-icon name="delete"></ui5-icon></button>
+        </div>
       </div>
       <div class="hg-body">${headerTableHtml(grpRows, gi)}</div>
     </div>`
@@ -661,9 +683,11 @@ function bindHeaderEvents(wrap) {
   wrap.querySelectorAll('[data-up]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.up, -1); renderHeaderTable() }))
   wrap.querySelectorAll('[data-down]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.down, 1); renderHeaderTable() }))
   wrap.querySelectorAll('[data-gdel]').forEach((el) => el.addEventListener('click', () => { removeHeaderGroup(+el.dataset.gdel); renderHeaderTable() }))
-  // 折叠头（跳过组名输入框 / 删组 / 增行，避免点这些触发折叠）
+  wrap.querySelectorAll('[data-gup]').forEach((el) => el.addEventListener('click', () => { moveHeaderGroup(+el.dataset.gup, -1); renderHeaderTable() }))
+  wrap.querySelectorAll('[data-gdown]').forEach((el) => el.addEventListener('click', () => { moveHeaderGroup(+el.dataset.gdown, 1); renderHeaderTable() }))
+  // 折叠头（跳过组名输入框 / 删组 / 增行 / 组排序，避免点这些触发折叠）
   wrap.querySelectorAll('.hg-head').forEach((h) => h.addEventListener('click', (e) => {
-    if (e.target.closest('[data-gdel]') || e.target.closest('.hg-name-input') || e.target.closest('[data-grpadd]')) return
+    if (e.target.closest('[data-gdel]') || e.target.closest('[data-gup]') || e.target.closest('[data-gdown]') || e.target.closest('.hg-name-input') || e.target.closest('[data-grpadd]')) return
     h.parentElement.classList.toggle('expanded')
   }))
   wrap.querySelectorAll('.hg-name-input').forEach((inp) => {
@@ -703,7 +727,7 @@ function renderLineGroups() {
           <span class="muted">→</span>
           <code>${esc(tt || '(目标表)')}</code>
         </div>
-        <span class="del-btn" data-lmdel="${i}" title="删除整组">✕</span>
+        <button class="icon-btn danger" data-lmdel="${i}" title="删除整组"><ui5-icon name="delete"></ui5-icon></button>
       </div>
       <div class="lm-body">
         <div class="lm-meta">
@@ -774,7 +798,7 @@ function renderLineFields(idx) {
     ${rows.map((r, ri) => `<tr data-ri="${ri}">
       <td><ui5-select class="lf-src" data-i="${idx}" data-ri="${ri}">${optHtml(srcOpts, r.sourceField)}</ui5-select></td>
       <td><ui5-select class="lf-tgt" data-i="${idx}" data-ri="${ri}">${optHtml(tgtOpts, r.targetField)}</ui5-select></td>
-      <td style="white-space:nowrap"><span class="row-move" data-lfup="${idx}" data-ri="${ri}" title="上移">↑</span><span class="row-move" data-lfdown="${idx}" data-ri="${ri}" title="下移">↓</span><span class="del-btn" data-lfdel="${idx}" data-ri="${ri}" title="删除">✕</span></td></tr>`).join('')
+      <td style="white-space:nowrap"><button class="icon-btn" data-lfup="${idx}" data-ri="${ri}" title="上移"><ui5-icon name="slim-arrow-up"></ui5-icon></button><button class="icon-btn" data-lfdown="${idx}" data-ri="${ri}" title="下移"><ui5-icon name="slim-arrow-down"></ui5-icon></button><button class="icon-btn danger" data-lfdel="${idx}" data-ri="${ri}" title="删除"><ui5-icon name="delete"></ui5-icon></button></td></tr>`).join('')
       || `<tr><td colspan="3" class="muted">暂无明细字段，点击「+ 添加明细字段」</td></tr>`}
     </tbody></table>
     <div class="add-row"><span class="add-btn" data-lfadd="${idx}">+ 添加明细字段</span></div>`
@@ -793,7 +817,9 @@ const q = (id) => rootEl && rootEl.querySelector('#' + id)
 const val = (id) => { const el = q(id); return el ? (el.value || '').trim() : '' }
 function collectForm() {
   const c = state.current
-  c.activation_code = val('amCode'); c.source_doc_type = val('amSdt'); c.cr_type = val('amCrt')
+  c.source_doc_type = val('amSdt'); c.cr_type = val('amCrt')
+  // activation_code 统一由 sdt+crt 派生（确定性 → upsert 幂等）
+  c.activation_code = c.source_doc_type && c.cr_type ? `${c.source_doc_type}__${c.cr_type}` : ''
   // target_dict 来自字典帮助选择（combo），target_table 由其自动带出 → 两者均已同步进 state.current
   const combo = q('amTdCombo')
   if (combo && typeof combo.getValue === 'function') c.target_dict = combo.getValue() || ''
@@ -818,7 +844,7 @@ async function save() {
   const M = cmx()
   try {
     const cfg = collectForm()
-    if (!cfg.activation_code || !cfg.source_doc_type || !cfg.target_dict) { M.cmxWarn?.('映射码 / 来源单据类型 / 目标字典 不能为空'); return }
+    if (!cfg.source_doc_type || !cfg.target_dict) { M.cmxWarn?.('来源单据类型 / 目标字典 不能为空'); return }
     await apiPost('/api/mdm/activations', cfg, coord && coord.dbId)
     showToast('保存成功', 'ok'); await loadList(); refresh()
   } catch (e) { M.cmxError?.(`保存失败：${e.message}`) }
@@ -946,15 +972,24 @@ function bind(root) {
   })
   // 卡片1 目标字典：cmx-combo-box 帮助选择（选中自动带出 target_table + 加载字段）
   initCombo()
-  // 头映射：增行入口已下沉到每个分区底部（data-grpadd），顶部不再放全局增行
-  // 添加分组：默认名「分组N」，用户随后点组名输入框改名（免 prompt）。切到分组模式以便看到。
+  // 卡片1 来源单据类型/变更类型 → 实时派生激活编码（只读展示框）。已保存记录两键锁定，不会触发。
+  const refreshDerivedCode = () => {
+    const sdt = val('amSdt'); const crt = val('amCrt')
+    if (!state.current) return
+    state.current.source_doc_type = sdt; state.current.cr_type = crt
+    const code = sdt && crt ? `${sdt}__${crt}` : ''
+    state.current.activation_code = code
+    const codeEl = q('amCode'); if (codeEl) codeEl.value = code
+  }
+  root.querySelector('#amSdt')?.addEventListener('input', refreshDerivedCode)
+  root.querySelector('#amCrt')?.addEventListener('change', refreshDerivedCode)
+  // 头映射：增行入口已下沉到每个分区底部（data-grpadd）；「+ 添加分组」在头表区下方（add-btn 样式）
+  // 添加分组：默认名「分组N」，点组名输入框可改名（免 prompt）。有分组即自动按分组展示。
   root.querySelector('#amAddGroup')?.addEventListener('click', () => {
     const n = state.headerGroups.length + 1
     state.headerGroups.push({ groupCode: 'group_' + Date.now(), groupName: `分组${n}` })
-    state.groupBy = 'group'; renderHeaderTable()
+    renderHeaderTable()
   })
-  // 切换 分组/扁平 展示
-  root.querySelector('#amGroupBy')?.addEventListener('change', (e) => { state.groupBy = e.target.value || 'group'; renderHeaderTable() })
   // 卡片2 互斥：rule 非空 → 清并锁 subCode；subCode 非空 → 清并锁 rule。始终同步 state 与指示器。
   root.querySelector('#amCrc')?.addEventListener('change', () => {
     const v = val('amCrc'); if (state.current) state.current.code_rule_code = v || null
