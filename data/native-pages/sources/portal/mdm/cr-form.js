@@ -85,6 +85,8 @@ const state = {
   step: 1, keyName: '', savedCrId: null,
   crId: null, crHead: null, crLines: [],
   editing: false,              // view 模式草稿编辑态（true=表单可编辑、右侧操作区切保存/取消）
+  autoEdit: false,             // 入口标志：修改重提打开 rejected/draft 原单据时直接进编辑态
+  deletedLineIds: [],          // 被删的已入库明细行真实 id（仿 cmx-doc merge：deleted 增量删；未入库新建行不记）
   loading: true, loadErr: '',
 }
 let rootEl = null
@@ -692,7 +694,7 @@ async function checkKey(name) {
     clusterKeys: [subjField],
   }, state.dbId)
 }
-function goStep(n) { state.step = n; refresh() }
+function goStep(n) { state.deletedLineIds = []; state.step = n; refresh() }
 async function onNext() {
   const C = cmx()
   const row = (keyForm && keyForm.getData && keyForm.getData()) || {}
@@ -797,7 +799,8 @@ function collectLines() {
       }
     })
   })
-  return { inserted, updated }
+  // 被删的已入库行（按 _savedId 记录）。仿 cmx-doc merge：deleted 为行主键 id 数组，后端 DELETE WHERE id=ANY。
+  return { inserted, updated, deleted: [...state.deletedLineIds] }
 }
 
 function doSave(submit) {
@@ -808,17 +811,24 @@ function doSave(submit) {
   if (typeof C.saveDocData !== 'function') { C.cmxError?.('组件库未加载，无法保存'); return }
   // 先收拢未提交的明细行内编辑（失焦/派发 change 触发 revo-grid flush），再构造 changeset 保存
   commitGridEdits(async () => {
+    // 保存并提交（submit=true）：前置确认——提交后进入审批流，本页不再可改。
+    // 保存草稿（submit=false）为高频暂存，不加确认以免反复打断录入。
+    if (submit) {
+      const ok = await C.cmxConfirm?.({ title: '保存并提交', message: '确认保存并提交审批？提交后进入审批流程，单据内容将无法在此页继续修改。', danger: false })
+      if (ok === false) return
+    }
     const changes = {}
     if (state.savedCrId != null) {
       changes.cv_mdm_apply = { updated: [{ id: state.savedCrId, fields: buildHead() }] }
     } else {
       changes.cv_mdm_apply = { inserted: [{ id: HEAD_TID, fields: buildHead() }] }
     }
-    const { inserted: lineIns, updated: lineUpd } = collectLines()
+    const { inserted: lineIns, updated: lineUpd, deleted: lineDel } = collectLines()
     const lineChanges = {}
     if (lineIns.length) lineChanges.inserted = lineIns
     if (lineUpd.length) lineChanges.updated = lineUpd
-    if (lineIns.length || lineUpd.length) changes[TABLE_NAMES[1]] = lineChanges
+    if (lineDel.length) lineChanges.deleted = lineDel
+    if (lineIns.length || lineUpd.length || lineDel.length) changes[TABLE_NAMES[1]] = lineChanges
     try {
       const data = await C.saveDocData(null,
         { ...DOC_DEF, dbId: state.dbId },
@@ -827,6 +837,8 @@ function doSave(submit) {
       const isFirstSave = state.savedCrId == null
       if (isFirstSave && idMap[HEAD_TID] != null) state.savedCrId = idMap[HEAD_TID]
       if (lineIns.length) syncSavedLineIds(idMap)
+      // 删行已落库（cmx-doc merge deleted 已执行），清空本次记录，避免下次保存重复删
+      state.deletedLineIds = []
       const crId = state.savedCrId
       if (submit && crId != null) {
         await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId)
@@ -838,6 +850,10 @@ function doSave(submit) {
         try {
           const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
           state.crHead = (detail && detail.head) || {}
+          // view 草稿编辑态保存成功后，同步刷新明细行（detail 现已返回 line 真实 id），
+          // 使紧随的 refresh() 从最新 crLines 重建 grid：既有行带 _savedId（再编辑走 update），
+          // 编辑期间新增的行也回写真实 id 而非退化成合成 id（否则下次保存又被当 insert）。
+          if (state.mode === 'view') state.crLines = (detail && detail.lines) || state.crLines
           const docNo = state.crHead.doc_no
           if (docNo != null && docNo !== '' && state.mode !== 'view') {
             for (const f of headForms) {
@@ -870,16 +886,28 @@ function doSave(submit) {
   })
 }
 
+// view 模式单据状态操作的确认文案（提交/通过/驳回/作废）。danger=true 走警示红，用于不可恢复操作。
+const CR_ACTION_CONFIRM = {
+  submit:  { title: '提交审批', msg: (id) => `确认提交 CR-${id}？提交后进入审批流程，单据内容将无法在此页修改。`, danger: false },
+  approve: { title: '审批通过', msg: (id) => `确认通过 CR-${id}？通过后将自动激活并写入主数据，此操作不可撤销。`, danger: false },
+  reject:  { title: '驳回',     msg: (id) => `确认驳回 CR-${id}？驳回后申请人可修改重提，主数据不受影响。`, danger: true },
+  abort:   { title: '作废',     msg: (id) => `确认作废 CR-${id}？作废后该单据终止，不可恢复。`, danger: true },
+}
+
 // view 模式单据状态操作（提交/作废/通过/驳回），复用 /api/mdm/change-requests/* 接口。
-// confirmFirst=true 前置二次确认；needReason=true 从意见框取理由（驳回默认"详情页驳回"）。
+// confirmFirst=true 前置二次确认（文案取 CR_ACTION_CONFIRM）；needReason=true 从意见框取理由（驳回默认"详情页驳回"）。
 async function doCrAction(act, confirmFirst = false, needReason = false) {
   const C = cmx()
   const crId = Number(state.crId)
   if (!crId) return
   try {
     if (confirmFirst) {
-      const label = ({ abort: '作废' })[act] || '该操作'
-      const ok = await C.cmxConfirm?.({ title: '确认操作', message: `确认对 CR-${crId} 执行${label}？`, danger: true })
+      const meta = CR_ACTION_CONFIRM[act]
+      const ok = await C.cmxConfirm?.({
+        title: meta?.title || '确认操作',
+        message: meta ? meta.msg(crId) : `确认对 CR-${crId} 执行该操作？`,
+        danger: meta?.danger ?? true,
+      })
       if (ok === false) return
     }
     let url = ''; let payload = { crId }
@@ -944,12 +972,12 @@ function bind(root) {
   root.querySelector('#fSubmit2')?.addEventListener('click', () => doSave(true))
   // view 模式右侧操作区按钮（按 doc_status 渲染，元素不存在则跳过）
   root.querySelector('#fEdit')?.addEventListener('click', () => { state.editing = true; refresh() })
-  root.querySelector('#fEditCancel')?.addEventListener('click', () => { state.editing = false; refresh() })
+  root.querySelector('#fEditCancel')?.addEventListener('click', () => { state.deletedLineIds = []; state.editing = false; refresh() })
   root.querySelector('#fEditSave')?.addEventListener('click', () => doSave(false))
-  root.querySelector('#fCrSubmit')?.addEventListener('click', () => doCrAction('submit'))
+  root.querySelector('#fCrSubmit')?.addEventListener('click', () => doCrAction('submit', true))
   root.querySelector('#fAbort')?.addEventListener('click', () => doCrAction('abort', true))
-  root.querySelector('#fApprove')?.addEventListener('click', () => doCrAction('approve'))
-  root.querySelector('#fReject')?.addEventListener('click', () => doCrAction('reject', false, true))
+  root.querySelector('#fApprove')?.addEventListener('click', () => doCrAction('approve', true))
+  root.querySelector('#fReject')?.addEventListener('click', () => doCrAction('reject', true, true))
 }
 
 function bindLineToolbar() {
@@ -962,7 +990,16 @@ function bindLineToolbar() {
   })
   rootEl.querySelector('#fDelRow')?.addEventListener('click', () => {
     const grid = lineGrids[activeLineIdx]; if (!grid) return
-    const ids = grid.getSelectedIds?.(); if (ids?.length) { grid.removeRows(ids); queueMicrotask(() => grid?.refreshLayout?.()) }
+    const ids = grid.getSelectedIds?.() || []
+    if (!ids.length) return
+    // 已入库的被删行（有 _savedId）记录真实 id，供 changeset 的 deleted 增量删（仿 cmx-doc merge 语义）。
+    // 未入库的新建行（合成 id 无 _savedId）仅从 grid 移除，无需进 deleted。
+    const rows = lineRows(grid)
+    for (const id of ids) {
+      const r = rows.find((x) => String(x.id) === String(id))
+      if (r && r._savedId != null && !state.deletedLineIds.includes(r._savedId)) state.deletedLineIds.push(r._savedId)
+    }
+    grid.removeRows(ids); queueMicrotask(() => grid?.refreshLayout?.())
   })
 }
 
@@ -998,6 +1035,10 @@ async function init(tok) {
       state.crType = state.crHead.cr_type || state.crType
       // view 草稿编辑保存走 update 该 CR（复用 doSave 的 savedCrId 分支）
       state.savedCrId = Number(state.crId) || null
+      // autoEdit（修改重提入口）：rejected/draft 原单据直接进编辑态，省去用户再点「编辑」
+      if (state.autoEdit && (state.crHead.doc_status === 'rejected' || state.crHead.doc_status === 'draft')) {
+        state.editing = true
+      }
     }
     state.activation = await loadActivation()
     if (stale()) return
@@ -1040,6 +1081,8 @@ export default {
       state.crHead = null; state.crLines = []
       state.target = null; state.targetLines = {}
       state.editing = false
+      state.autoEdit = ctxGet('autoEdit') || p.autoEdit || false
+      state.deletedLineIds = []
       state.loading = true; state.loadErr = ''
     activeLineIdx = 0; lineSeq = 0
     initToken++; const tok = initToken
