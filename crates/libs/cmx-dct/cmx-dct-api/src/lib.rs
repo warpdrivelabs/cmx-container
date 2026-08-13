@@ -6,6 +6,9 @@
 //! 本 crate（无环）。端点路径与迁移前完全一致（`/dct/*`，`/api` 前缀由 web-server nest 加）。
 
 pub mod handlers;
+pub mod openapi;
+
+pub use openapi::DctApiDoc;
 
 use axum::Router;
 use axum::routing::{get, post};

@@ -10,7 +10,7 @@
 //! 绑定口径（对齐 match_store）：可空 BIGINT 用 `DataValue::from(Option<i64>)`，
 //! JSONB 用 `DataValue::Json(String)`；时间戳列由 DB DEFAULT/now() 算，应用层不 SET。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use cmx_core::dv;
 use cmx_core::model::cell::DataValue;
@@ -128,6 +128,42 @@ async fn load_pending_hashes(
 /// 发现项列表（分页，dictCode + status 过滤）。
 ///
 /// 排序：max_score DESC（高分优先）→ created_at DESC → id DESC。
+/// 按 status 聚合计数（管家工作台 summary 用）。
+///
+/// `dict_code` 为 `Some` 时按字典过滤；`None` 全表。吃 `(dict_code, status)` 索引。
+/// 返回 `status → 数量`；未出现的 status 调用方默认 0。
+pub async fn count_scan_by_status(
+    mm: &DatabaseManager,
+    db_id: &str,
+    dict_code: Option<&str>,
+) -> Result<HashMap<String, i64>, cmx_api_types::Error> {
+    let sql = if dict_code.is_some() {
+        "SELECT status, COUNT(*)::bigint AS c FROM md_match_scan \
+         WHERE dict_code = $1 GROUP BY status"
+    } else {
+        "SELECT status, COUNT(*)::bigint AS c FROM md_match_scan GROUP BY status"
+    };
+    let params: Vec<DataValue> = match dict_code {
+        Some(d) => vec![DataValue::String(d.into())],
+        None => vec![],
+    };
+    let ds = mm
+        .query_sql_with_datavalues(db_id, None, sql, params, "mdm_scan_count_by_status")
+        .await
+        .map_err(|e| api_err_db(&format!("聚合 md_match_scan 计数失败: {e}")))?;
+    let schema = ds.schema.as_ref();
+    let mut out = HashMap::new();
+    for row in ds.rows.iter() {
+        if let (Some(s), Some(c)) = (
+            row.get_by_name_as::<String>(schema, "status"),
+            row.get_by_name_as::<i64>(schema, "c"),
+        ) {
+            out.insert(s, c);
+        }
+    }
+    Ok(out)
+}
+
 /// member_ids JSONB 列经 [`parse_jsonb_field`] 转对象。
 pub async fn list_scans(
     mm: &DatabaseManager,

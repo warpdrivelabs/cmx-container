@@ -69,3 +69,69 @@ use utoipa::OpenApi;
     )
 )]
 pub struct ApiDoc;
+
+/// 门户业务 OpenAPI 文档切片（`/api` 下门户 / 设计器接口，统一 tag「门户接口」）。
+///
+/// 不带 `info`（切片惯例），由 cmx-platform-app `merged_openapi()` 合并进主文档；
+/// 独立门户微服务（cmx-portal-server）复用同一装配核，Swagger 同样可见。
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        // AI 对话中继 + 本地编辑代理
+        crate::handlers::portal::ai::ai_chat,
+        crate::handlers::portal::ai::agent_capabilities,
+        crate::handlers::portal::ai::agent_message,
+        crate::handlers::portal::ai::agent_message_stream,
+        crate::handlers::portal::ai::agent_approval,
+        // 工作区节点
+        crate::handlers::portal::meta::list_workspace_nodes,
+        crate::handlers::portal::meta::get_workspace_node,
+        crate::handlers::portal::meta::save_workspace_node,
+        crate::handlers::portal::meta::delete_workspace_node,
+        // 表单页 / 原生页面 / HTML 页面
+        crate::handlers::portal::pages::list_form_pages,
+        crate::handlers::portal::pages::save_form_page,
+        crate::handlers::portal::pages::get_form_page,
+        crate::handlers::portal::pages::list_native_pages,
+        crate::handlers::portal::pages::save_native_page,
+        crate::handlers::portal::pages::batch_native_pages,
+        crate::handlers::portal::pages::get_native_page,
+        crate::handlers::portal::pages::list_html_pages,
+        crate::handlers::portal::pages::save_html_page,
+        crate::handlers::portal::pages::batch_html_pages,
+        crate::handlers::portal::pages::get_html_page,
+        // 事实数据 / 帮助中心
+        crate::handlers::portal::data::list_facts,
+        crate::handlers::portal::data::get_fact_post,
+        crate::handlers::portal::data::get_fact_path,
+        crate::handlers::portal::data::help_catalog,
+        crate::handlers::portal::data::help_get_post,
+        crate::handlers::portal::data::help_get_path,
+        crate::handlers::portal::data::help_save_doc,
+        crate::handlers::portal::data::help_delete_doc,
+        // 通知中心（任务/消息/日志 + SSE 主动推送）
+        crate::handlers::portal::notify::notify_list,
+        crate::handlers::portal::notify::notify_centers,
+        crate::handlers::portal::notify::notify_counts,
+        crate::handlers::portal::notify::notify_publish,
+        crate::handlers::portal::notify::notify_mark_read,
+        crate::handlers::portal::notify::notify_stream,
+        // 功能启动器
+        crate::handlers::portal::launcher::launcher_resolve,
+        // 注册表只读派生（DAM）+ 服务目录 + 模块清单与资源
+        crate::handlers::portal::registry::registry_domains,
+        crate::handlers::portal::registry::registry_apps,
+        crate::handlers::portal::registry::registry_modules,
+        crate::handlers::portal::registry::registry_dam,
+        crate::handlers::portal::registry::service_catalog_list,
+        crate::handlers::portal::registry::service_catalog_get,
+        crate::handlers::portal::registry::list_modules,
+        crate::handlers::portal::registry::get_module_manifest,
+        crate::handlers::portal::registry::get_module_resource,
+        crate::handlers::portal::registry::module_resources,
+    ),
+    components(
+        schemas(crate::handlers::portal::notify::NotifyMarkInput)
+    )
+)]
+pub struct PortalApiDoc;

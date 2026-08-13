@@ -40,19 +40,20 @@ mod md_accessor;
 mod sql_builder;
 
 pub use activation_store::{find_by_doc_type, line_tables_for_dict, list, upsert, delete_by_code, LineTableInfo};
-pub use cr_service::{abort_cr, check_status, clone_revise, get_cr_detail, list_cr};
+pub use cr_service::{abort_cr, check_status, check_status_in, clone_revise, get_cr_detail, list_cr};
 pub use error::{api_err, api_err_db};
 // 激活器主流程对 api 层暴露（M1 activate + M3 merge/unmerge）
 pub use activation_service::{activate, merge, unmerge, MergeStats};
 // M3 匹配/合并 store 对 api 层暴露
 pub use match_store::{
-    get_match_group, insert_match_group, list_audit, list_events, list_match_groups,
-    list_subscriptions, load_by_ids, load_published, load_suspects, transition_match_group,
-    update_match_group, upsert_subscription,
+    count_merge_by_status, get_match_group, insert_match_group, list_audit, list_events,
+    list_match_groups, list_subscriptions, load_by_ids, load_published, load_suspects,
+    transition_match_group, update_match_group, upsert_subscription,
 };
 // M3.5 查重发现项 store（全库扫描 / 评审队列，cluster_hash 去重）
 pub use scan_store::{
-    get_scan, insert_findings, list_scans, transition_scan_status, InsertStats, PreparedCluster,
+    count_scan_by_status, get_scan, insert_findings, list_scans, transition_scan_status,
+    InsertStats, PreparedCluster,
 };
 // 查重规则配置 store 对 api 层暴露（查重界面内维护）
 pub use match_config_store::{

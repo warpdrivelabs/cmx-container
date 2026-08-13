@@ -46,7 +46,10 @@ pub async fn load_cr_lines(
     txn_id: Option<&str>,
     cr_id: i64,
 ) -> Result<Vec<Value>, cmx_api_types::Error> {
-    let sql = r#"SELECT line_type, line_action, line_payload, line_target_id, line_deltas
+    // 含 id：detail 接口供前端按 line id 区分 update/insert（重开草稿再编辑时避免全量 insert 重复）。
+    // clone_revise_inner 复用本函数读旧行时只取 line_type/line_action/line_payload/line_target_id/
+    // line_deltas、自行 next_pk_id() 铸新 id，不依赖旧 line id，故多取 id 列对其无影响。
+    let sql = r#"SELECT id, line_type, line_action, line_payload, line_target_id, line_deltas
                  FROM cv_mdm_apply_line WHERE upper_id = $1 ORDER BY line_no"#;
     let ds = mm
         .query_sql_with_datavalues(db_id, txn_id, sql, dv![DataValue::Int(cr_id)], "mdm_cr_lines")

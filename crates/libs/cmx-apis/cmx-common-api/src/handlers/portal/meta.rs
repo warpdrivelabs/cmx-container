@@ -56,7 +56,17 @@ use crate::{ApiResp, Result};
 //     )))
 // }
 
-/// `GET /api/workspace-nodes` —— 列表摘要。
+/// 列出工作区节点。
+///
+/// `GET /api/workspace-nodes` —— 全部工作区节点的列表摘要（不含 workspace 配置详情）。
+#[utoipa::path(
+    get,
+    path = "/api/workspace-nodes",
+    responses(
+        (status = 200, description = "工作区节点列表摘要", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn list_workspace_nodes(
     CmxSvrContext(_c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -65,7 +75,20 @@ pub async fn list_workspace_nodes(
     )))
 }
 
-/// `GET /api/workspace-nodes/:id` —— 完整定义。
+/// 取工作区节点。
+///
+/// `GET /api/workspace-nodes/{id}` —— 单个节点的完整定义（含 workspace 配置对象）。
+#[utoipa::path(
+    get,
+    path = "/api/workspace-nodes/{id}",
+    params(
+        ("id" = String, Path, description = "工作区节点 id")
+    ),
+    responses(
+        (status = 200, description = "节点完整定义（含 workspace 配置对象）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn get_workspace_node(
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
@@ -76,7 +99,28 @@ pub async fn get_workspace_node(
     )))
 }
 
-/// `POST /api/workspace-nodes` —— upsert。
+/// 保存工作区节点。
+///
+/// `POST /api/workspace-nodes` —— upsert（新建 / 更新）。body：
+///
+/// ```json
+/// {
+///   "id": "新建时可为空，由服务端生成",
+///   "name": "节点名称",
+///   "icon": "图标名",
+///   "details": "详情描述",
+///   "workspace": { "工作区配置，必须为对象": "..." }
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/workspace-nodes",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "保存后的节点完整记录", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn save_workspace_node(
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::meta::workspace_nodes::WorkspaceNodeInput>,
@@ -87,7 +131,21 @@ pub async fn save_workspace_node(
     )))
 }
 
-/// `DELETE /api/workspace-nodes/:id` —— 删除。
+/// 删除工作区节点。
+///
+/// `DELETE /api/workspace-nodes/{id}` —— 按节点 id 删除。既有接口，保留 DELETE
+/// 方法与路径参数（新接口规范不再如此设计）。
+#[utoipa::path(
+    delete,
+    path = "/api/workspace-nodes/{id}",
+    params(
+        ("id" = String, Path, description = "工作区节点 id")
+    ),
+    responses(
+        (status = 200, description = "删除结果", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn delete_workspace_node(
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,

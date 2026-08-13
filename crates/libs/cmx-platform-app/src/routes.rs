@@ -4,7 +4,7 @@
 
 use axum::Router;
 use cmx_common_api::CmxAppState;
-use cmx_common_api::openapi::ApiDoc;
+use cmx_common_api::openapi::{ApiDoc, PortalApiDoc};
 use cmx_common_api::routes::routes_impl::api_routes;
 use cmx_common_api::routes::traits::ModuleRoutes;
 use cmx_ai_api::{AiApiDoc, AiModule};
@@ -17,8 +17,8 @@ use cmx_plugin_api::{
     MarketplaceModule, ModulePackageModule, PluginApiDoc, PluginModule, TableMetadataModule,
 };
 use cmx_iam_api::{AuthModule, IamApiDoc, IamModule};
-use cmx_dct_api::DctModule;
-use cmx_doc_api::DocModule;
+use cmx_dct_api::{DctApiDoc, DctModule};
+use cmx_doc_api::{DocApiDoc, DocModule};
 use cmx_flow_api::{FlowModule, FlowProxyModule};
 use cmx_job_api::JobModule;
 use cmx_mdm_api::MdmModule;
@@ -197,6 +197,9 @@ fn merged_openapi() -> utoipa::openapi::OpenApi {
     doc.merge(BizApiDoc::openapi());
     doc.merge(PluginApiDoc::openapi());
     doc.merge(IamApiDoc::openapi());
+    doc.merge(DctApiDoc::openapi());
+    doc.merge(DocApiDoc::openapi());
+    doc.merge(PortalApiDoc::openapi());
     doc
 }
 

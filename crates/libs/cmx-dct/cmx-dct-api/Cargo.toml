@@ -5,14 +5,20 @@ edition.workspace = true
 authors.workspace = true
 
 # 数据字典（DCT）模块的 HTTP 层：薄 axum handler（提取参数 → resolve_dict → 调
-# cmx-dct-store-pg 服务 → ApiResp/msgpack 信封）+ DctModule(impl cmx_api::ModuleRoutes)
-# 路由表。依赖 cmx-api 拿 CmxAppState/CmxSvrContext/ApiResp/Result；由 web-server 合并
-# DctModule.routes()（cmx-api 不反向依赖本 crate，避免环）。端点路径与迁移前完全一致
+# cmx-dct-store-pg 服务 → ApiResp/msgpack 信封）+ DctModule(impl cmx_api_core::ModuleRoutes)
+# 路由表。依赖 cmx-api-core 拿 CmxAppState/CmxSvrContext/ApiResp/Result；由 web-server 合并
+# DctModule.routes()（cmx-api-core 不反向依赖本 crate，避免环）。端点路径与迁移前完全一致
 # （/dct/meta、/dct/data/*、/dct/entries、/dct/save）。
 
 [dependencies]
 # 内部依赖 - DCT 持久化/服务层（场景入口 dict_meta/dict_search/dict_upsert/... + DctQuery/BatchConflictMode re-export）
 cmx-dct-store-pg = { workspace = true }
+# 内部依赖 - DCT 中立模型（DctQuery 坐标 DTO；openapi feature 开 IntoParams 供 Swagger 查询参数描述）
+cmx-dct-model = { workspace = true, features = ["openapi"] }
+# 内部依赖 - API 通用类型（ApiResp<T>：响应信封，OpenApi schema 引用）
+cmx-api-types = { workspace = true }
+# OpenAPI 文档生成（handler #[utoipa::path] + DctApiDoc）
+utoipa = { workspace = true }
 # 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / ModuleRoutes / ApiResp/Result/Error）
 cmx-api-core = { workspace = true }
 # 内部依赖 - 业务错误码（Violation：校验失败结构化响应）

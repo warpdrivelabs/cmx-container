@@ -15,20 +15,44 @@ fn notify_user_id(c: &cmx_core::model::service::context::SVRContext) -> Result<S
         .ok_or_else(|| cmx_api_types::Error::unauthorized("未登录或无用户标识"))
 }
 
-#[derive(Debug, serde::Deserialize)]
+/// `GET /api/notifications` 通知中心过滤参数。
+#[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct NotifyListQuery {
+    /// 通知中心：task / message / log；缺省查全部中心。
     #[serde(default)]
     pub center: Option<String>,
 }
 
-/// `GET /api/notifications/centers` —— 三中心元信息（前端下拉用）。
+/// 通知中心元信息。
+///
+/// `GET /api/notifications/centers` —— 三中心（task / message / log）元信息，
+/// 前端下拉用。
+#[utoipa::path(
+    get,
+    path = "/api/notifications/centers",
+    responses(
+        (status = 200, description = "三中心元信息（id / 名称等）", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn notify_centers(
     CmxSvrContext(_c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(cmx_portal::notify::store::centers_meta())))
 }
 
+/// 通知未读计数。
+///
 /// `GET /api/notifications/counts` —— 当前用户各中心未读数 + 合计（红色角标）。
+#[utoipa::path(
+    get,
+    path = "/api/notifications/counts",
+    responses(
+        (status = 200, description = "各中心未读数 {task, message, log, total}", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn notify_counts(
     CmxSvrContext(c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
@@ -39,7 +63,19 @@ pub async fn notify_counts(
     )))
 }
 
-/// `GET /api/notifications?center=task|message|log` —— 当前用户通知列表（缺 center 则全部）。
+/// 列出用户通知。
+///
+/// `GET /api/notifications?center=task|message|log` —— 当前用户通知列表（通知按
+/// 用户隔离）；缺 center 查全部中心，center 非法返回 400。
+#[utoipa::path(
+    get,
+    path = "/api/notifications",
+    params(NotifyListQuery),
+    responses(
+        (status = 200, description = "通知列表 {items}", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn notify_list(
     CmxSvrContext(c): CmxSvrContext,
     Query(q): Query<NotifyListQuery>,
@@ -57,8 +93,30 @@ pub async fn notify_list(
     Ok(Json(ApiResp::ok(serde_json::json!({ "items": items }))))
 }
 
-/// `POST /api/notifications/publish` —— 发布一条通知（也用于后端/服务端主动推送的入口）。
-/// 默认发给当前用户；body 带 userId 时发给指定用户（服务端代发场景）。
+/// 发布一条通知。
+///
+/// `POST /api/notifications/publish` —— 也用于后端 / 服务端主动推送的入口。默认发给
+/// 当前用户；body 带 `userId` 时发给指定用户（服务端代发场景）。body：
+///
+/// ```json
+/// {
+///   "userId": "可选，缺省=当前登录用户",
+///   "center": "task | message | log",
+///   "title": "通知标题",
+///   "body": "正文（可选）",
+///   "level": "info | success | warning | error（可选）",
+///   "link": "点击跳转目标（可选）"
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/notifications/publish",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "发布后的通知记录", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn notify_publish(
     CmxSvrContext(c): CmxSvrContext,
     Json(mut input): Json<cmx_portal::notify::store::NotifyInput>,
@@ -78,18 +136,36 @@ pub async fn notify_publish(
     )))
 }
 
-#[derive(Debug, serde::Deserialize)]
+/// `POST /api/notifications/mark-read` 标记已读入参。
+///
+/// `{center, id}` 标单条；`{all: true, center?}` 标全部。
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NotifyMarkInput {
+    /// 通知中心：task / message / log；标单条时必填。
     #[serde(default)]
     pub center: Option<String>,
+    /// 通知 id；标单条时必填。
     #[serde(default)]
     pub id: Option<String>,
+    /// true 时标记该中心（或全部中心）所有通知为已读。
     #[serde(default)]
     pub all: bool,
 }
 
-/// `POST /api/notifications/mark-read` —— 标记已读：{ center, id } 标单条；{ all:true, center? } 标全部。
+/// 标记通知已读。
+///
+/// `POST /api/notifications/mark-read` —— `{center, id}` 标单条；`{all: true, center?}`
+/// 标全部；标单条缺 center / id 返回 400。
+#[utoipa::path(
+    post,
+    path = "/api/notifications/mark-read",
+    request_body = NotifyMarkInput,
+    responses(
+        (status = 200, description = "标单条返回 {changed}；标全部返回 {marked}", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "门户接口"
+)]
 pub async fn notify_mark_read(
     CmxSvrContext(c): CmxSvrContext,
     Json(input): Json<NotifyMarkInput>,
@@ -123,8 +199,19 @@ pub async fn notify_mark_read(
     Ok(Json(ApiResp::ok(serde_json::json!({ "changed": changed }))))
 }
 
-/// `GET /api/notifications/stream` —— SSE：服务端主动推送本用户的新通知与角标刷新。
-/// 浏览器用 fetch + 流读消费（携带 Authorization 头），订阅进程内 broadcast，仅下发本人事件。
+/// 订阅通知推送。
+///
+/// `GET /api/notifications/stream` —— SSE：服务端主动推送本用户的新通知与角标刷新；
+/// 连接建立先推一次当前 counts 保证角标立刻准确。浏览器用 fetch + 流读消费
+/// （携带 Authorization 头），订阅进程内 broadcast，仅下发本人事件。
+#[utoipa::path(
+    get,
+    path = "/api/notifications/stream",
+    responses(
+        (status = 200, description = "SSE 事件流：连接时先发 counts，其后按通知事件类型推送", content_type = "text/event-stream")
+    ),
+    tag = "门户接口"
+)]
 pub async fn notify_stream(
     CmxSvrContext(c): CmxSvrContext,
 ) -> axum::response::Response {

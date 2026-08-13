@@ -21,11 +21,12 @@
 
 const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
 function unwrap(res, body) {
+  // 后端错误响应有两种字段名：ApiResp 用 msg，cmx_api_types::Error 用 error；两者都兼容。
   if (body && typeof body === 'object' && typeof body.code === 'number') {
-    if (body.code !== 0) { const e = new Error(body.msg || `业务错误 ${body.code}`); e.body = body; throw e }
+    if (body.code !== 0) { const e = new Error(body.msg || body.error || `业务错误 ${body.code}`); e.body = body; throw e }
     return body.data
   }
-  if (!res.ok) { const e = new Error((body && body.error) || `HTTP ${res.status}`); e.status = res.status; throw e }
+  if (!res.ok) { const e = new Error((body && (body.msg || body.error)) || `HTTP ${res.status}`); e.status = res.status; throw e }
   return body
 }
 async function apiGet(url, dbId) {
@@ -65,11 +66,14 @@ function showToast(message, tone = 'ok', duration = 3000) {
 }
 
 // 头表分组渲染样式（前端配置，不存后端）：card=卡片分区 / bar=色条+下分隔线。改此常量切换。
-const HEAD_GROUP_STYLE = 'card'
+const HEAD_GROUP_STYLE = 'bar'
 // step：create 模式初始 1（先查重），update 模式初始 2（改已有记录，跳过查重）
 const state = {
   dbId: '', coord: null,
-  docType: '', crType: 'create', mode: 'create', target: null,
+  docType: '', crType: 'create', mode: 'create',
+  targetId: null, targetName: '',   // update：变更目标字典记录 id / 名称（tab 标题）
+  target: null,                     // update：按 targetId 加载的头记录（扁平 search 行，供 buildHead/headInitialValue 取列值）
+  targetLines: {},                  // update：各明细类型预填行 { [lineType]: rows }
   activation: null,        // 命中的 activation 配置
   dictMeta: null,          // 头字典 dct/meta
   headMap: [],             // [[srcField, tgtCol]] 按 header_mapping 顺序（数据构造用）
@@ -80,9 +84,15 @@ const state = {
   lineDefs: [],            // [{lineType, targetDict, targetTable, parentIdField, meta, map:[[src,tgt]], cols:[CmxColumn]}]
   step: 1, keyName: '', savedCrId: null,
   crId: null, crHead: null, crLines: [],
+  editing: false,              // view 模式草稿编辑态（true=表单可编辑、右侧操作区切保存/取消）
+  autoEdit: false,             // 入口标志：修改重提打开 rejected/draft 原单据时直接进编辑态
+  deletedLineIds: [],          // 被删的已入库明细行真实 id（仿 cmx-doc merge：deleted 增量删；未入库新建行不记）
   loading: true, loadErr: '',
 }
 let rootEl = null
+// init 调用令牌：每次 content 重新进入页面时自增，使旧的异步加载链在 await 后判定过期而中止，
+// 避免刷新时新旧两次 init 并发，把明细重复 push 进共享 state.lineDefs（刷新翻倍 bug）。
+let initToken = 0
 const q = (id) => rootEl && rootEl.querySelector('#' + id)
 
 // 字典坐标四元组（domain/application/module/dbId），来自 ctx.props / workspace.context；module 回退 mdm。
@@ -106,57 +116,77 @@ function coordQs(extra = {}) {
 
 function styleCss() {
   return `
-  .pg { height:100%; display:flex; flex-direction:column; gap:6px; box-sizing:border-box; padding:8px;
+  .pg { height:100%; display:flex; flex-direction:column; gap:10px; box-sizing:border-box; padding:12px 16px;
     background:var(--sapBackgroundColor); color:var(--sapTextColor); overflow:auto;
     font-family:var(--sapFontFamily,'72','Segoe UI',Arial,sans-serif); }
-  .sec { border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); border-radius:6px; overflow:hidden;
+  .sec { border:1px solid var(--sapList_BorderColor,#e0e0e0); border-radius:8px; overflow:hidden;
     background:var(--sapList_Background,#fff); }
   .sec-hd { display:flex; align-items:center; justify-content:space-between; gap:8px;
-    padding:6px 10px; border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0);
-    background:var(--sapGroup_TitleBackground,transparent); }
-  .sec-hd-l { display:flex; align-items:center; gap:6px; }
+    padding:9px 14px; border-bottom:1px solid var(--sapList_BorderColor,#e0e0e0);
+    background:var(--sapList_HeaderBackground,#f5f6f7); }
+  .sec-hd-l { display:flex; align-items:center; gap:8px; }
   .sec-hd-r { display:flex; gap:4px; align-items:center; }
-  .sec-hd ui5-icon { color:var(--sapInformativeTextColor,var(--sapHighlightColor)); font-size:1rem; }
-  .sec-t { margin:0; font-weight:700; color:var(--sapTitleColor); font-size:0.95rem; }
-  .sec-bd { padding:8px 10px; box-sizing:border-box; }
+  .sec-hd ui5-icon { color:var(--neo-cyan,var(--sapInformativeTextColor,#00b4d8)); font-size:14px; }
+  .sec-t { margin:0; font-weight:600; color:var(--sapTitleColor); font-size:13px; }
+  .sec-bd { padding:12px 14px; box-sizing:border-box; }
   .sec-head { flex:0 0 auto; }
   .sec-grid { flex:1 1 0; display:flex; flex-direction:column; min-height:120px; }
   .sec-grid .sec-bd { flex:1; min-height:0; padding:0; display:flex; flex-direction:column; }
   .tbl-wrap { flex:1; min-height:0; display:flex; flex-direction:column; }
   .tbl-wrap cmx-revo-grid { display:flex; width:100%; flex:1 1 0%; min-width:0; min-height:0; flex-direction:column; }
   cmx-toolbar { display:block; }
-  /* 头表单分组：card（卡片分区）/ bar（色条+下分隔线），由 group.groupType 控制 */
-  .grp { margin-bottom:6px; }
-  .grp-title { display:flex; align-items:center; gap:6px; font-weight:700; color:var(--sapTitleColor); font-size:0.92rem; }
-  .grp-title ui5-icon { color:var(--sapInformativeTextColor,var(--sapHighlightColor)); font-size:0.95rem; }
+  /* 头表单分组：card（卡片分区）/ bar（色条+下分隔线），由 HEAD_GROUP_STYLE 控制 */
+  /* 内紧外松：字段卡片由 neo 皮肤处理（紧凑），分组之间留 14px 形成阅读节奏 */
+  .grp { margin-bottom:14px; }
+  .grp:last-child { margin-bottom:0; }
+  .grp-title { display:flex; align-items:center; gap:6px; font-weight:600; color:var(--sapTitleColor);
+    font-size:12px; letter-spacing:.01em; }
+  .grp-title ui5-icon { color:var(--neo-cyan,var(--sapInformativeTextColor,#00b4d8)); font-size:13px; }
   .grp-body { box-sizing:border-box; }
-  .grp-card { border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); border-radius:6px; overflow:hidden;
+  .grp-card { border:1px solid var(--sapList_BorderColor,#e0e0e0); border-radius:8px; overflow:hidden;
     background:var(--sapList_Background,#fff); }
-  .grp-card .grp-title { padding:6px 10px; background:var(--sapGroup_TitleBackground,#f7f7f7);
-    border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); }
-  .grp-card .grp-body { padding:8px 10px; }
-  .grp-bar .grp-title { padding:2px 0 2px 10px; border-left:3px solid var(--sapButton_Emphasized_Background,#0a6ed1); }
-  .grp-bar .grp-body { padding:8px 0 6px; border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0); }
-  .step-bar { display:flex; align-items:center; gap:6px; padding:6px 10px;
-    background:var(--sapList_Background,#fff); border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0);
-    border-radius:6px; margin-bottom:6px; font-size:0.85rem; color:var(--sapContent_LabelColor); }
-  .step-bar .step { display:flex; align-items:center; gap:4px; }
+  .grp-card .grp-title { padding:8px 12px; background:var(--sapList_HeaderBackground,#f5f6f7);
+    border-bottom:1px solid var(--sapList_BorderColor,#e0e0e0); }
+  .grp-card .grp-body { padding:10px 12px; }
+  .grp-bar .grp-title { padding:3px 0 3px 10px; border-left:3px solid var(--neo-cyan,#00b4d8); }
+  .grp-bar .grp-body { padding:10px 0 8px; border-bottom:1px solid var(--sapList_BorderColor,#e0e0e0); }
+  .step-bar { display:flex; align-items:center; gap:8px; padding:9px 14px;
+    background:var(--sapList_Background,#fff); border:1px solid var(--sapList_BorderColor,#e0e0e0);
+    border-radius:8px; font-size:12px; color:var(--sapContent_LabelColor); }
+  .step-bar .step { display:flex; align-items:center; gap:5px; }
   .step-bar .step .num { display:inline-flex; align-items:center; justify-content:center;
-    width:20px; height:20px; border-radius:50%; font-size:0.75rem; font-weight:700;
-    background:var(--sapButton_Emphasized_Background,#0a6ed1); color:#fff; }
+    width:18px; height:18px; border-radius:50%; font-size:11px; font-weight:600;
+    background:var(--neo-cyan,#00b4d8); color:#fff; }
   .step-bar .step.done .num { background:var(--sapSuccessBorderColor,#2b7c2b); }
-  .step-bar .step.cur .num { background:var(--sapButton_Emphasized_Background,#0a6ed1); }
+  .step-bar .step.cur .num { background:var(--neo-cyan,#00b4d8); }
   .step-bar .step.pending .num { background:var(--sapNeutralBorderColor,#899191); }
   .step-bar .sep { color:var(--sapContent_DisabledTextColor); }
   .step-actions { display:flex; gap:6px; align-items:center; }
   .line-tabs { display:flex; gap:2px; flex-wrap:wrap; }
-  .line-tab { padding:4px 12px; font-size:0.82rem; cursor:pointer; border:1px solid var(--sapGroup_ContentBorderColor,#e0e0e0);
-    border-bottom:none; border-radius:6px 6px 0 0; background:var(--sapGroup_TitleBackground,transparent);
+  .line-tab { padding:6px 14px; font-size:12px; cursor:pointer; border:1px solid var(--sapList_BorderColor,#e0e0e0);
+    border-bottom:none; border-radius:6px 6px 0 0; background:var(--sapList_HeaderBackground,transparent);
     color:var(--sapContent_LabelColor); }
   .line-tab.active { background:var(--sapList_Background,#fff); color:var(--sapTitleColor); font-weight:600;
-    border-bottom:1px solid var(--sapList_Background,#fff); position:relative; top:1px; }
-  .loading { padding:40px; text-align:center; color:var(--sapContent_LabelColor); font-size:0.9rem; }
-  .load-err { padding:24px; color:var(--sapNegativeTextColor,#b00); font-size:0.9rem; }
+    border-bottom:1px solid var(--sapList_Background,#fff); position:relative; top:1px;
+    box-shadow:inset 0 -2px 0 var(--neo-cyan,#00b4d8); }
+  .loading { padding:40px; text-align:center; color:var(--sapContent_LabelColor); font-size:13px; }
+  .load-err { padding:24px; color:var(--sapNegativeTextColor,#b00); font-size:13px; }
+  /* 关键信息查重引导提示条 */
+  .key-tip { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; padding:8px 12px;
+    border-radius:6px; font-size:12px; line-height:1.5; color:var(--sapContent_LabelColor);
+    background:color-mix(in srgb, var(--neo-cyan,#00b4d8) 8%, var(--sapList_Background,#fff));
+    border:1px solid color-mix(in srgb, var(--neo-cyan,#00b4d8) 24%, transparent); }
+  .key-tip ui5-icon { color:var(--neo-cyan,var(--sapInformativeTextColor,#00b4d8)); font-size:14px; flex-shrink:0; margin-top:1px; }
+  /* view 模式左右分栏：左主内容 + 右固定操作区（操作按钮 + 流程占位） */
+  .pg-view { flex-direction:row; align-items:stretch; overflow:hidden; }
+  .pg-view .pg-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; overflow:auto; }
+  .action-panel { flex:0 0 240px; display:flex; flex-direction:column; gap:10px; overflow:auto; }
+  .ap-card { background:var(--sapList_Background,#fff); border:1px solid var(--sapList_BorderColor,#e0e0e0);
+    border-radius:8px; padding:10px 12px; }
+  .ap-title { font-size:13px; font-weight:600; color:var(--sapTitleColor); margin-bottom:8px; }
+  .ap-actions { display:flex; flex-direction:column; gap:8px; }
+  .ap-actions ui5-button { width:100%; }
+  .ap-opinion { width:100%; }
   `
 }
 function esc(s) { return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) }
@@ -178,28 +208,26 @@ function viewHtml() {
   const modeLabel = isView ? '查看' : (isEdit ? '变更' : '新增')
   // view 模式标题带单据号
   const titleSuffix = (isView && state.crHead?.doc_no) ? `· ${esc(state.crHead.doc_no)}` : ''
-  let topActions = ''
-  if (showSteps && step === 1) {
-    topActions = `<ui5-button design="Emphasized" icon="navigation-right-arrow" id="fNext">下一步</ui5-button>`
-  } else if (showSteps && step === 2) {
-    topActions = `<ui5-button design="Transparent" icon="navigation-left-arrow" id="fPrev">上一步</ui5-button>
-      <ui5-button design="Default" icon="save" id="fSave2">保存草稿</ui5-button>
-      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit2">保存并提交</ui5-button>`
-  } else if (isEdit) {
-    topActions = `<ui5-button design="Default" icon="save" id="fSave">保存草稿</ui5-button>
-      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit">保存并提交</ui5-button>`
-  }
+  // 查重页（create step1）操作按钮留顶部 bar；create step2 / update / view 按钮统一移右侧 action-panel
+  const isKeyStep = showSteps && step === 1
+  const topActions = isKeyStep
+    ? `<ui5-button design="Emphasized" icon="navigation-right-arrow" id="fNext">下一步</ui5-button>`
+    : ''
   const keyFormCard = (showSteps && step === 1) ? `<div class="sec sec-head">
       <div class="sec-hd"><div class="sec-hd-l">
         <ui5-icon name="add-document" design="Default" mode="Decorative"></ui5-icon>
         <ui5-title level="H6" size="H6" wrapping-type="Normal" class="sec-t">关键信息（查重）</ui5-title>
       </div></div>
-      <div class="sec-bd" id="fKeyForm"></div>
+      <div class="sec-bd">
+        <div class="key-tip"><ui5-icon name="message-information" mode="Decorative"></ui5-icon>
+          <span>填写关键信息后点击「下一步」，系统将自动查重——若已存在相似记录会提示确认，避免重复录入。</span></div>
+        <div id="fKeyForm"></div>
+      </div>
     </div>` : ''
   const fullVisible = !showSteps || step === 2
   const headHtml = fullVisible ? `<div id="fHeadForms"></div>` : ''
-  // 明细区：view 模式无增删行按钮
-  const lineToolbar = isView ? '' : `<div class="sec-hd-r">
+  // 明细区：view 只读无增删行按钮；view 编辑态（editing）需要增删行
+  const lineToolbar = (isView && !state.editing) ? '' : `<div class="sec-hd-r">
           <ui5-button design="Default" icon="add" id="fAddRow">增行</ui5-button>
           <ui5-button design="Transparent" icon="delete" id="fDelRow">删选中</ui5-button>
         </div>`
@@ -216,19 +244,70 @@ function viewHtml() {
         <div id="fLinePanels" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>
       </div>
     </div>` : ''
-  // 操作按钮统一放顶部 ui5-bar（各模式集中），底部不再放按钮
-  const bottomActions = ''
-  return `<div class="pg">
-    <ui5-bar design="Header" accessible-role="Toolbar">
-      <ui5-label wrapping-type="Normal" style="font-weight:800;font-size:1.05rem;color:var(--sapShellTitleColor,var(--sapTitleColor));">${modeLabel}${esc(domainLabel)} ${titleSuffix}</ui5-label>
+  // 顶部 bar 只放标题（+ 查重页的「下一步」）；操作按钮在右侧 action-panel（见末尾布局判定）
+  const body = `<ui5-bar design="Header" accessible-role="Toolbar">
+      <ui5-label wrapping-type="Normal" style="font-weight:600;font-size:15px;color:var(--sapShellTitleColor,var(--sapTitleColor));">${modeLabel}${esc(domainLabel)} ${titleSuffix}</ui5-label>
       <div slot="endContent" style="display:flex;gap:4px;">${topActions}</div>
     </ui5-bar>
     ${stepBarHtml}
     ${keyFormCard}
     ${headHtml}
-    ${lineHtml}
-    ${bottomActions}
-  </div>`
+    ${lineHtml}`
+  // 查重页单栏（按钮在顶部 bar）；create step2 / update / view 左右分栏（按钮在右侧 action-panel）
+  if (isKeyStep) {
+    return `<div class="pg">${body}</div>`
+  }
+  return `<div class="pg pg-view"><div class="pg-main">${body}</div><aside class="action-panel">${actionPanelHtml()}</aside></div>`
+}
+
+// 右侧操作区：所有非查重页模式统一在此渲染操作按钮（create step2 / update / view 各状态）。
+// 按钮 id 与 doSave/doCrAction 逻辑完全不变，仅 HTML 容器从顶部 bar 移到右侧。
+function actionPanelHtml() {
+  const mode = state.mode
+  const apCard = (title, inner) => `<div class="ap-card"><div class="ap-title">${title}</div><div class="ap-actions">${inner}</div></div>`
+  // 流程占位仅在「已进入流转的单据查看态」展示：view 非编辑 且 非草稿（draft）。
+  // 新建 / 变更 / 草稿 / 编辑态都尚未进入审批流，不展示流程。
+  const showFlow = mode === 'view' && !state.editing && (state.crHead?.doc_status || '') !== 'draft'
+  const flow = showFlow ? flowPlaceholderHtml() : ''
+  // create step2：上一步 / 保存草稿 / 保存并提交
+  if (mode === 'create' && state.step === 2) {
+    return apCard('操作', `<ui5-button design="Transparent" icon="navigation-left-arrow" id="fPrev">上一步</ui5-button>
+      <ui5-button design="Default" icon="save" id="fSave2">保存草稿</ui5-button>
+      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit2">保存并提交</ui5-button>`) + flow
+  }
+  // update 变更：保存草稿 / 保存并提交
+  if (mode === 'update') {
+    return apCard('操作', `<ui5-button design="Default" icon="save" id="fSave">保存草稿</ui5-button>
+      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit">保存并提交</ui5-button>`) + flow
+  }
+  // view 草稿编辑态：保存 / 取消
+  if (mode === 'view' && state.editing) {
+    return apCard('编辑', `<ui5-button design="Emphasized" icon="save" id="fEditSave">保存</ui5-button>
+      <ui5-button design="Transparent" icon="cancel" id="fEditCancel">取消</ui5-button>`) + flow
+  }
+  // view 非编辑态：按 doc_status 显示对应操作按钮
+  if (mode === 'view') {
+    const st = state.crHead?.doc_status || ''
+    let actions = ''
+    // draft / rejected 都可编辑 + 重新提交；draft 额外可作废（rejected 已终止，无需作废）
+    if (st === 'draft' || st === 'rejected') {
+      actions = `<ui5-button design="Default" icon="edit" id="fEdit">编辑</ui5-button>
+        <ui5-button design="Emphasized" icon="paper-plane" id="fCrSubmit">提交</ui5-button>`
+      if (st === 'draft') actions += `<ui5-button design="Transparent" icon="cancel" id="fAbort">作废</ui5-button>`
+    } else if (st === 'approving') {
+      actions = `<ui5-textarea id="fOpinion" placeholder="审批意见（可选）" rows="3" class="ap-opinion"></ui5-textarea>
+        <ui5-button design="Emphasized" icon="accept" id="fApprove">通过</ui5-button>
+        <ui5-button design="Transparent" icon="decline" id="fReject">驳回</ui5-button>`
+    }
+    return (actions ? apCard('操作', actions) : '') + flow
+  }
+  return ''
+}
+
+// 流程节点/审批历史占位（暂不开发，等流程能力落地后填充真实节点/历史）
+function flowPlaceholderHtml() {
+  return `<div class="ap-card"><div class="ap-title">流程</div>
+    <cmx-empty-state icon="process" title="流程功能开发中" description="后续展示流程节点与审批历史"></cmx-empty-state></div>`
 }
 
 // ── 元数据加载 ──────────────────────────────────────────────────────────────
@@ -270,16 +349,69 @@ function metaColumns(dictMeta) {
     coord: { domain: c.domain, application: c.application, module: c.module, ...(c.dbId ? { dbId: c.dbId } : {}) },
   })
 }
+// cv_mdm_apply 单据头列（doc/meta）——供「目标列留空的引用字段」取展示属性。这类字段不映射主数据列
+// （header_mapping 值为 null），pickAndRename 在 dct 找不到，回退到 cv_mdm_apply 顶层列（doc_no/entity_id 等）。
+async function loadDocHeadFields() {
+  const c = state.coord || {}
+  const docMeta = await apiGet(`/api/doc/meta?${coordQs({ file: `${c.application}_doc_meta_v1.json` })}`, state.dbId)
+  const layers = (docMeta && docMeta.layers) || []
+  return (layers.find((l) => l.tableName === 'cv_mdm_apply') || {}).columns || []
+}
+function docMetaColumns(fields) {
+  const C = cmx()
+  if (!C.metaTableFieldsToColumns || !fields || !fields.length) return []
+  const c = state.coord || {}
+  return C.metaTableFieldsToColumns(fields, 'DOC', {
+    respectOrder: true,
+    coord: { domain: c.domain, application: c.application, module: c.module, ...(c.dbId ? { dbId: c.dbId } : {}) },
+  })
+}
 
 // 按 mapping（{srcField: tgtCol}）从全量列里筛 + 把 id 从 tgtCol 改成 srcField，保持 mapping 顺序。
 // 直接改实例 id（不 spread）——spread 会丢 CmxColumn 原型链，setMembers 要求 CmxColumn 实例。
-function pickAndRename(allCols, mapping) {
+// 目标列留空（tgt=null）的「引用字段」按 srcField 回退：payload 同名业务字段（dct）→ cv_mdm_apply 顶层列（doc/meta）。
+// 让「只在单据展示、不写主数据」的字段也进表单——否则 buildHeadForms 按 g.fields 匹配 headCols 时
+// 整组匹配不上，分组被 continue 跳过而不渲染。
+function pickAndRename(allCols, mapping, refCols) {
   const out = []
+  const ref = (refCols && refCols.length) ? refCols : []
   for (const srcField of Object.keys(mapping || {})) {
     const tgtCol = mapping[srcField]
-    const found = allCols.find((col) => col.id === tgtCol)
+    let found = allCols.find((col) => col.id === tgtCol)
+    if (!found && (tgtCol == null || tgtCol === '')) {
+      found = allCols.find((col) => col.id === srcField) || ref.find((col) => col.id === srcField)
+    }
     if (found) { found.id = srcField; out.push(found) }
   }
+  return out
+}
+
+// 字段展示顺序的载体是 header_groups[].fields 数组（jsonb 数组保序），而非 header_mapping 的 key 序——
+// header_mapping 经 serde Map（BTreeMap 字母序）+ PG jsonb（key 无序）落库后 key 序必丢。
+// activation-mapper 保存时把全部字段按展示序写进各组 fields，未分组字段收 groupCode='__order__' 影子组。
+// 此处按 fields 数组序重建 mapping（JS 对象 key 插入序 = 数组序），未覆盖的 key 追加尾部兜底。
+const ORDER_GROUP_CODE = '__order__'
+function orderedHeaderMapping(a) {
+  const hm = a.header_mapping || {}
+  const groups = Array.isArray(a.header_groups) ? a.header_groups : []
+  const out = {}
+  for (const g of groups) {
+    for (const f of (Array.isArray(g.fields) ? g.fields : [])) {
+      if (f && Object.prototype.hasOwnProperty.call(hm, f) && !Object.prototype.hasOwnProperty.call(out, f)) out[f] = hm[f]
+    }
+  }
+  for (const k of Object.keys(hm)) { if (!Object.prototype.hasOwnProperty.call(out, k)) out[k] = hm[k] }
+  return out
+}
+// 明细字段同理：fields 的 key 序落库已丢，按 fieldOrder 保序数组重排（旧数据无 fieldOrder 时原样兜底）。
+function orderedLineFields(lm) {
+  const fields = lm.fields || {}
+  const order = Array.isArray(lm.fieldOrder) ? lm.fieldOrder : []
+  const out = {}
+  for (const f of order) {
+    if (f && Object.prototype.hasOwnProperty.call(fields, f) && !Object.prototype.hasOwnProperty.call(out, f)) out[f] = fields[f]
+  }
+  for (const k of Object.keys(fields)) { if (!Object.prototype.hasOwnProperty.call(out, k)) out[k] = fields[k] }
   return out
 }
 
@@ -291,10 +423,15 @@ async function buildFieldModel() {
   if (typeof C.metaTableFieldsToColumns !== 'function') { state.loadErr = '组件库版本过低（缺少 metaTableFieldsToColumns），请构建最新 cmx-data-comp。'; return }
   state.dictMeta = await loadDictMeta(a.target_dict)
   if (!state.dictMeta) { state.loadErr = `目标字典元数据加载失败：${a.target_dict}`; return }
-  // 头表：全量列派生 → 按 header_mapping 筛 + 改名
+  // 头表：全量列派生 → 按 header_mapping 筛 + 改名（顺序按 header_groups[].fields 数组序重建，见上注释）
   const headAll = metaColumns(state.dictMeta)
-  state.headMap = Object.keys(a.header_mapping || {}).map((src) => [src, a.header_mapping[src]])
-  state.headCols = pickAndRename(headAll, a.header_mapping || {})
+  const refCols = docMetaColumns(await loadDocHeadFields())
+  const orderedHm = orderedHeaderMapping(a)
+  state.headMap = Object.keys(orderedHm).map((src) => [src, orderedHm[src]])
+  state.headCols = pickAndRename(headAll, orderedHm, refCols)
+  // 快照每列原始 edit.mode，供 buildHeadForms 在 view↔editing 切换时正确恢复
+  // （否则反复设/清 readonly 会污染共享 headCols，导致编辑态仍只读或系统列被误解锁）
+  state.headCols.forEach((c) => { c._origEditMode = c.edit ? c.edit.mode : undefined })
   // 主体名 key：header_mapping 里 value === subject_name_field（目标列名）的那个 key
   const subjField = a.subject_name_field || state.dictMeta.labelField || ''
   state.nameFieldKey = ''
@@ -308,21 +445,52 @@ async function buildFieldModel() {
   }
   const nameCol = state.headCols.find((col) => col.id === state.nameFieldKey)
   state.nameCaption = nameCol ? (nameCol.caption || subjField) : (subjField || '名称')
-  state.headerGroups = a.header_groups || []
-  // 明细
-  state.lineDefs = []
+  // 影子组（__order__）仅是未分组字段顺序的载体，不作分组渲染——剥除后其字段落入「其他」组/散列
+  state.headerGroups = (a.header_groups || []).filter((g) => (g.groupCode || g.group_code || '') !== ORDER_GROUP_CODE)
+  // 明细：先用局部数组构建，全部就绪后一次性赋值给 state.lineDefs。
+  // 不能边循环边 push 进 state.lineDefs——for 体内有 await loadDictMeta，会让出执行权；
+  // 若刷新触发第二次 init 并发，两次 push 会交织，导致明细从 2 个翻倍成 4 个。
+  const lineDefs = []
   for (const lmRaw of (a.line_mappings || [])) {
     const lm = normLineMapping(lmRaw)
     const meta = await loadDictMeta(lm.targetDict)
     const all = meta ? metaColumns(meta) : []
-    const map = Object.keys(lm.fields || {}).map((src) => [src, lm.fields[src]])
-    const cols = pickAndRename(all, lm.fields || {})
-    state.lineDefs.push({
+    // fields 的 key 序落库已丢（同头表），按 fieldOrder 数组序重建
+    const orderedFields = orderedLineFields(lm)
+    const map = Object.keys(orderedFields).map((src) => [src, orderedFields[src]])
+    const cols = pickAndRename(all, orderedFields)
+    lineDefs.push({
       lineType: lm.lineType, targetDict: lm.targetDict,
       targetTable: lm.targetTable, parentIdField: lm.parentIdField,
       meta, map, cols,
     })
   }
+  state.lineDefs = lineDefs
+}
+
+// update 变更模式：按 targetId 加载目标字典的头记录 + 各明细类型记录，供表单预填。
+// 元数据驱动——target_dict / lineDef.targetDict / parentIdField 全来自 activation 配置，不写死任何主数据表名，
+// 支撑未来新增其他主数据（客户/物料/组织…）复用同一页面。头与明细并发加载；每个 await 后用 stale() 守卫防刷新并发。
+async function loadTargetData(tok, targetId) {
+  const stale = () => tok !== initToken
+  const a = state.activation
+  const targetDict = a && a.target_dict
+  if (targetDict) {
+    const headRes = await apiPost(`/api/dct/data/search?${coordQs({ dict: targetDict })}`, { filters: { id: targetId }, pageSize: 1 }, state.dbId)
+    if (stale()) return
+    state.target = (headRes && headRes.rows && headRes.rows[0]) || null
+  }
+  // 各明细按 parentIdField 过滤（外键 = 头记录 id），并发加载
+  const lineTasks = state.lineDefs.map((lm) => {
+    if (!lm.targetDict) return Promise.resolve([lm.lineType, []])
+    return apiPost(`/api/dct/data/search?${coordQs({ dict: lm.targetDict })}`, { filters: { [lm.parentIdField]: targetId }, pageSize: 500 }, state.dbId)
+      .then((r) => [lm.lineType, (r && r.rows) || []])
+  })
+  const results = await Promise.all(lineTasks)
+  if (stale()) return
+  const targetLines = {}
+  for (const [lineType, rows] of results) targetLines[lineType] = rows
+  state.targetLines = targetLines
 }
 
 function normLineMapping(lm) {
@@ -332,6 +500,7 @@ function normLineMapping(lm) {
     targetTable: lm.targetTable || lm.target_table || '',
     parentIdField: lm.parentIdField || lm.parent_field || lm.parentId_field || '',
     fields: lm.fields || {},
+    fieldOrder: Array.isArray(lm.fieldOrder) ? lm.fieldOrder : [],
   }
 }
 
@@ -363,11 +532,15 @@ function buildHeadForms() {
   const C = cmx(); const wrap = q('fHeadForms'); if (!wrap) return
   wrap.innerHTML = ''; headForms.length = 0
   const isEdit = state.mode === 'update'
-  const isView = state.mode === 'view'
-  // 列只读处理（直接改实例 edit，保持 CmxColumn 类型）：view 全只读；create 步骤2 nameFieldKey 只读回显
+  // view 只读（editing=true 时解锁为可编辑，用于草稿编辑态）
+  const isView = state.mode === 'view' && !state.editing
+  // 列只读处理：基于 _origEditMode 重置，避免 view↔editing 切换时 readonly 残留 / 系统列被误解锁。
+  // 系统列（_origEditMode=readonly）恒只读；view 全只读；create 步骤2 nameFieldKey 只读回显。
   const cols = state.headCols.map((c) => {
-    if (isView) c.edit = { ...(c.edit || {}), mode: 'readonly' }
-    else if (!isEdit && c.id === state.nameFieldKey) c.edit = { ...(c.edit || {}), mode: 'readonly' }
+    const forceRo = c._origEditMode === 'readonly' || isView || (!isEdit && c.id === state.nameFieldKey)
+    c.edit = { ...(c.edit || {}) }
+    if (forceRo) c.edit.mode = 'readonly'
+    else if (c.edit.mode === 'readonly') delete c.edit.mode
     return c
   })
   // 按 header_groups 包成 CmxColumnGroup；未归组字段：有分组配置时包「其他」组，无分组配置时散列
@@ -411,6 +584,8 @@ function headInitialValue(srcField) {
   if (mode === 'view') {
     const cr = state.crHead || {}
     if (srcField === state.nameFieldKey) return cr.subject_name != null ? String(cr.subject_name) : ''
+    // 引用字段（目标列留空，如 doc_no/doc_status）展示单据头顶层列——它们不在 payload 里
+    if ((tgtCol == null || tgtCol === '') && cr[srcField] != null) return String(cr[srcField])
     const p = cr.payload || {}
     return p[srcField] != null ? String(p[srcField]) : ''
   }
@@ -452,7 +627,7 @@ function buildLineGrids() {
       cm.setMembers(lm.cols)
       grid.setColumnModel(cm)
     }
-    const readonlyGrid = state.mode === 'view'
+    const readonlyGrid = state.mode === 'view' && !state.editing
     grid.setOptions?.({ editable: !readonlyGrid, fillHeight: true, showRowIndex: true, selectionMode: readonlyGrid ? 'none' : 'multi', showTotals: false })
     const fill = () => {
       const rows = lineSeedRows(lm)
@@ -494,6 +669,17 @@ function lineSeedRows(lm) {
       return row
     })
   }
+  // update 变更：从字典加载的明细行预填（目标列 tgt → 源字段 src）。合成 id 无 _savedId → 保存走 insert
+  // （CR 单据统一新增；写回字典时由后端激活器按头 update + 明细先删后插处理）。
+  if (state.mode === 'update') {
+    const rows = ((state.targetLines || {})[lm.lineType] || []).map((r, i) => {
+      lineSeq += 1
+      const row = { id: `tg_${state.targetId}_${lm.lineType}_${i}` }
+      for (const [src, tgt] of lm.map) row[src] = r[tgt] != null ? String(r[tgt]) : ''
+      return row
+    })
+    return rows.length ? rows : [newLineRow(lm)]
+  }
   return [newLineRow(lm)]
 }
 
@@ -508,7 +694,7 @@ async function checkKey(name) {
     clusterKeys: [subjField],
   }, state.dbId)
 }
-function goStep(n) { state.step = n; refresh() }
+function goStep(n) { state.deletedLineIds = []; state.step = n; refresh() }
 async function onNext() {
   const C = cmx()
   const row = (keyForm && keyForm.getData && keyForm.getData()) || {}
@@ -613,7 +799,8 @@ function collectLines() {
       }
     })
   })
-  return { inserted, updated }
+  // 被删的已入库行（按 _savedId 记录）。仿 cmx-doc merge：deleted 为行主键 id 数组，后端 DELETE WHERE id=ANY。
+  return { inserted, updated, deleted: [...state.deletedLineIds] }
 }
 
 function doSave(submit) {
@@ -624,17 +811,24 @@ function doSave(submit) {
   if (typeof C.saveDocData !== 'function') { C.cmxError?.('组件库未加载，无法保存'); return }
   // 先收拢未提交的明细行内编辑（失焦/派发 change 触发 revo-grid flush），再构造 changeset 保存
   commitGridEdits(async () => {
+    // 保存并提交（submit=true）：前置确认——提交后进入审批流，本页不再可改。
+    // 保存草稿（submit=false）为高频暂存，不加确认以免反复打断录入。
+    if (submit) {
+      const ok = await C.cmxConfirm?.({ title: '保存并提交', message: '确认保存并提交审批？提交后进入审批流程，单据内容将无法在此页继续修改。', danger: false })
+      if (ok === false) return
+    }
     const changes = {}
     if (state.savedCrId != null) {
       changes.cv_mdm_apply = { updated: [{ id: state.savedCrId, fields: buildHead() }] }
     } else {
       changes.cv_mdm_apply = { inserted: [{ id: HEAD_TID, fields: buildHead() }] }
     }
-    const { inserted: lineIns, updated: lineUpd } = collectLines()
+    const { inserted: lineIns, updated: lineUpd, deleted: lineDel } = collectLines()
     const lineChanges = {}
     if (lineIns.length) lineChanges.inserted = lineIns
     if (lineUpd.length) lineChanges.updated = lineUpd
-    if (lineIns.length || lineUpd.length) changes[TABLE_NAMES[1]] = lineChanges
+    if (lineDel.length) lineChanges.deleted = lineDel
+    if (lineIns.length || lineUpd.length || lineDel.length) changes[TABLE_NAMES[1]] = lineChanges
     try {
       const data = await C.saveDocData(null,
         { ...DOC_DEF, dbId: state.dbId },
@@ -643,11 +837,45 @@ function doSave(submit) {
       const isFirstSave = state.savedCrId == null
       if (isFirstSave && idMap[HEAD_TID] != null) state.savedCrId = idMap[HEAD_TID]
       if (lineIns.length) syncSavedLineIds(idMap)
+      // 删行已落库（cmx-doc merge deleted 已执行），清空本次记录，避免下次保存重复删
+      state.deletedLineIds = []
       const crId = state.savedCrId
       if (submit && crId != null) {
         await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId)
       }
       showToast(submit ? `变更申请 ${crId} 已提交审批` : (isFirstSave ? `已创建变更申请 ${crId}（草稿）` : `变更申请 ${crId} 已更新`))
+      // 回显后端铸号 doc_no：草稿保存不 refresh（保留用户输入继续编辑），拉详情把 doc_no 写进对应单元格；
+      // view 草稿编辑态走下方 refresh 重建，由 headInitialValue 顶层列回退统一回显（二者互补不重复）。
+      if (!submit && crId != null) {
+        try {
+          const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
+          state.crHead = (detail && detail.head) || {}
+          // view 草稿编辑态保存成功后，同步刷新明细行（detail 现已返回 line 真实 id），
+          // 使紧随的 refresh() 从最新 crLines 重建 grid：既有行带 _savedId（再编辑走 update），
+          // 编辑期间新增的行也回写真实 id 而非退化成合成 id（否则下次保存又被当 insert）。
+          if (state.mode === 'view') state.crLines = (detail && detail.lines) || state.crLines
+          const docNo = state.crHead.doc_no
+          if (docNo != null && docNo !== '' && state.mode !== 'view') {
+            for (const f of headForms) {
+              const cur = (f && typeof f.getData === 'function') ? f.getData() : null
+              if (cur && Object.prototype.hasOwnProperty.call(cur, 'doc_no')) f.setDataSet({ ...cur, doc_no: String(docNo) })
+            }
+          }
+        } catch (e) { /* 回显失败不阻断保存结果 */ }
+      }
+      // view 草稿编辑态保存（submit=false）成功后，回退到只读查看
+      if (!submit && state.mode === 'view' && state.editing) { state.editing = false; refresh() }
+      // 保存并提交成功后切只读视图：CR 已进审批流不应再改，避免重复点「保存并提交」
+      // 触发 submit 状态校验失败 → cmxError 模态遮罩锁页面。保存草稿保持可编辑（可继续修改）。
+      if (submit) {
+        state.mode = 'view'
+        try {
+          const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
+          state.crHead = (detail && detail.head) || {}
+          state.crLines = (detail && detail.lines) || []
+        } catch (e) { /* 重载失败不阻断，按当前内存数据渲染只读 */ }
+        refresh()
+      }
     } catch (e) {
       if (e && e.violations && typeof C.formatViolations === 'function') {
         C.cmxError?.(`数据校验未通过：\n${C.formatViolations(e.violations, TABLE_NAMES)}`)
@@ -656,6 +884,58 @@ function doSave(submit) {
       }
     }
   })
+}
+
+// view 模式单据状态操作的确认文案（提交/通过/驳回/作废）。danger=true 走警示红，用于不可恢复操作。
+const CR_ACTION_CONFIRM = {
+  submit:  { title: '提交审批', msg: (id) => `确认提交 CR-${id}？提交后进入审批流程，单据内容将无法在此页修改。`, danger: false },
+  approve: { title: '审批通过', msg: (id) => `确认通过 CR-${id}？通过后将自动激活并写入主数据，此操作不可撤销。`, danger: false },
+  reject:  { title: '驳回',     msg: (id) => `确认驳回 CR-${id}？驳回后申请人可修改重提，主数据不受影响。`, danger: true },
+  abort:   { title: '作废',     msg: (id) => `确认作废 CR-${id}？作废后该单据终止，不可恢复。`, danger: true },
+}
+
+// view 模式单据状态操作（提交/作废/通过/驳回），复用 /api/mdm/change-requests/* 接口。
+// confirmFirst=true 前置二次确认（文案取 CR_ACTION_CONFIRM）；needReason=true 从意见框取理由（驳回默认"详情页驳回"）。
+async function doCrAction(act, confirmFirst = false, needReason = false) {
+  const C = cmx()
+  const crId = Number(state.crId)
+  if (!crId) return
+  try {
+    if (confirmFirst) {
+      const meta = CR_ACTION_CONFIRM[act]
+      const ok = await C.cmxConfirm?.({
+        title: meta?.title || '确认操作',
+        message: meta ? meta.msg(crId) : `确认对 CR-${crId} 执行该操作？`,
+        danger: meta?.danger ?? true,
+      })
+      if (ok === false) return
+    }
+    let url = ''; let payload = { crId }
+    if (act === 'submit') url = '/api/mdm/change-requests/submit'
+    else if (act === 'abort') url = '/api/mdm/change-requests/abort'
+    else if (act === 'approve') url = '/api/mdm/change-requests/approve'
+    else if (act === 'reject') {
+      url = '/api/mdm/change-requests/reject'
+      const reason = needReason ? ((rootEl.querySelector('#fOpinion')?.value || '').trim() || '详情页驳回') : undefined
+      payload = reason ? { crId, reason } : { crId }
+    }
+    await apiPost(url, payload, state.dbId)
+    const msgMap = { submit: '已提交审批', abort: '已作废', approve: '已通过并激活', reject: '已驳回' }
+    C.cmxInfo?.(`CR-${crId} ${msgMap[act] || '操作成功'}`)
+    await reloadDetail()
+  } catch (e) { C.cmxError?.(`操作失败：${e.message}`) }
+}
+
+// 状态操作后重新拉详情，刷新 doc_status 与表单回显（编辑态强制回只读）
+async function reloadDetail() {
+  if (state.crId == null) return
+  try {
+    const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${state.crId}`, state.dbId)
+    state.crHead = (detail && detail.head) || {}
+    state.crLines = (detail && detail.lines) || []
+    state.editing = false
+    refresh()
+  } catch (e) { cmx().cmxError?.(`刷新详情失败：${e.message}`) }
 }
 
 function syncSavedLineIds(idMap) {
@@ -680,7 +960,8 @@ function bind(root) {
     try { buildHeadForms() } catch (e) { console.error('[cr-form] buildHeadForms fail', e) }
     if (state.lineDefs.length) {
       try { buildLineGrids() } catch (e) { console.error('[cr-form] buildLineGrids fail', e) }
-      if (state.mode !== 'view') bindLineToolbar()
+      // view 只读不绑明细增删；view 编辑态（editing）需要
+      if (state.mode !== 'view' || state.editing) bindLineToolbar()
     }
   }
   root.querySelector('#fNext')?.addEventListener('click', onNext)
@@ -689,6 +970,14 @@ function bind(root) {
   root.querySelector('#fSubmit')?.addEventListener('click', () => doSave(true))
   root.querySelector('#fSave2')?.addEventListener('click', () => doSave(false))
   root.querySelector('#fSubmit2')?.addEventListener('click', () => doSave(true))
+  // view 模式右侧操作区按钮（按 doc_status 渲染，元素不存在则跳过）
+  root.querySelector('#fEdit')?.addEventListener('click', () => { state.editing = true; refresh() })
+  root.querySelector('#fEditCancel')?.addEventListener('click', () => { state.deletedLineIds = []; state.editing = false; refresh() })
+  root.querySelector('#fEditSave')?.addEventListener('click', () => doSave(false))
+  root.querySelector('#fCrSubmit')?.addEventListener('click', () => doCrAction('submit', true))
+  root.querySelector('#fAbort')?.addEventListener('click', () => doCrAction('abort', true))
+  root.querySelector('#fApprove')?.addEventListener('click', () => doCrAction('approve', true))
+  root.querySelector('#fReject')?.addEventListener('click', () => doCrAction('reject', true, true))
 }
 
 function bindLineToolbar() {
@@ -701,7 +990,16 @@ function bindLineToolbar() {
   })
   rootEl.querySelector('#fDelRow')?.addEventListener('click', () => {
     const grid = lineGrids[activeLineIdx]; if (!grid) return
-    const ids = grid.getSelectedIds?.(); if (ids?.length) { grid.removeRows(ids); queueMicrotask(() => grid?.refreshLayout?.()) }
+    const ids = grid.getSelectedIds?.() || []
+    if (!ids.length) return
+    // 已入库的被删行（有 _savedId）记录真实 id，供 changeset 的 deleted 增量删（仿 cmx-doc merge 语义）。
+    // 未入库的新建行（合成 id 无 _savedId）仅从 grid 移除，无需进 deleted。
+    const rows = lineRows(grid)
+    for (const id of ids) {
+      const r = rows.find((x) => String(x.id) === String(id))
+      if (r && r._savedId != null && !state.deletedLineIds.includes(r._savedId)) state.deletedLineIds.push(r._savedId)
+    }
+    grid.removeRows(ids); queueMicrotask(() => grid?.refreshLayout?.())
   })
 }
 
@@ -721,22 +1019,42 @@ function whenRendered(host, sel, cb, t) {
 }
 
 // ── 入口 ────────────────────────────────────────────────────────────────────
-async function init() {
+async function init(tok) {
+  // 过期判定：content 每次重新进入会 initToken++，使旧 tok 作废；
+  // 每个 await 之后检查，作废则立即中止，避免旧异步链覆盖新状态（根治刷新并发）。
+  const stale = () => tok !== initToken
   try {
+    if (stale()) return
     // view 模式：先加载 CR 详情，从 CR 头取 docType/crType 定位 activation 配置
     if (state.mode === 'view' && state.crId) {
       const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${state.crId}`, state.dbId)
+      if (stale()) return
       state.crHead = (detail && detail.head) || {}
       state.crLines = (detail && detail.lines) || []
       state.docType = state.crHead.doc_type || state.docType
       state.crType = state.crHead.cr_type || state.crType
+      // view 草稿编辑保存走 update 该 CR（复用 doSave 的 savedCrId 分支）
+      state.savedCrId = Number(state.crId) || null
+      // autoEdit（修改重提入口）：rejected/draft 原单据直接进编辑态，省去用户再点「编辑」
+      if (state.autoEdit && (state.crHead.doc_status === 'rejected' || state.crHead.doc_status === 'draft')) {
+        state.editing = true
+      }
     }
     state.activation = await loadActivation()
+    if (stale()) return
     await buildFieldModel()
+    if (stale()) return
+    // update 变更模式：按 targetId 加载目标字典的头记录 + 各明细类型记录（元数据驱动，预填表单）
+    if (state.mode === 'update' && state.targetId) {
+      await loadTargetData(tok, state.targetId)
+      if (stale()) return
+    }
   } catch (e) {
+    if (stale()) return
     state.loadErr = `元数据加载失败：${e.message}`
     console.error('[cr-form] init fail', e)
   }
+  if (stale()) return
   state.loading = false
   refresh()
 }
@@ -756,13 +1074,19 @@ export default {
       state.crType = ctxGet('crType') || p.crType || 'create'
       // mode：view（只读详情，由 cr-todo 传 crId）/ update（变更，列表台传 target）/ create（新增）
       state.mode = ctxGet('mode') || p.mode || (state.crId ? 'view' : (state.crType === 'update' ? 'update' : 'create'))
-      state.target = ctxGet('target') || p.target || null
+      state.targetId = ctxGet('targetId') || p.targetId || null
+      state.targetName = ctxGet('targetName') || p.targetName || ''
       state.step = state.mode === 'create' ? 1 : 2
       state.keyName = ''; state.savedCrId = null
       state.crHead = null; state.crLines = []
+      state.target = null; state.targetLines = {}
+      state.editing = false
+      state.autoEdit = ctxGet('autoEdit') || p.autoEdit || false
+      state.deletedLineIds = []
       state.loading = true; state.loadErr = ''
-      activeLineIdx = 0; lineSeq = 0
-      if (host) whenRendered(host, '.pg', () => { init() })
+    activeLineIdx = 0; lineSeq = 0
+    initToken++; const tok = initToken
+    if (host) whenRendered(host, '.pg', () => { init(tok) })
       return `<style>${styleCss()}</style>${viewHtml()}`
     },
   },

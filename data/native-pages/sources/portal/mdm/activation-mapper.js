@@ -77,6 +77,9 @@ const lineRowsCache = [] // [{rows:[{sourceField,targetField}]}]
 
 // 字典坐标四元组（domain/application/module/dbId），全部来自 ctx.props，代码中不写死。
 let coord = null
+// 复制副本脏标记：复制出的副本虽可能撞已有 activation_code（反向已存在的覆盖场景），但语义是
+// 「未保存」——期间不算已持久化（禁删除 / 隐藏复制按钮，避免误删已有或连环复制）；保存/选中/新建时复位。
+let cloneDirty = false
 function coordQs(extra = {}) {
   if (!coord) return new URLSearchParams(extra).toString()
   return new URLSearchParams({
@@ -147,15 +150,18 @@ const capOf = (f) => {
   return c.zh_CN || c.zh || c.label || ''
 }
 const disp = (f) => { const c = capOf(f); return (c && c !== f.name ? `${c}（${f.name}）` : f.name) }
-// CR 源字段候选：CR 头公共列（subject_name/subject_code）+ 目标字典全部字段（payload 段，
-// 裸名 value、payload.xxx 显示）。源/目标同取 cmFields 全集，不做过滤——所有引用字段都展示，
-// 由用户自行决定映射哪些。
+// CR 源字段候选：cv_mdm_apply 全部顶层字段（本表 fields 定义 + documentFieldSets 引入的公共/引用列），
+// 仅剔除纯审计技术列（id/create_*/update_*/delete_flag）和 payload/field_deltas 容器。
+// documentFieldSets 引入的字段（doc_no/doc_date/entity_id/source_doc_no/doc_status 等）属「引用字段」
+// （非本表 fields 定义），可选用作 CR 单据展示（目标列留空 → 不写主数据，plan_create 遇 null tgt 自动跳过）。
+// + 目标字典字段（payload 段，payload.xxx 显示；plan_create 优先从 payload 取值）。
+const AUDIT_COLS = new Set(['id', 'create_by', 'create_time', 'update_by', 'update_time', 'delete_flag'])
 const crOptions = () => {
-  const common = state.crFields
-    .filter((f) => ['subject_name', 'subject_code'].includes(f.name))
+  const header = state.crFields
+    .filter((f) => f.name !== 'payload' && f.name !== 'field_deltas' && !AUDIT_COLS.has(f.name))
     .map((f) => ({ value: f.name, label: disp(f) }))
   const payload = state.cmFields.map((f) => ({ value: f.name, label: `payload.${disp(f)}` }))
-  return [...common, ...payload]
+  return [...header, ...payload]
 }
 const cmOptions = () => state.cmFields.map((f) => ({ value: f.name, label: disp(f) }))
 // 行表映射：目标明细字典候选（dictCatalog）
@@ -225,6 +231,8 @@ function styleCss() {
 
   /* 编辑头：标题 + 启用开关 */
   .ed-head { display:flex; align-items:center; justify-content:space-between; }
+  .ed-actions { display:flex; align-items:center; gap:10px; }
+  .ed-head-left { display:flex; align-items:center; gap:14px; }
   .ed-title { font-size:18px; font-weight:600; display:flex; align-items:center; gap:8px; }
   .ed-title .code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:14px;
     color:var(--neo-cyan,#00b4d8); }
@@ -283,10 +291,12 @@ function styleCss() {
   .add-row { padding:8px 10px; text-align:center; }
   .add-btn { color:var(--neo-cyan,#00b4d8); cursor:pointer; font-size:12px; font-weight:500; }
   .add-btn:hover { text-decoration:underline; }
-  .del-btn { color:var(--sapContent_LabelColor); cursor:pointer; font-size:12px; }
-  .del-btn:hover { color:var(--neo-red,#c53030); }
-  .row-move { color:var(--sapContent_LabelColor); cursor:pointer; font-size:13px; padding:0 2px; line-height:1; }
-  .row-move:hover { color:var(--neo-cyan,#00b4d8); }
+  .icon-btn { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--sapContent_IconColor,#6a6d70); cursor:pointer; transition:background-color .12s,color .12s; vertical-align:middle; }
+  .icon-btn ui5-icon { width:16px; height:16px; pointer-events:none; }
+  .icon-btn:hover { background:var(--sapButton_Hover_Background,rgba(0,0,0,.06)); color:var(--sapHighlightColor,#0070f2); }
+  .icon-btn:active { background:var(--sapButton_Active_Background,rgba(0,0,0,.12)); }
+  .icon-btn.danger:hover { background:rgba(187,0,0,.1); color:var(--sapNegativeColor,#bb0000); }
+  .icon-btn[disabled] { opacity:.4; cursor:default; background:transparent; color:var(--sapContent_NonInteractiveIconColor,#6a6d70); }
 
   /* 行表折叠组 */
   .lm { border:1px solid var(--sapList_BorderColor); border-radius:6px; margin-bottom:10px; overflow:hidden; }
@@ -375,16 +385,21 @@ function sideHtml() {
 // ── 卡片1：基本信息 ──────────────────────────────────────────────────────────
 function cardBasic() {
   const c = state.current || {}
+  // 已持久化（list 内能查到）→ 锁定 source_doc_type / cr_type（改这俩 = 换 activation_code = 另一条配置）
+  const isPersisted = !!c.activation_code && state.list.some((it) => it.activation_code === c.activation_code)
+  // activation_code 统一由 sdt+crt 派生（确定性 → upsert 幂等）
+  const derived = c.source_doc_type && c.cr_type ? `${c.source_doc_type}__${c.cr_type}` : ''
   return `<div class="card">
     <div class="card-head"><h3><span class="num">1</span> 基本信息</h3>
       <span class="card-hint">CR 路由键 → 目标字典定位</span></div>
     <div class="card-body"><div class="form-grid">
-      <div class="f-item"><label>激活编码 activation_code <span class="req">*</span></label>
-        <ui5-input id="amCode" class="mono" value="${esc(c.activation_code || '')}" placeholder="如 supplier_apply"></ui5-input></div>
-      <div class="f-item"><label>来源单据类型 source_doc_type <span class="req">*</span></label>
-        <ui5-input id="amSdt" class="mono" value="${esc(c.source_doc_type || '')}" placeholder="如 mdm_supplier_apply"></ui5-input></div>
-      <div class="f-item"><label>变更类型 cr_type <span class="req">*</span></label>
-        <ui5-select id="amCrt">${CR_TYPES.map((t) => `<ui5-option value="${t.value}" ${c.cr_type === t.value ? 'selected' : ''}>${esc(t.label)}</ui5-option>`).join('')}</ui5-select></div>
+      <div class="f-item readonly-field" style="display:none"><label>激活编码 activation_code · 自动生成</label>
+        <ui5-input id="amCode" class="mono" value="${esc(derived)}" placeholder="填入来源单据类型 + 变更类型后自动生成" readonly></ui5-input>
+        <span class="help">由「来源单据类型 + 变更类型」拼接，作配置主键；已保存记录不可改</span></div>
+      <div class="f-item ${isPersisted ? 'readonly-field' : ''}"><label>来源单据类型 source_doc_type <span class="req">*</span>${isPersisted ? ' · 已锁定' : ''}</label>
+        <ui5-input id="amSdt" class="mono" value="${esc(c.source_doc_type || '')}" placeholder="如 mdm_supplier_apply" ${isPersisted ? 'readonly' : ''}></ui5-input></div>
+      <div class="f-item ${isPersisted ? 'readonly-field' : ''}"><label>变更类型 cr_type <span class="req">*</span>${isPersisted ? ' · 已锁定' : ''}</label>
+        <ui5-select id="amCrt" ${isPersisted ? 'disabled' : ''}>${CR_TYPES.map((t) => `<ui5-option value="${t.value}" ${c.cr_type === t.value ? 'selected' : ''}>${esc(t.label)}</ui5-option>`).join('')}</ui5-select></div>
       <div class="f-item"><label>目标字典 target_dict <span class="req">*</span></label>
         <cmx-combo-box id="amTdCombo" data-cmx-mode="list" data-cmx-clearable="false"></cmx-combo-box>
         <span class="help">从同模块 DCT 字典目录选择</span></div>
@@ -454,17 +469,10 @@ function cardHeader() {
     <div class="card-head"><h3><span class="num">3</span> 头表字段映射 header_mapping</h3>
       <span class="card-hint">CR 源字段 → cm_* 目标列 · 分组仅 UI 展示，落库仍扁平 {源:目标}</span></div>
     <div class="card-body">
-      <div class="hg-tool">
-        <ui5-button design="Default" icon="add" id="amAddRow">增行</ui5-button>
-        <ui5-button design="Transparent" icon="group" id="amAddGroup">+ 添加分组</ui5-button>
-        <span style="flex:1"></span>
-        <span class="muted" style="font-size:11px">展示：</span>
-        <ui5-select id="amGroupBy" class="grp-sel">
-          <ui5-option value="group" ${state.groupBy === 'group' ? 'selected' : ''}>按分组</ui5-option>
-          <ui5-option value="flat" ${state.groupBy === 'flat' ? 'selected' : ''}>扁平</ui5-option>
-        </ui5-select>
-      </div>
       <div id="amHeaderTable"></div>
+      <div style="text-align:center; padding:6px">
+        <span class="add-btn" id="amAddGroup">+ 添加分组</span>
+      </div>
     </div>
   </div>`
 }
@@ -483,66 +491,145 @@ function cardLines() {
   </div>`
 }
 
+// 复制按钮：仅已持久化时显示（基于已保存配置派生）。点击弹出选择目标 cr_type 的对话框。
+function cloneBtnHtml(isPersisted) {
+  if (!isPersisted) return ''
+  return `<ui5-button design="Transparent" icon="duplicate" id="amClone">复制</ui5-button>`
+}
+
+// 复制目标 cr_type 选择对话框（ui5-dialog）：下拉列出全部 cr_type（排除当前），选 update 默认提示
+// 会清空编码规则；目标 activation_code 已存在时红字提示「将覆盖」。确认后调 doClone 执行。
+function cloneDlgHtml() {
+  const cur = state.current ? state.current.cr_type : ''
+  const def = cur === 'create' ? 'update' : 'create'
+  const opts = CR_TYPES
+    .filter((t) => t.value !== cur)
+    .map((t) => `<ui5-option value="${t.value}"${t.value === def ? ' selected' : ''}>${esc(t.label)}</ui5-option>`)
+    .join('')
+  return `
+  <ui5-dialog id="amCloneDlg">
+    <ui5-bar slot="header" design="Header"><ui5-title slot="startContent" level="H5">复制映射</ui5-title></ui5-bar>
+    <div style="min-width:360px;max-width:520px;padding:12px 18px;box-sizing:border-box;">
+      <div style="font-size:13px;margin-bottom:10px;color:var(--sapContent_LabelColor)">
+        将当前映射「<b>${esc(state.current?.activation_code || '')}</b>」复制为新的变更类型：
+      </div>
+      <ui5-select id="amCloneCrt" style="width:100%">${opts}</ui5-select>
+      <div id="amCloneHint" style="font-size:12px;margin-top:8px;min-height:16px;color:var(--sapContent_LabelColor)"></div>
+    </div>
+    <ui5-bar slot="footer" design="Footer">
+      <ui5-button id="amCloneCancel" slot="endContent">取消</ui5-button>
+      <ui5-button id="amCloneOk" slot="endContent" design="Emphasized">复制</ui5-button>
+    </ui5-bar>
+  </ui5-dialog>`
+}
+
 function formHtml() {
   const c = state.current || {}
-  // 已持久化 = list 里能按 activation_code 查到（选中已有 / 保存后均在 list；新建未保存不在 → 禁删）
-  const isPersisted = !!c.activation_code && state.list.some((it) => it.activation_code === c.activation_code)
+  // 已持久化 = list 里能按 activation_code 查到 且 非复制副本脏态（选中已有 / 保存后均在 list；新建未保存不在 → 禁删）
+  const isPersisted = !!c.activation_code && !cloneDirty && state.list.some((it) => it.activation_code === c.activation_code)
   return `
   <div class="main-scroll">
   <div class="banner info"><span class="ic">ℹ️</span><span><b>数据来源提示</b>：目标字典字段、源字段下拉均来自 <b>DCT 字典元数据</b>。先在「目标字典」选择字典，自动加载字段候选。</span></div>
   <div class="ed-head">
-    <div class="ed-title">激活映射 <span class="code">${esc(c.activation_code || '(新建)')}</span></div>
-    <div class="sw-wrap" id="amActiveWrap"><span>${c.is_active ? '已启用' : '已停用'}</span><span class="sw ${c.is_active ? '' : 'off'}" id="amActiveSw"></span></div>
+    <div class="ed-head-left">
+      <div class="ed-title">激活映射 <span class="code">${esc(c.activation_code || '(新建)')}</span></div>
+      <div class="sw-wrap" id="amActiveWrap"><span>${c.is_active ? '已启用' : '已停用'}</span><span class="sw ${c.is_active ? '' : 'off'}" id="amActiveSw"></span></div>
+    </div>
+    <div class="ed-actions">
+      <ui5-button design="Negative" icon="delete" id="amDelete" ${isPersisted ? '' : 'disabled'}>删除</ui5-button>
+      ${cloneBtnHtml(isPersisted)}
+      <ui5-button design="Emphasized" icon="save" id="amSave">保存配置</ui5-button>
+    </div>
   </div>
   ${cardBasic()}
   ${cardCodeSource()}
   ${cardHeader()}
   ${cardLines()}
-  </div>
-  <div class="ed-foot">
-    <ui5-button design="Negative" icon="delete" id="amDelete" ${isPersisted ? '' : 'disabled'}>删除</ui5-button>
-    <ui5-button design="Emphasized" icon="save" id="amSave">保存配置</ui5-button>
   </div>`
 }
 
 function viewHtml() {
   return `<div class="pg">${headHtml()}<div class="layout"><div class="side">${sideHtml()}</div>
     <div class="main">${state.current ? formHtml() : '<cmx-panel title="映射配置"><div class="muted" style="padding:24px">请从左侧选择或「新增映射」一份映射</div></cmx-panel>'}</div>
-  </div></div>`
+  </div>${cloneDlgHtml()}</div>`
 }
 
 // ── 头映射表（普通可编辑表格，规避 revo-grid 弹层/页内时序不渲染问题）──────────
-const mappingToRows = (hm) => Object.entries(hm || {}).map(([sourceField, targetField]) => ({ sourceField, targetField }))
-function syncHeaderRowsFromMapping() { state.headerRows = mappingToRows(state.current?.header_mapping) }
+// 字段展示顺序的持久化载体是 header_groups[].fields 数组（jsonb 数组保序），而非 header_mapping 的 key 序——
+// header_mapping 经 serde Map（BTreeMap 字母序）+ PG jsonb（key 无序）落库后 key 序必丢。
+// 未分组字段（gi=-1）保存时收进 groupCode='__order__' 的影子组（仅作顺序载体，加载时剥离不进 UI）。
+const ORDER_GROUP_CODE = '__order__'
+// 行的分组归属由行自带 gi 承载（-1 = 未分组，>=0 = 分组下标），不再靠 headerGroups.fields 反查 sourceField。
+// 这样空 sourceField 的新行也能稳定归属某分组，支持「在分组内直接增行」；headerGroups 运行时只存组定义，
+// 其 fields 在 collectForm 时由各行 gi 推导落库（扁平 header_mapping 形态不变）。
+function syncHeaderRowsFromMapping() {
+  const hm = state.current?.header_mapping || {}
+  const hg = state.current?.header_groups ?? state.current?.headerGroups
+  const groups = Array.isArray(hg) ? hg : []
+  const codeOf = (g) => g.groupCode || g.group_code || ''
+  const uiGroups = groups.filter((g) => codeOf(g) !== ORDER_GROUP_CODE)
+  const rows = []
+  const seen = new Set()
+  // 按各组（含影子组）fields 数组序展开行——恢复用户保存时排的顺序
+  for (const g of groups) {
+    const isShadow = codeOf(g) === ORDER_GROUP_CODE
+    const gi = isShadow ? -1 : uiGroups.indexOf(g)
+    for (const f of (Array.isArray(g.fields) ? g.fields : [])) {
+      if (!f || seen.has(f) || !Object.prototype.hasOwnProperty.call(hm, f)) continue
+      seen.add(f)
+      rows.push({ sourceField: f, targetField: hm[f] || '', gi })
+    }
+  }
+  // header_mapping 里未被任何 fields 覆盖的 key（旧数据无影子组、字段未归组）追加为未分组
+  for (const [k, v] of Object.entries(hm)) {
+    if (seen.has(k)) continue
+    rows.push({ sourceField: k, targetField: v || '', gi: -1 })
+  }
+  state.headerRows = rows
+}
 function headerRowsToMapping() {
-  const m = {}; for (const r of state.headerRows) if (r.sourceField && r.targetField) m[r.sourceField] = r.targetField
+  // 只要求源字段有值；目标列留空时存 null（激活器 plan_create/plan_update 遇 null tgt 自动跳过，不搬运不报错）
+  const m = {}; for (const r of state.headerRows) if (r.sourceField) m[r.sourceField] = r.targetField || null
   return m
 }
 const optHtml = (opts, val) => `<ui5-option value=""></ui5-option>` + opts.map((o) => `<ui5-option value="${esc(o.value)}" ${o.value === val ? 'selected' : ''}>${esc(o.label)}</ui5-option>`).join('')
-// 从 current.header_groups 同步到 state.headerGroups（list 返 snake；兼容历史 camel 数据）
+// 从 current.header_groups 同步分组定义（仅组元信息；行归属在 syncHeaderRowsFromMapping 里标 gi）
 function syncHeaderGroups() {
-  // list 返回 DB row（snake: header_groups）；save 后 current 可能带 header_groups。统一读 snake。
   const hg = state.current?.header_groups ?? state.current?.headerGroups
-  state.headerGroups = Array.isArray(hg) ? hg.map((g) => ({
+  // 影子组（__order__）仅是未分组字段顺序的持久化载体，不进 UI 分组定义
+  state.headerGroups = Array.isArray(hg) ? hg.filter((g) => (g.groupCode || g.group_code || '') !== ORDER_GROUP_CODE).map((g) => ({
     groupCode: g.groupCode || g.group_code || '',
     groupName: g.groupName || g.group_name || g.groupCode || g.group_code || '',
-    fields: Array.isArray(g.fields) ? [...g.fields] : [],
   })) : []
 }
-// 查 sourceField 所属组下标（-1 = 未分组）。空 sourceField 视为未分组。
-function groupIndexOf(sourceField) {
-  if (!sourceField) return -1
-  return state.headerGroups.findIndex((g) => Array.isArray(g.fields) && g.fields.includes(sourceField))
+// 行的分组下标（直接读 r.gi；-1 = 未分组）
+const groupIndexOfRow = (r) => (r && r.gi != null && r.gi >= 0 ? r.gi : -1)
+// 设置行分组（gi = -1 归未分组）
+function setRowGroup(i, gi) { if (state.headerRows[i]) state.headerRows[i].gi = gi < 0 ? -1 : gi }
+// 删除分组：该组行归未分组，后续分组下标前移（保证其余行 gi 仍指向正确组）
+function removeHeaderGroup(gi) {
+  if (gi < 0 || gi >= state.headerGroups.length) return
+  state.headerGroups.splice(gi, 1)
+  state.headerRows.forEach((r) => {
+    if (r.gi === gi) r.gi = -1
+    else if (r.gi != null && r.gi > gi) r.gi -= 1
+  })
 }
-// 把 sourceField 从所有组移除，再加入 toGi（-1 = 仅移除/归未分组）
-function moveRowGroup(sourceField, toGi) {
-  if (!sourceField) return
-  state.headerGroups.forEach((g) => { const k = g.fields.indexOf(sourceField); if (k >= 0) g.fields.splice(k, 1) })
-  if (toGi >= 0 && state.headerGroups[toGi]) state.headerGroups[toGi].fields.push(sourceField)
+// 分组排序：交换相邻分组定义 + 同步行归属 gi（gi↔j 互换，行跟随组移动）。
+// 顺序由 header_groups 数组序持久化（collectForm 按当前数组序导出）。
+function moveHeaderGroup(gi, dir) {
+  const j = gi + dir
+  if (gi < 0 || gi >= state.headerGroups.length || j < 0 || j >= state.headerGroups.length) return
+  const tmp = state.headerGroups[gi]; state.headerGroups[gi] = state.headerGroups[j]; state.headerGroups[j] = tmp
+  // 行归属下标同步互换（同一 r.gi 只命中 gi 或 j 之一，if/elif 互斥，无 double-swap）
+  state.headerRows.forEach((r) => {
+    if (r.gi === gi) r.gi = j
+    else if (r.gi === j) r.gi = gi
+  })
 }
 // 字段排序：调整 headerRows 数组顺序。dir=-1 上移 / +1 下移。
 // 扁平模式：纯相邻交换；分组模式：只在同一分组（含「未分组」）内找相邻同组行交换，
-// 避免上移越过别组行导致组内位置不变。顺序靠 header_mapping（preserve_order）持久化。
+// 避免上移越过别组行导致组内位置不变。顺序靠 header_groups[].fields 数组（jsonb 保序）持久化。
 function moveHeaderRow(i, dir) {
   const rows = state.headerRows; if (i < 0 || i >= rows.length) return
   const grouped = state.groupBy === 'group' && state.headerGroups.length
@@ -550,52 +637,60 @@ function moveHeaderRow(i, dir) {
   if (!grouped) {
     j = dir < 0 ? i - 1 : i + 1
   } else {
-    const gi = groupIndexOf(rows[i].sourceField)
-    if (dir < 0) { for (let k = i - 1; k >= 0; k--) { if (groupIndexOf(rows[k].sourceField) === gi) { j = k; break } } }
-    else { for (let k = i + 1; k < rows.length; k++) { if (groupIndexOf(rows[k].sourceField) === gi) { j = k; break } } }
+    const gi = groupIndexOfRow(rows[i])
+    if (dir < 0) { for (let k = i - 1; k >= 0; k--) { if (groupIndexOfRow(rows[k]) === gi) { j = k; break } } }
+    else { for (let k = i + 1; k < rows.length; k++) { if (groupIndexOfRow(rows[k]) === gi) { j = k; break } } }
   }
   if (j < 0 || j >= rows.length) return
   const tmp = rows[i]; rows[i] = rows[j]; rows[j] = tmp
 }
-// 渲染单行（4 列：源 | 目标 | 分组 | 操作）。分组列按归组状态显示标签/移出/加入组下拉。
+// 渲染单行（源 | 目标 | [分组] | 操作）。分组列统一为下拉，分组内行与未分组行同风格——
+// 选「未分组」即移出，选某组即归组，不再有「移出」按钮与「加入组」两套交互。
 function headerRowHtml(r, i) {
-  const gi = groupIndexOf(r.sourceField)
-  let grpCell
-  if (!r.sourceField) {
-    grpCell = '<span class="muted" style="font-size:11px">填源字段后可归组</span>'
-  } else if (gi >= 0) {
-    grpCell = `<span class="hg-tag">${esc(state.headerGroups[gi].groupName)}</span> <span class="add-btn" data-mvout="${i}" title="移到未分组">移出</span>`
-  } else if (state.headerGroups.length) {
-    grpCell = `<ui5-select class="hm-grp" data-i="${i}"><ui5-option value="">加入组…</ui5-option>${state.headerGroups.map((g, x) => `<ui5-option value="${x}">${esc(g.groupName)}</ui5-option>`).join('')}</ui5-select>`
-  } else {
-    grpCell = '<span class="muted" style="font-size:11px">未分组</span>'
-  }
+  const hasGroups = state.headerGroups.length > 0
+  const gi = groupIndexOfRow(r)
+  const grpCell = hasGroups
+    ? `<ui5-select class="hm-grp" data-i="${i}">
+         <ui5-option value="-1" ${gi < 0 ? 'selected' : ''}>未分组</ui5-option>
+         ${state.headerGroups.map((g, x) => `<ui5-option value="${x}" ${x === gi ? 'selected' : ''}>${esc(g.groupName)}</ui5-option>`).join('')}
+       </ui5-select>`
+    : ''
   return `<tr data-i="${i}">
     <td><ui5-select class="hm-src" data-i="${i}">${optHtml(crOptions(), r.sourceField)}</ui5-select></td>
     <td><ui5-select class="hm-tgt" data-i="${i}">${optHtml(cmOptions(), r.targetField)}</ui5-select></td>
-    <td style="white-space:nowrap">${grpCell}</td>
-    <td style="white-space:nowrap"><span class="row-move" data-up="${i}" title="上移">↑</span><span class="row-move" data-down="${i}" title="下移">↓</span><span class="del-btn" data-hdel="${i}" title="删除">✕</span></td></tr>`
+    ${hasGroups ? `<td style="white-space:nowrap">${grpCell}</td>` : ''}
+    <td style="white-space:nowrap"><button class="icon-btn" data-up="${i}" title="上移"><ui5-icon name="slim-arrow-up"></ui5-icon></button><button class="icon-btn" data-down="${i}" title="下移"><ui5-icon name="slim-arrow-down"></ui5-icon></button><button class="icon-btn danger" data-hdel="${i}" title="删除"><ui5-icon name="delete"></ui5-icon></button></td></tr>`
+}
+// 通用表格渲染：扁平模式 / 各分组卡片内的表格共用。底部「增行」按 gi 决定新行归属。
+function headerTableHtml(rowList, gi) {
+  const hasGroups = state.headerGroups.length > 0
+  const addLabel = hasGroups
+    ? (gi >= 0 ? `+ 在「${esc(state.headerGroups[gi].groupName)}」内增行` : '+ 增行（未分组）')
+    : '+ 增行'
+  return `<table class="tbl"><thead><tr>
+      <th style="width:36%">源字段（CR 侧）</th>
+      <th style="width:34%">目标列（${esc(state.current?.target_table || 'cm_*')}）</th>
+      ${hasGroups ? '<th style="width:20%">分组</th>' : ''}
+      <th style="width:80px"></th></tr></thead><tbody>
+    ${rowList.map(({ r, i }) => headerRowHtml(r, i)).join('')
+      || `<tr><td colspan="${hasGroups ? 4 : 3}" class="muted" style="padding:8px">暂无字段，点击下方增行</td></tr>`}
+    </tbody></table>
+    <div class="add-row"><span class="add-btn" data-grpadd="${gi}">${addLabel}</span></div>`
 }
 function renderHeaderTable() {
   const wrap = q('amHeaderTable'); if (!wrap) return
-  const rows = state.headerRows
-  if (!rows.length) {
-    const empty = !state.cmFields.length
-    wrap.innerHTML = `<div class="muted" style="padding:8px">${empty ? '目标字典为空，先选目标字典加载字段' : '暂无头映射，点击「增行」添加'}</div>`; return
+  if (!state.cmFields.length) {
+    wrap.innerHTML = `<div class="muted" style="padding:8px">目标字典为空，先选目标字典加载字段</div>`; return
   }
-  // 扁平模式（或无分组定义）：单表格，每行带分组操作列
+  const rows = state.headerRows
+  // 无分组定义或扁平展示：单表格（扁平，新行归未分组）
   if (state.groupBy === 'flat' || !state.headerGroups.length) {
-    wrap.innerHTML = `<table class="tbl"><thead><tr>
-        <th style="width:36%">源字段（CR 侧）</th>
-        <th style="width:34%">目标列（${esc(state.current?.target_table || 'cm_*')}）</th>
-        <th style="width:20%">分组</th>
-        <th style="width:80px"></th></tr></thead><tbody>
-      ${rows.map((r, i) => headerRowHtml(r, i)).join('')}</tbody></table>`
+    wrap.innerHTML = headerTableHtml(rows.map((r, i) => ({ r, i })), -1)
     bindHeaderEvents(wrap); return
   }
-  // 分组模式：各分组折叠卡片 + 未分组区
+  // 分组模式：各分组折叠卡片 + 未分组区，每区独立增行（归属该区 gi）
   const groupsHtml = state.headerGroups.map((g, gi) => {
-    const grpRows = rows.map((r, i) => ({ r, i })).filter(({ r }) => groupIndexOf(r.sourceField) === gi)
+    const grpRows = rows.map((r, i) => ({ r, i })).filter(({ r }) => groupIndexOfRow(r) === gi)
     return `<div class="hg expanded" data-gi="${gi}">
       <div class="hg-head">
         <div class="hg-title">
@@ -604,61 +699,81 @@ function renderHeaderTable() {
           <input class="hg-name-input" data-gi="${gi}" value="${esc(g.groupName)}">
           <span class="hg-count">${grpRows.length} 字段</span>
         </div>
-        <div class="hg-actions"><span class="del-btn" data-gdel="${gi}" title="删除整组（字段回到未分组）">✕</span></div>
+        <div class="hg-actions">
+          <button class="icon-btn" data-gup="${gi}" ${gi === 0 ? 'disabled' : ''} title="上移分组"><ui5-icon name="slim-arrow-up"></ui5-icon></button>
+          <button class="icon-btn" data-gdown="${gi}" ${gi === state.headerGroups.length - 1 ? 'disabled' : ''} title="下移分组"><ui5-icon name="slim-arrow-down"></ui5-icon></button>
+          <button class="icon-btn danger" data-gdel="${gi}" title="删除整组（字段回到未分组）"><ui5-icon name="delete"></ui5-icon></button>
+        </div>
       </div>
-      <div class="hg-body">${grpRows.length
-        ? `<table class="tbl"><tbody>${grpRows.map(({ r, i }) => headerRowHtml(r, i)).join('')}</tbody></table>`
-        : '<div class="muted" style="padding:6px;font-size:11px">空组：把未分组字段「加入组」即可</div>'}</div>
+      <div class="hg-body">${headerTableHtml(grpRows, gi)}</div>
     </div>`
   }).join('')
-  const unassigned = rows.map((r, i) => ({ r, i })).filter(({ r }) => groupIndexOf(r.sourceField) < 0)
-  const ungrpHtml = unassigned.length ? `<div class="hg expanded" data-gi="-1">
+  const unassigned = rows.map((r, i) => ({ r, i })).filter(({ r }) => groupIndexOfRow(r) < 0)
+  const ungrpHtml = `<div class="hg expanded" data-gi="-1">
     <div class="hg-head"><div class="hg-title">
       <span class="chev">▸</span>
       <span class="hg-tag" style="background:color-mix(in srgb,var(--sapContent_LabelColor) 16%,transparent);color:var(--sapContent_LabelColor)">未分组</span>
       <span class="hg-count">${unassigned.length} 字段</span>
     </div></div>
-    <div class="hg-body"><table class="tbl"><tbody>${unassigned.map(({ r, i }) => headerRowHtml(r, i)).join('')}</tbody></table></div>
-  </div>` : ''
+    <div class="hg-body">${headerTableHtml(unassigned, -1)}</div>
+  </div>`
   wrap.innerHTML = groupsHtml + ungrpHtml
   bindHeaderEvents(wrap)
+}
+// 头映射事件（扁平 / 分组模式共用）：源/目标/归组下拉、删行、区内增行、上下移、
+// 折叠、组名编辑、删组。归属完全由行 gi 承载，下拉改值即迁移。
+function bindHeaderEvents(wrap) {
+  wrap.querySelectorAll('ui5-select.hm-src').forEach((s) => s.addEventListener('change', () => {
+    state.headerRows[+s.dataset.i].sourceField = s.value; renderHeaderTable()
+  }))
+  wrap.querySelectorAll('ui5-select.hm-tgt').forEach((s) => s.addEventListener('change', () => { state.headerRows[+s.dataset.i].targetField = s.value }))
+  wrap.querySelectorAll('ui5-select.hm-grp').forEach((s) => s.addEventListener('change', () => {
+    setRowGroup(+s.dataset.i, parseInt(s.value, 10)); renderHeaderTable()
+  }))
+  wrap.querySelectorAll('[data-hdel]').forEach((el) => el.addEventListener('click', () => {
+    state.headerRows.splice(+el.dataset.hdel, 1); renderHeaderTable()
+  }))
+  // 区内增行：data-grpadd = 新行归属组（-1 = 未分组 / 扁平）
+  wrap.querySelectorAll('[data-grpadd]').forEach((el) => el.addEventListener('click', () => {
+    const gi = parseInt(el.dataset.grpadd, 10)
+    state.headerRows.push({ sourceField: '', targetField: '', gi: Number.isNaN(gi) ? -1 : gi })
+    renderHeaderTable()
+  }))
+  wrap.querySelectorAll('[data-up]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.up, -1); renderHeaderTable() }))
+  wrap.querySelectorAll('[data-down]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.down, 1); renderHeaderTable() }))
+  wrap.querySelectorAll('[data-gdel]').forEach((el) => el.addEventListener('click', () => { removeHeaderGroup(+el.dataset.gdel); renderHeaderTable() }))
+  wrap.querySelectorAll('[data-gup]').forEach((el) => el.addEventListener('click', () => { moveHeaderGroup(+el.dataset.gup, -1); renderHeaderTable() }))
+  wrap.querySelectorAll('[data-gdown]').forEach((el) => el.addEventListener('click', () => { moveHeaderGroup(+el.dataset.gdown, 1); renderHeaderTable() }))
+  // 折叠头（跳过组名输入框 / 删组 / 增行 / 组排序，避免点这些触发折叠）
   wrap.querySelectorAll('.hg-head').forEach((h) => h.addEventListener('click', (e) => {
-    if (e.target.closest('[data-gdel]') || e.target.closest('.hg-name-input')) return
+    if (e.target.closest('[data-gdel]') || e.target.closest('[data-gup]') || e.target.closest('[data-gdown]') || e.target.closest('.hg-name-input') || e.target.closest('[data-grpadd]')) return
     h.parentElement.classList.toggle('expanded')
   }))
   wrap.querySelectorAll('.hg-name-input').forEach((inp) => {
     inp.addEventListener('click', (e) => e.stopPropagation())
-    inp.addEventListener('change', () => { const gi = +inp.dataset.gi; if (state.headerGroups[gi]) { state.headerGroups[gi].groupName = inp.value.trim() || state.headerGroups[gi].groupName; renderHeaderTable() } })
+    inp.addEventListener('change', () => {
+      const gi = +inp.dataset.gi; if (state.headerGroups[gi]) { state.headerGroups[gi].groupName = inp.value.trim() || state.headerGroups[gi].groupName; renderHeaderTable() }
+    })
   })
-  wrap.querySelectorAll('[data-gdel]').forEach((el) => el.addEventListener('click', () => { state.headerGroups.splice(+el.dataset.gdel, 1); renderHeaderTable() }))
-}
-// 行级事件绑定（源/目标/归组/删行/移出）——扁平与分组模式共用
-function bindHeaderEvents(wrap) {
-  wrap.querySelectorAll('ui5-select.hm-src').forEach((s) => s.addEventListener('change', () => {
-    const i = +s.dataset.i; const old = state.headerRows[i].sourceField; const nxt = s.value
-    state.headerRows[i].sourceField = nxt
-    // 源字段变更：同步它在 headerGroups.fields 里的引用，保持归组
-    if (old && old !== nxt) { const gi = groupIndexOf(old); if (gi >= 0) { state.headerGroups[gi].fields = state.headerGroups[gi].fields.filter((f) => f !== old); if (nxt) state.headerGroups[gi].fields.push(nxt) } }
-    renderHeaderTable()
-  }))
-  wrap.querySelectorAll('ui5-select.hm-tgt').forEach((s) => s.addEventListener('change', () => { state.headerRows[+s.dataset.i].targetField = s.value }))
-  wrap.querySelectorAll('ui5-select.hm-grp').forEach((s) => s.addEventListener('change', () => { if (s.value !== '') { moveRowGroup(state.headerRows[+s.dataset.i].sourceField, +s.value); renderHeaderTable() } }))
-  wrap.querySelectorAll('[data-hdel]').forEach((el) => el.addEventListener('click', () => {
-    const i = +el.dataset.hdel; const sf = state.headerRows[i].sourceField
-    state.headerRows.splice(i, 1)
-    if (sf) state.headerGroups.forEach((g) => { const k = g.fields.indexOf(sf); if (k >= 0) g.fields.splice(k, 1) })
-    renderHeaderTable()
-  }))
-  wrap.querySelectorAll('[data-mvout]').forEach((el) => el.addEventListener('click', () => { moveRowGroup(state.headerRows[+el.dataset.mvout].sourceField, -1); renderHeaderTable() }))
-  wrap.querySelectorAll('[data-up]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.up, -1); renderHeaderTable() }))
-  wrap.querySelectorAll('[data-down]').forEach((el) => el.addEventListener('click', () => { moveHeaderRow(+el.dataset.down, 1); renderHeaderTable() }))
 }
 
 // ── 行表映射（折叠组 + 结构化 fields 子表）────────────────────────────────────
 function syncLineRowsFromMapping() {
   const lines = state.current?.line_mappings || []
   lineRowsCache.length = 0
-  lines.forEach((lm) => { lineRowsCache.push({ rows: Object.entries(lm.fields || {}).map(([sourceField, targetField]) => ({ sourceField, targetField })) }) })
+  lines.forEach((lm) => {
+    // fields 的 key 序落库时已丢（BTreeMap + jsonb，同头表），按 fieldOrder 保序数组恢复用户排的顺序；
+    // 旧数据无 fieldOrder → 保持 entries 原序（sort 稳定，未命中字段排尾部不交错）。
+    const order = Array.isArray(lm.fieldOrder) ? lm.fieldOrder : []
+    const entries = Object.entries(lm.fields || {})
+    if (order.length) {
+      entries.sort((a, b) => {
+        const ia = order.indexOf(a[0]); const ib = order.indexOf(b[0])
+        return (ia < 0 ? order.length : ia) - (ib < 0 ? order.length : ib)
+      })
+    }
+    lineRowsCache.push({ rows: entries.map(([sourceField, targetField]) => ({ sourceField, targetField })) })
+  })
 }
 function lineRowsToFields(idx) {
   const m = {}; const rows = (lineRowsCache[idx] && lineRowsCache[idx].rows) || []
@@ -683,7 +798,7 @@ function renderLineGroups() {
           <span class="muted">→</span>
           <code>${esc(tt || '(目标表)')}</code>
         </div>
-        <span class="del-btn" data-lmdel="${i}" title="删除整组">✕</span>
+        <button class="icon-btn danger" data-lmdel="${i}" title="删除整组"><ui5-icon name="delete"></ui5-icon></button>
       </div>
       <div class="lm-body">
         <div class="lm-meta">
@@ -754,7 +869,7 @@ function renderLineFields(idx) {
     ${rows.map((r, ri) => `<tr data-ri="${ri}">
       <td><ui5-select class="lf-src" data-i="${idx}" data-ri="${ri}">${optHtml(srcOpts, r.sourceField)}</ui5-select></td>
       <td><ui5-select class="lf-tgt" data-i="${idx}" data-ri="${ri}">${optHtml(tgtOpts, r.targetField)}</ui5-select></td>
-      <td style="white-space:nowrap"><span class="row-move" data-lfup="${idx}" data-ri="${ri}" title="上移">↑</span><span class="row-move" data-lfdown="${idx}" data-ri="${ri}" title="下移">↓</span><span class="del-btn" data-lfdel="${idx}" data-ri="${ri}" title="删除">✕</span></td></tr>`).join('')
+      <td style="white-space:nowrap"><button class="icon-btn" data-lfup="${idx}" data-ri="${ri}" title="上移"><ui5-icon name="slim-arrow-up"></ui5-icon></button><button class="icon-btn" data-lfdown="${idx}" data-ri="${ri}" title="下移"><ui5-icon name="slim-arrow-down"></ui5-icon></button><button class="icon-btn danger" data-lfdel="${idx}" data-ri="${ri}" title="删除"><ui5-icon name="delete"></ui5-icon></button></td></tr>`).join('')
       || `<tr><td colspan="3" class="muted">暂无明细字段，点击「+ 添加明细字段」</td></tr>`}
     </tbody></table>
     <div class="add-row"><span class="add-btn" data-lfadd="${idx}">+ 添加明细字段</span></div>`
@@ -773,21 +888,31 @@ const q = (id) => rootEl && rootEl.querySelector('#' + id)
 const val = (id) => { const el = q(id); return el ? (el.value || '').trim() : '' }
 function collectForm() {
   const c = state.current
-  c.activation_code = val('amCode'); c.source_doc_type = val('amSdt'); c.cr_type = val('amCrt')
+  c.source_doc_type = val('amSdt'); c.cr_type = val('amCrt')
+  // activation_code 统一由 sdt+crt 派生（确定性 → upsert 幂等）
+  c.activation_code = c.source_doc_type && c.cr_type ? `${c.source_doc_type}__${c.cr_type}` : ''
   // target_dict 来自字典帮助选择（combo），target_table 由其自动带出 → 两者均已同步进 state.current
   const combo = q('amTdCombo')
   if (combo && typeof combo.getValue === 'function') c.target_dict = combo.getValue() || ''
   c.code_rule_code = val('amCrc') || null
   c.subject_name_field = val('amSnf') || null; c.subject_code_field = val('amScf') || null
   c.header_mapping = headerRowsToMapping()
-  c.header_groups = state.headerGroups.map((g) => ({ groupCode: g.groupCode, groupName: g.groupName, fields: g.fields.filter(Boolean) }))
-  // 行表：把缓存行还原为 fields 扁平对象
+  c.header_groups = state.headerGroups.map((g, gi) => ({
+    groupCode: g.groupCode, groupName: g.groupName,
+    fields: state.headerRows.filter((r) => groupIndexOfRow(r) === gi && r.sourceField).map((r) => r.sourceField),
+  }))
+  // 未分组字段顺序收进 __order__ 影子组（header_mapping 的 key 序经 BTreeMap + jsonb 落库必丢，
+  // fields 数组是唯一保序通道）；加载时 syncHeaderGroups / syncHeaderRowsFromMapping 剥离。
+  const looseFields = state.headerRows.filter((r) => groupIndexOfRow(r) < 0 && r.sourceField).map((r) => r.sourceField)
+  if (looseFields.length) c.header_groups.push({ groupCode: ORDER_GROUP_CODE, groupName: ORDER_GROUP_CODE, fields: looseFields })
+  // 行表：把缓存行还原为 fields 扁平对象；字段顺序另存 fieldOrder 保序数组（同头表原理）
   c.line_mappings = (c.line_mappings || []).map((lm, i) => ({
     lineType: lm.lineType || lm.line_type || '',
     targetDict: lm.targetDict || lm.target_dict || '',
     targetTable: lm.targetTable || lm.target_table || '',
     parentIdField: lm.parentIdField || lm.parent_field || lm.parentField || '',
     fields: lineRowsToFields(i),
+    fieldOrder: ((lineRowsCache[i] && lineRowsCache[i].rows) || []).filter((r) => r.sourceField && r.targetField).map((r) => r.sourceField),
   }))
   return c
 }
@@ -795,9 +920,9 @@ async function save() {
   const M = cmx()
   try {
     const cfg = collectForm()
-    if (!cfg.activation_code || !cfg.source_doc_type || !cfg.target_dict) { M.cmxWarn?.('映射码 / 来源单据类型 / 目标字典 不能为空'); return }
+    if (!cfg.source_doc_type || !cfg.target_dict) { M.cmxWarn?.('来源单据类型 / 目标字典 不能为空'); return }
     await apiPost('/api/mdm/activations', cfg, coord && coord.dbId)
-    showToast('保存成功', 'ok'); await loadList(); refresh()
+    cloneDirty = false; showToast('保存成功', 'ok'); await loadList(); refresh()
   } catch (e) { M.cmxError?.(`保存失败：${e.message}`) }
 }
 // 删除当前映射（硬删除，二次确认）。删除后返回空态并刷新侧栏列表。
@@ -814,12 +939,64 @@ async function delMapping() {
     showToast(`已删除「${c.activation_code}」`, 'ok'); state.current = null; await loadList(); refresh()
   } catch (e) { M.cmxError?.(`删除失败：${e.message}`) }
 }
+// 打开复制对话框：校验当前配置已持久化 → 绑定下拉/确认/取消事件 → 显示。下拉切换实时提示重复覆盖风险。
+function openCloneDlg() {
+  const M = cmx()
+  const src = state.current
+  if (!src || !src.activation_code) { M.cmxWarn?.('请先选择要复制的映射'); return }
+  const dlg = q('amCloneDlg'); if (!dlg) return
+  // 下拉切换时实时提示：目标 activation_code 已存在 → 红字「将覆盖」；update → 提示会清空编码规则
+  const updateHint = () => {
+    const target = (q('amCloneCrt')?.value || '').trim()
+    const hint = q('amCloneHint'); if (!hint) return
+    if (!target) { hint.textContent = ''; return }
+    const dupCode = `${src.source_doc_type}__${target}`
+    if (state.list.some((it) => it.activation_code === dupCode)) {
+      hint.textContent = `⚠「${dupCode}」已存在，保存将覆盖原配置`
+      hint.style.color = 'var(--sapNegativeElementColor,#bb0000)'
+    } else if (target === 'update') {
+      hint.textContent = 'update 不铸号，将自动清空编码规则 code_rule_code'
+      hint.style.color = 'var(--sapContent_LabelColor)'
+    } else {
+      hint.textContent = ''
+    }
+  }
+  q('amCloneCrt')?.addEventListener('change', updateHint)
+  q('amCloneOk').onclick = () => {
+    const target = (q('amCloneCrt')?.value || '').trim()
+    if (!target) { M.cmxWarn?.('请选择目标变更类型'); return }
+    dlg.open = false; doClone(target)
+  }
+  q('amCloneCancel').onclick = () => { dlg.open = false }
+  updateHint()
+  dlg.open = true
+}
+// 执行复制：深拷贝当前配置 → 改 cr_type → activation_code 由 sdt__crt 派生（与原配置不冲突）→
+// update 清空 code_rule_code（update 分支不铸号）→ 进入未保存编辑态（cloneDirty）。
+function doClone(target) {
+  const src = state.current
+  const dup = JSON.parse(JSON.stringify(src)) // 配置均为 JSON 可序列化数据，深拷贝安全
+  dup.cr_type = target
+  dup.activation_code = `${src.source_doc_type}__${target}`
+  if (target === 'update') dup.code_rule_code = null // update 分支不铸号，清空规则
+  cloneDirty = true
+  state.current = dup
+  state.cmFields = []
+  syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping()
+  // 目标字典不变，重新加载字段候选（头/明细/主体字段下拉才有项）
+  const td = state.current.target_dict
+  if (td) { loadTargetMeta(td).then(onTargetMetaLoaded).catch(() => {}) }
+  refresh()
+  showToast(`已复制为「${target}」配置，检查后请点「保存配置」`, 'ok')
+}
 function newMapping() {
+  cloneDirty = false
   state.current = { activation_code: '', source_doc_type: '', cr_type: 'create', target_dict: '', target_table: '', is_active: true, header_mapping: {}, line_mappings: [], code_rule_code: null, subject_name_field: null, subject_code_field: null, header_groups: [] }
   state.cmFields = []
   syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping(); refresh()
 }
 function selectByCode(code) {
+  cloneDirty = false
   state.current = state.list.find((it) => it.activation_code === code) || null
   state.cmFields = []
   syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping()
@@ -909,6 +1086,7 @@ function bind(root) {
   root.querySelector('#amNew')?.addEventListener('click', newMapping)
   root.querySelector('#amReload')?.addEventListener('click', async () => { await loadList(); refresh() })
   root.querySelector('#amSave')?.addEventListener('click', save)
+  root.querySelector('#amClone')?.addEventListener('click', () => openCloneDlg())
   root.querySelector('#amDelete')?.addEventListener('click', () => delMapping())
   // 启用开关
   root.querySelector('#amActiveWrap')?.addEventListener('click', () => {
@@ -923,16 +1101,24 @@ function bind(root) {
   })
   // 卡片1 目标字典：cmx-combo-box 帮助选择（选中自动带出 target_table + 加载字段）
   initCombo()
-  // 头映射
-  root.querySelector('#amAddRow')?.addEventListener('click', () => { state.headerRows.push({ sourceField: '', targetField: '' }); renderHeaderTable() })
-  // 添加分组：建一个默认名「新分组」，用户随后点组名输入框改名（免 prompt）。切到分组模式以便看到。
+  // 卡片1 来源单据类型/变更类型 → 实时派生激活编码（只读展示框）。已保存记录两键锁定，不会触发。
+  const refreshDerivedCode = () => {
+    const sdt = val('amSdt'); const crt = val('amCrt')
+    if (!state.current) return
+    state.current.source_doc_type = sdt; state.current.cr_type = crt
+    const code = sdt && crt ? `${sdt}__${crt}` : ''
+    state.current.activation_code = code
+    const codeEl = q('amCode'); if (codeEl) codeEl.value = code
+  }
+  root.querySelector('#amSdt')?.addEventListener('input', refreshDerivedCode)
+  root.querySelector('#amCrt')?.addEventListener('change', refreshDerivedCode)
+  // 头映射：增行入口已下沉到每个分区底部（data-grpadd）；「+ 添加分组」在头表区下方（add-btn 样式）
+  // 添加分组：默认名「分组N」，点组名输入框可改名（免 prompt）。有分组即自动按分组展示。
   root.querySelector('#amAddGroup')?.addEventListener('click', () => {
     const n = state.headerGroups.length + 1
-    state.headerGroups.push({ groupCode: 'group_' + Date.now(), groupName: `分组${n}`, fields: [] })
-    state.groupBy = 'group'; renderHeaderTable()
+    state.headerGroups.push({ groupCode: 'group_' + Date.now(), groupName: `分组${n}` })
+    renderHeaderTable()
   })
-  // 切换 分组/扁平 展示
-  root.querySelector('#amGroupBy')?.addEventListener('change', (e) => { state.groupBy = e.target.value || 'group'; renderHeaderTable() })
   // 卡片2 互斥：rule 非空 → 清并锁 subCode；subCode 非空 → 清并锁 rule。始终同步 state 与指示器。
   root.querySelector('#amCrc')?.addEventListener('change', () => {
     const v = val('amCrc'); if (state.current) state.current.code_rule_code = v || null

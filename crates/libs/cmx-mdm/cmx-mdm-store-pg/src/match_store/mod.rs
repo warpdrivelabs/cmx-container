@@ -23,7 +23,7 @@ mod xref;
 pub use governance::{list_audit, list_events, list_subscriptions, upsert_subscription};
 pub use loader::{load_by_ids, load_published, load_suspects};
 pub use match_group::{
-    get_match_group, insert_match_group, list_match_groups, transition_match_group,
-    update_match_group,
+    count_merge_by_status, get_match_group, insert_match_group, list_match_groups,
+    transition_match_group, update_match_group,
 };
 pub use xref::{activate_xref, deactivate_xref};

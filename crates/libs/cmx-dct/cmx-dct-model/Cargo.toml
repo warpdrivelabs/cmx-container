@@ -9,6 +9,11 @@ authors.workspace = true
 # 主键铸号判定/临时 id 识别/自分级 parent_id 重指向、search/upsert 的参数化 SQL 构造。
 # 生成的 SQL 用 $N 占位 + JSON/DataValue 绑定，由 cmx-dct-store-pg 执行。
 
+[features]
+# 暴露 utoipa 派生（IntoParams），供 cmx-dct-api 的 OpenApi 文档引用 DctQuery 的查询参数。
+# 消费方在 Cargo.toml 用 features = ["openapi"] 开启；不开启则零 utoipa 依赖（编译隔离）。
+openapi = ["utoipa"]
+
 [dependencies]
 # 内部依赖 - 核心库（DataValue：zmc 查询参数强类型绑定）
 cmx-core = { workspace = true }
@@ -23,3 +28,5 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 # 时间解析（to_dv_by_col 对 TIMESTAMP/DATETIME/DATE 列支持 ISO8601/RFC3339 字符串 coerce）
 chrono = { workspace = true }
+# OpenApi 文档派生（optional，由 openapi feature 激活；DctQuery 的 IntoParams）
+utoipa = { workspace = true, optional = true }

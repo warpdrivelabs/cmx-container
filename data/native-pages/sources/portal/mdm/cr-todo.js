@@ -239,7 +239,11 @@ function buildListGrid() {
 async function doAction(act, id) {
   const crId = Number(id); const M = cmx()
   try {
-    if (act === 'submit') { await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId); M.cmxInfo?.(`CR-${crId} 已提交`) }
+    if (act === 'submit') {
+      const ok = await M.cmxConfirm?.({ title: '提交审批', message: `确认提交 CR-${crId}？提交后进入审批流程。`, danger: false })
+      if (ok === false) return
+      await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId); M.cmxInfo?.(`CR-${crId} 已提交`)
+    }
     else if (act === 'approve') {
       const ok = await M.cmxConfirm?.({ title: '审批通过', message: `确认通过 CR-${crId}？通过后将自动激活落主数据。`, danger: false })
       if (ok === false) return
@@ -251,13 +255,16 @@ async function doAction(act, id) {
       await apiPost('/api/mdm/change-requests/reject', { crId, reason: '待办台驳回' }, state.dbId)
       M.cmxInfo?.(`CR-${crId} 已驳回`)
     } else if (act === 'clone') {
-      const d = await apiPost('/api/mdm/change-requests/clone-revise', { crId }, state.dbId)
-      M.cmxInfo?.(`已克隆新 CR-${d.newCrId}（草稿）`)
+      // 修改重提：驳回后在「原单据」上直接编辑重新提交——后端 submit 支持 rejected→approving，
+      // 无需 clone 新 CR。打开原单据 view 页并 autoEdit 直接进编辑态；cr-form 按 rejected 状态显示编辑/提交。
+      openTab(currentHost, `单据·CR-${crId}`, 'portal.mdm.cr-form',
+        { mode: 'view', crId, autoEdit: true, domain: state.domain, application: state.application, module: 'mdm', dbId: state.dbId })
+      return
     } else if (act === 'abort') {
       const ok = await M.cmxConfirm?.({ title: '作废', message: `确认作废 CR-${crId}？`, danger: true })
       if (ok === false) return
       await apiPost('/api/mdm/change-requests/abort', { crId }, state.dbId); M.cmxInfo?.(`CR-${crId} 已作废`)
-    } else if (act === 'view') { openTab(currentHost, `单据·CR-${crId}`, 'portal.mdm.cr-form', { mode: 'view', crId, domain: state.domain, application: state.application, dbId: state.dbId }); return }
+    } else if (act === 'view') { openTab(currentHost, `单据·CR-${crId}`, 'portal.mdm.cr-form', { mode: 'view', crId, domain: state.domain, application: state.application, module: 'mdm', dbId: state.dbId }); return }
     await load(); refresh()
   } catch (e) { cmx().cmxError?.(`操作失败：${e.message}`) }
 }

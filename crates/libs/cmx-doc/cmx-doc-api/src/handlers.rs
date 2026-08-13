@@ -35,7 +35,8 @@ use cmx_biz::errcode::validation_fail_resp;
 use cmx_api_core::{ApiResp, Result};
 
 /// `/api/doc/data/*` 装载端点共用查询参数（GET 便捷路径：URL query）。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct DocDataQuery {
     /// 域；可选：缺失时后端按 doc(moduleCode)/file 全局反查（多 DAM 冲突返回 409 + 候选列表）。
     #[serde(default)]
@@ -194,7 +195,44 @@ async fn doc_load_entry(
 
 // ── 五个组合端点（GET + POST 共用 doc_load_entry） ──────────────────────────
 
-/// `GET|POST /api/doc/data/sqlx-dataset-json` —— sqlx + 老 DataSet + JSON。
+/// 装载单据数据-sqlx-dataset-json
+///
+/// `GET|POST /api/doc/data/sqlx-dataset-json` —— sqlx + 老 DataSet 全拷贝 + JSON 信封出口。
+/// GET 走便捷路径：URL query 传坐标（domain / application / module / file / doc）+
+/// `filter=列名:值` 简单等值 + `limit` + `depth`；POST 时 body 为 DocQuery 富查询
+/// JSON（URL 上的 depth / limit 作为兜底默认值）：
+///
+/// ```json
+/// {
+///   "depth": 2,
+///   "includeSiblings": true,
+///   "countTotal": false,
+///   "layers": {
+///     "<层 id>": {
+///       "filter": { "status": "posted", "amount": { "$gt": 0 },
+///                   "$or": [ { "type": "1" }, { "type": "2" } ] },
+///       "orderBy": ["!posting_date", "code"],
+///       "limit": 50,
+///       "offset": 0,
+///       "cursor": "<base64 游标>"
+///     }
+///   }
+/// }
+/// ```
+///
+/// filter 语义：键值对隐式 AND；标量值 = 等值简写；支持算子 `$eq` `$ne` `$gt` `$gte`
+/// `$lt` `$lte` `$like` `$ilike` `$contains` `$startsWith` `$endsWith` `$null` 及
+/// `$or` / `$and` 组合；`orderBy` 元素前缀 `!` 表示降序。
+#[utoipa::path(
+    post,
+    path = "/api/doc/data/sqlx-dataset-json",
+    params(DocDataQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "列式包（ApiResp JSON 信封）：datasetId / columns / rows / childRows，前端 CmxDataSet.fromJSON 直接装载", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_data_sqlx_dataset_json(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -219,7 +257,44 @@ pub async fn doc_data_sqlx_dataset_json(
     .await
 }
 
-/// `GET|POST /api/doc/data/tokio-zmc-msgpack` —— tokio + ZmcDataSet + msgpack 二进制。
+/// 装载单据数据-tokio-zmc-msgpack
+///
+/// `GET|POST /api/doc/data/tokio-zmc-msgpack` —— tokio-postgres + ZmcDataSet 零拷贝 + 列式 msgpack 二进制出口。
+/// GET 走便捷路径：URL query 传坐标（domain / application / module / file / doc）+
+/// `filter=列名:值` 简单等值 + `limit` + `depth`；POST 时 body 为 DocQuery 富查询
+/// JSON（URL 上的 depth / limit 作为兜底默认值）：
+///
+/// ```json
+/// {
+///   "depth": 2,
+///   "includeSiblings": true,
+///   "countTotal": false,
+///   "layers": {
+///     "<层 id>": {
+///       "filter": { "status": "posted", "amount": { "$gt": 0 },
+///                   "$or": [ { "type": "1" }, { "type": "2" } ] },
+///       "orderBy": ["!posting_date", "code"],
+///       "limit": 50,
+///       "offset": 0,
+///       "cursor": "<base64 游标>"
+///     }
+///   }
+/// }
+/// ```
+///
+/// filter 语义：键值对隐式 AND；标量值 = 等值简写；支持算子 `$eq` `$ne` `$gt` `$gte`
+/// `$lt` `$lte` `$like` `$ilike` `$contains` `$startsWith` `$endsWith` `$null` 及
+/// `$or` / `$and` 组合；`orderBy` 元素前缀 `!` 表示降序。
+#[utoipa::path(
+    post,
+    path = "/api/doc/data/tokio-zmc-msgpack",
+    params(DocDataQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "列式 msgpack 二进制信封：{code, msg, data}（data 为列式编码字节）", content_type = "application/x-msgpack")
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_data_tokio_zmc_msgpack(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -244,7 +319,44 @@ pub async fn doc_data_tokio_zmc_msgpack(
     .await
 }
 
-/// `GET|POST /api/doc/data/sqlx-zmc-msgpack` —— sqlx + ZmcDataSet + msgpack 二进制。
+/// 装载单据数据-sqlx-zmc-msgpack
+///
+/// `GET|POST /api/doc/data/sqlx-zmc-msgpack` —— sqlx + ZmcDataSet 零拷贝 + 列式 msgpack 二进制出口。
+/// GET 走便捷路径：URL query 传坐标（domain / application / module / file / doc）+
+/// `filter=列名:值` 简单等值 + `limit` + `depth`；POST 时 body 为 DocQuery 富查询
+/// JSON（URL 上的 depth / limit 作为兜底默认值）：
+///
+/// ```json
+/// {
+///   "depth": 2,
+///   "includeSiblings": true,
+///   "countTotal": false,
+///   "layers": {
+///     "<层 id>": {
+///       "filter": { "status": "posted", "amount": { "$gt": 0 },
+///                   "$or": [ { "type": "1" }, { "type": "2" } ] },
+///       "orderBy": ["!posting_date", "code"],
+///       "limit": 50,
+///       "offset": 0,
+///       "cursor": "<base64 游标>"
+///     }
+///   }
+/// }
+/// ```
+///
+/// filter 语义：键值对隐式 AND；标量值 = 等值简写；支持算子 `$eq` `$ne` `$gt` `$gte`
+/// `$lt` `$lte` `$like` `$ilike` `$contains` `$startsWith` `$endsWith` `$null` 及
+/// `$or` / `$and` 组合；`orderBy` 元素前缀 `!` 表示降序。
+#[utoipa::path(
+    post,
+    path = "/api/doc/data/sqlx-zmc-msgpack",
+    params(DocDataQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "列式 msgpack 二进制信封：{code, msg, data}（data 为列式编码字节）", content_type = "application/x-msgpack")
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_data_sqlx_zmc_msgpack(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -269,7 +381,44 @@ pub async fn doc_data_sqlx_zmc_msgpack(
     .await
 }
 
-/// `GET|POST /api/doc/data/tokio-zmc-json` —— tokio + ZmcDataSet + 纯 JSON。
+/// 装载单据数据-tokio-zmc-json
+///
+/// `GET|POST /api/doc/data/tokio-zmc-json` —— tokio-postgres + ZmcDataSet 零拷贝 + 纯 JSON 出口。
+/// GET 走便捷路径：URL query 传坐标（domain / application / module / file / doc）+
+/// `filter=列名:值` 简单等值 + `limit` + `depth`；POST 时 body 为 DocQuery 富查询
+/// JSON（URL 上的 depth / limit 作为兜底默认值）：
+///
+/// ```json
+/// {
+///   "depth": 2,
+///   "includeSiblings": true,
+///   "countTotal": false,
+///   "layers": {
+///     "<层 id>": {
+///       "filter": { "status": "posted", "amount": { "$gt": 0 },
+///                   "$or": [ { "type": "1" }, { "type": "2" } ] },
+///       "orderBy": ["!posting_date", "code"],
+///       "limit": 50,
+///       "offset": 0,
+///       "cursor": "<base64 游标>"
+///     }
+///   }
+/// }
+/// ```
+///
+/// filter 语义：键值对隐式 AND；标量值 = 等值简写；支持算子 `$eq` `$ne` `$gt` `$gte`
+/// `$lt` `$lte` `$like` `$ilike` `$contains` `$startsWith` `$endsWith` `$null` 及
+/// `$or` / `$and` 组合；`orderBy` 元素前缀 `!` 表示降序。
+#[utoipa::path(
+    post,
+    path = "/api/doc/data/tokio-zmc-json",
+    params(DocDataQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "列式包（ApiResp JSON 信封）：datasetId / columns / rows / childRows，前端 CmxDataSet.fromJSON 直接装载", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_data_tokio_zmc_json(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -287,7 +436,44 @@ pub async fn doc_data_tokio_zmc_json(
     doc_load_entry(Driver::Tokio, Exit::ZmcJson, q, headers, body.map(|b| b.0)).await
 }
 
-/// `GET|POST /api/doc/data/sqlx-zmc-json` —— sqlx + ZmcDataSet + 纯 JSON。
+/// 装载单据数据-sqlx-zmc-json
+///
+/// `GET|POST /api/doc/data/sqlx-zmc-json` —— sqlx + ZmcDataSet 零拷贝 + 纯 JSON 出口。
+/// GET 走便捷路径：URL query 传坐标（domain / application / module / file / doc）+
+/// `filter=列名:值` 简单等值 + `limit` + `depth`；POST 时 body 为 DocQuery 富查询
+/// JSON（URL 上的 depth / limit 作为兜底默认值）：
+///
+/// ```json
+/// {
+///   "depth": 2,
+///   "includeSiblings": true,
+///   "countTotal": false,
+///   "layers": {
+///     "<层 id>": {
+///       "filter": { "status": "posted", "amount": { "$gt": 0 },
+///                   "$or": [ { "type": "1" }, { "type": "2" } ] },
+///       "orderBy": ["!posting_date", "code"],
+///       "limit": 50,
+///       "offset": 0,
+///       "cursor": "<base64 游标>"
+///     }
+///   }
+/// }
+/// ```
+///
+/// filter 语义：键值对隐式 AND；标量值 = 等值简写；支持算子 `$eq` `$ne` `$gt` `$gte`
+/// `$lt` `$lte` `$like` `$ilike` `$contains` `$startsWith` `$endsWith` `$null` 及
+/// `$or` / `$and` 组合；`orderBy` 元素前缀 `!` 表示降序。
+#[utoipa::path(
+    post,
+    path = "/api/doc/data/sqlx-zmc-json",
+    params(DocDataQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "列式包（ApiResp JSON 信封）：datasetId / columns / rows / childRows，前端 CmxDataSet.fromJSON 直接装载", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_data_sqlx_zmc_json(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -308,7 +494,7 @@ pub async fn doc_data_sqlx_zmc_json(
 // ── 懒下钻端点：只装某层在指定父下的子树 ─────────────────────────────────────
 
 /// `POST /api/doc/data/children` 请求体。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct DocChildrenReq {
     /// 域；可选：缺失时后端按 doc(moduleCode)/file 全局反查（多 DAM 冲突返回 409 + 候选列表）。
     #[serde(default)]
@@ -341,11 +527,21 @@ pub struct DocChildrenReq {
     pub exit: Option<String>,
 }
 
-/// `POST /api/doc/data/children` —— 懒下钻：装载某层在给定父 id 下的子树（含可选孙层）。
+/// 懒下钻装载子树。
 ///
-/// 通用（元数据驱动）：`layer` 是任意层 id，childKey 由元数据推导，该层查询由 body.query
-/// 指定，全部经 `build_layer_select`。前端 grid 展开某父行时调用。出口纯 JSON 列式包
-/// （子树可直接 `CmxDataSet.fromJSON` 回填父行 `_children`）。
+/// `POST /api/doc/data/children` —— 装载某层在给定父 id 下的子树（含可选孙层）。
+/// 前端 grid 展开某父行时调用。通用（元数据驱动）：`layer` 是任意层 id，childKey
+/// 由元数据推导，该层查询由 body 的 `query` 指定（filter / orderBy / limit / offset /
+/// cursor），全部经 `build_layer_select` 生成参数化 SQL。
+#[utoipa::path(
+    post,
+    path = "/api/doc/data/children",
+    request_body = DocChildrenReq,
+    responses(
+        (status = 200, description = "子树列式包（纯 JSON），前端 CmxDataSet.fromJSON 直接回填父行 _children", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_children(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -409,12 +605,33 @@ pub async fn doc_children(
 
 // ── 真·流式端点：超大扁平结果零内存 chunked 传输 ──────────────────────────────
 
-/// `GET|POST /api/doc/data/tokio-zmc-stream` 请求参数（**单层扁平**大结果，不下钻）。
+/// 流式装载单层大结果。
 ///
-/// GET：URL query（domain/app/module/file + 便捷 filter/limit）；
-/// POST：body = `{ layer?, filter?, orderBy?, limit? }`（不指定 layer 则用根层）。
-/// 出口是**长度分帧**二进制流（`Content-Type: application/octet-stream`，
-/// `Transfer-Encoding: chunked`），服务端峰值内存 O(单行)。前端用 cmx-msgpack-stream 解码。
+/// `GET|POST /api/doc/data/tokio-zmc-stream` —— 长度分帧二进制流。
+/// 面向超大扁平单层结果（不下钻子层）：服务端逐行流式吐出，峰值内存 O(单行)。
+/// 响应为长度分帧二进制流（`Content-Type: application/octet-stream`、chunked），
+/// 前端用 cmx-msgpack-stream 解码。
+///
+/// GET 走便捷路径：URL query 传坐标 + `filter=列名:值` + `limit`；POST body（单层查询）：
+///
+/// ```json
+/// {
+///   "layer": "<目标层 id，缺省根层>",
+///   "filter": { "status": "posted" },
+///   "orderBy": ["code"],
+///   "limit": 100000
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/doc/data/tokio-zmc-stream",
+    params(DocDataQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "长度分帧二进制流（chunked 传输），前端 cmx-msgpack-stream 解码", content_type = "application/octet-stream")
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_data_stream(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -518,11 +735,22 @@ pub async fn doc_data_stream(
         .into_response())
 }
 
-/// `GET /api/doc/meta` —— 返回单据**显示元数据**(层序 L1..LN + 各层列 caption/类型 + 父子关系)。
+/// 返回单据显示元数据。
 ///
-/// 数据包(`/api/doc/data*`)只带列名,不带 caption/类型/宽度;通用单据前端页据此端点**动态**
-/// 构建 N 层主从 schema、各层 grid 与列头。复用已解析+缓存+合并 base 字段集的 `DocMetaView`
-/// (与装载器同一真相源),投影成前端友好 JSON。参数同 [`DocDataQuery`] 的 domain/app/module/file。
+/// `GET /api/doc/meta` —— 内容为层序 L1..LN + 各层列 caption / 类型 + 父子关系。
+/// 数据包（`/api/doc/data*`）
+/// 只带列名，不带 caption / 类型 / 宽度；通用单据前端页据此端点动态构建 N 层主从
+/// schema、各层 grid 与列头。复用已解析 + 缓存 + 合并 base 字段集的 `DocMetaView`
+/// （与装载器同一真相源），投影成前端友好 JSON。参数同 [`DocDataQuery`] 的坐标部分。
+#[utoipa::path(
+    get,
+    path = "/api/doc/meta",
+    params(DocDataQuery),
+    responses(
+        (status = 200, description = "单据显示元数据：层序 L1..LN + 各层列 caption / 类型 + 父子关系", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_meta(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -553,8 +781,9 @@ pub async fn doc_meta(
 // encode_envelope_ok / msgpack_response 已上提到 cmx_api_core::msgpack（与 dct 共用）。
 use cmx_api_core::msgpack::msgpack_ok_response;
 
-/// POST /api/doc/save 请求体。
-#[derive(Debug, Deserialize)]
+/// `POST /api/doc/save` / `POST /api/doc/restore` 共用的单据坐标 query 参数。
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct DocSaveQuery {
     /// 域；可选：缺失时后端按 doc(moduleCode)/file 全局反查（多 DAM 冲突返回 409 + 候选列表）。
     #[serde(default)]
@@ -573,9 +802,37 @@ pub struct DocSaveQuery {
     pub doc: Option<String>,
 }
 
-/// `POST /api/doc/save` —— 回存单据数据（merge/replace 双模式）。
+/// 回存单据数据。
 ///
-/// body: `{ saveMode, changes | snapshot }`（§6.4）。单据坐标走 query 参数。
+/// `POST /api/doc/save` —— merge/replace 双模式。
+/// 单据坐标走 query 参数（[`DocSaveQuery`]），body 为 changeset JSON：
+///
+/// ```json
+/// {
+///   "saveMode": "merge",
+///   "changes": {
+///     "<层 id>": {
+///       "inserted": [ { "id": "临时 id", "upper_id": "父行 id", "fields": { "...": "..." } } ],
+///       "updated": [ { "id": "...", "fields": { "...": "..." }, "baseline": { "update_time": "..." } } ],
+///       "deleted": [ "id1", "id2" ]
+///     }
+///   }
+/// }
+/// ```
+///
+/// `saveMode=replace` 时改用 `snapshot` 整树替换。保存自动带审计填充
+/// （create_by / update_by）、版本快照与乐观锁；列级校验 / validationRules 失败时
+/// 返回结构化 violations（HTTP 200 错误信封），前端逐行逐列高亮。
+#[utoipa::path(
+    post,
+    path = "/api/doc/save",
+    params(DocSaveQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "保存结果（affected / idMap 等）；列级校验失败返回结构化 violations", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_save(
     State(_s): State<CmxAppState>,
     ctx: CmxSvrContext,
@@ -658,11 +915,35 @@ fn save_ctx(
     }
 }
 
-/// `POST /api/doc/save/batch` —— 批量回存多单（方案 F）。
+/// 批量回存单据。
 ///
-/// body: `{ atomic?: bool = true, docs: [ { domain, application, module, file, saveMode?, changes|snapshot } ] }`。
-/// 一批可混多种单据（每单自带坐标）。`atomic=true` 一个大事务全成全败；`false` 每单独立事务逐单成败。
-/// 每单自动享 C（审计）/B1（版本快照）/B2（乐观锁）。
+/// `POST /api/doc/save/batch` —— 一批可混多种单据（每单自带坐标），body：
+///
+/// ```json
+/// {
+///   "atomic": true,
+///   "docs": [
+///     {
+///       "domain": "fi", "application": "cmxfico", "module": "gl",
+///       "file": "cmxfico_doc_meta_v1.json", "doc": "cmxfico",
+///       "saveMode": "merge",
+///       "changes": { "<层 id>": { "inserted": [], "updated": [], "deleted": [] } }
+///     }
+///   ]
+/// }
+/// ```
+///
+/// `atomic` 缺省 true：一个大事务全成全败；false 时每单独立事务、逐单成败。
+/// 每单自动享审计填充 / 版本快照 / 乐观锁；单单 changeset 格式同 `/api/doc/save`。
+#[utoipa::path(
+    post,
+    path = "/api/doc/save/batch",
+    request_body = Value,
+    responses(
+        (status = 200, description = "批量保存结果 {atomic, count, results}；校验失败返回 {atomic, failedIndex, validation}", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_save_batch(
     State(_s): State<CmxAppState>,
     ctx: CmxSvrContext,
@@ -789,18 +1070,34 @@ fn serde_err_to_api(e: serde_json::Error) -> cmx_api_core::Error {
 
 // ─────────────────── 版本化查询/回滚（方案 §6A.5，Phase 8）───────────────────
 
-/// GET /api/doc/revisions?docFile&rootId —— 列某单全部版本时间线。
-#[derive(Debug, Deserialize)]
+/// `GET /api/doc/revisions` / `GET /api/doc/revision` 共用的版本查询参数。
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct RevisionsQuery {
+    /// 单据定义文件名（版本台账定位「哪种单据」）。
     #[serde(rename = "docFile")]
     pub doc_file: String,
+    /// 单据根行 id。
     #[serde(rename = "rootId")]
     pub root_id: String,
-    /// 取某版完整快照时用（revision 端点）
+    /// 目标版本号；缺省取当前版（is_current=1）。revision 端点取快照时用。
     pub rev: Option<i32>,
 }
 
-/// `GET /api/doc/revisions` —— 版本时间线。
+/// 列出版本时间线。
+///
+/// `GET /api/doc/revisions` —— 按 `docFile` + `rootId` 查询版本台账，返回该单据历次
+/// 保存的版本列表（rev_no / is_current / op / reason / actor_name / created_at 等，
+/// 按 rev 降序），供版本对比与回滚选择。
+#[utoipa::path(
+    get,
+    path = "/api/doc/revisions",
+    params(RevisionsQuery),
+    responses(
+        (status = 200, description = "版本时间线：该单据根行的全部历史版本", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_revisions(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -813,7 +1110,20 @@ pub async fn doc_revisions(
     Ok(Json(ApiResp::ok(list)))
 }
 
-/// `GET /api/doc/revision` —— 取某历史版完整快照（列式包，前端 fromJSON 直接渲染）。
+/// 取历史版本快照。
+///
+/// `GET /api/doc/revision` —— 按 `docFile` + `rootId` + `rev` 返回该版本的列式包快照
+/// （结构与装载接口数据包一致），前端 `CmxDataSet.fromJSON` 直接渲染。`rev` 缺省取
+/// 当前版（is_current=1）。
+#[utoipa::path(
+    get,
+    path = "/api/doc/revision",
+    params(RevisionsQuery),
+    responses(
+        (status = 200, description = "该版本的完整快照（列式包，前端 CmxDataSet.fromJSON 直接渲染）", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_revision(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -826,9 +1136,27 @@ pub async fn doc_revision(
     Ok(Json(ApiResp::ok(snap)))
 }
 
-/// `POST /api/doc/restore` —— 把某历史版恢复为新当前版（op=restore，历史不丢，§6A.5）。
+/// 恢复历史版本。
 ///
-/// body: `{ docFile, rootId, rev }`。取该版快照 → replace 模式写回。
+/// `POST /api/doc/restore` —— 取该版快照后以 replace 模式写回（op=restore），历史
+/// 版本不丢失。单据坐标走 query 参数（[`DocSaveQuery`]），body：
+///
+/// ```json
+/// { "rootId": "<根行 id>", "rev": 3 }
+/// ```
+///
+/// 取该版快照后以 replace 模式写回（op=restore），历史版本不丢失。`rev` 缺省时
+/// 使用当前版（is_current=1）快照。
+#[utoipa::path(
+    post,
+    path = "/api/doc/restore",
+    params(DocSaveQuery),
+    request_body = Value,
+    responses(
+        (status = 200, description = "恢复结果 {ok, mode: restore, affected, restoredRev}", body = ApiResp<Value>)
+    ),
+    tag = "DOC单据接口"
+)]
 pub async fn doc_restore(
     State(_s): State<CmxAppState>,
     ctx: CmxSvrContext,

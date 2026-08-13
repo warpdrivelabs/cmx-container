@@ -28,7 +28,7 @@ use cmx_mdm_store_pg as store;
 
 use super::{default_page, default_page_size};
 
-/// 提交审批：draft → approving。
+/// 提交审批：draft / rejected → approving（驳回后可直接编辑重新提交，无需 clone 新 CR）。
 pub async fn mdm_cr_submit(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -37,7 +37,7 @@ pub async fn mdm_cr_submit(
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
-    store::check_status(mm, &db_id, None, body.cr_id, "draft").await?;
+    store::check_status_in(mm, &db_id, None, body.cr_id, &["draft", "rejected"]).await?;
     store::set_cr_status_pub(mm, &db_id, None, body.cr_id, "approving").await?;
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "approving" }))))
 }

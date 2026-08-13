@@ -713,7 +713,26 @@ impl DocSaver {
             let rows_per_batch = (Self::MAX_PARAMS / per_row).max(1);
             for chunk in id_rows.chunks(rows_per_batch) {
                 let oplock_col = if locked { Some("update_time") } else { None };
-                let sql = build_multi_update_sql(&layer.table_name, &cols, chunk.len(), oplock_col);
+                // JSONB 列掩码（与 batch_insert_grouped 对称）：FieldType::Json 的列占位符加 ::jsonb
+                // cast，规避 UPDATE 路径 serde_json::Value 被推断为 text 导致 jsonb 列类型不匹配。
+                let jsonb_mask: Vec<bool> = cols
+                    .iter()
+                    .map(|c| {
+                        layer
+                            .schema
+                            .get_index(c)
+                            .and_then(|i| layer.schema.fields.get(i))
+                            .map(|f| matches!(f.field_type, FieldType::Json))
+                            .unwrap_or(false)
+                    })
+                    .collect();
+                let sql = build_multi_update_sql(
+                    &layer.table_name,
+                    &cols,
+                    chunk.len(),
+                    oplock_col,
+                    &jsonb_mask,
+                );
                 // 展平参数：每行 (id, col1..colN [, baseline])
                 let mut flat: Vec<DataValue> = Vec::with_capacity(chunk.len() * per_row);
                 for (id_dv, col_vals, baseline) in chunk {
@@ -1610,6 +1629,7 @@ fn build_multi_update_sql(
     cols: &[String],
     nrows: usize,
     oplock: Option<&str>,
+    jsonb_cols_mask: &[bool],
 ) -> String {
     let extra = if oplock.is_some() { 2 } else { 1 }; // id (+ baseline)
     let ncol = cols.len() + extra;
@@ -1629,9 +1649,20 @@ fn build_multi_update_sql(
     let value_groups: Vec<String> = (0..nrows)
         .map(|_| {
             let group: Vec<String> = (0..ncol)
-                .map(|_| {
+                .map(|ci| {
                     p += 1;
-                    format!("${p}")
+                    // 每行 VALUES 布局：(id, col1..colN [, baseline])。
+                    // 仅 cols 区间（ci ∈ 1..=cols.len()）按 jsonb_cols_mask 加 `$p::jsonb` cast，
+                    // 与 build_multi_insert_sql 对称：规避 PG 把 serde_json::Value 参数推断为 text，
+                    // 导致「column is of type jsonb but expression is of type text」（实测 cv_mdm_apply
+                    // 第二次保存草稿走 UPDATE 路径时 payload 列必现）。
+                    let is_jsonb = (1..=cols.len()).contains(&ci)
+                        && jsonb_cols_mask.get(ci - 1).copied().unwrap_or(false);
+                    if is_jsonb {
+                        format!("${p}::jsonb")
+                    } else {
+                        format!("${p}")
+                    }
                 })
                 .collect();
             format!("({})", group.join(", "))
@@ -1765,7 +1796,7 @@ mod tests {
     #[test]
     fn multi_update_from_values() {
         let cols = vec!["a".to_string(), "b".to_string()];
-        let sql = build_multi_update_sql("cv_header", &cols, 2, None);
+        let sql = build_multi_update_sql("cv_header", &cols, 2, None, &[false, false]);
         // 每行 (id,a,b) = 3 参，2 行 = $1..$6
         assert_eq!(
             sql,
@@ -1779,12 +1810,27 @@ mod tests {
     fn multi_update_with_oplock_baseline() {
         // B2 乐观锁：带 update_time 基线 → 每行 (id, a, baseline) = 3 参，WHERE 加基线谓词。
         let cols = vec!["a".to_string()];
-        let sql = build_multi_update_sql("cv_batch", &cols, 2, Some("update_time"));
+        let sql = build_multi_update_sql("cv_batch", &cols, 2, Some("update_time"), &[false]);
         assert_eq!(
             sql,
             "UPDATE \"cv_batch\" SET \"a\" = v.\"a\" \
              FROM (VALUES ($1, $2, $3), ($4, $5, $6)) AS v(id, \"a\", __oplock) \
              WHERE \"cv_batch\".id = v.id AND \"cv_batch\".\"update_time\" = v.\"__oplock\""
+        );
+    }
+
+    #[test]
+    fn multi_update_jsonb_cast() {
+        // jsonb 列（payload）占位符加 ::jsonb，与 build_multi_insert_sql 对称：
+        // 规避「column "payload" is of type jsonb but expression is of type text」
+        // （cr-form 第二次保存草稿走 UPDATE 路径时 payload 列必现）。
+        let cols = vec!["name".to_string(), "payload".to_string()];
+        let sql = build_multi_update_sql("cv_mdm_apply", &cols, 1, None, &[false, true]);
+        assert_eq!(
+            sql,
+            "UPDATE \"cv_mdm_apply\" SET \"name\" = v.\"name\", \"payload\" = v.\"payload\" \
+             FROM (VALUES ($1, $2, $3::jsonb)) AS v(id, \"name\", \"payload\") \
+             WHERE \"cv_mdm_apply\".id = v.id"
         );
     }
 

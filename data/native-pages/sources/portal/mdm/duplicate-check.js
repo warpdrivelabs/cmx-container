@@ -276,9 +276,9 @@ function condHtml() {
       <label>目标记录</label>
       <cmx-dict-select id="dcRecord" ${state.targetRow ? `value="${state.targetRow.id}"` : ''}></cmx-dict-select>
     </div>` : ''
-  // 动作按钮随模式切换：anchor=查重（需字典+目标记录+规则字段）；scan=开始扫描（仅需字典，扫描中置 disabled）
+  // 动作按钮随模式切换：anchor=查重（需字典+目标记录+规则字段）；scan=开始扫描（需字典+已选/新建含查重字段的规则）
   const actionBtn = state.mode === 'scan'
-    ? `<ui5-button design="Emphasized" icon="background-process" id="dcScan" ${(!state.dictCode || state.scanning) ? 'disabled' : ''}>${state.scanning ? '扫描中…' : '开始扫描'}</ui5-button>`
+    ? `<ui5-button design="Emphasized" icon="background-process" id="dcScan" ${(!state.dictCode || !ruleHasFields() || state.scanning) ? 'disabled' : ''}>${state.scanning ? '扫描中…' : '开始扫描'}</ui5-button>`
     : `<ui5-button design="Emphasized" icon="search" id="dcFind" ${(!state.dictCode || !state.targetId || !ruleHasFields()) ? 'disabled' : ''}>查重</ui5-button>`
   return `<section class="neo-panel">
     <div class="neo-panel-head"><div class="pt"><ui5-icon name="filter"></ui5-icon>查重条件</div></div>
@@ -293,7 +293,7 @@ function condHtml() {
         ${actionBtn}
       </div>
       ${state.dictCode ? ruleHtml() : '<div class="hint">请先选择数据字典</div>'}
-      ${state.dictCode && state.mode === 'scan' ? '<div class="hint">规则配置为可选：未填写时后端从 md_match_config 读默认；填写则覆盖默认参与本次扫描。</div>' : ''}`}
+      ${state.dictCode && state.mode === 'scan' ? '<div class="hint">请先选择或新建查重规则（需含查重字段）：扫描按所选规则执行，未配置查重字段时无法启动。</div>' : ''}`}
     </div>
   </section>`
 }
@@ -841,6 +841,7 @@ async function runFind() {
 async function runScan() {
   const M = cmx()
   if (!state.dictCode) { M.cmxWarn?.('请先选择数据字典'); return }
+  if (!ruleHasFields()) { M.cmxWarn?.('请先选择或新建含查重字段的规则'); return }
   if (state.scanning) return
   state.scanning = true; state.scanResult = null
   refresh()
