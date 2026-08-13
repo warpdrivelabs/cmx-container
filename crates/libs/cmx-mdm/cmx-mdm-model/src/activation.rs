@@ -60,6 +60,10 @@ pub struct LineMapping {
     pub parent_field: String,
     #[serde(default)]
     pub fields: Map<String, Value>,
+    /// 明细字段展示顺序（纯 UI 用：fields 经 serde Map 字母序 + jsonb 无序落库后 key 序必丢，
+    /// 配置器把用户排的字段顺序存此保序数组；激活器 plan_lines 不读——遍历 fields 与顺序无关）。
+    #[serde(default, rename = "fieldOrder")]
+    pub field_order: Vec<String>,
 }
 
 /// 头映射分组（一条 = 一个展示分组，如「基础信息」「工商资质」）。
@@ -121,6 +125,20 @@ pub fn plan_create(cfg: &ActivationConfig, cr_head: &Map<String, Value>, new_cod
             header_row.insert(tgt.to_string(), v.clone());
         }
     }
+    // subject_name 是 CR 的专用主体名称列：cr-form 的 buildHead 把 nameFieldKey（即
+    // subject_name_field）的值存到 subject_name，并故意排除出 payload（避免重复）。因此
+    // header_mapping 按 payload[src]/cr_head[src] 查找时取不到它（name 既不在 payload 也不在
+    // 顶层）。这里按 cfg.subject_name_field（目标字典的名称列名，如 "name"）把 subject_name
+    // 单独搬运，补齐映射——否则目标表 name(NOT NULL) 落空报「供应商名称不能为空」。
+    if let Some(name_col) = cfg.subject_name_field.as_deref()
+        && !name_col.is_empty()
+    {
+        if let Some(v) = cr_head.get("subject_name")
+            && !is_unfilled(v)
+        {
+            header_row.insert(name_col.to_string(), v.clone());
+        }
+    }
     header_row.insert("code".into(), Value::String(new_code.to_string()));
     // 闸口:强制 published(V3.1 dct_accessor 唯一写入入口约束)
     header_row.insert("lifecycle_status".into(), Value::String("published".to_string()));
@@ -150,6 +168,20 @@ pub fn plan_update(
             {
                 // 空串跳过（前端表单未改的空串）；null 保留——update 时是显式清空意图，落库 SET col=NULL。
                 header_row.insert(tgt.to_string(), new_val.clone());
+            }
+        }
+        // 同 plan_create：subject_name 是 CR 专用列，update 时名称变更存在 deltas['subject_name']
+        // （cr-form buildHead 的 deltas key 是 'subject_name'），header_mapping 按 src_field
+        // ('name') 查 deltas 查不到。按 cfg.subject_name_field 把 deltas['subject_name'].new
+        // 搬到目标名称列。
+        if let Some(name_col) = cfg.subject_name_field.as_deref()
+            && !name_col.is_empty()
+        {
+            if let Some(delta) = deltas.get("subject_name")
+                && let Some(new_val) = delta.get("new")
+                && !is_empty_str(new_val)
+            {
+                header_row.insert(name_col.to_string(), new_val.clone());
             }
         }
     }
@@ -225,7 +257,8 @@ mod tests {
                 "parentIdField": "supplier_id",
                 "fields": { "account_no": "account_no" }
             }],
-            "code_rule_code": null
+            "code_rule_code": null,
+            "subject_name_field": "name"
         }))
         .unwrap()
     }
@@ -271,6 +304,22 @@ mod tests {
     }
 
     #[test]
+    fn plan_create_maps_subject_name_when_payload_misses_it() {
+        // 真实 cr-form 场景：供应商名称只存在 cr_head.subject_name（buildHead 把 nameFieldKey 值
+        // 存到 subject_name 并排除出 payload）。header_mapping 的 name→name 按 payload[src]/
+        // cr_head[src] 查不到，须由 cfg.subject_name_field 把 subject_name 搬到目标列。
+        let cfg = sample_cfg(); // subject_name_field = "name"
+        let cr_head = serde_json::from_value(json!({
+            "subject_name": "张三供应商",
+            "payload": { "tax_no": "911" }   // payload 故意不含 name（对齐 cr-form buildHead）
+        })).unwrap();
+        let plan = plan_create(&cfg, &cr_head, "GYS-001");
+        // subject_name 经 subject_name_field 映射到目标 name 列（不再为空）
+        assert_eq!(plan.header_row.get("name").and_then(|v| v.as_str()), Some("张三供应商"));
+        assert_eq!(plan.header_row.get("tax_no").and_then(|v| v.as_str()), Some("911"));
+    }
+
+    #[test]
     fn plan_update_skips_empty_str_but_keeps_null() {
         // update 场景：空串=前端未改（跳过）；null=显式清空（保留落库 SET col=NULL）。
         let mut cfg = sample_cfg();
@@ -301,6 +350,24 @@ mod tests {
         assert_eq!(plan.header_row.get("published_version").and_then(|v| v.as_i64()), Some(4));
         // 变更不改 lifecycle_status
         assert!(plan.header_row.get("lifecycle_status").is_none());
+    }
+
+    #[test]
+    fn plan_update_maps_subject_name_rename() {
+        // 真实 cr-form 场景：供应商改名时 cr-form 把变更存到 deltas['subject_name']
+        // （key 是 subject_name，非 header_mapping 的 'name'）。plan_update 须按
+        // subject_name_field 把 new 搬到目标 name 列。
+        let cfg = sample_cfg(); // subject_name_field = "name"
+        let deltas = json!({
+            "subject_name": { "old": "旧名", "new": "新名" },
+            "tax_no": { "old": "911", "new": "922" }
+        });
+        let plan = plan_update(&cfg, &Map::new(), &deltas, 1);
+        // subject_name 改名 → 目标 name 列
+        assert_eq!(plan.header_row.get("name").and_then(|v| v.as_str()), Some("新名"));
+        // tax_no 正常经 header_mapping 搬运
+        assert_eq!(plan.header_row.get("tax_no").and_then(|v| v.as_str()), Some("922"));
+        assert_eq!(plan.header_row.get("published_version").and_then(|v| v.as_i64()), Some(2));
     }
 
     #[test]
