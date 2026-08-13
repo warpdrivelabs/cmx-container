@@ -147,15 +147,18 @@ const capOf = (f) => {
   return c.zh_CN || c.zh || c.label || ''
 }
 const disp = (f) => { const c = capOf(f); return (c && c !== f.name ? `${c}（${f.name}）` : f.name) }
-// CR 源字段候选：CR 头公共列（subject_name/subject_code）+ 目标字典全部字段（payload 段，
-// 裸名 value、payload.xxx 显示）。源/目标同取 cmFields 全集，不做过滤——所有引用字段都展示，
-// 由用户自行决定映射哪些。
+// CR 源字段候选：cv_mdm_apply 全部顶层字段（本表 fields 定义 + documentFieldSets 引入的公共/引用列），
+// 仅剔除纯审计技术列（id/create_*/update_*/delete_flag）和 payload/field_deltas 容器。
+// documentFieldSets 引入的字段（doc_no/doc_date/entity_id/source_doc_no/doc_status 等）属「引用字段」
+// （非本表 fields 定义），可选用作 CR 单据展示（目标列留空 → 不写主数据，plan_create 遇 null tgt 自动跳过）。
+// + 目标字典字段（payload 段，payload.xxx 显示；plan_create 优先从 payload 取值）。
+const AUDIT_COLS = new Set(['id', 'create_by', 'create_time', 'update_by', 'update_time', 'delete_flag'])
 const crOptions = () => {
-  const common = state.crFields
-    .filter((f) => ['subject_name', 'subject_code'].includes(f.name))
+  const header = state.crFields
+    .filter((f) => f.name !== 'payload' && f.name !== 'field_deltas' && !AUDIT_COLS.has(f.name))
     .map((f) => ({ value: f.name, label: disp(f) }))
   const payload = state.cmFields.map((f) => ({ value: f.name, label: `payload.${disp(f)}` }))
-  return [...common, ...payload]
+  return [...header, ...payload]
 }
 const cmOptions = () => state.cmFields.map((f) => ({ value: f.name, label: disp(f) }))
 // 行表映射：目标明细字典候选（dictCatalog）
