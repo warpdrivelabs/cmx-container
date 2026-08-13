@@ -70,7 +70,10 @@ const HEAD_GROUP_STYLE = 'bar'
 // step：create 模式初始 1（先查重），update 模式初始 2（改已有记录，跳过查重）
 const state = {
   dbId: '', coord: null,
-  docType: '', crType: 'create', mode: 'create', target: null,
+  docType: '', crType: 'create', mode: 'create',
+  targetId: null, targetName: '',   // update：变更目标字典记录 id / 名称（tab 标题）
+  target: null,                     // update：按 targetId 加载的头记录（扁平 search 行，供 buildHead/headInitialValue 取列值）
+  targetLines: {},                  // update：各明细类型预填行 { [lineType]: rows }
   activation: null,        // 命中的 activation 配置
   dictMeta: null,          // 头字典 dct/meta
   headMap: [],             // [[srcField, tgtCol]] 按 header_mapping 顺序（数据构造用）
@@ -203,17 +206,11 @@ function viewHtml() {
   const modeLabel = isView ? '查看' : (isEdit ? '变更' : '新增')
   // view 模式标题带单据号
   const titleSuffix = (isView && state.crHead?.doc_no) ? `· ${esc(state.crHead.doc_no)}` : ''
-  let topActions = ''
-  if (showSteps && step === 1) {
-    topActions = `<ui5-button design="Emphasized" icon="navigation-right-arrow" id="fNext">下一步</ui5-button>`
-  } else if (showSteps && step === 2) {
-    topActions = `<ui5-button design="Transparent" icon="navigation-left-arrow" id="fPrev">上一步</ui5-button>
-      <ui5-button design="Default" icon="save" id="fSave2">保存草稿</ui5-button>
-      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit2">保存并提交</ui5-button>`
-  } else if (isEdit) {
-    topActions = `<ui5-button design="Default" icon="save" id="fSave">保存草稿</ui5-button>
-      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit">保存并提交</ui5-button>`
-  }
+  // 查重页（create step1）操作按钮留顶部 bar；create step2 / update / view 按钮统一移右侧 action-panel
+  const isKeyStep = showSteps && step === 1
+  const topActions = isKeyStep
+    ? `<ui5-button design="Emphasized" icon="navigation-right-arrow" id="fNext">下一步</ui5-button>`
+    : ''
   const keyFormCard = (showSteps && step === 1) ? `<div class="sec sec-head">
       <div class="sec-hd"><div class="sec-hd-l">
         <ui5-icon name="add-document" design="Default" mode="Decorative"></ui5-icon>
@@ -245,7 +242,7 @@ function viewHtml() {
         <div id="fLinePanels" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>
       </div>
     </div>` : ''
-  // view 模式：左右分栏（左主内容 + 右固定操作区）；create/update 单栏，按钮在顶部 bar
+  // 顶部 bar 只放标题（+ 查重页的「下一步」）；操作按钮在右侧 action-panel（见末尾布局判定）
   const body = `<ui5-bar design="Header" accessible-role="Toolbar">
       <ui5-label wrapping-type="Normal" style="font-weight:600;font-size:15px;color:var(--sapShellTitleColor,var(--sapTitleColor));">${modeLabel}${esc(domainLabel)} ${titleSuffix}</ui5-label>
       <div slot="endContent" style="display:flex;gap:4px;">${topActions}</div>
@@ -254,39 +251,55 @@ function viewHtml() {
     ${keyFormCard}
     ${headHtml}
     ${lineHtml}`
-  if (isView) {
-    return `<div class="pg pg-view"><div class="pg-main">${body}</div><aside class="action-panel">${actionPanelHtml()}</aside></div>`
+  // 查重页单栏（按钮在顶部 bar）；create step2 / update / view 左右分栏（按钮在右侧 action-panel）
+  if (isKeyStep) {
+    return `<div class="pg">${body}</div>`
   }
-  return `<div class="pg">${body}</div>`
+  return `<div class="pg pg-view"><div class="pg-main">${body}</div><aside class="action-panel">${actionPanelHtml()}</aside></div>`
 }
 
-// view 模式右侧操作区：按 doc_status 显示操作按钮；草稿/驳回可切编辑态；下方流程区占位（暂不开发）。
+// 右侧操作区：所有非查重页模式统一在此渲染操作按钮（create step2 / update / view 各状态）。
+// 按钮 id 与 doSave/doCrAction 逻辑完全不变，仅 HTML 容器从顶部 bar 移到右侧。
 function actionPanelHtml() {
-  if (state.mode !== 'view') return ''
-  // 编辑态：保存/取消
-  if (state.editing) {
-    return `<div class="ap-card"><div class="ap-title">编辑</div><div class="ap-actions">
-        <ui5-button design="Emphasized" icon="save" id="fEditSave">保存</ui5-button>
-        <ui5-button design="Transparent" icon="cancel" id="fEditCancel">取消</ui5-button>
-      </div></div>${flowPlaceholderHtml()}`
+  const mode = state.mode
+  const apCard = (title, inner) => `<div class="ap-card"><div class="ap-title">${title}</div><div class="ap-actions">${inner}</div></div>`
+  // 流程占位仅在「已进入流转的单据查看态」展示：view 非编辑 且 非草稿（draft）。
+  // 新建 / 变更 / 草稿 / 编辑态都尚未进入审批流，不展示流程。
+  const showFlow = mode === 'view' && !state.editing && (state.crHead?.doc_status || '') !== 'draft'
+  const flow = showFlow ? flowPlaceholderHtml() : ''
+  // create step2：上一步 / 保存草稿 / 保存并提交
+  if (mode === 'create' && state.step === 2) {
+    return apCard('操作', `<ui5-button design="Transparent" icon="navigation-left-arrow" id="fPrev">上一步</ui5-button>
+      <ui5-button design="Default" icon="save" id="fSave2">保存草稿</ui5-button>
+      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit2">保存并提交</ui5-button>`) + flow
   }
-  // 非编辑态：按单据状态显示对应操作按钮
-  const st = state.crHead?.doc_status || ''
-  let actions = ''
-  // draft / rejected 都可编辑 + 重新提交；draft 额外可作废（rejected 已终止，无需作废）
-  if (st === 'draft' || st === 'rejected') {
-    actions = `<ui5-button design="Default" icon="edit" id="fEdit">编辑</ui5-button>
-      <ui5-button design="Emphasized" icon="paper-plane" id="fCrSubmit">提交</ui5-button>`
-    if (st === 'draft') {
-      actions += `<ui5-button design="Transparent" icon="cancel" id="fAbort">作废</ui5-button>`
+  // update 变更：保存草稿 / 保存并提交
+  if (mode === 'update') {
+    return apCard('操作', `<ui5-button design="Default" icon="save" id="fSave">保存草稿</ui5-button>
+      <ui5-button design="Emphasized" icon="paper-plane" id="fSubmit">保存并提交</ui5-button>`) + flow
+  }
+  // view 草稿编辑态：保存 / 取消
+  if (mode === 'view' && state.editing) {
+    return apCard('编辑', `<ui5-button design="Emphasized" icon="save" id="fEditSave">保存</ui5-button>
+      <ui5-button design="Transparent" icon="cancel" id="fEditCancel">取消</ui5-button>`) + flow
+  }
+  // view 非编辑态：按 doc_status 显示对应操作按钮
+  if (mode === 'view') {
+    const st = state.crHead?.doc_status || ''
+    let actions = ''
+    // draft / rejected 都可编辑 + 重新提交；draft 额外可作废（rejected 已终止，无需作废）
+    if (st === 'draft' || st === 'rejected') {
+      actions = `<ui5-button design="Default" icon="edit" id="fEdit">编辑</ui5-button>
+        <ui5-button design="Emphasized" icon="paper-plane" id="fCrSubmit">提交</ui5-button>`
+      if (st === 'draft') actions += `<ui5-button design="Transparent" icon="cancel" id="fAbort">作废</ui5-button>`
+    } else if (st === 'approving') {
+      actions = `<ui5-textarea id="fOpinion" placeholder="审批意见（可选）" rows="3" class="ap-opinion"></ui5-textarea>
+        <ui5-button design="Emphasized" icon="accept" id="fApprove">通过</ui5-button>
+        <ui5-button design="Transparent" icon="decline" id="fReject">驳回</ui5-button>`
     }
-  } else if (st === 'approving') {
-    actions = `<ui5-textarea id="fOpinion" placeholder="审批意见（可选）" rows="3" class="ap-opinion"></ui5-textarea>
-      <ui5-button design="Emphasized" icon="accept" id="fApprove">通过</ui5-button>
-      <ui5-button design="Transparent" icon="decline" id="fReject">驳回</ui5-button>`
+    return (actions ? apCard('操作', actions) : '') + flow
   }
-  const actionsCard = actions ? `<div class="ap-card"><div class="ap-title">操作</div><div class="ap-actions">${actions}</div></div>` : ''
-  return `${actionsCard}${flowPlaceholderHtml()}`
+  return ''
 }
 
 // 流程节点/审批历史占位（暂不开发，等流程能力落地后填充真实节点/历史）
@@ -393,6 +406,31 @@ async function buildFieldModel() {
     })
   }
   state.lineDefs = lineDefs
+}
+
+// update 变更模式：按 targetId 加载目标字典的头记录 + 各明细类型记录，供表单预填。
+// 元数据驱动——target_dict / lineDef.targetDict / parentIdField 全来自 activation 配置，不写死任何主数据表名，
+// 支撑未来新增其他主数据（客户/物料/组织…）复用同一页面。头与明细并发加载；每个 await 后用 stale() 守卫防刷新并发。
+async function loadTargetData(tok, targetId) {
+  const stale = () => tok !== initToken
+  const a = state.activation
+  const targetDict = a && a.target_dict
+  if (targetDict) {
+    const headRes = await apiPost(`/api/dct/data/search?${coordQs({ dict: targetDict })}`, { filters: { id: targetId }, pageSize: 1 }, state.dbId)
+    if (stale()) return
+    state.target = (headRes && headRes.rows && headRes.rows[0]) || null
+  }
+  // 各明细按 parentIdField 过滤（外键 = 头记录 id），并发加载
+  const lineTasks = state.lineDefs.map((lm) => {
+    if (!lm.targetDict) return Promise.resolve([lm.lineType, []])
+    return apiPost(`/api/dct/data/search?${coordQs({ dict: lm.targetDict })}`, { filters: { [lm.parentIdField]: targetId }, pageSize: 500 }, state.dbId)
+      .then((r) => [lm.lineType, (r && r.rows) || []])
+  })
+  const results = await Promise.all(lineTasks)
+  if (stale()) return
+  const targetLines = {}
+  for (const [lineType, rows] of results) targetLines[lineType] = rows
+  state.targetLines = targetLines
 }
 
 function normLineMapping(lm) {
@@ -567,6 +605,17 @@ function lineSeedRows(lm) {
       for (const [src] of lm.map) row[src] = p[src] != null ? String(p[src]) : ''
       return row
     })
+  }
+  // update 变更：从字典加载的明细行预填（目标列 tgt → 源字段 src）。合成 id 无 _savedId → 保存走 insert
+  // （CR 单据统一新增；写回字典时由后端激活器按头 update + 明细先删后插处理）。
+  if (state.mode === 'update') {
+    const rows = ((state.targetLines || {})[lm.lineType] || []).map((r, i) => {
+      lineSeq += 1
+      const row = { id: `tg_${state.targetId}_${lm.lineType}_${i}` }
+      for (const [src, tgt] of lm.map) row[src] = r[tgt] != null ? String(r[tgt]) : ''
+      return row
+    })
+    return rows.length ? rows : [newLineRow(lm)]
   }
   return [newLineRow(lm)]
 }
@@ -878,6 +927,11 @@ async function init(tok) {
     if (stale()) return
     await buildFieldModel()
     if (stale()) return
+    // update 变更模式：按 targetId 加载目标字典的头记录 + 各明细类型记录（元数据驱动，预填表单）
+    if (state.mode === 'update' && state.targetId) {
+      await loadTargetData(tok, state.targetId)
+      if (stale()) return
+    }
   } catch (e) {
     if (stale()) return
     state.loadErr = `元数据加载失败：${e.message}`
@@ -903,10 +957,12 @@ export default {
       state.crType = ctxGet('crType') || p.crType || 'create'
       // mode：view（只读详情，由 cr-todo 传 crId）/ update（变更，列表台传 target）/ create（新增）
       state.mode = ctxGet('mode') || p.mode || (state.crId ? 'view' : (state.crType === 'update' ? 'update' : 'create'))
-      state.target = ctxGet('target') || p.target || null
+      state.targetId = ctxGet('targetId') || p.targetId || null
+      state.targetName = ctxGet('targetName') || p.targetName || ''
       state.step = state.mode === 'create' ? 1 : 2
       state.keyName = ''; state.savedCrId = null
       state.crHead = null; state.crLines = []
+      state.target = null; state.targetLines = {}
       state.editing = false
       state.loading = true; state.loadErr = ''
     activeLineIdx = 0; lineSeq = 0

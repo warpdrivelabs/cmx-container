@@ -3,8 +3,8 @@
  *
  * 列表与详情/新增/编辑为**并列门户标签页**（关闭一个不影响另一个）：
  *   新增供应商 → 打开 portal.mdm.cr-form（mode=create）
- *   变更     → 打开 portal.mdm.cr-form（mode=update + supplier）
- *   查看详情  → 打开 portal.mdm.supplier-detail（supplier）
+ *   变更     → 打开 portal.mdm.cr-form（mode=update + targetId，单据页自行加载字典头+明细）
+ *   查看详情  → 打开 portal.mdm.supplier-detail（supplierId）
  * 经 portal-app.openNode(node,{initialContext}) 开新 tab；目标页用 host.workspace.context.get() 读参。
  * 表格铺满屏幕（flex 列 + tbl-wrap flex:1）。
  *
@@ -39,6 +39,11 @@ function coordQs(extra = {}) {
   return new URLSearchParams({
     domain: coord.domain, application: coord.application, module: coord.module, ...extra,
   }).toString()
+}
+// 字典坐标四元组对象（供 openTab context 携带，cr-form 据此自加载字典数据）。coord 缺失时返回空对象。
+function coordCtx() {
+  if (!coord) return {}
+  return { domain: coord.domain, application: coord.application, module: coord.module || 'mdm', dbId: coord.dbId }
 }
 let rootEl = null
 
@@ -153,8 +158,8 @@ function buildListGrid() {
     const row = (ds && ds.rows && !isNaN(parseInt(d.rowId, 10))) ? ds.rows[parseInt(d.rowId, 10)] : null
     const s = row ? (row.toPlainObject ? row.toPlainObject() : row) : null
     if (!s) return
-    if (d.actionRef === 'view') openTab(currentHost, `供应商·${s.name || ''}`, 'portal.mdm.supplier-detail', { supplierId: s.id, supplierName: s.name, domain: coord && coord.domain, application: coord && coord.application, module: (coord && coord.module) || 'mdm', dbId: coord && coord.dbId })
-    else if (d.actionRef === 'edit') openTab(currentHost, `变更·${s.name || ''}`, 'portal.mdm.cr-form', { docType: DOC_TYPE, crType: 'update', target: s })
+    if (d.actionRef === 'view') openTab(currentHost, `供应商·${s.name || ''}`, 'portal.mdm.supplier-detail', { supplierId: s.id, supplierName: s.name, ...coordCtx() })
+    else if (d.actionRef === 'edit') openTab(currentHost, `变更·${s.name || ''}`, 'portal.mdm.cr-form', { mode: 'update', docType: DOC_TYPE, crType: 'update', targetId: s.id, targetName: s.name, ...coordCtx() })
   })
   const fill = () => {
     if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows(state.suppliers); grid.setDataSet(ds) }
@@ -173,7 +178,7 @@ function bind(root) {
   rootEl = root
   const host = currentHost
   // 新增=单例（只开一个）；详情/变更=按行 id 多开
-  root.querySelector('#ceAdd')?.addEventListener('click', () => openTab(host, '新增供应商', 'portal.mdm.cr-form', { docType: DOC_TYPE, crType: 'create' }, { single: true }))
+  root.querySelector('#ceAdd')?.addEventListener('click', () => openTab(host, '新增供应商', 'portal.mdm.cr-form', { mode: 'create', docType: DOC_TYPE, crType: 'create', ...coordCtx() }, { single: true }))
   root.querySelector('#ceReload')?.addEventListener('click', () => { loadSuppliers().then(refresh) })
   root.querySelector('#ceFilter')?.addEventListener('cmx-filter-search', (e) => { state.kw = e.detail?.text || ''; state.page = 1; loadSuppliers().then(refresh) })
   root.querySelector('#ceFilter')?.addEventListener('cmx-filter-reset', () => { state.kw = ''; state.page = 1; loadSuppliers().then(refresh) })
