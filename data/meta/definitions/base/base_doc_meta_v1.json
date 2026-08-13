@@ -136,7 +136,7 @@
             "zh_CN": "单据编码/单据号"
           },
           "edit": {
-            "mode": "cmx-text-input",
+            "mode": "readonly",
             "required": true
           },
           "display": {
@@ -636,5 +636,5 @@
       ]
     }
   },
-  "updatedAt": "2026-07-30T05:48:13.866Z"
+  "updatedAt": "2026-08-13T06:04:02.576Z"
 }

@@ -347,16 +347,69 @@ function metaColumns(dictMeta) {
     coord: { domain: c.domain, application: c.application, module: c.module, ...(c.dbId ? { dbId: c.dbId } : {}) },
   })
 }
+// cv_mdm_apply 单据头列（doc/meta）——供「目标列留空的引用字段」取展示属性。这类字段不映射主数据列
+// （header_mapping 值为 null），pickAndRename 在 dct 找不到，回退到 cv_mdm_apply 顶层列（doc_no/entity_id 等）。
+async function loadDocHeadFields() {
+  const c = state.coord || {}
+  const docMeta = await apiGet(`/api/doc/meta?${coordQs({ file: `${c.application}_doc_meta_v1.json` })}`, state.dbId)
+  const layers = (docMeta && docMeta.layers) || []
+  return (layers.find((l) => l.tableName === 'cv_mdm_apply') || {}).columns || []
+}
+function docMetaColumns(fields) {
+  const C = cmx()
+  if (!C.metaTableFieldsToColumns || !fields || !fields.length) return []
+  const c = state.coord || {}
+  return C.metaTableFieldsToColumns(fields, 'DOC', {
+    respectOrder: true,
+    coord: { domain: c.domain, application: c.application, module: c.module, ...(c.dbId ? { dbId: c.dbId } : {}) },
+  })
+}
 
 // 按 mapping（{srcField: tgtCol}）从全量列里筛 + 把 id 从 tgtCol 改成 srcField，保持 mapping 顺序。
 // 直接改实例 id（不 spread）——spread 会丢 CmxColumn 原型链，setMembers 要求 CmxColumn 实例。
-function pickAndRename(allCols, mapping) {
+// 目标列留空（tgt=null）的「引用字段」按 srcField 回退：payload 同名业务字段（dct）→ cv_mdm_apply 顶层列（doc/meta）。
+// 让「只在单据展示、不写主数据」的字段也进表单——否则 buildHeadForms 按 g.fields 匹配 headCols 时
+// 整组匹配不上，分组被 continue 跳过而不渲染。
+function pickAndRename(allCols, mapping, refCols) {
   const out = []
+  const ref = (refCols && refCols.length) ? refCols : []
   for (const srcField of Object.keys(mapping || {})) {
     const tgtCol = mapping[srcField]
-    const found = allCols.find((col) => col.id === tgtCol)
+    let found = allCols.find((col) => col.id === tgtCol)
+    if (!found && (tgtCol == null || tgtCol === '')) {
+      found = allCols.find((col) => col.id === srcField) || ref.find((col) => col.id === srcField)
+    }
     if (found) { found.id = srcField; out.push(found) }
   }
+  return out
+}
+
+// 字段展示顺序的载体是 header_groups[].fields 数组（jsonb 数组保序），而非 header_mapping 的 key 序——
+// header_mapping 经 serde Map（BTreeMap 字母序）+ PG jsonb（key 无序）落库后 key 序必丢。
+// activation-mapper 保存时把全部字段按展示序写进各组 fields，未分组字段收 groupCode='__order__' 影子组。
+// 此处按 fields 数组序重建 mapping（JS 对象 key 插入序 = 数组序），未覆盖的 key 追加尾部兜底。
+const ORDER_GROUP_CODE = '__order__'
+function orderedHeaderMapping(a) {
+  const hm = a.header_mapping || {}
+  const groups = Array.isArray(a.header_groups) ? a.header_groups : []
+  const out = {}
+  for (const g of groups) {
+    for (const f of (Array.isArray(g.fields) ? g.fields : [])) {
+      if (f && Object.prototype.hasOwnProperty.call(hm, f) && !Object.prototype.hasOwnProperty.call(out, f)) out[f] = hm[f]
+    }
+  }
+  for (const k of Object.keys(hm)) { if (!Object.prototype.hasOwnProperty.call(out, k)) out[k] = hm[k] }
+  return out
+}
+// 明细字段同理：fields 的 key 序落库已丢，按 fieldOrder 保序数组重排（旧数据无 fieldOrder 时原样兜底）。
+function orderedLineFields(lm) {
+  const fields = lm.fields || {}
+  const order = Array.isArray(lm.fieldOrder) ? lm.fieldOrder : []
+  const out = {}
+  for (const f of order) {
+    if (f && Object.prototype.hasOwnProperty.call(fields, f) && !Object.prototype.hasOwnProperty.call(out, f)) out[f] = fields[f]
+  }
+  for (const k of Object.keys(fields)) { if (!Object.prototype.hasOwnProperty.call(out, k)) out[k] = fields[k] }
   return out
 }
 
@@ -368,10 +421,12 @@ async function buildFieldModel() {
   if (typeof C.metaTableFieldsToColumns !== 'function') { state.loadErr = '组件库版本过低（缺少 metaTableFieldsToColumns），请构建最新 cmx-data-comp。'; return }
   state.dictMeta = await loadDictMeta(a.target_dict)
   if (!state.dictMeta) { state.loadErr = `目标字典元数据加载失败：${a.target_dict}`; return }
-  // 头表：全量列派生 → 按 header_mapping 筛 + 改名
+  // 头表：全量列派生 → 按 header_mapping 筛 + 改名（顺序按 header_groups[].fields 数组序重建，见上注释）
   const headAll = metaColumns(state.dictMeta)
-  state.headMap = Object.keys(a.header_mapping || {}).map((src) => [src, a.header_mapping[src]])
-  state.headCols = pickAndRename(headAll, a.header_mapping || {})
+  const refCols = docMetaColumns(await loadDocHeadFields())
+  const orderedHm = orderedHeaderMapping(a)
+  state.headMap = Object.keys(orderedHm).map((src) => [src, orderedHm[src]])
+  state.headCols = pickAndRename(headAll, orderedHm, refCols)
   // 快照每列原始 edit.mode，供 buildHeadForms 在 view↔editing 切换时正确恢复
   // （否则反复设/清 readonly 会污染共享 headCols，导致编辑态仍只读或系统列被误解锁）
   state.headCols.forEach((c) => { c._origEditMode = c.edit ? c.edit.mode : undefined })
@@ -388,7 +443,8 @@ async function buildFieldModel() {
   }
   const nameCol = state.headCols.find((col) => col.id === state.nameFieldKey)
   state.nameCaption = nameCol ? (nameCol.caption || subjField) : (subjField || '名称')
-  state.headerGroups = a.header_groups || []
+  // 影子组（__order__）仅是未分组字段顺序的载体，不作分组渲染——剥除后其字段落入「其他」组/散列
+  state.headerGroups = (a.header_groups || []).filter((g) => (g.groupCode || g.group_code || '') !== ORDER_GROUP_CODE)
   // 明细：先用局部数组构建，全部就绪后一次性赋值给 state.lineDefs。
   // 不能边循环边 push 进 state.lineDefs——for 体内有 await loadDictMeta，会让出执行权；
   // 若刷新触发第二次 init 并发，两次 push 会交织，导致明细从 2 个翻倍成 4 个。
@@ -397,8 +453,10 @@ async function buildFieldModel() {
     const lm = normLineMapping(lmRaw)
     const meta = await loadDictMeta(lm.targetDict)
     const all = meta ? metaColumns(meta) : []
-    const map = Object.keys(lm.fields || {}).map((src) => [src, lm.fields[src]])
-    const cols = pickAndRename(all, lm.fields || {})
+    // fields 的 key 序落库已丢（同头表），按 fieldOrder 数组序重建
+    const orderedFields = orderedLineFields(lm)
+    const map = Object.keys(orderedFields).map((src) => [src, orderedFields[src]])
+    const cols = pickAndRename(all, orderedFields)
     lineDefs.push({
       lineType: lm.lineType, targetDict: lm.targetDict,
       targetTable: lm.targetTable, parentIdField: lm.parentIdField,
@@ -440,6 +498,7 @@ function normLineMapping(lm) {
     targetTable: lm.targetTable || lm.target_table || '',
     parentIdField: lm.parentIdField || lm.parent_field || lm.parentId_field || '',
     fields: lm.fields || {},
+    fieldOrder: Array.isArray(lm.fieldOrder) ? lm.fieldOrder : [],
   }
 }
 
@@ -523,6 +582,8 @@ function headInitialValue(srcField) {
   if (mode === 'view') {
     const cr = state.crHead || {}
     if (srcField === state.nameFieldKey) return cr.subject_name != null ? String(cr.subject_name) : ''
+    // 引用字段（目标列留空，如 doc_no/doc_status）展示单据头顶层列——它们不在 payload 里
+    if ((tgtCol == null || tgtCol === '') && cr[srcField] != null) return String(cr[srcField])
     const p = cr.payload || {}
     return p[srcField] != null ? String(p[srcField]) : ''
   }
@@ -771,6 +832,21 @@ function doSave(submit) {
         await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId)
       }
       showToast(submit ? `变更申请 ${crId} 已提交审批` : (isFirstSave ? `已创建变更申请 ${crId}（草稿）` : `变更申请 ${crId} 已更新`))
+      // 回显后端铸号 doc_no：草稿保存不 refresh（保留用户输入继续编辑），拉详情把 doc_no 写进对应单元格；
+      // view 草稿编辑态走下方 refresh 重建，由 headInitialValue 顶层列回退统一回显（二者互补不重复）。
+      if (!submit && crId != null) {
+        try {
+          const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
+          state.crHead = (detail && detail.head) || {}
+          const docNo = state.crHead.doc_no
+          if (docNo != null && docNo !== '' && state.mode !== 'view') {
+            for (const f of headForms) {
+              const cur = (f && typeof f.getData === 'function') ? f.getData() : null
+              if (cur && Object.prototype.hasOwnProperty.call(cur, 'doc_no')) f.setDataSet({ ...cur, doc_no: String(docNo) })
+            }
+          }
+        } catch (e) { /* 回显失败不阻断保存结果 */ }
+      }
       // view 草稿编辑态保存（submit=false）成功后，回退到只读查看
       if (!submit && state.mode === 'view' && state.editing) { state.editing = false; refresh() }
       // 保存并提交成功后切只读视图：CR 已进审批流不应再改，避免重复点「保存并提交」

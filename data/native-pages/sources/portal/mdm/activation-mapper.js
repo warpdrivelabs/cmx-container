@@ -519,17 +519,36 @@ function viewHtml() {
 }
 
 // ── 头映射表（普通可编辑表格，规避 revo-grid 弹层/页内时序不渲染问题）──────────
-const mappingToRows = (hm) => Object.entries(hm || {}).map(([sourceField, targetField]) => ({ sourceField, targetField: targetField || '' }))
+// 字段展示顺序的持久化载体是 header_groups[].fields 数组（jsonb 数组保序），而非 header_mapping 的 key 序——
+// header_mapping 经 serde Map（BTreeMap 字母序）+ PG jsonb（key 无序）落库后 key 序必丢。
+// 未分组字段（gi=-1）保存时收进 groupCode='__order__' 的影子组（仅作顺序载体，加载时剥离不进 UI）。
+const ORDER_GROUP_CODE = '__order__'
 // 行的分组归属由行自带 gi 承载（-1 = 未分组，>=0 = 分组下标），不再靠 headerGroups.fields 反查 sourceField。
 // 这样空 sourceField 的新行也能稳定归属某分组，支持「在分组内直接增行」；headerGroups 运行时只存组定义，
 // 其 fields 在 collectForm 时由各行 gi 推导落库（扁平 header_mapping 形态不变）。
 function syncHeaderRowsFromMapping() {
-  const rows = mappingToRows(state.current?.header_mapping)
+  const hm = state.current?.header_mapping || {}
   const hg = state.current?.header_groups ?? state.current?.headerGroups
   const groups = Array.isArray(hg) ? hg : []
-  const fieldToGi = new Map()
-  groups.forEach((g, gi) => (Array.isArray(g.fields) ? g.fields : []).forEach((f) => fieldToGi.set(f, gi)))
-  rows.forEach((r) => { r.gi = fieldToGi.has(r.sourceField) ? fieldToGi.get(r.sourceField) : -1 })
+  const codeOf = (g) => g.groupCode || g.group_code || ''
+  const uiGroups = groups.filter((g) => codeOf(g) !== ORDER_GROUP_CODE)
+  const rows = []
+  const seen = new Set()
+  // 按各组（含影子组）fields 数组序展开行——恢复用户保存时排的顺序
+  for (const g of groups) {
+    const isShadow = codeOf(g) === ORDER_GROUP_CODE
+    const gi = isShadow ? -1 : uiGroups.indexOf(g)
+    for (const f of (Array.isArray(g.fields) ? g.fields : [])) {
+      if (!f || seen.has(f) || !Object.prototype.hasOwnProperty.call(hm, f)) continue
+      seen.add(f)
+      rows.push({ sourceField: f, targetField: hm[f] || '', gi })
+    }
+  }
+  // header_mapping 里未被任何 fields 覆盖的 key（旧数据无影子组、字段未归组）追加为未分组
+  for (const [k, v] of Object.entries(hm)) {
+    if (seen.has(k)) continue
+    rows.push({ sourceField: k, targetField: v || '', gi: -1 })
+  }
   state.headerRows = rows
 }
 function headerRowsToMapping() {
@@ -541,7 +560,8 @@ const optHtml = (opts, val) => `<ui5-option value=""></ui5-option>` + opts.map((
 // 从 current.header_groups 同步分组定义（仅组元信息；行归属在 syncHeaderRowsFromMapping 里标 gi）
 function syncHeaderGroups() {
   const hg = state.current?.header_groups ?? state.current?.headerGroups
-  state.headerGroups = Array.isArray(hg) ? hg.map((g) => ({
+  // 影子组（__order__）仅是未分组字段顺序的持久化载体，不进 UI 分组定义
+  state.headerGroups = Array.isArray(hg) ? hg.filter((g) => (g.groupCode || g.group_code || '') !== ORDER_GROUP_CODE).map((g) => ({
     groupCode: g.groupCode || g.group_code || '',
     groupName: g.groupName || g.group_name || g.groupCode || g.group_code || '',
   })) : []
@@ -573,7 +593,7 @@ function moveHeaderGroup(gi, dir) {
 }
 // 字段排序：调整 headerRows 数组顺序。dir=-1 上移 / +1 下移。
 // 扁平模式：纯相邻交换；分组模式：只在同一分组（含「未分组」）内找相邻同组行交换，
-// 避免上移越过别组行导致组内位置不变。顺序靠 header_mapping（preserve_order）持久化。
+// 避免上移越过别组行导致组内位置不变。顺序靠 header_groups[].fields 数组（jsonb 保序）持久化。
 function moveHeaderRow(i, dir) {
   const rows = state.headerRows; if (i < 0 || i >= rows.length) return
   const grouped = state.groupBy === 'group' && state.headerGroups.length
@@ -705,7 +725,19 @@ function bindHeaderEvents(wrap) {
 function syncLineRowsFromMapping() {
   const lines = state.current?.line_mappings || []
   lineRowsCache.length = 0
-  lines.forEach((lm) => { lineRowsCache.push({ rows: Object.entries(lm.fields || {}).map(([sourceField, targetField]) => ({ sourceField, targetField })) }) })
+  lines.forEach((lm) => {
+    // fields 的 key 序落库时已丢（BTreeMap + jsonb，同头表），按 fieldOrder 保序数组恢复用户排的顺序；
+    // 旧数据无 fieldOrder → 保持 entries 原序（sort 稳定，未命中字段排尾部不交错）。
+    const order = Array.isArray(lm.fieldOrder) ? lm.fieldOrder : []
+    const entries = Object.entries(lm.fields || {})
+    if (order.length) {
+      entries.sort((a, b) => {
+        const ia = order.indexOf(a[0]); const ib = order.indexOf(b[0])
+        return (ia < 0 ? order.length : ia) - (ib < 0 ? order.length : ib)
+      })
+    }
+    lineRowsCache.push({ rows: entries.map(([sourceField, targetField]) => ({ sourceField, targetField })) })
+  })
 }
 function lineRowsToFields(idx) {
   const m = {}; const rows = (lineRowsCache[idx] && lineRowsCache[idx].rows) || []
@@ -833,13 +865,18 @@ function collectForm() {
     groupCode: g.groupCode, groupName: g.groupName,
     fields: state.headerRows.filter((r) => groupIndexOfRow(r) === gi && r.sourceField).map((r) => r.sourceField),
   }))
-  // 行表：把缓存行还原为 fields 扁平对象
+  // 未分组字段顺序收进 __order__ 影子组（header_mapping 的 key 序经 BTreeMap + jsonb 落库必丢，
+  // fields 数组是唯一保序通道）；加载时 syncHeaderGroups / syncHeaderRowsFromMapping 剥离。
+  const looseFields = state.headerRows.filter((r) => groupIndexOfRow(r) < 0 && r.sourceField).map((r) => r.sourceField)
+  if (looseFields.length) c.header_groups.push({ groupCode: ORDER_GROUP_CODE, groupName: ORDER_GROUP_CODE, fields: looseFields })
+  // 行表：把缓存行还原为 fields 扁平对象；字段顺序另存 fieldOrder 保序数组（同头表原理）
   c.line_mappings = (c.line_mappings || []).map((lm, i) => ({
     lineType: lm.lineType || lm.line_type || '',
     targetDict: lm.targetDict || lm.target_dict || '',
     targetTable: lm.targetTable || lm.target_table || '',
     parentIdField: lm.parentIdField || lm.parent_field || lm.parentField || '',
     fields: lineRowsToFields(i),
+    fieldOrder: ((lineRowsCache[i] && lineRowsCache[i].rows) || []).filter((r) => r.sourceField && r.targetField).map((r) => r.sourceField),
   }))
   return c
 }
