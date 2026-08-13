@@ -7,6 +7,12 @@
  *
  * 发现项（md_match_scan）是系统全库扫描出的重复簇，管家评审载体；
  * 合并历史（md_merge_record）是已确认的合并事务记录。两者职责分离。
+ *
+ * 数据装载（v2 重构，告别全量拉取 + 前端 filter）：
+ *   - zone 计数：调 GET /api/mdm/workbench/summary（一次拿两表各状态计数），不再前端 filter().length。
+ *   - 列表：按当前 zone（status）向后端分页请求（match-scan / merge-requests 均支持 status+page+pageSize+total），
+ *     配 cmx-pager 分页条；不再 pageSize=500/200 全量拉取。
+ *   - 下拉：选的是「数据字典」（表只有 dict_code 维度，无规则 id），显示字典中文名。
  * 提示统一 cmxInfo/cmxError/cmxConfirm；禁 alert/confirm。
  *
  * 契约：export default { defaultView:'content', views:{ async content(ctx) } }。
@@ -33,6 +39,29 @@ async function apiPost(url, payload, dbId) {
   return unwrap(r, await r.json().catch(() => null))
 }
 
+// 字典坐标四元组（domain/application/module/dbId），来自 ctx.props 或 workspace.context。
+// 仅用于加载 DCT 字典中文名映射；缺失时字典名回退显示 dictCode。
+let coord = null
+function coordQs(extra = {}) {
+  if (!coord) return new URLSearchParams(extra).toString()
+  return new URLSearchParams({
+    domain: coord.domain, application: coord.application, module: coord.module,
+    ...extra,
+  }).toString()
+}
+function readCoord(ctx) {
+  const p = (ctx && ctx.props) || {}
+  const wctx = ctx && ctx.host && ctx.host.workspace && ctx.host.workspace.context
+  const get = (k) => (wctx && typeof wctx.get === 'function' ? wctx.get(k) : undefined)
+  const c = {
+    domain: get('domain') || p.domain || '',
+    application: get('application') || p.application || '',
+    module: get('module') || p.module || '',
+    dbId: p.dbId || p.db_id || '',
+  }
+  return (c.domain && c.application && c.module) ? c : null
+}
+
 // 合并历史 tab 的 zone（md_merge_record.status）
 const ZONES = [
   { code: 'pending', name: '待审', tone: 'warning' },
@@ -48,19 +77,20 @@ const FINDING_ZONES = [
 ]
 const state = {
   dbId: '',
-  dicts: [],            // 有查重规则的字典列表（从 match-configs 动态拉）
+  dicts: [],            // [{dictCode, dictName}] 有查重规则的字典（match-configs ∩ DCT 中文名）
   dictConfigMap: {},    // dictCode → match_config（含 survive_fields，供字段对比动态取列）
   dictCode: '',         // 当前选中字典（init 后默认 dicts[0]）
   tab: 'findings',
-  // 发现项（md_match_scan）
+  // 计数（来自 summary 接口，替代前端 filter 计数）：{findings:{status:n}, merges:{status:n}}
+  counts: { findings: {}, merges: {} },
+  // 发现项（md_match_scan，按 zone + 分页）
   findingsZone: 'pending',
-  findings: [],
+  findingsPage: 1, findingsPageSize: 20, findingsTotal: 0, findings: [],
   findingDetail: null,
-  // 合并历史（md_merge_record）
+  // 合并历史（md_merge_record，按 zone + 分页）
   zone: 'pending',
-  groups: [],
-  detail: null,
-  rulings: {},
+  page: 1, pageSize: 20, total: 0, groups: [],
+  detail: null, rulings: {},
 }
 
 function styleCss() {
@@ -71,9 +101,9 @@ function styleCss() {
   .pg-head { margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
   .pg-title { font-size:20px; font-weight:600; color:var(--sapTitleColor); }
   .pg-sub { font-size:12px; color:var(--sapContent_LabelColor); margin-top:2px; }
-  .head-tools { display:flex; align-items:center; gap:12px; }
-  .dict-sel { padding:5px 8px; font-size:13px; border-radius:4px;
-    border:1px solid var(--sapField_BorderColor); background:var(--sapField_Background); color:var(--sapField_TextColor); }
+  .head-tools { display:flex; align-items:center; gap:6px; }
+  .head-tools label { font-size:12px; color:var(--sapContent_LabelColor); }
+  .dict-sel { min-width:200px; }
   .tab-bar { display:flex; gap:4px; margin-bottom:14px; border-bottom:1px solid var(--sapList_BorderColor); }
   .tab-btn { padding:8px 16px; font-size:13px; cursor:pointer; border:none; background:transparent;
     color:var(--sapContent_LabelColor); border-bottom:2px solid transparent; }
@@ -92,12 +122,37 @@ function styleCss() {
   .tbl td { padding:10px 12px; border-bottom:1px solid var(--sapList_BorderColor); vertical-align:middle; }
   .tbl tbody tr:hover td { background:var(--sapList_Hover_Background); }
   .muted { color:var(--sapContent_LabelColor); }
+  .pager-row { display:flex; justify-content:flex-end; padding:8px 4px 0; }
   cmx-panel { display:block; }
+  cmx-pager { display:inline-flex; }
   `
 }
 
 // ─── 数据装载 ─────────────────────────────────────────────────────────────
-// 拉全部查重规则，建字典列表 + 配置索引（dictCode → match_config）。init 时调一次。
+// DCT 字典中文名映射：dictCode → dictName。需 coord；缺失返回 {}（调用方回退 dictCode）。
+let _dictNameCache = null
+async function loadDictNameMap() {
+  if (_dictNameCache) return _dictNameCache
+  const map = {}
+  if (!coord) { _dictNameCache = map; return map }
+  try {
+    const d = await apiGet(`/api/definitions/list?${coordQs({ kind: 'DCT' })}`, coord.dbId)
+    const files = (d && d.items) || []
+    await Promise.all(files.map(async (f) => {
+      try {
+        const cfg = await apiGet(`/api/definitions/config?${new URLSearchParams({ kind: 'DCT', domain: coord.domain, application: coord.application, module: coord.module, file: f.file }).toString()}`, coord.dbId)
+        for (const t of ((cfg && cfg.dictionaryTables) || [])) {
+          const m = t.dictMeta || {}
+          if (m.dictCode) map[m.dictCode] = m.dictName || m.dictCode
+        }
+      } catch (e) { /* 单文件失败跳过 */ }
+    }))
+  } catch (e) { /* 整体失败返回已收集 */ }
+  _dictNameCache = map
+  return map
+}
+
+// 拉全部查重规则，建字典列表（含中文名）+ 配置索引（dictCode → match_config）。init 时调一次。
 async function loadDicts() {
   const list = (await apiGet('/api/mdm/match-configs', state.dbId)) || []
   state.dictConfigMap = {}
@@ -108,26 +163,37 @@ async function loadDicts() {
       seen.push(c.dict_code)
     }
   }
-  state.dicts = seen
-  if (!state.dictCode && state.dicts.length) state.dictCode = state.dicts[0]
+  const nameMap = await loadDictNameMap()
+  state.dicts = seen.map((dc) => ({ dictCode: dc, dictName: nameMap[dc] || dc }))
+  if (!state.dictCode && state.dicts.length) state.dictCode = state.dicts[0].dictCode
 }
 // 当前字典的字段对比列（从 match_config.survive_fields 动态取；缺失则空数组）
 function diffFields() {
   return ((state.dictConfigMap[state.dictCode] || {}).survive_fields) || []
 }
-async function loadFindings() {
-  // 拉全量（不分 status），前端按 findingsZone 过滤展示 + 各 zone 计数
-  const d = (await apiGet(`/api/mdm/match-scan?dictCode=${encodeURIComponent(state.dictCode)}&pageSize=500`, state.dbId)) || {}
-  state.findings = d.list || []
+// zone 计数：来自 summary 接口（findings/merges 各 status 计数），不再前端 filter。
+async function loadCounts() {
+  if (!state.dictCode) { state.counts = { findings: {}, merges: {} }; return }
+  const d = (await apiGet(`/api/mdm/workbench/summary?dictCode=${encodeURIComponent(state.dictCode)}`, state.dbId)) || {}
+  state.counts = { findings: d.findings || {}, merges: d.merges || {} }
 }
-function findingsCount(code) { return state.findings.filter((s) => s.status === code).length }
-function filteredFindings() { return state.findings.filter((s) => s.status === state.findingsZone) }
+function findingsCount(code) { return state.counts.findings[code] ?? 0 }
+function zoneCount(code) { return state.counts.merges[code] ?? 0 }
+
+// 发现项列表：按当前 zone（status）分页请求（后端支持 status+page+pageSize+total）。
+async function loadFindings() {
+  const d = (await apiGet(`/api/mdm/match-scan?dictCode=${encodeURIComponent(state.dictCode)}&status=${state.findingsZone}&page=${state.findingsPage}&pageSize=${state.findingsPageSize}`, state.dbId)) || {}
+  state.findings = d.list || []
+  state.findingsTotal = d.total || 0
+}
 async function loadFindingDetail(scanId) {
   state.findingDetail = await apiGet(`/api/mdm/match-scan/detail?scanId=${scanId}`, state.dbId)
 }
+// 合并历史列表：按当前 zone（status）分页；excludePending=false 以查全四态（含 pending）。
 async function loadGroups() {
-  const d = (await apiGet(`/api/mdm/merge-requests?dictCode=${encodeURIComponent(state.dictCode)}&pageSize=200`, state.dbId)) || {}
+  const d = (await apiGet(`/api/mdm/merge-requests?dictCode=${encodeURIComponent(state.dictCode)}&status=${state.zone}&excludePending=false&page=${state.page}&pageSize=${state.pageSize}`, state.dbId)) || {}
   state.groups = d.list || []
+  state.total = d.total || 0
 }
 async function loadDetail(mergeId) {
   state.detail = await apiGet(`/api/mdm/merge-requests/detail?mergeId=${mergeId}`, state.dbId)
@@ -140,11 +206,12 @@ function headHtml() {
     <div><div class="pg-title">数据管家工作台</div>
       <div class="pg-sub">查重发现项评审 · 合并/忽略 · 合并历史追溯</div></div>
     <div class="head-tools">
-      <select class="dict-sel" data-dict>
+      <label>数据字典</label>
+      <ui5-select class="dict-sel" data-dict>
         ${state.dicts.length
-          ? state.dicts.map((d) => `<option value="${d}" ${state.dictCode === d ? 'selected' : ''}>${d}</option>`).join('')
-          : '<option value="">（暂无查重规则）</option>'}
-      </select>
+          ? state.dicts.map((d) => `<ui5-option value="${d.dictCode}" ${state.dictCode === d.dictCode ? 'selected' : ''}>${d.dictName && d.dictName !== d.dictCode ? `${d.dictName}（${d.dictCode}）` : d.dictCode}</ui5-option>`).join('')
+          : '<ui5-option>（暂无查重规则）</ui5-option>'}
+      </ui5-select>
     </div>
   </div>
   <div class="tab-bar">
@@ -161,7 +228,7 @@ function findingsBarHtml() {
     </div>`).join('')}</div>`
 }
 function findingsQueueHtml() {
-  const list = filteredFindings()
+  const list = state.findings
   const rows = list.length ? list.map((s) => {
     const fz = FINDING_ZONES.find((z) => z.code === s.status) || {}
     return `<tr>
@@ -174,7 +241,8 @@ function findingsQueueHtml() {
   }).join('') : null
   return `<cmx-panel title="发现项 · ${state.findingsZone}" icon="search">
     ${rows
-      ? `<table class="tbl"><thead><tr><th>id</th><th>簇键</th><th>成员数</th><th>最高分</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`
+      ? `<table class="tbl"><thead><tr><th>id</th><th>簇键</th><th>成员数</th><th>最高分</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>
+         <div class="pager-row"><cmx-pager id="stFindingsPager" page="${state.findingsPage}" page-size="${state.findingsPageSize}" page-sizes="10,20,50" total="${state.findingsTotal}"></cmx-pager></div>`
       : `<cmx-empty-state icon="search" title="该区暂无发现项"></cmx-empty-state>`}
   </cmx-panel>`
 }
@@ -197,9 +265,7 @@ function findingDiffHtml() {
     </div>`
 }
 
-// ─── tab2：合并历史（保留现有逻辑） ────────────────────────────────────────
-function zoneCount(code) { return state.groups.filter((g) => g.status === code).length }
-function filteredGroups() { return state.groups.filter((g) => g.status === state.zone) }
+// ─── tab2：合并历史 ────────────────────────────────────────────────────────
 function zoneBarHtml() {
   return `<div class="zone-bar">${ZONES.map((z) => `
     <div class="zone-tab ${state.zone === z.code ? 'active' : ''}" data-z="${z.code}">
@@ -207,7 +273,7 @@ function zoneBarHtml() {
     </div>`).join('')}</div>`
 }
 function queueHtml() {
-  const list = filteredGroups()
+  const list = state.groups
   const rows = list.length ? list.map((g) => {
     const gz = ZONES.find((z) => z.code === g.status) || {}
     return `<tr>
@@ -217,7 +283,8 @@ function queueHtml() {
   }).join('') : null
   return `<cmx-panel title="合并历史 · ${state.zone}" icon="list">
     ${rows
-      ? `<table class="tbl"><thead><tr><th>group</th><th>master</th><th>score</th><th>status</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`
+      ? `<table class="tbl"><thead><tr><th>group</th><th>master</th><th>score</th><th>status</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>
+         <div class="pager-row"><cmx-pager id="stMergePager" page="${state.page}" page-size="${state.pageSize}" page-sizes="10,20,50" total="${state.total}"></cmx-pager></div>`
       : `<cmx-empty-state icon="list" title="该区暂无合并请求"></cmx-empty-state>`}
   </cmx-panel>`
 }
@@ -310,14 +377,17 @@ async function doFindingMerge() {
   const d = await apiPost('/api/mdm/merge-requests', {
     dictCode: state.dictCode, masterId, victimIds, scanId: scan.id,
   }, state.dbId)
-  M.cmxInfo?.(mergeSummary(d)); closeDiff(); state.findingDetail = null; await loadFindings(); refresh()
+  M.cmxInfo?.(mergeSummary(d)); closeDiff(); state.findingDetail = null
+  // 合并改变计数（pending-1/resolved+1）与当前列表，两者都刷新
+  await loadCounts(); await loadFindings(); refresh()
 }
 async function doFindingIgnore(scanId) {
   const M = cmx()
   const ok = await M.cmxConfirm?.({ title: '忽略发现项', message: `确认忽略发现项 ${scanId}？`, danger: true })
   if (ok === false) return
   await apiPost('/api/mdm/match-scan/ignore', { scanId: Number(scanId) }, state.dbId)
-  M.cmxInfo?.('已忽略'); closeDiff(); state.findingDetail = null; await loadFindings(); refresh()
+  M.cmxInfo?.('已忽略'); closeDiff(); state.findingDetail = null
+  await loadCounts(); await loadFindings(); refresh()
 }
 
 function collectRulings() {
@@ -338,14 +408,16 @@ async function doMerge() {
   const d = await apiPost('/api/mdm/merge-requests', {
     dictCode: state.dictCode, masterId, victimIds, mergeId: g.id, survivorship, overrides,
   }, state.dbId)
-  M.cmxInfo?.(mergeSummary(d)); closeDiff(); state.detail = null; await loadGroups(); refresh()
+  M.cmxInfo?.(mergeSummary(d)); closeDiff(); state.detail = null
+  await loadCounts(); await loadGroups(); refresh()
 }
 async function doReject(id) {
   const M = cmx()
   const ok = await M.cmxConfirm?.({ title: '驳回', message: `驳回 group=${id}？`, danger: true })
   if (ok === false) return
   await apiPost('/api/mdm/merge-requests/reject', { mergeId: Number(id), reason: '管家驳回' }, state.dbId)
-  M.cmxInfo?.('已驳回'); closeDiff(); state.detail = null; await loadGroups(); refresh()
+  M.cmxInfo?.('已驳回'); closeDiff(); state.detail = null
+  await loadCounts(); await loadGroups(); refresh()
 }
 
 // ─── 渲染 / 绑定 ──────────────────────────────────────────────────────────
@@ -361,19 +433,32 @@ async function reloadCurrent() {
   else await loadGroups()
 }
 
+function bindPager(root, sel, onPage) {
+  const p = root.querySelector(sel)
+  if (!p) return
+  p.addEventListener('page-change', (e) => {
+    const { page, pageSize } = e.detail || {}
+    onPage(page, pageSize)
+    reloadCurrent().then(refresh)
+  })
+}
+
 function bind(root) {
-  // 字典切换
+  // 字典切换：计数 + 列表都重载，页码归 1
   root.querySelector('[data-dict]')?.addEventListener('change', async (e) => {
-    state.dictCode = e.target.value; await reloadCurrent(); refresh()
+    state.dictCode = e.target.value; state.findingsPage = 1; state.page = 1
+    await loadCounts(); await reloadCurrent(); refresh()
   })
   // tab 切换
   root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', async () => {
     state.tab = b.dataset.tab; await reloadCurrent(); refresh()
   }))
-  // 发现项 zone 切换
+  // 发现项 zone 切换：换 status 重置页码，重新分页请求（不再前端 filter）
   root.querySelectorAll('[data-fz]').forEach((k) => k.addEventListener('click', async () => {
-    state.findingsZone = k.dataset.fz; await loadFindings(); refresh()
+    state.findingsZone = k.dataset.fz; state.findingsPage = 1; await reloadCurrent(); refresh()
   }))
+  // 发现项分页
+  bindPager(root, '#stFindingsPager', (page, pageSize) => { state.findingsPage = page; state.findingsPageSize = pageSize })
   // 发现项操作
   root.querySelectorAll('[data-freview]').forEach((b) => b.addEventListener('click', async () => {
     await loadFindingDetail(b.dataset.freview); openDiff(findingDiffHtml(), bindFindingDiff)
@@ -381,8 +466,10 @@ function bind(root) {
   root.querySelectorAll('[data-fignore]').forEach((b) => b.addEventListener('click', () => doFindingIgnore(b.dataset.fignore)))
   // 合并历史 zone 切换
   root.querySelectorAll('[data-z]').forEach((k) => k.addEventListener('click', async () => {
-    state.zone = k.dataset.z; state.detail = null; refresh()
+    state.zone = k.dataset.z; state.page = 1; state.detail = null; await reloadCurrent(); refresh()
   }))
+  // 合并历史分页
+  bindPager(root, '#stMergePager', (page, pageSize) => { state.page = page; state.pageSize = pageSize })
   // 合并历史操作
   root.querySelectorAll('[data-review]').forEach((b) => b.addEventListener('click', async () => {
     await loadDetail(b.dataset.review); openDiff(diffHtml(), bindHistoryDiff)
@@ -410,8 +497,9 @@ export default {
   views: {
     async content(ctx) {
       const host = ctx && ctx.host; currentHost = host
-      state.dbId = (ctx && ctx.props && (ctx.props.dbId || ctx.props.db_id)) || ''
-      try { await loadDicts(); await reloadCurrent() } catch (e) { console.error('[steward] init fail', e) }
+      coord = readCoord(ctx)
+      state.dbId = (ctx && ctx.props && (ctx.props.dbId || ctx.props.db_id)) || (coord && coord.dbId) || ''
+      try { await loadDicts(); await loadCounts(); await reloadCurrent() } catch (e) { console.error('[steward] init fail', e) }
       if (host) whenRendered(host, '.pg', (r) => bind(r))
       return `<style>${styleCss()}</style>${viewHtml()}`
     },

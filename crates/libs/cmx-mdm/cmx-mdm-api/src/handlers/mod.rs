@@ -8,6 +8,7 @@
 //! - [`governance`]：MDM 治理端点（审计 / 事件 / 订阅 / 发布）。
 //! - [`match_config`]：查重规则配置。
 //! - [`scan`]：M3.5 全库扫描查重（扫描 / 列表 / 详情 / 忽略）。
+//! - [`workbench`]：M4 管家工作台聚合（summary 计数）。
 //!
 //! 提取器惯例（对齐 cmx-dct-api/src/handlers.rs:14-27）：
 //!   - `State(_s): State<CmxAppState>`：状态（DB 走全局单例，常忽略为 `_s`）
@@ -29,6 +30,8 @@ mod match_config;
 mod merge;
 /// M3.5 全库扫描查重 handler（扫描 / 列表 / 详情 / 忽略）。
 mod scan;
+/// M4 管家工作台聚合 handler（summary 计数）。
+mod workbench;
 
 use axum::Json;
 use axum::extract::State;
@@ -112,3 +115,4 @@ pub use governance::*;
 pub use match_config::*;
 pub use merge::*;
 pub use scan::*;
+pub use workbench::*;

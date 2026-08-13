@@ -71,6 +71,8 @@ impl ModuleRoutes for MdmModule {
             .route("/mdm/match-scan/run", post(mdm::mdm_match_scan_run))
             .route("/mdm/match-scan/detail", get(mdm::mdm_match_scan_detail))
             .route("/mdm/match-scan/ignore", post(mdm::mdm_match_scan_ignore))
+            // M4 · 管家工作台：汇总计数（发现项 + 合并历史各状态数量）
+            .route("/mdm/workbench/summary", get(mdm::mdm_workbench_summary))
     }
 
     fn prefix() -> &'static str {
