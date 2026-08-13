@@ -77,6 +77,9 @@ const lineRowsCache = [] // [{rows:[{sourceField,targetField}]}]
 
 // 字典坐标四元组（domain/application/module/dbId），全部来自 ctx.props，代码中不写死。
 let coord = null
+// 复制副本脏标记：复制出的副本虽可能撞已有 activation_code（反向已存在的覆盖场景），但语义是
+// 「未保存」——期间不算已持久化（禁删除 / 隐藏复制按钮，避免误删已有或连环复制）；保存/选中/新建时复位。
+let cloneDirty = false
 function coordQs(extra = {}) {
   if (!coord) return new URLSearchParams(extra).toString()
   return new URLSearchParams({
@@ -488,10 +491,42 @@ function cardLines() {
   </div>`
 }
 
+// 复制按钮：仅已持久化时显示（基于已保存配置派生）。点击弹出选择目标 cr_type 的对话框。
+function cloneBtnHtml(isPersisted) {
+  if (!isPersisted) return ''
+  return `<ui5-button design="Transparent" icon="duplicate" id="amClone">复制</ui5-button>`
+}
+
+// 复制目标 cr_type 选择对话框（ui5-dialog）：下拉列出全部 cr_type（排除当前），选 update 默认提示
+// 会清空编码规则；目标 activation_code 已存在时红字提示「将覆盖」。确认后调 doClone 执行。
+function cloneDlgHtml() {
+  const cur = state.current ? state.current.cr_type : ''
+  const def = cur === 'create' ? 'update' : 'create'
+  const opts = CR_TYPES
+    .filter((t) => t.value !== cur)
+    .map((t) => `<ui5-option value="${t.value}"${t.value === def ? ' selected' : ''}>${esc(t.label)}</ui5-option>`)
+    .join('')
+  return `
+  <ui5-dialog id="amCloneDlg">
+    <ui5-bar slot="header" design="Header"><ui5-title slot="startContent" level="H5">复制映射</ui5-title></ui5-bar>
+    <div style="min-width:360px;max-width:520px;padding:12px 18px;box-sizing:border-box;">
+      <div style="font-size:13px;margin-bottom:10px;color:var(--sapContent_LabelColor)">
+        将当前映射「<b>${esc(state.current?.activation_code || '')}</b>」复制为新的变更类型：
+      </div>
+      <ui5-select id="amCloneCrt" style="width:100%">${opts}</ui5-select>
+      <div id="amCloneHint" style="font-size:12px;margin-top:8px;min-height:16px;color:var(--sapContent_LabelColor)"></div>
+    </div>
+    <ui5-bar slot="footer" design="Footer">
+      <ui5-button id="amCloneCancel" slot="endContent">取消</ui5-button>
+      <ui5-button id="amCloneOk" slot="endContent" design="Emphasized">复制</ui5-button>
+    </ui5-bar>
+  </ui5-dialog>`
+}
+
 function formHtml() {
   const c = state.current || {}
-  // 已持久化 = list 里能按 activation_code 查到（选中已有 / 保存后均在 list；新建未保存不在 → 禁删）
-  const isPersisted = !!c.activation_code && state.list.some((it) => it.activation_code === c.activation_code)
+  // 已持久化 = list 里能按 activation_code 查到 且 非复制副本脏态（选中已有 / 保存后均在 list；新建未保存不在 → 禁删）
+  const isPersisted = !!c.activation_code && !cloneDirty && state.list.some((it) => it.activation_code === c.activation_code)
   return `
   <div class="main-scroll">
   <div class="banner info"><span class="ic">ℹ️</span><span><b>数据来源提示</b>：目标字典字段、源字段下拉均来自 <b>DCT 字典元数据</b>。先在「目标字典」选择字典，自动加载字段候选。</span></div>
@@ -502,6 +537,7 @@ function formHtml() {
     </div>
     <div class="ed-actions">
       <ui5-button design="Negative" icon="delete" id="amDelete" ${isPersisted ? '' : 'disabled'}>删除</ui5-button>
+      ${cloneBtnHtml(isPersisted)}
       <ui5-button design="Emphasized" icon="save" id="amSave">保存配置</ui5-button>
     </div>
   </div>
@@ -515,7 +551,7 @@ function formHtml() {
 function viewHtml() {
   return `<div class="pg">${headHtml()}<div class="layout"><div class="side">${sideHtml()}</div>
     <div class="main">${state.current ? formHtml() : '<cmx-panel title="映射配置"><div class="muted" style="padding:24px">请从左侧选择或「新增映射」一份映射</div></cmx-panel>'}</div>
-  </div></div>`
+  </div>${cloneDlgHtml()}</div>`
 }
 
 // ── 头映射表（普通可编辑表格，规避 revo-grid 弹层/页内时序不渲染问题）──────────
@@ -886,7 +922,7 @@ async function save() {
     const cfg = collectForm()
     if (!cfg.source_doc_type || !cfg.target_dict) { M.cmxWarn?.('来源单据类型 / 目标字典 不能为空'); return }
     await apiPost('/api/mdm/activations', cfg, coord && coord.dbId)
-    showToast('保存成功', 'ok'); await loadList(); refresh()
+    cloneDirty = false; showToast('保存成功', 'ok'); await loadList(); refresh()
   } catch (e) { M.cmxError?.(`保存失败：${e.message}`) }
 }
 // 删除当前映射（硬删除，二次确认）。删除后返回空态并刷新侧栏列表。
@@ -903,12 +939,64 @@ async function delMapping() {
     showToast(`已删除「${c.activation_code}」`, 'ok'); state.current = null; await loadList(); refresh()
   } catch (e) { M.cmxError?.(`删除失败：${e.message}`) }
 }
+// 打开复制对话框：校验当前配置已持久化 → 绑定下拉/确认/取消事件 → 显示。下拉切换实时提示重复覆盖风险。
+function openCloneDlg() {
+  const M = cmx()
+  const src = state.current
+  if (!src || !src.activation_code) { M.cmxWarn?.('请先选择要复制的映射'); return }
+  const dlg = q('amCloneDlg'); if (!dlg) return
+  // 下拉切换时实时提示：目标 activation_code 已存在 → 红字「将覆盖」；update → 提示会清空编码规则
+  const updateHint = () => {
+    const target = (q('amCloneCrt')?.value || '').trim()
+    const hint = q('amCloneHint'); if (!hint) return
+    if (!target) { hint.textContent = ''; return }
+    const dupCode = `${src.source_doc_type}__${target}`
+    if (state.list.some((it) => it.activation_code === dupCode)) {
+      hint.textContent = `⚠「${dupCode}」已存在，保存将覆盖原配置`
+      hint.style.color = 'var(--sapNegativeElementColor,#bb0000)'
+    } else if (target === 'update') {
+      hint.textContent = 'update 不铸号，将自动清空编码规则 code_rule_code'
+      hint.style.color = 'var(--sapContent_LabelColor)'
+    } else {
+      hint.textContent = ''
+    }
+  }
+  q('amCloneCrt')?.addEventListener('change', updateHint)
+  q('amCloneOk').onclick = () => {
+    const target = (q('amCloneCrt')?.value || '').trim()
+    if (!target) { M.cmxWarn?.('请选择目标变更类型'); return }
+    dlg.open = false; doClone(target)
+  }
+  q('amCloneCancel').onclick = () => { dlg.open = false }
+  updateHint()
+  dlg.open = true
+}
+// 执行复制：深拷贝当前配置 → 改 cr_type → activation_code 由 sdt__crt 派生（与原配置不冲突）→
+// update 清空 code_rule_code（update 分支不铸号）→ 进入未保存编辑态（cloneDirty）。
+function doClone(target) {
+  const src = state.current
+  const dup = JSON.parse(JSON.stringify(src)) // 配置均为 JSON 可序列化数据，深拷贝安全
+  dup.cr_type = target
+  dup.activation_code = `${src.source_doc_type}__${target}`
+  if (target === 'update') dup.code_rule_code = null // update 分支不铸号，清空规则
+  cloneDirty = true
+  state.current = dup
+  state.cmFields = []
+  syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping()
+  // 目标字典不变，重新加载字段候选（头/明细/主体字段下拉才有项）
+  const td = state.current.target_dict
+  if (td) { loadTargetMeta(td).then(onTargetMetaLoaded).catch(() => {}) }
+  refresh()
+  showToast(`已复制为「${target}」配置，检查后请点「保存配置」`, 'ok')
+}
 function newMapping() {
+  cloneDirty = false
   state.current = { activation_code: '', source_doc_type: '', cr_type: 'create', target_dict: '', target_table: '', is_active: true, header_mapping: {}, line_mappings: [], code_rule_code: null, subject_name_field: null, subject_code_field: null, header_groups: [] }
   state.cmFields = []
   syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping(); refresh()
 }
 function selectByCode(code) {
+  cloneDirty = false
   state.current = state.list.find((it) => it.activation_code === code) || null
   state.cmFields = []
   syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping()
@@ -998,6 +1086,7 @@ function bind(root) {
   root.querySelector('#amNew')?.addEventListener('click', newMapping)
   root.querySelector('#amReload')?.addEventListener('click', async () => { await loadList(); refresh() })
   root.querySelector('#amSave')?.addEventListener('click', save)
+  root.querySelector('#amClone')?.addEventListener('click', () => openCloneDlg())
   root.querySelector('#amDelete')?.addEventListener('click', () => delMapping())
   // 启用开关
   root.querySelector('#amActiveWrap')?.addEventListener('click', () => {
