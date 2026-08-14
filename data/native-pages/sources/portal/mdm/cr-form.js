@@ -67,6 +67,10 @@ function showToast(message, tone = 'ok', duration = 3000) {
 
 // 头表分组渲染样式（前端配置，不存后端）：card=卡片分区 / bar=色条+下分隔线。改此常量切换。
 const HEAD_GROUP_STYLE = 'bar'
+// 单据状态中文映射（doc_status 显示用；存储仍为英文枚举，由状态机管理）
+const STATUS_LABEL = { draft: '草稿', approving: '审批中', approved: '已通过', activated: '已激活', rejected: '已驳回', aborted: '已作废' }
+// 系统管理头字段：状态机/铸号管理，前端只读展示、不参与收集
+const SYS_HEAD_FIELDS = new Set(['doc_status', 'doc_no'])
 // step：create 模式初始 1（先查重），update 模式初始 2（改已有记录，跳过查重）
 const state = {
   dbId: '', coord: null,
@@ -537,7 +541,7 @@ function buildHeadForms() {
   // 列只读处理：基于 _origEditMode 重置，避免 view↔editing 切换时 readonly 残留 / 系统列被误解锁。
   // 系统列（_origEditMode=readonly）恒只读；view 全只读；create 步骤2 nameFieldKey 只读回显。
   const cols = state.headCols.map((c) => {
-    const forceRo = c._origEditMode === 'readonly' || isView || (!isEdit && c.id === state.nameFieldKey)
+    const forceRo = c._origEditMode === 'readonly' || isView || (!isEdit && c.id === state.nameFieldKey) || SYS_HEAD_FIELDS.has(c.id)
     c.edit = { ...(c.edit || {}) }
     if (forceRo) c.edit.mode = 'readonly'
     else if (c.edit.mode === 'readonly') delete c.edit.mode
@@ -577,7 +581,13 @@ function buildHeadForms() {
 //   view：从 CR 头回填（subject_name 顶层 + payload[srcField] 下沉）
 //   update：从 target 字典记录回填（按 tgtCol 取，兼容扁平/payload）
 //   create 步骤2：name 从步骤1 缓存的 keyName 回显
+//   doc_status：始终显示中文（系统管理，不参与收集）
 function headInitialValue(srcField) {
+  // 单据状态：显示中文（view 取实际状态，create/update 新建为 draft）
+  if (srcField === 'doc_status') {
+    const raw = state.mode === 'view' ? (state.crHead?.doc_status || 'draft') : 'draft'
+    return STATUS_LABEL[raw] || raw
+  }
   const mode = state.mode
   const entry = state.headMap.find(([s]) => s === srcField)
   const tgtCol = entry ? entry[1] : srcField
@@ -590,11 +600,19 @@ function headInitialValue(srcField) {
     return p[srcField] != null ? String(p[srcField]) : ''
   }
   if (mode === 'update') {
+    // 单据字段（目标列留空）：update 本质是新建变更单，doc_date 回填今天，其余空（remark 用户填，doc_no 铸号）
+    if (tgtCol == null || tgtCol === '') {
+      if (srcField === 'doc_date') return todayStr()
+      return ''
+    }
+    // 业务字段：从 target（cm_* 主数据）回填，兼容扁平/payload
     const t = state.target || {}
     const v = t[tgtCol] != null ? t[tgtCol] : (t.payload && t.payload[tgtCol]) != null ? t.payload[tgtCol] : ''
     return v != null ? String(v) : ''
   }
   if (srcField === state.nameFieldKey) return state.keyName || ''
+  // 单据字段 doc_date 默认今天（与 update 一致；base 同样以今天占位）
+  if (srcField === 'doc_date') return todayStr()
   return ''
 }
 
@@ -729,23 +747,34 @@ function collectHeadData() {
   return merged
 }
 
-// 构造头表 fields。nameFieldKey 值 → subject_name；其余 header_mapping key → payload。
+// 构造头表 fields。nameFieldKey 值 → subject_name；
+// header_mapping 中 value=null 的「单据字段」(doc_no/remark/doc_date/doc_status 等) → cv_mdm_apply 顶层列；
+// value 非空的「业务字段」→ payload。
 function buildHead() {
   const data = collectHeadData()
   const isEdit = state.mode === 'update'
   const a = state.activation
   const name = (data[state.nameFieldKey] != null ? String(data[state.nameFieldKey]) : '').trim()
   const payload = {}
-  for (const [src] of state.headMap) {
-    if (src === state.nameFieldKey) continue
-    payload[src] = data[src] != null ? data[src] : ''
-  }
   const base = { line_no: 1, doc_status: 'draft', doc_type_id: 1, doc_date: todayStr(), entity_id: 1 }
+  for (const [src, tgt] of state.headMap) {
+    if (src === state.nameFieldKey) continue
+    if (SYS_HEAD_FIELDS.has(src)) continue  // 系统字段（状态/单据号）不收集，由状态机/铸号管理
+    const v = data[src] != null ? data[src] : ''
+    if (tgt == null || tgt === '') {
+      // 单据字段：写 cv_mdm_apply 顶层列（有值才写，避免覆盖 base 默认）
+      if (v !== '' && v != null) base[src] = v
+    } else {
+      // 业务字段：进 payload
+      payload[src] = v
+    }
+  }
   if (isEdit) {
     const t = state.target || {}
     const deltas = {}
     for (const [src, tgt] of state.headMap) {
       if (src === state.nameFieldKey) continue
+      if (tgt == null || tgt === '') continue  // 单据字段不进 field_deltas（主数据变更追踪只记业务字段）
       const oldV = (t[tgt] != null ? t[tgt] : (t.payload && t.payload[tgt]) != null ? t.payload[tgt] : '')
       const cur = (data[src] != null ? data[src] : '')
       if (String(cur) !== String(oldV)) deltas[src] = { old: oldV, new: cur }
