@@ -871,6 +871,9 @@ function doSave(submit) {
       // 触发 submit 状态校验失败 → cmxError 模态遮罩锁页面。保存草稿保持可编辑（可继续修改）。
       if (submit) {
         state.mode = 'view'
+        // 同步 crId：create/update 新建保存并提交后切 view 详情页，doCrAction（提交/通过/驳回/作废）
+        // 读 state.crId；不同步则 !crId 静默 return → 详情页操作无反应（无弹窗/无接口/无报错）。
+        state.crId = crId
         try {
           const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
           state.crHead = (detail && detail.head) || {}
@@ -901,7 +904,7 @@ const CR_ACTION_CONFIRM = {
 async function doCrAction(act, confirmFirst = false, needReason = false) {
   const C = cmx()
   const crId = Number(state.crId)
-  if (!crId) return
+  if (!crId) { C.cmxWarn?.('单据 id 缺失，无法操作，请重新打开该单据'); return }
   try {
     if (confirmFirst) {
       const meta = CR_ACTION_CONFIRM[act]
