@@ -114,6 +114,8 @@ pub async fn list_match_groups(
     dict_code: Option<&str>,
     status: Option<&str>,
     exclude_statuses: Option<&[&str]>,
+    // 名称搜索命中的主数据 id（D-05）：非空时仅返回 master_id 或 member_ids 命中其一的记录
+    name_match_ids: Option<&[i64]>,
     page: i64,
     page_size: i64,
 ) -> Result<(Vec<Value>, i64), cmx_api_types::Error> {
@@ -139,6 +141,33 @@ pub async fn list_match_groups(
             })
             .collect();
         clauses.push(format!("status NOT IN ({})", ph.join(", ")));
+    }
+    // 名称搜索命中 id（D-05）：master_id 命中其一 或 member_ids(JSONB 数组) 含任一命中 id。
+    // id 集合通常很小（名称模糊匹配命中数），绑定两遍（master IN + member EXISTS IN）。
+    if let Some(ids) = name_match_ids
+        && !ids.is_empty()
+    {
+        let m_ph: Vec<String> = ids
+            .iter()
+            .map(|i| {
+                let p = format!("${}", params.len() + 1);
+                params.push(DataValue::Int(*i));
+                p
+            })
+            .collect();
+        let l_ph: Vec<String> = ids
+            .iter()
+            .map(|i| {
+                let p = format!("${}", params.len() + 1);
+                params.push(DataValue::Int(*i));
+                p
+            })
+            .collect();
+        clauses.push(format!(
+            "(master_id IN ({}) OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(member_ids) AS mid WHERE mid::bigint IN ({})))",
+            m_ph.join(", "),
+            l_ph.join(", ")
+        ));
     }
     let where_sql = clauses.join(" AND ");
     // 总数

@@ -94,6 +94,45 @@ async fn load_table_columns(
         .collect())
 }
 
+/// 按名称模糊匹配主数据 id（合并历史名称搜索用，D-05）。
+///
+/// 在 `{table}.name` 上做 `ILIKE '%kw%'`，返回命中 id。目标表无 `name` 列时返回空 Vec
+/// （防御性：合并的 cm_* 主数据表通常都有 name，但仍避免无 name 列的表 SQL 报错）。
+///
+/// `kw` 作为绑定参数 `%kw%` 传入，无 SQL 注入风险；kw 中的 `%`/`_` 按 ILIKE 通配语义
+/// 处理（搜索词罕见此类字符，先不做 ESCAPE 转义）。
+pub async fn find_ids_by_name_like(
+    mm: &DatabaseManager,
+    db_id: &str,
+    table: &str,
+    kw: &str,
+) -> Result<Vec<i64>, cmx_api_types::Error> {
+    validate_ident(table)?;
+    let cols = load_table_columns(mm, db_id, None, table).await?;
+    if !cols.contains("name") {
+        return Ok(Vec::new());
+    }
+    let sql = format!("SELECT id FROM {table} WHERE name ILIKE $1");
+    let ds = mm
+        .query_sql_with_datavalues(
+            db_id,
+            None,
+            &sql,
+            vec![DataValue::String(format!("%{kw}%").into())],
+            "mdm_find_ids_by_name",
+        )
+        .await
+        .map_err(|e| api_err_db(&format!("按名称查 {table} 失败: {e}")))?;
+    let schema = ds.schema.as_ref();
+    let mut ids = Vec::with_capacity(ds.rows.len());
+    for row in ds.rows.iter() {
+        if let Some(id) = row.get_by_name_as::<i64>(schema, "id") {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
+}
+
 /// 变更主数据头（UPDATE by id + 乐观锁 CAS）。返回受影响行数（0=版本冲突）。
 pub async fn update_header(
     mm: &DatabaseManager,

@@ -48,12 +48,34 @@ pub async fn mdm_merge_requests_list(
     } else {
         None
     };
+    // 名称搜索（D-05）：kw 非空且选了 dict 时，先在 cm_*.name ILIKE 查命中 id，
+    // 再交给 store 过滤 master_id/member_ids。kw 无 dict（"全部字典"，无法解析目标表）
+    // 或 dict 未注册时忽略 kw，按原条件列出。
+    let mut name_match_ids: Option<Vec<i64>> = None;
+    if let Some(kw) = q.kw.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(dict_code) = q.dict_code.as_deref() {
+            if let Ok(meta) = resolve_dict_meta(dict_code).await {
+                let ids =
+                    store::find_ids_by_name_like(mm, &db_id, &meta.table_name, kw).await?;
+                if ids.is_empty() {
+                    // 名称无命中：直接返回空，避免 store 收到空命中集语义歧义
+                    return Ok(Json(ApiResp::ok(json!({
+                        "list": Vec::<Value>::new(),
+                        "total": 0,
+                        "page": q.page, "pageSize": q.page_size,
+                    }))));
+                }
+                name_match_ids = Some(ids);
+            }
+        }
+    }
     let (list, total) = store::list_match_groups(
         mm,
         &db_id,
         q.dict_code.as_deref(),
         q.status.as_deref(),
         exclude_statuses,
+        name_match_ids.as_deref(),
         q.page,
         q.page_size,
     )
@@ -458,6 +480,10 @@ pub struct MergeListQuery {
     pub page: i64,
     #[serde(default = "default_page_size", alias = "pageSize")]
     pub page_size: i64,
+    /// 名称搜索关键字（D-05）：在目标 `cm_*.name` 上 `ILIKE %kw%`。
+    /// 需配合 dictCode（"全部字典"时无法解析目标表，后端忽略 kw）。
+    #[serde(default)]
+    pub kw: Option<String>,
 }
 
 /// 确认合并请求体。

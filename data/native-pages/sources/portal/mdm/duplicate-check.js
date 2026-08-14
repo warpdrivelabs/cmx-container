@@ -481,8 +481,8 @@ function histHtml() {
           <ui5-option value="" ${state.histDict === '' ? 'selected' : ''}>全部字典</ui5-option>
           ${state.allDicts.map((d) => `<ui5-option value="${d}" ${state.histDict === d ? 'selected' : ''}>${d}</ui5-option>`).join('')}
         </ui5-select>
-        <ui5-input id="dcHistKw" placeholder="搜索主记录/被合并方名称" value="${state.histKw}" style="min-width:240px;flex:1 1 240px;"></ui5-input>
-        <ui5-button design="Default" icon="search" id="dcHistSearch">查询</ui5-button>
+        <ui5-input id="dcHistKw" placeholder="${state.histDict ? '搜索主记录/被合并方名称' : '请先选择字典'}" value="${state.histKw}" ${state.histDict ? '' : 'disabled'} style="min-width:240px;flex:1 1 240px;"></ui5-input>
+        <ui5-button design="Default" icon="search" id="dcHistSearch" ${state.histDict ? '' : 'disabled'}>查询</ui5-button>
       </div>
       ${state.histList.length
         ? `<table class="tbl"><thead><tr><th>主记录</th><th>被合并方</th><th>状态</th><th>score</th><th>合并时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`
@@ -911,17 +911,11 @@ async function saveRule() {
 async function loadHist() {
   const q = new URLSearchParams({ page: String(state.histPage), pageSize: String(state.histPageSize) })
   if (state.histDict) q.set('dictCode', state.histDict)
+  // 名称搜索走后端（D-05）：仅在选了字典时传 kw（"全部字典"时后端无法解析目标表会忽略）
+  if (state.histDict && state.histKw) q.set('kw', state.histKw)
   const d = await apiGet('/api/mdm/merge-requests?' + q.toString(), coord && coord.dbId)
   state.histList = (d && d.list) || []
   state.histTotal = (d && d.total) || 0
-  // 关键字二次过滤（后端暂不支持名称搜索，前端按 masterName/memberNames 过滤）
-  if (state.histKw) {
-    const kw = state.histKw.toLowerCase()
-    state.histList = state.histList.filter((g) => {
-      const names = [g.masterName || '', ...((g.memberNames || []).map((m) => m.name || ''))].join(' ').toLowerCase()
-      return names.includes(kw)
-    })
-  }
 }
 
 // ── 渲染循环 ────────────────────────────────────────────────────────────
