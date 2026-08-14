@@ -4,7 +4,7 @@
  * 布局：页头 → 左右分栏（左「映射列表」面板 / 右「映射配置」面板）。
  *   配置面板四张编号卡片：
  *     ① 基本信息（CR 路由键 → 目标字典定位）
- *     ② 编码规则与主体识别（code_rule_code ↔ subject_code_field 互斥 + 实时来源指示器）
+ *     ② 单据编码规则覆盖（doc_code_rules）+ 主体识别（subject_name_field）+ 关键信息字段（key_fields）
  *     ③ 头表字段映射（CR 源字段 → cm_* 目标列，扁平 {source:target} 落库）
  *     ④ 行表映射（按 line_type 折叠组，fields 改结构化源→目标子表，告别裸 JSON）
  *
@@ -71,6 +71,8 @@ async function apiPost(url, payload, dbId) {
 const state = {
   crFields: [], cmFields: [], crLineFields: [], list: [], current: null,
   headerRows: [], headerGroups: [], dictCatalog: [], codeRules: [], lineDictFields: {}, kw: '', groupBy: 'group',
+  docRuleRows: [],
+  keyFieldRows: [],
 }
 // 行表映射的编辑态：与 state.current.line_mappings 平行的「字段行数组」缓存
 const lineRowsCache = [] // [{rows:[{sourceField,targetField}]}]
@@ -131,7 +133,7 @@ async function loadDictCatalog() {
 }
 
 // 编码规则目录：GET /api/code/rules（与 cmx_mdm_activation 同库，故沿用 coord.dbId 即业务库）。
-// 返回 { rules: [{ ruleCode, ruleName }] }，供卡片② code_rule_code 下拉选择。
+// 返回 { rules: [{ ruleCode, ruleName }] }，供卡片② doc_code_rules 规则下拉选择。
 async function loadCodeRules() {
   state.codeRules = []
   try {
@@ -273,19 +275,12 @@ function styleCss() {
   .f-item.locked ui5-input, .f-item.locked ui5-select { opacity:.55; pointer-events:none; }
   .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; }
 
-  /* 来源指示器 */
-  .src-ind { margin-top:14px; padding:10px 14px; border:1px dashed var(--sapList_BorderColor); border-radius:6px;
-    font-size:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--sapContent_LabelColor); }
-  .src-ind .lab { color:var(--sapTextColor); font-weight:500; }
-  .src-badge { padding:3px 10px; border-radius:4px; font-weight:600; font-size:11px; }
-  .src-badge.mint { background:color-mix(in srgb,var(--neo-green,#2f855a) 16%,transparent); color:var(--neo-green,#2f855a); }
-  .src-badge.manual { background:color-mix(in srgb,var(--neo-orange,#c05621) 16%,transparent); color:var(--neo-orange,#c05621); }
-  .src-badge.none { background:color-mix(in srgb,var(--neo-red,#c53030) 14%,transparent); color:var(--neo-red,#c53030); }
-
   /* 映射表 */
   .tbl { width:100%; border-collapse:collapse; font-size:13px; }
   .tbl th { text-align:left; padding:8px 10px; font-size:11px; font-weight:600; color:var(--sapContent_LabelColor); border-bottom:1px solid var(--sapList_BorderColor); }
   .tbl td { padding:6px 10px; border-bottom:1px solid var(--sapList_BorderColor); vertical-align:middle; }
+  .kf-weight { width:64px; padding:4px 8px; border:1px solid var(--sapList_BorderColor); border-radius:4px;
+    font:inherit; font-size:12px; background:transparent; color:var(--sapTextColor); }
   .tbl tr:last-child td { border-bottom:none; }
   .tbl ui5-select { width:100%; display:block; }
   .add-row { padding:8px 10px; text-align:center; }
@@ -410,57 +405,118 @@ function cardBasic() {
   </div>`
 }
 
-// ── 卡片2：编码规则与主体识别（互斥 + 指示器）─────────────────────────────────
+// ── 卡片2：单据编码规则覆盖 + 主体识别 ─────────────────────────────────────────
+// 职责重分配（2026-08-13）：activation 的「编码规则」从「管字典 code」改为「管单据字段铸号覆盖」。
+//   - 单据字段铸号：doc_code_rules {单据字段:ruleCode}，覆盖单据元数据 codeRule（激活配置优先）。
+//   - 字典 code 铸号：走字典自身 dictMeta.codeRule（不再用 activation 的 code_rule_code，已废弃）。
 function cardCodeSource() {
   const c = state.current || {}
-  const hasRule = !!(c.code_rule_code && c.code_rule_code.trim())
-  const hasSubCode = !!(c.subject_code_field && c.subject_code_field.trim())
-  const lockRule = hasSubCode && !hasRule
-  const lockSub = hasRule && !hasSubCode
   return `<div class="card">
-    <div class="card-head"><h3><span class="num">2</span> 编码规则与主体识别</h3>
-      <span class="card-hint">cm_*.code 来源（二选一）+ 列表搜索列</span></div>
+    <div class="card-head"><h3><span class="num">2</span> 单据编码规则覆盖 + 主体识别</h3>
+      <span class="card-hint">单据字段铸号规则覆盖 doc_code_rules + 主体识别 + 关键信息字段 key_fields</span></div>
     <div class="card-body">
-      <div class="banner warn"><span class="ic">⚠️</span><span><b>互斥配置</b>：<code>编码规则</code> 与 <code>主体编码字段</code> 二选一。
-        选铸号规则 → code 系统生成；选主体编码字段 → code 从 payload 取。<b>不可同时生效</b>，否则激活器会静默吞掉用户手填值。</span></div>
+      <div class="banner info"><span class="ic">ℹ️</span><span><b>单据编码规则覆盖</b>：为单据字段指定铸号规则，<b>覆盖单据元数据 codeRule</b>（激活配置优先）。
+        例：<code>doc_no → MDM_GYS</code> 则该变更单的单据号用 MDM_GYS 铸号（而非单据元数据里的默认规则）。
+        字典 code 铸号走字典自身 <code>dictMeta.codeRule</code>（不在此配）。</span></div>
+      <div id="amDocRules"></div>
       <div class="form-grid" style="margin-top:14px">
-        <div class="f-item ${lockRule ? 'locked' : ''}" id="fldRule">
-          <label>编码规则 code_rule_code</label>
-          <ui5-select id="amCrc">
-            <ui5-option value="" ${!hasRule ? 'selected' : ''}>（无——改用主体编码字段）</ui5-option>
-            ${state.codeRules.map((r) => `<ui5-option value="${esc(r.ruleCode)}" ${r.ruleCode === c.code_rule_code ? 'selected' : ''}>${esc(r.ruleName)}（${esc(r.ruleCode)}）</ui5-option>`).join('')}
-          </ui5-select>
-          <span class="help">非空时激活调 cmx-code 铸号写入 cm_*.code</span></div>
         <div class="f-item">
           <label>主体名字段 subject_name_field</label>
           <ui5-select id="amSnf">${optHtml(cmOptions(), c.subject_name_field || '')}</ui5-select>
           <span class="help">前端步骤条据此从 payload 取值填 subject_name</span></div>
-        <div class="f-item ${lockSub ? 'locked' : ''}" id="fldSubCode">
-          <label>主体编码字段 subject_code_field</label>
-          <ui5-select id="amScf">${optHtml(cmOptions(), c.subject_code_field || '')}</ui5-select>
-          <span class="help">非空时从 payload 取 code，codeRule 自动禁用</span></div>
       </div>
-      <div class="src-ind" id="srcInd">${srcIndHtml()}</div>
+      <div class="banner info" style="margin-top:14px"><span class="ic">🔎</span><span><b>关键信息字段</b>：新增单据步骤①「关键信息」表单按此展示多字段。
+        勾选<b>参与查重</b>的字段做多字段加权查重（综合分 ≥80 阻断录入），不勾的仅提前采集展示；
+        行序 = 簇键优先级（强标识字段排前，如税号/信用代码建议用 Exact 全等比对）。
+        未配置：新增不出现关键信息步骤，直接进完整表单（不做查重）。</span></div>
+      <div id="amKeyFields"></div>
     </div>
   </div>`
 }
-function srcIndHtml() {
-  const c = state.current || {}
-  const rule = (c.code_rule_code || '').trim()
-  const sub = (c.subject_code_field || '').trim()
-  if (rule) {
-    return `<span class="lab">📌 当前 cm_*.code 来源：</span>
-      <span class="src-badge mint">系统铸号（${esc(rule)}）</span>
-      <span>激活时调 cmx-code 引擎按 ${esc(rule)} 生成编码写入 cm_*.code</span>`
+// 单据字段铸号规则覆盖行表（范式对齐 headerTable：tbl + ui5-select + icon-btn）。
+// 字段下拉取 cv_mdm_apply 单据字段（crFields，保底含 doc_no）；规则下拉取编码规则库（state.codeRules）。
+function renderDocRules() {
+  const wrap = q('amDocRules'); if (!wrap) return
+  const rows = state.docRuleRows || []
+  const fieldOpts = () => {
+    const cols = state.crFields
+      .filter((f) => !AUDIT_COLS.has(f.name) && f.name !== 'payload' && f.name !== 'field_deltas')
+      .map((f) => ({ value: f.name, label: disp(f) }))
+    // doc_no 是单据号（经 documentFieldSets 引入，crFields 可能未含），确保可选——这是覆盖主场景
+    if (!cols.some((o) => o.value === 'doc_no')) cols.unshift({ value: 'doc_no', label: 'doc_no（单据号）' })
+    return cols
   }
-  if (sub) {
-    return `<span class="lab">📌 当前 cm_*.code 来源：</span>
-      <span class="src-badge manual">用户手填（payload.${esc(sub)}）</span>
-      <span>激活器从 payload.${esc(sub)} 取值写入 cm_*.code，不调铸号引擎</span>`
-  }
-  return `<span class="lab">📌 当前 cm_*.code 来源：</span>
-    <span class="src-badge none">⚠️ 未配置</span>
-    <span>激活时 cm_*.code 无来源，将触发 NOT NULL 约束错误</span>`
+  const ruleOpts = () => state.codeRules.map((r) => ({ value: r.ruleCode, label: r.ruleName ? `${r.ruleName}（${r.ruleCode}）` : r.ruleCode }))
+  const rowHtml = (r, i) => `<tr data-i="${i}">
+    <td><ui5-select class="dr-field" data-i="${i}">${optHtml(fieldOpts(), r.field)}</ui5-select></td>
+    <td><ui5-select class="dr-rule" data-i="${i}">${optHtml(ruleOpts(), r.ruleCode)}</ui5-select></td>
+    <td style="white-space:nowrap"><button class="icon-btn danger" data-drdel="${i}" title="删除"><ui5-icon name="delete"></ui5-icon></button></td></tr>`
+  wrap.innerHTML = `<table class="tbl"><thead><tr>
+      <th style="width:46%">单据字段（cv_mdm_apply）</th>
+      <th style="width:46%">编码规则（覆盖单据元数据 codeRule）</th>
+      <th style="width:56px"></th></tr></thead><tbody>
+    ${rows.map(rowHtml).join('') || `<tr><td colspan="3" class="muted" style="padding:8px">暂无字段规则覆盖——单据字段铸号走单据元数据默认 codeRule</td></tr>`}
+  </tbody></table>
+  <div class="add-row"><span class="add-btn" data-dradd>+ 添加字段规则</span></div>`
+  wrap.querySelectorAll('ui5-select.dr-field').forEach((s) => s.addEventListener('change', () => { state.docRuleRows[+s.dataset.i].field = s.value }))
+  wrap.querySelectorAll('ui5-select.dr-rule').forEach((s) => s.addEventListener('change', () => { state.docRuleRows[+s.dataset.i].ruleCode = s.value }))
+  wrap.querySelectorAll('[data-drdel]').forEach((el) => el.addEventListener('click', () => { state.docRuleRows.splice(+el.dataset.drdel, 1); renderDocRules() }))
+  wrap.querySelector('[data-dradd]')?.addEventListener('click', () => { state.docRuleRows.push({ field: '', ruleCode: '' }); renderDocRules() })
+}
+// 从 state.current.doc_code_rules（{字段:ruleCode}）同步进行表缓存 state.docRuleRows。
+function syncDocRulesFromMapping() {
+  const m = (state.current && state.current.doc_code_rules) || {}
+  state.docRuleRows = Object.entries(m).filter(([, v]) => v).map(([field, ruleCode]) => ({ field, ruleCode: String(ruleCode) }))
+}
+
+// 关键信息字段行表（范式对齐 renderDocRules：tbl + ui5-select + icon-btn；权重用窄数字输入，
+// 参与查重用 ui5-checkbox——对齐 duplicate-check.js 的勾选范式）。
+// 字段下拉取目标字典列（cmOptions，依赖 cmFields 异步加载——onTargetMetaLoaded 后重渲）。
+// 行序即簇键优先级（强标识排前），上/下移调整；kind：Exact 全等 / EditDistance 编辑距离；
+// dedup=false 仅进步骤①表单采集，不进查重请求。
+function renderKeyFields() {
+  const wrap = q('amKeyFields'); if (!wrap) return
+  const rows = state.keyFieldRows || []
+  const kindOpts = () => [{ value: 'EditDistance', label: 'EditDistance（编辑距离）' }, { value: 'Exact', label: 'Exact（全等）' }]
+  const rowHtml = (r, i) => `<tr data-i="${i}">
+    <td><ui5-select class="kf-field" data-i="${i}">${optHtml(cmOptions(), r.field)}</ui5-select></td>
+    <td><ui5-select class="kf-kind" data-i="${i}">${optHtml(kindOpts(), r.kind || 'EditDistance')}</ui5-select></td>
+    <td style="text-align:center"><ui5-checkbox class="kf-dedup" data-i="${i}" ${r.dedup === false ? '' : 'checked'} title="勾选则参与查重；不勾仅步骤①展示采集"></ui5-checkbox></td>
+    <td><input class="kf-weight" data-i="${i}" type="number" min="0" step="10" value="${Number(r.weight) || 100}" title="查重权重（score = Σ(字段分×weight)/Σweight）"></td>
+    <td style="white-space:nowrap">
+      <button class="icon-btn" data-kfup="${i}" ${i === 0 ? 'disabled' : ''} title="上移（提高簇键优先级）"><ui5-icon name="slim-arrow-up"></ui5-icon></button>
+      <button class="icon-btn" data-kfdown="${i}" ${i === rows.length - 1 ? 'disabled' : ''} title="下移"><ui5-icon name="slim-arrow-down"></ui5-icon></button>
+      <button class="icon-btn danger" data-kfdel="${i}" title="删除"><ui5-icon name="delete"></ui5-icon></button></td></tr>`
+  wrap.innerHTML = `<table class="tbl"><thead><tr>
+      <th style="width:34%">字段（目标字典列）</th>
+      <th style="width:22%">比较方式</th>
+      <th style="width:10%;text-align:center">参与查重</th>
+      <th style="width:12%">权重</th>
+      <th style="width:80px"></th></tr></thead><tbody>
+    ${rows.map(rowHtml).join('') || `<tr><td colspan="5" class="muted" style="padding:8px">未配置——新增无关键信息步骤，直接进完整表单（不查重）</td></tr>`}
+  </tbody></table>
+  <div class="add-row"><span class="add-btn" data-kfadd>+ 添加关键信息字段</span></div>`
+  wrap.querySelectorAll('ui5-select.kf-field').forEach((s) => s.addEventListener('change', () => { state.keyFieldRows[+s.dataset.i].field = s.value }))
+  wrap.querySelectorAll('ui5-select.kf-kind').forEach((s) => s.addEventListener('change', () => { state.keyFieldRows[+s.dataset.i].kind = s.value }))
+  wrap.querySelectorAll('ui5-checkbox.kf-dedup').forEach((cb) => cb.addEventListener('change', () => { state.keyFieldRows[+cb.dataset.i].dedup = cb.checked }))
+  wrap.querySelectorAll('input.kf-weight').forEach((inp) => inp.addEventListener('change', () => { state.keyFieldRows[+inp.dataset.i].weight = Math.max(0, parseInt(inp.value, 10) || 0) }))
+  wrap.querySelectorAll('[data-kfup]').forEach((el) => el.addEventListener('click', () => {
+    const i = +el.dataset.kfup; if (i <= 0) return
+    const t = state.keyFieldRows[i - 1]; state.keyFieldRows[i - 1] = state.keyFieldRows[i]; state.keyFieldRows[i] = t; renderKeyFields()
+  }))
+  wrap.querySelectorAll('[data-kfdown]').forEach((el) => el.addEventListener('click', () => {
+    const i = +el.dataset.kfdown; if (i >= state.keyFieldRows.length - 1) return
+    const t = state.keyFieldRows[i + 1]; state.keyFieldRows[i + 1] = state.keyFieldRows[i]; state.keyFieldRows[i] = t; renderKeyFields()
+  }))
+  wrap.querySelectorAll('[data-kfdel]').forEach((el) => el.addEventListener('click', () => { state.keyFieldRows.splice(+el.dataset.kfdel, 1); renderKeyFields() }))
+  wrap.querySelector('[data-kfadd]')?.addEventListener('click', () => { state.keyFieldRows.push({ field: '', kind: 'EditDistance', weight: 100, dedup: true }); renderKeyFields() })
+}
+// 从 state.current.key_fields（[{field,weight,kind,dedup}]）同步进行表缓存 state.keyFieldRows。
+function syncKeyFieldsFromMapping() {
+  const kfs = Array.isArray(state.current && state.current.key_fields) ? state.current.key_fields : []
+  state.keyFieldRows = kfs
+    .filter((k) => k && k.field)
+    .map((k) => ({ field: k.field, kind: k.kind || 'EditDistance', weight: Number(k.weight) || 100, dedup: k.dedup !== false }))
 }
 
 // ── 卡片3：头表字段映射 ──────────────────────────────────────────────────────
@@ -894,8 +950,13 @@ function collectForm() {
   // target_dict 来自字典帮助选择（combo），target_table 由其自动带出 → 两者均已同步进 state.current
   const combo = q('amTdCombo')
   if (combo && typeof combo.getValue === 'function') c.target_dict = combo.getValue() || ''
-  c.code_rule_code = val('amCrc') || null
-  c.subject_name_field = val('amSnf') || null; c.subject_code_field = val('amScf') || null
+  c.code_rule_code = null // 已废弃（字典 code 改走 dictMeta）；保留字段兼容旧数据，不再从 UI 读
+  c.subject_name_field = val('amSnf') || null
+  c.subject_code_field = null // 已废弃（从未接线，UI 已移除）；置空以清除旧数据
+  c.doc_code_rules = {}
+  ;(state.docRuleRows || []).forEach((r) => { if (r.field && r.ruleCode) c.doc_code_rules[r.field] = r.ruleCode })
+  c.key_fields = (state.keyFieldRows || []).filter((r) => r.field)
+    .map((r) => ({ field: r.field, kind: r.kind || 'EditDistance', weight: Math.max(0, parseInt(r.weight, 10) || 0), dedup: r.dedup !== false }))
   c.header_mapping = headerRowsToMapping()
   c.header_groups = state.headerGroups.map((g, gi) => ({
     groupCode: g.groupCode, groupName: g.groupName,
@@ -954,9 +1015,6 @@ function openCloneDlg() {
     if (state.list.some((it) => it.activation_code === dupCode)) {
       hint.textContent = `⚠「${dupCode}」已存在，保存将覆盖原配置`
       hint.style.color = 'var(--sapNegativeElementColor,#bb0000)'
-    } else if (target === 'update') {
-      hint.textContent = 'update 不铸号，将自动清空编码规则 code_rule_code'
-      hint.style.color = 'var(--sapContent_LabelColor)'
     } else {
       hint.textContent = ''
     }
@@ -972,17 +1030,16 @@ function openCloneDlg() {
   dlg.open = true
 }
 // 执行复制：深拷贝当前配置 → 改 cr_type → activation_code 由 sdt__crt 派生（与原配置不冲突）→
-// update 清空 code_rule_code（update 分支不铸号）→ 进入未保存编辑态（cloneDirty）。
+// 深拷贝改 cr_type（doc_code_rules 一并复制）→ 进入未保存编辑态（cloneDirty）。
 function doClone(target) {
   const src = state.current
   const dup = JSON.parse(JSON.stringify(src)) // 配置均为 JSON 可序列化数据，深拷贝安全
   dup.cr_type = target
   dup.activation_code = `${src.source_doc_type}__${target}`
-  if (target === 'update') dup.code_rule_code = null // update 分支不铸号，清空规则
   cloneDirty = true
   state.current = dup
   state.cmFields = []
-  syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping()
+  syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping(); syncDocRulesFromMapping(); syncKeyFieldsFromMapping()
   // 目标字典不变，重新加载字段候选（头/明细/主体字段下拉才有项）
   const td = state.current.target_dict
   if (td) { loadTargetMeta(td).then(onTargetMetaLoaded).catch(() => {}) }
@@ -991,28 +1048,19 @@ function doClone(target) {
 }
 function newMapping() {
   cloneDirty = false
-  state.current = { activation_code: '', source_doc_type: '', cr_type: 'create', target_dict: '', target_table: '', is_active: true, header_mapping: {}, line_mappings: [], code_rule_code: null, subject_name_field: null, subject_code_field: null, header_groups: [] }
+  state.current = { activation_code: '', source_doc_type: '', cr_type: 'create', target_dict: '', target_table: '', is_active: true, header_mapping: {}, line_mappings: [], code_rule_code: null, doc_code_rules: {}, key_fields: [], subject_name_field: null, header_groups: [] }
   state.cmFields = []
-  syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping(); refresh()
+  syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping(); syncDocRulesFromMapping(); syncKeyFieldsFromMapping(); refresh()
 }
 function selectByCode(code) {
   cloneDirty = false
   state.current = state.list.find((it) => it.activation_code === code) || null
   state.cmFields = []
-  syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping()
+  syncHeaderRowsFromMapping(); syncHeaderGroups(); syncLineRowsFromMapping(); syncDocRulesFromMapping(); syncKeyFieldsFromMapping()
   // 选中后异步拉目标字典字段，让头/明细下拉有候选
   const td = state.current && state.current.target_dict
   if (td) { loadTargetMeta(td).then(onTargetMetaLoaded).catch(() => {}) }
   refresh()
-}
-
-// 互斥联动：rule 非空 → 锁 subCode；subCode 非空 → 锁 rule。同步指示器。
-function applyMutex() {
-  const fldRule = q('fldRule'); const fldSub = q('fldSubCode'); if (!fldRule || !fldSub) return
-  const rule = (val('amCrc')); const sub = val('amScf')
-  fldRule.classList.toggle('locked', !!(sub && !rule))
-  fldSub.classList.toggle('locked', !!(rule && !sub))
-  const ind = q('srcInd'); if (ind) ind.innerHTML = srcIndHtml()
 }
 
 // 目标字典帮助选择：选中后自动带出 target_table（只读）+ 加载该字典字段候选
@@ -1026,10 +1074,11 @@ function onDictChange(e) {
   const tt = q('amTt'); if (tt) tt.value = dict ? dict.tableName : ''
   if (code) loadTargetMeta(code).then(onTargetMetaLoaded).catch(() => {})
 }
-// 目标字典字段加载完成后，统一刷新所有依赖 cmFields 的下拉/表格（头映射、行明细、主体名/编码字段）
+// 目标字典字段加载完成后，统一刷新所有依赖 cmFields 的下拉/表格（头映射、行明细、主体名字段、关键信息查重字段）
 async function onTargetMetaLoaded() {
   fillSubjectSelects()
   renderHeaderTable()
+  renderKeyFields()
   // 先加载各 line_mapping 的目标明细字典字段（缓存），再渲染明细字段子表
   const lms = state.current?.line_mappings || []
   await Promise.all(lms.map(async (lm) => {
@@ -1039,16 +1088,12 @@ async function onTargetMetaLoaded() {
   // 字段已加载，重渲染行表组（挂头外键下拉 + 明细字段子表都有选项）
   renderLineGroups()
 }
-// 卡片② 主体名字段/主体编码字段下拉（选项来自目标字典 DCT columns）。这两个 select 在 formHtml
-// 静态渲染时 cmFields 可能尚未加载 → 选项为空；故在 loadTargetMeta 完成后补填。
+// 卡片② 主体名字段下拉（选项来自目标字典 DCT columns）。该 select 在 formHtml 静态渲染时
+// cmFields 可能尚未加载 → 选项为空；故在 loadTargetMeta 完成后补填。
 function fillSubjectSelects() {
-  const c = state.current || {}
-  const opts = cmOptions()
-  ;['amSnf', 'amScf'].forEach((id) => {
-    const sel = q(id); if (!sel) return
-    const cur = id === 'amSnf' ? (c.subject_name_field || '') : (c.subject_code_field || '')
-    sel.innerHTML = '<ui5-option value=""></ui5-option>' + opts.map((o) => `<ui5-option value="${esc(o.value)}" ${o.value === cur ? 'selected' : ''}>${esc(o.label)}</ui5-option>`).join('')
-  })
+  const sel = q('amSnf'); if (!sel) return
+  const cur = state.current?.subject_name_field || ''
+  sel.innerHTML = '<ui5-option value=""></ui5-option>' + cmOptions().map((o) => `<ui5-option value="${esc(o.value)}" ${o.value === cur ? 'selected' : ''}>${esc(o.label)}</ui5-option>`).join('')
 }
 // 初始化 cmx-combo-box（本地字典目录 + list 模式 + 可搜索）；元素未升级时等 whenDefined
 function initCombo() {
@@ -1119,30 +1164,14 @@ function bind(root) {
     state.headerGroups.push({ groupCode: 'group_' + Date.now(), groupName: `分组${n}` })
     renderHeaderTable()
   })
-  // 卡片2 互斥：rule 非空 → 清并锁 subCode；subCode 非空 → 清并锁 rule。始终同步 state 与指示器。
-  root.querySelector('#amCrc')?.addEventListener('change', () => {
-    const v = val('amCrc'); if (state.current) state.current.code_rule_code = v || null
-    if (v) { // 选了规则 → 清空主体编码字段并锁定
-      if (state.current) state.current.subject_code_field = null
-      const sc = q('amScf'); if (sc) sc.value = ''
-    }
-    applyMutex()
-  })
-  root.querySelector('#amScf')?.addEventListener('change', () => {
-    const v = val('amScf'); if (state.current) state.current.subject_code_field = v || null
-    if (v) { // 选了主体编码字段 → 清空规则并锁定
-      if (state.current) state.current.code_rule_code = null
-      const cr = q('amCrc'); if (cr) cr.value = ''
-    }
-    applyMutex()
-  })
+  // 卡片2 单据字段规则覆盖行表的事件在 renderDocRules 内绑定（主体名字段下拉无需实时同步，collectForm 统一收集）。
   // 行表映射
   root.querySelector('#amAddLine')?.addEventListener('click', () => {
     if (!state.current.line_mappings) state.current.line_mappings = []
     state.current.line_mappings.push({ lineType: '', targetDict: '', targetTable: '', parentField: '', fields: {} })
     syncLineRowsFromMapping(); renderLineGroups()
   })
-  if (state.current) { renderHeaderTable(); renderLineGroups() }
+  if (state.current) { renderHeaderTable(); renderLineGroups(); renderDocRules(); renderKeyFields() }
 }
 // 侧栏项点击绑定（独立出来，供搜索重渲复用）
 function bindSide(root) {
