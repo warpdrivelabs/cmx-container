@@ -173,7 +173,7 @@ impl RemoteImporterContext {
         }
     }
 
-    /// gRPC 查询:经 `cmx_rpc::resource_data_client()` 调用远程 `ListResourceData`。
+    /// gRPC 查询:经 `cmx_resource_rpc::resource_data_client()` 调用远程 `ListResourceData`。
     async fn list_via_grpc(
         &self,
         category: DataCategory,
@@ -186,7 +186,7 @@ impl RemoteImporterContext {
             )));
         }
         let service_name = self.resolve_service_name(category)?;
-        let client = cmx_rpc::resource_data_client();
+        let client = cmx_resource_rpc::resource_data_client();
         client
             .list_resource_data(&service_name, request)
             .await
@@ -296,7 +296,7 @@ impl RemoteImporterContext {
         }
     }
 
-    /// gRPC 传输:经 `cmx_rpc::resource_data_client()` 调用远程 `CmxResourceDataService`。
+    /// gRPC 传输:经 `cmx_resource_rpc::resource_data_client()` 调用远程 `CmxResourceDataService`。
     async fn send_via_grpc(
         &self,
         category: DataCategory,
@@ -309,7 +309,7 @@ impl RemoteImporterContext {
             )));
         }
         let service_name = self.resolve_service_name(category)?;
-        let client = cmx_rpc::resource_data_client();
+        let client = cmx_resource_rpc::resource_data_client();
         client
             .import_resource_data(&service_name, request)
             .await

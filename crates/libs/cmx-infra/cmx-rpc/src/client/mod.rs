@@ -1,23 +1,20 @@
-//! gRPC 领域客户端模块。
+//! gRPC 客户端共享设施。
 //!
-//! 按领域拆分为：
 //! - [`auth_outbound`]：出站鉴权 header 注入（`apply_auth_metadata`）。
-//! - [`orchestrator`]：服务编排（`call_service` / `call_function`）。
-//! - [`resource_data`]：资源数据管理（`import_resource_data` / `cleanup_resource_data`）。
+//! - [`infra`]：共享基础设施（[`GrpcInfrastructure`]，服务发现缓存/超时/重试配置）。
+//! - [`retry`]：重试循环（[`with_retry`]，指数退避 + 总预算）。
 //!
-//! 共享基础设施见 [`infra::GrpcInfrastructure`]，重试逻辑见 [`retry::with_retry`]。
+//! 具体领域的 gRPC 客户端（orchestrator / resource_data 等）已迁至 `cmx-rpcs/*`
+//! 皮肤 crate（如 `cmx-orchestrator-rpc`），经 [`GrpcInfrastructure`] 复用本模块设施。
 
 pub mod auth_outbound;
 pub mod infra;
-pub mod orchestrator;
-pub mod resource_data;
 pub mod retry;
 
-pub use orchestrator::orchestrator_client;
-pub use resource_data::resource_data_client;
+pub use infra::GrpcInfrastructure;
 
 /// 安全解析 JSON 字符串，解析失败时记录 warn 日志并降级为 [`serde_json::Value::Null`]。
-pub(crate) fn safe_parse_json(raw: &str, context: &str) -> serde_json::Value {
+pub fn safe_parse_json(raw: &str, context: &str) -> serde_json::Value {
     serde_json::from_str(raw).unwrap_or_else(|e| {
         tracing::warn!(
             target: "cmx_rpc",

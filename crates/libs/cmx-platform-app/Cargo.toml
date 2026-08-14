@@ -61,6 +61,9 @@ cmx-service = { workspace = true }
 cmx-debug = { workspace = true }
 cmx-registry-config = { workspace = true }
 cmx-rpc = { workspace = true }
+# RPC 皮肤（组装层显式注册的 Bundle 来源；依赖哪些 *-rpc = 主应用提供哪些 gRPC 服务）
+cmx-orchestrator-rpc = { workspace = true }
+cmx-resource-rpc = { workspace = true }
 cmx-storage = { workspace = true }
 local-ip-address = { workspace = true }
 # 通用 HTTP 服务骨架 + 技术监控 + 基础服务库

@@ -41,7 +41,7 @@ const STATUS_META = {
   rejected: { name: '已驳回', tone: 'danger' },
   aborted: { name: '已作废', tone: 'neutral' },
 }
-const state = { dbId: '', filter: 'all', list: [], view: 'list', detail: null, domain: '', application: '', page: 1, pageSize: 20, total: 0, counts: { draft: 0, approving: 0, rejected: 0, done: 0 } }
+const state = { dbId: '', filter: 'all', list: [], domain: '', application: '', page: 1, pageSize: 20, total: 0, counts: { draft: 0, approving: 0, rejected: 0, done: 0 } }
 
 function styleCss() {
   return `
@@ -109,54 +109,28 @@ function actionsHtml(r) {
   const b = (act, design, icon, text) => `<ui5-button design="${design}" icon="${icon}" data-act="${act}" data-id="${id}">${text}</ui5-button>`
   if (s === 'draft') return b('submit', 'Default', 'paper-plane', '提交') + b('abort', 'Transparent', 'cancel', '作废')
   if (s === 'approving') return b('approve', 'Emphasized', 'accept', '通过') + b('reject', 'Transparent', 'decline', '驳回')
-  if (s === 'rejected') return b('clone', 'Default', 'edit', '修改重提')
+  if (s === 'rejected') return b('resubmit', 'Default', 'edit', '修改重提')
   return b('view', 'Transparent', 'show', '查看')
 }
 
 function fmtTime(t) { if (!t) return ''; const s = String(t); return s.length > 19 ? s.slice(0, 19).replace('T', ' ') : s }
 
-function tableHtml() {
-  const rows = filtered()
-  if (!rows.length) {
-    return `<cmx-empty-state icon="document" title="暂无变更申请" description="调整过滤条件或到录入台新建申请"></cmx-empty-state>`
-  }
-  const trs = rows.map((r) => {
-    const m = STATUS_META[r.doc_status] || { name: r.doc_status, tone: 'neutral' }
-    return `<tr>
-      <td class="muted">${r.id}</td><td>${r.doc_no || ''}</td><td>${r.subject_name || ''}</td><td>${r.cr_type || ''}</td>
-      <td><cmx-status-tag tone="${m.tone}" variant="subtle" dot size="sm">${m.name}</cmx-status-tag></td>
-      <td class="muted">${fmtTime(r.create_time)}</td><td>${actionsHtml(r)}</td></tr>`
-  }).join('')
-  return `<table class="tbl"><thead><tr><th>ID</th><th>单据号</th><th>名称</th><th>类型</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${trs}</tbody></table>`
-}
-
-function crumbHtml(sub) {
-  return `<div class="crumb"><a id="crumbList">供应商单据列表</a>${sub ? `<span class="sep">/</span><span class="cur">${sub}</span>` : ''}</div>`
-}
-
-function detailHtml() {
-  const d = state.detail || {}; const h = d.head || {}; const lines = d.lines || []
-  const kv = (l, v) => `<cmx-desc-item label="${l}">${v ?? '—'}</cmx-desc-item>`
-  const lineRows = lines.map((l, i) => {
-    const p = (l.line_payload && typeof l.line_payload === 'object') ? l.line_payload : {}
-    return `<tr><td>${i + 1}</td><td>${l.line_type || ''}</td><td>${l.line_action || ''}</td><td>${p.account_no || ''}</td><td>${p.bank_name || ''}</td></tr>`
-  }).join('') || '<tr><td colspan="5" class="muted">无明细行</td></tr>'
-  return `<div class="pg">${crumbHtml('申请详情')}
-    <div class="card"><div class="card-title">CR-${h.id ?? ''} 基本信息</div>
-      <cmx-desc-list columns="3" border>
-        ${kv('单据号', h.doc_no)}${kv('状态', (STATUS_META[h.doc_status] || {}).name || h.doc_status)}
-        ${kv('单据类型', h.doc_type)}${kv('变更类型', h.cr_type)}
-        ${kv('目标字典', h.target_dict_code)}${kv('目标记录ID', h.target_record_id)}
-        ${kv('供应商名称', h.subject_name)}${kv('税号', (h.payload || {}).tax_no)}${kv('信用代码', (h.payload || {}).credit_code)}
-      </cmx-desc-list></div>
-    <div class="card"><div class="card-title">明细行</div>
-      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>类型</th><th>操作</th><th>账号</th><th>开户行</th></tr></thead><tbody>${lineRows}</tbody></table></div></div>
-    <div class="card"><div class="card-title">关联流程（预留）</div>
-      <cmx-empty-state icon="process" title="暂无流程" description="后续在此展示该申请的审批/激活流程"></cmx-empty-state></div>`
-}
+// function tableHtml() {
+//   const rows = filtered()
+//   if (!rows.length) {
+//     return `<cmx-empty-state icon="document" title="暂无变更申请" description="调整过滤条件或到录入台新建申请"></cmx-empty-state>`
+//   }
+//   const trs = rows.map((r) => {
+//     const m = STATUS_META[r.doc_status] || { name: r.doc_status, tone: 'neutral' }
+//     return `<tr>
+//       <td class="muted">${r.id}</td><td>${r.doc_no || ''}</td><td>${r.subject_name || ''}</td><td>${r.cr_type || ''}</td>
+//       <td><cmx-status-tag tone="${m.tone}" variant="subtle" dot size="sm">${m.name}</cmx-status-tag></td>
+//       <td class="muted">${fmtTime(r.create_time)}</td><td>${actionsHtml(r)}</td></tr>`
+//   }).join('')
+//   return `<table class="tbl"><thead><tr><th>ID</th><th>单据号</th><th>名称</th><th>类型</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${trs}</tbody></table>`
+// }
 
 function viewHtml() {
-  if (state.view === 'detail') return detailHtml()
   return `<div class="pg">
     <div class="pg-head"><div class="pg-title">供应商单据列表</div>
       <div class="pg-sub">提交 / 审批 / 驳回 / 修改重提 / 作废，审批通过自动激活落字典</div></div>
@@ -198,7 +172,7 @@ function buildListGrid() {
     cm.setMembers([
       new C.CmxColumn({ id: 'id', caption: 'ID', dataType: 'VARCHAR', width: '110px' }),
       new C.CmxColumn({ id: 'doc_no', caption: '单据号', dataType: 'VARCHAR', width: '150px' }),
-      new C.CmxColumn({ id: 'subject_name', caption: '名称', dataType: 'VARCHAR', width: '150px' }),
+      new C.CmxColumn({ id: 'remark', caption: '业务事由', dataType: 'VARCHAR', width: '150px' }),
       new C.CmxColumn({ id: 'doc_type', caption: '类型', dataType: 'VARCHAR', width: '120px' }),
       new C.CmxColumn({ id: 'status_name', caption: '状态', dataType: 'VARCHAR', width: '80px' }),
       new C.CmxColumn({ id: 'create_time', caption: '创建时间', dataType: 'VARCHAR', width: '150px', display: {
@@ -211,7 +185,7 @@ function buildListGrid() {
           { text: '作废',   actionRef: 'abort',   variant: 'negative', visible: is('draft') },
           { text: '通过',   actionRef: 'approve', variant: 'emphasized', visible: is('approving') },
           { text: '驳回',   actionRef: 'reject',  variant: 'negative', visible: is('approving') },
-          { text: '修改重提', actionRef: 'clone',  visible: is('rejected') },
+          { text: '修改重提', actionRef: 'resubmit',  visible: is('rejected') },
         ] } }),
     ])
     grid.setColumnModel(cm)
@@ -254,7 +228,7 @@ async function doAction(act, id) {
       if (ok === false) return
       await apiPost('/api/mdm/change-requests/reject', { crId, reason: '待办台驳回' }, state.dbId)
       M.cmxInfo?.(`CR-${crId} 已驳回`)
-    } else if (act === 'clone') {
+    } else if (act === 'resubmit') {
       // 修改重提：驳回后在「原单据」上直接编辑重新提交——后端 submit 支持 rejected→approving，
       // 无需 clone 新 CR。打开原单据 view 页并 autoEdit 直接进编辑态；cr-form 按 rejected 状态显示编辑/提交。
       openTab(currentHost, `单据·CR-${crId}`, 'portal.mdm.cr-form',
@@ -305,7 +279,6 @@ async function load() {
 function bind(root) {
   rootEl = root
   const reload = async () => { await load(); refresh() }
-  root.querySelector('#crumbList')?.addEventListener('click', () => { state.view = 'list'; state.detail = null; refresh() })
   root.querySelectorAll('cmx-kpi-card[clickable]').forEach((k) => k.addEventListener('cmx-kpi-click', () => {
     state.filter = k.dataset.k || 'all'; state.page = 1; reload()
   }))

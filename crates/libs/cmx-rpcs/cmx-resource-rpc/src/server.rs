@@ -5,14 +5,14 @@
 
 use std::sync::Arc;
 
-use cmx_rpc_gen::cmx::cmx_resource_data_service::cmx_resource_data_service::cmx as resource_data_proto;
+use cmx_rpc_gen::resource_data_proto;
 use cmx_traits::resource::{
     ResourceDataCategory, ResourceDataCleanupRequest, ResourceDataImportRequest,
     ResourceDataImporter,
 };
 use tracing::instrument;
 
-use super::auth_layer::{AuthVerifier, VerifiedAuth, verify_request};
+use cmx_rpc::{AuthVerifier, VerifiedAuth, verify_request};
 
 /// [`resource_data_proto::CmxResourceDataService`] 的 gRPC 服务端实现。
 #[derive(Clone)]
@@ -165,7 +165,7 @@ impl resource_data_proto::CmxResourceDataService for CmxResourceDataServerImpl {
                         }
                         Err(e) => {
                             tracing::error!(
-                                target: "cmx_rpc",
+                                target = "cmx_rpc",
                                 error = %e,
                                 category = %req.category,
                                 domain = %req.domain_code,
@@ -265,7 +265,7 @@ impl resource_data_proto::CmxResourceDataService for CmxResourceDataServerImpl {
                         }
                         Err(e) => {
                             tracing::error!(
-                                target: "cmx_rpc",
+                                target = "cmx_rpc",
                                 error = %e,
                                 category = %req.category,
                                 domain = %req.domain_code,
@@ -366,7 +366,7 @@ impl resource_data_proto::CmxResourceDataService for CmxResourceDataServerImpl {
                         }
                         Err(e) => {
                             tracing::error!(
-                                target: "cmx_rpc",
+                                target = "cmx_rpc",
                                 error = %e,
                                 category = %req.category,
                                 module = %req.module_code,

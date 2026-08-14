@@ -1,19 +1,25 @@
 //! gRPC 服务领域的 Bundle 模式，实现真正的开闭原则（OCP）。
 //!
-//! 每个领域封装为一个 [`RpcServiceBundle`]，负责：
+//! 每个领域封装为一个 [`RpcServiceBundle`]（皮肤 crate 提供，如
+//! `cmx-orchestrator-rpc::OrchestratorBundle`），负责：
 //! - 初始化该领域的客户端并注册到领域全局单例。
 //! - 构建该领域的服务端注册闭包。
 //!
-//! 新增 gRPC 服务 = 新增一个领域模块（含 Bundle 实现）+ 在 [`default_bundles()`] 加一行。
-//! `factory` / `global` / `server_runner` 零改动。
+//! 新增 gRPC 服务 = 在 `cmx-rpc-gen` 加 proto + 新建一个 `cmx-rpcs/*` 皮肤 crate
+//! （含 Bundle 实现）+ 组装层（cmx-platform-app）Bundle 列表加一行。
+//! `factory` / `server_runner` 零改动。
 //!
 //! # `ServerDeps` 耦合代价说明
 //!
-//! [`ServerDeps`] 含 3 个字段，每个 Bundle 都收到全量，但 `OrchestratorBundle` 忽略
-//! `data_importer`、`ResourceDataBundle` 忽略前 2 个。这是为换取 OCP
-//! （`factory`/`server_runner` 零改动）付出的合理耦合代价。当前仅 2 领域，引入
-//! `type Deps` 关联类型属过度设计，本期不做；若未来 Bundle 数量增长，可再考虑每 Bundle
-//! 自带关联类型。
+//! [`ServerDeps`] 含 4 个字段，每个 Bundle 都收到全量，但各领域按需取用、互不感知
+//! （如 orchestrator 领域忽略 `data_importer`、resource_data 领域忽略前 2 个）。
+//! 这是为换取 OCP（`factory`/`server_runner` 零改动）付出的合理耦合代价。当前仅
+//! 2 领域，引入 `type Deps` 关联类型属过度设计（且与 `Box<dyn RpcServiceBundle>`
+//! 对象化不兼容），本期不做。
+//!
+//! **演进路线**：当皮肤数量增长（≥5 域）且新增字段频繁时，可考虑把 `ServerDeps`
+//! 改为按类型取用的容器（如 `HashMap<TypeId, Arc<dyn Any>>` + Bundle 内 downcast），
+//! 使"新增一个领域的依赖"不再改动本文件、不触发其他皮肤 crate 重编。
 
 use std::sync::Arc;
 
@@ -24,7 +30,7 @@ pub struct ServerDeps {
     /// 服务编排调用器（orchestrator 领域使用）。
     pub service_invoker: Arc<dyn cmx_traits::service::ServiceInvoker>,
     /// 插件函数调用器（orchestrator 领域使用；由组装层注入 cmx-biz 的实现，
-    /// 封装 RuntimeInvoker + PluginQuery 完整调用链，使 cmx-rpc 不直接依赖 cmx-biz）。
+    /// 封装 RuntimeInvoker + PluginQuery 完整调用链，使皮肤 crate 不直接依赖 cmx-biz）。
     pub function_invoker: Arc<dyn cmx_traits::function_invoker::FunctionInvoker>,
     /// 资源数据导入器（resource_data 领域使用，可选）。
     pub data_importer: Option<Arc<dyn cmx_traits::resource::ResourceDataImporter>>,
@@ -65,12 +71,4 @@ pub trait RpcServiceBundle: Send + Sync {
     fn init_client(&self, infra: Arc<GrpcInfrastructure>);
     /// 构建服务端注册闭包。
     fn build_server(&self, deps: &ServerDeps) -> ServerRegistration;
-}
-
-/// 内置 Bundle 清单（新增领域时此处加一行）。
-pub fn default_bundles() -> Vec<Box<dyn RpcServiceBundle>> {
-    vec![
-        Box::new(crate::client::orchestrator::OrchestratorBundle),
-        Box::new(crate::client::resource_data::ResourceDataBundle),
-    ]
 }

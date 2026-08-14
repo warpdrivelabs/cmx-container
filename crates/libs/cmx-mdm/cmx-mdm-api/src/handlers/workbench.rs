@@ -19,15 +19,19 @@ use cmx_api_core::{ApiResp, Result};
 use cmx_database_pg::get_default_pg_db_manager;
 use cmx_mdm_store_pg as store;
 
-/// 工作台汇总（两个评审载体的各状态计数）。
+/// 工作台汇总计数。
 ///
-/// query: `?dictCode=`（可选，缺省全表聚合）。返回：
-/// ```json
-/// { "dictCode":"supplier",
-///   "findings":{"pending":12,"resolved":5,"ignored":2},
-///   "merges":{"pending":0,"reviewed":8,"rejected":1,"unmerged":0} }
-/// ```
-/// 未出现的 status 前端默认 0。
+/// `GET /api/mdm/workbench/summary` —— 一次请求返回 `md_match_scan`（发现项）+
+/// `md_merge_record`（合并历史）各 status 计数，供前端 zone 展示。query `?dictCode=` 可选（缺省全表聚合）。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/workbench/summary",
+    params(WorkbenchSummaryQuery),
+    responses(
+        (status = 200, description = "{ dictCode, findings{pending,resolved,ignored}, merges{pending,reviewed,rejected,unmerged} }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_workbench_summary(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -46,7 +50,8 @@ pub async fn mdm_workbench_summary(
 }
 
 /// summary 查询参数。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct WorkbenchSummaryQuery {
     /// 字典码（可选，限定聚合域；缺省全表）。
     #[serde(default, alias = "dictCode")]

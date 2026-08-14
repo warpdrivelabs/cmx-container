@@ -8,7 +8,7 @@
 //!
 //! # 重试策略
 //!
-//! `import_resource_data` / `cleanup_resource_data` **不走 [`super::retry::with_retry`]**：
+//! `import_resource_data` / `cleanup_resource_data` **不走 [`cmx_rpc::with_retry`]**：
 //! 传输 ZIP 二进制大包（默认上限 4MB），重试需保证下游导入幂等。当前服务端按 upsert
 //! 语义实现，理论上幂等，但：(1) 大包重试放大带宽与下游负载；(2) 4MB 上限下网络抖动
 //! 概率高，盲目重试易雪崩；(3) import 由插件安装流程驱动，失败可由上层重试整个安装任务。
@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
-use cmx_rpc_gen::cmx::cmx_resource_data_service::cmx_resource_data_service::cmx as resource_data_proto;
+use cmx_rpc_gen::resource_data_proto;
 use cmx_traits::resource::{
     ResourceDataCleanupRequest, ResourceDataImportRequest, ResourceDataImportResult,
     ResourceDataListResult,
@@ -27,8 +27,8 @@ use cmx_traits::rpc::{ResourceDataClient, RpcError};
 use tokio::sync::RwLock;
 use tracing::instrument;
 
-use super::infra::GrpcInfrastructure;
-use crate::bundle::{RpcServiceBundle, ServerDeps, ServerRegistration};
+use cmx_rpc::bundle::{RpcServiceBundle, ServerDeps, ServerRegistration};
+use cmx_rpc::GrpcInfrastructure;
 
 /// 将 volo_grpc::Status 结构化映射为 RpcError(保留认证/权限类别,避免全部坍缩为 RpcCallFailed)。
 ///
@@ -51,11 +51,11 @@ pub(crate) fn set_client(c: Arc<dyn ResourceDataClient>) -> Result<(), ()> {
     RESOURCE_DATA_CLIENT.set(c).map_err(|_| ())
 }
 
-/// 获取资源数据管理 RPC 客户端（须先通过 [`crate::factory::init_rpc_clients`] 初始化）。
+/// 获取资源数据管理 RPC 客户端（须先通过 [`cmx_rpc::init_rpc_clients`] 初始化）。
 ///
 /// # Panics
 ///
-/// 未初始化时 panic。先用 [`crate::global::GlobalRpcClient::is_initialized`] 守卫。
+/// 未初始化时 panic。先用 [`cmx_rpc::GlobalRpcClient::is_initialized`] 守卫。
 pub fn resource_data_client() -> &'static Arc<dyn ResourceDataClient> {
     RESOURCE_DATA_CLIENT
         .get()
@@ -134,7 +134,7 @@ impl ResourceDataClient for ResourceDataGrpcClient {
         };
         let mut grpc_req = volo_grpc::Request::new(proto_req);
         if let Some(key) = self.infra.outbound_service_key() {
-            super::auth_outbound::apply_auth_metadata(&mut grpc_req, key);
+            cmx_rpc::apply_auth_metadata(&mut grpc_req, key);
         }
 
         match client.import_resource_data(grpc_req).await {
@@ -191,7 +191,7 @@ impl ResourceDataClient for ResourceDataGrpcClient {
         };
         let mut grpc_req = volo_grpc::Request::new(proto_req);
         if let Some(key) = self.infra.outbound_service_key() {
-            super::auth_outbound::apply_auth_metadata(&mut grpc_req, key);
+            cmx_rpc::apply_auth_metadata(&mut grpc_req, key);
         }
 
         match client.cleanup_resource_data(grpc_req).await {
@@ -244,7 +244,7 @@ impl ResourceDataClient for ResourceDataGrpcClient {
         };
         let mut grpc_req = volo_grpc::Request::new(proto_req);
         if let Some(key) = self.infra.outbound_service_key() {
-            super::auth_outbound::apply_auth_metadata(&mut grpc_req, key);
+            cmx_rpc::apply_auth_metadata(&mut grpc_req, key);
         }
 
         match client.list_resource_data(grpc_req).await {
@@ -297,8 +297,7 @@ impl RpcServiceBundle for ResourceDataBundle {
         let data_importer = deps.data_importer.clone();
         let auth_verifier = deps.auth_verifier.clone();
         ServerRegistration::new(move |server| {
-            let mut impl_ =
-                crate::server::resource_data::CmxResourceDataServerImpl::new(data_importer);
+            let mut impl_ = crate::server::CmxResourceDataServerImpl::new(data_importer);
             if let Some(verifier) = auth_verifier.clone() {
                 impl_ = impl_.with_auth_verifier(verifier);
             }

@@ -21,9 +21,18 @@ use cmx_mdm_model::activation::ActivationConfig;
 use cmx_mdm_model::codegen::RandomCodeGenerator;
 use cmx_mdm_store_pg as store;
 
-/// 激活映射列表（配置器 UI 用）。
+/// 列激活映射配置。
 ///
-/// 按 `sourceDocType` / `crType` 可选过滤。
+/// `GET /api/mdm/activations` —— 配置器 UI 用，按 `sourceDocType` / `crType` 可选过滤，返回全部激活映射。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/activations",
+    params(ActivationListQuery),
+    responses(
+        (status = 200, description = "激活映射列表数组", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_activations_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -42,9 +51,29 @@ pub async fn mdm_activations_list(
     Ok(Json(ApiResp::ok(json!(list))))
 }
 
-/// 保存激活映射（upsert by activation_code）。配置器 UI 用。
+/// 保存激活映射。
+///
+/// `POST /api/mdm/activations` —— upsert（按 `activationCode` 唯一），配置器 UI 用。body 为
+/// `ActivationConfig` JSON（顶层 snake_case，明细 `lineMappings` 内层 camelCase）：
+///
+/// ```json
+/// { "activation_code": "supplier_create", "source_doc_type": "PO",
+///   "cr_type": "create", "target_dict": "supplier", "target_table": "cm_supplier",
+///   "header_mapping": { "code": "code", "name": "name" },
+///   "line_mappings": [{ "lineType": "bank", "targetDict": "bank_account", "fields": {} }],
+///   "code_rule_code": "SUP_SEQ" }
+/// ```
 ///
 /// 返回 `{ activationCode }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/activations",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ activationCode }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_activations_save(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -57,9 +86,25 @@ pub async fn mdm_activations_save(
     Ok(Json(ApiResp::ok(json!({ "activationCode": code }))))
 }
 
-/// 删除激活映射（硬删除）。POST body `{ activationCode }`。
+/// 删除激活映射。
 ///
-/// 对应路由 `POST /mdm/activations/delete`（禁用 Path Variable，承接 AGENTS.md §四 第 5 条）。
+/// `POST /api/mdm/activations/delete` —— 硬删除（禁用 Path Variable，承接 AGENTS.md §四 第 5 条）。
+/// body：
+///
+/// ```json
+/// { "activationCode": "supplier_create" }
+/// ```
+///
+/// 返回 `{ activationCode, affected }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/activations/delete",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ activationCode, affected }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_activations_delete(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -82,9 +127,23 @@ pub struct ActivationDeleteBody {
     pub activation_code: String,
 }
 
-/// 手动触发激活（审批型 CR 兜底入口 / 内部 CR 直接调）。
+/// 手动触发激活。
 ///
-/// body `{ crId }`，返回激活后的主数据记录 id。
+/// `POST /api/mdm/change-requests/activate` —— 审批型 CR 兜底入口 / 内部 CR 直接调激活器。
+/// body `{ crId }`，返回激活后的主数据记录 id：
+///
+/// ```json
+/// { "crId": 123 }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/mdm/change-requests/activate",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ recordId }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_activate(
     State(_s): State<CmxAppState>,
     svr_ctx: CmxSvrContext,
@@ -100,7 +159,8 @@ pub async fn mdm_cr_activate(
 }
 
 /// 激活映射列表查询参数。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct ActivationListQuery {
     /// 源单据类型（可选过滤）。
     #[serde(default, alias = "sourceDocType")]

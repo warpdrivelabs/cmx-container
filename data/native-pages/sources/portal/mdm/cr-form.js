@@ -67,6 +67,10 @@ function showToast(message, tone = 'ok', duration = 3000) {
 
 // 头表分组渲染样式（前端配置，不存后端）：card=卡片分区 / bar=色条+下分隔线。改此常量切换。
 const HEAD_GROUP_STYLE = 'bar'
+// 单据状态中文映射（doc_status 显示用；存储仍为英文枚举，由状态机管理）
+const STATUS_LABEL = { draft: '草稿', approving: '审批中', approved: '已通过', activated: '已激活', rejected: '已驳回', aborted: '已作废' }
+// 系统管理头字段：状态机/铸号管理，前端只读展示、不参与收集
+const SYS_HEAD_FIELDS = new Set(['doc_status', 'doc_no'])
 // step：create 模式初始 1（先查重），update 模式初始 2（改已有记录，跳过查重）
 const state = {
   dbId: '', coord: null,
@@ -518,7 +522,13 @@ function buildKeyForm() {
   if (C.CmxColumnModel) {
     const cm = new C.CmxColumnModel({ datasetId: 'crKey' })
     const col = state.headCols.find((c) => c.id === state.nameFieldKey)
-    cm.setMembers(col ? [col] : [])
+    // step1 查重输入必须可编辑：克隆列实例（保留原型），按 _origEditMode 恢复，不污染 headCols
+    let member = null
+    if (col) {
+      member = Object.assign(Object.create(Object.getPrototypeOf(col)), col, { edit: { ...(col.edit || {}) } })
+      if (col._origEditMode !== 'readonly' && member.edit.mode === 'readonly') delete member.edit.mode
+    }
+    cm.setMembers(member ? [member] : [])
     form.setColumnModel(cm)
   }
   form.setLayout?.('S1 M1 L2 XL2')
@@ -536,12 +546,15 @@ function buildHeadForms() {
   const isView = state.mode === 'view' && !state.editing
   // 列只读处理：基于 _origEditMode 重置，避免 view↔editing 切换时 readonly 残留 / 系统列被误解锁。
   // 系统列（_origEditMode=readonly）恒只读；view 全只读；create 步骤2 nameFieldKey 只读回显。
+  // 用副本计算只读，不写回共享的 state.headCols：buildKeyForm 复用 nameFieldKey 列，
+  // 若在此改 c.edit.mode 会污染 headCols，导致回 step1 输入框只读、view↔editing 切换残留只读。
   const cols = state.headCols.map((c) => {
-    const forceRo = c._origEditMode === 'readonly' || isView || (!isEdit && c.id === state.nameFieldKey)
-    c.edit = { ...(c.edit || {}) }
-    if (forceRo) c.edit.mode = 'readonly'
-    else if (c.edit.mode === 'readonly') delete c.edit.mode
-    return c
+    const forceRo = c._origEditMode === 'readonly' || isView || (!isEdit && c.id === state.nameFieldKey) || SYS_HEAD_FIELDS.has(c.id)
+    // 克隆列实例（保留 CmxColumn 原型 → toDescriptor 可用），改副本 edit.mode 不污染共享 headCols
+    const cc = Object.assign(Object.create(Object.getPrototypeOf(c)), c, { edit: { ...(c.edit || {}) } })
+    if (forceRo) cc.edit.mode = 'readonly'
+    else if (cc.edit.mode === 'readonly') delete cc.edit.mode
+    return cc
   })
   // 按 header_groups 包成 CmxColumnGroup；未归组字段：有分组配置时包「其他」组，无分组配置时散列
   const used = new Set()
@@ -577,7 +590,13 @@ function buildHeadForms() {
 //   view：从 CR 头回填（subject_name 顶层 + payload[srcField] 下沉）
 //   update：从 target 字典记录回填（按 tgtCol 取，兼容扁平/payload）
 //   create 步骤2：name 从步骤1 缓存的 keyName 回显
+//   doc_status：始终显示中文（系统管理，不参与收集）
 function headInitialValue(srcField) {
+  // 单据状态：显示中文（view 取实际状态，create/update 新建为 draft）
+  if (srcField === 'doc_status') {
+    const raw = state.mode === 'view' ? (state.crHead?.doc_status || 'draft') : 'draft'
+    return STATUS_LABEL[raw] || raw
+  }
   const mode = state.mode
   const entry = state.headMap.find(([s]) => s === srcField)
   const tgtCol = entry ? entry[1] : srcField
@@ -590,11 +609,19 @@ function headInitialValue(srcField) {
     return p[srcField] != null ? String(p[srcField]) : ''
   }
   if (mode === 'update') {
+    // 单据字段（目标列留空）：update 本质是新建变更单，doc_date 回填今天，其余空（remark 用户填，doc_no 铸号）
+    if (tgtCol == null || tgtCol === '') {
+      if (srcField === 'doc_date') return todayStr()
+      return ''
+    }
+    // 业务字段：从 target（cm_* 主数据）回填，兼容扁平/payload
     const t = state.target || {}
     const v = t[tgtCol] != null ? t[tgtCol] : (t.payload && t.payload[tgtCol]) != null ? t.payload[tgtCol] : ''
     return v != null ? String(v) : ''
   }
   if (srcField === state.nameFieldKey) return state.keyName || ''
+  // 单据字段 doc_date 默认今天（与 update 一致；base 同样以今天占位）
+  if (srcField === 'doc_date') return todayStr()
   return ''
 }
 
@@ -663,18 +690,19 @@ function lineSeedRows(lm) {
     if (!crLines.length) return []
     return crLines.map((l) => {
       lineSeq += 1
-      const row = { id: l.id || `cr_${Date.now()}_${lineSeq}`, _savedId: l.id }
+      const row = { id: l.id || `cr_${Date.now()}_${lineSeq}`, _savedId: l.id, lineTargetId: l.line_target_id ?? null }
       const p = (l.line_payload && typeof l.line_payload === 'object') ? l.line_payload : {}
       for (const [src] of lm.map) row[src] = p[src] != null ? String(p[src]) : ''
       return row
     })
   }
-  // update 变更：从字典加载的明细行预填（目标列 tgt → 源字段 src）。合成 id 无 _savedId → 保存走 insert
-  // （CR 单据统一新增；写回字典时由后端激活器按头 update + 明细先删后插处理）。
+  // update 变更：从字典加载的明细行预填（目标列 tgt → 源字段 src），并保留 cm_* 明细 id 到
+  // lineTargetId（激活器 diff 用：有 id=update，无 id=insert，cm_* 有但 CR 没=软删）。
+  // 合成 id 无 _savedId → 保存走 insert（CR 单据统一新增 cv_mdm_apply_line，带 line_target_id）。
   if (state.mode === 'update') {
     const rows = ((state.targetLines || {})[lm.lineType] || []).map((r, i) => {
       lineSeq += 1
-      const row = { id: `tg_${state.targetId}_${lm.lineType}_${i}` }
+      const row = { id: `tg_${state.targetId}_${lm.lineType}_${i}`, lineTargetId: r.id }
       for (const [src, tgt] of lm.map) row[src] = r[tgt] != null ? String(r[tgt]) : ''
       return row
     })
@@ -728,23 +756,34 @@ function collectHeadData() {
   return merged
 }
 
-// 构造头表 fields。nameFieldKey 值 → subject_name；其余 header_mapping key → payload。
+// 构造头表 fields。nameFieldKey 值 → subject_name；
+// header_mapping 中 value=null 的「单据字段」(doc_no/remark/doc_date/doc_status 等) → cv_mdm_apply 顶层列；
+// value 非空的「业务字段」→ payload。
 function buildHead() {
   const data = collectHeadData()
   const isEdit = state.mode === 'update'
   const a = state.activation
   const name = (data[state.nameFieldKey] != null ? String(data[state.nameFieldKey]) : '').trim()
   const payload = {}
-  for (const [src] of state.headMap) {
-    if (src === state.nameFieldKey) continue
-    payload[src] = data[src] != null ? data[src] : ''
-  }
   const base = { line_no: 1, doc_status: 'draft', doc_type_id: 1, doc_date: todayStr(), entity_id: 1 }
+  for (const [src, tgt] of state.headMap) {
+    if (src === state.nameFieldKey) continue
+    if (SYS_HEAD_FIELDS.has(src)) continue  // 系统字段（状态/单据号）不收集，由状态机/铸号管理
+    const v = data[src] != null ? data[src] : ''
+    if (tgt == null || tgt === '') {
+      // 单据字段：写 cv_mdm_apply 顶层列（有值才写，避免覆盖 base 默认）
+      if (v !== '' && v != null) base[src] = v
+    } else {
+      // 业务字段：进 payload
+      payload[src] = v
+    }
+  }
   if (isEdit) {
     const t = state.target || {}
     const deltas = {}
     for (const [src, tgt] of state.headMap) {
       if (src === state.nameFieldKey) continue
+      if (tgt == null || tgt === '') continue  // 单据字段不进 field_deltas（主数据变更追踪只记业务字段）
       const oldV = (t[tgt] != null ? t[tgt] : (t.payload && t.payload[tgt]) != null ? t.payload[tgt] : '')
       const cur = (data[src] != null ? data[src] : '')
       if (String(cur) !== String(oldV)) deltas[src] = { old: oldV, new: cur }
@@ -791,10 +830,11 @@ function collectLines() {
       for (const [src] of lm.map) payload[src] = r[src] != null ? r[src] : ''
       const upperId = state.savedCrId != null ? state.savedCrId : HEAD_TID
       if (r._savedId != null) {
-        updated.push({ id: r._savedId, fields: { line_no: i + 1, line_payload: payload } })
+        updated.push({ id: r._savedId, fields: { line_no: i + 1, line_payload: payload, line_target_id: r.lineTargetId ?? null } })
       } else {
         inserted.push({ id: r.id, upper_id: upperId, line_no: i + 1, fields: {
           line_type: lm.lineType, line_action: 'insert', line_payload: payload,
+          line_target_id: r.lineTargetId ?? null,
         } })
       }
     })
@@ -869,6 +909,9 @@ function doSave(submit) {
       // 触发 submit 状态校验失败 → cmxError 模态遮罩锁页面。保存草稿保持可编辑（可继续修改）。
       if (submit) {
         state.mode = 'view'
+        // 同步 crId：create/update 新建保存并提交后切 view 详情页，doCrAction（提交/通过/驳回/作废）
+        // 读 state.crId；不同步则 !crId 静默 return → 详情页操作无反应（无弹窗/无接口/无报错）。
+        state.crId = crId
         try {
           const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
           state.crHead = (detail && detail.head) || {}
@@ -899,7 +942,7 @@ const CR_ACTION_CONFIRM = {
 async function doCrAction(act, confirmFirst = false, needReason = false) {
   const C = cmx()
   const crId = Number(state.crId)
-  if (!crId) return
+  if (!crId) { C.cmxWarn?.('单据 id 缺失，无法操作，请重新打开该单据'); return }
   try {
     if (confirmFirst) {
       const meta = CR_ACTION_CONFIRM[act]

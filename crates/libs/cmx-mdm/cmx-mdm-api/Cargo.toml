@@ -23,6 +23,10 @@ cmx-biz = { workspace = true }
 cmx-database-pg = { workspace = true }
 # 内部依赖 - DCT 字典解析（dict_meta 取表名/列清单，替代 merge handler 硬编码）
 cmx-dct-store-pg = { workspace = true }
+# 内部依赖 - API 通用类型（ApiResp<T>：响应信封，OpenApi schema 引用）
+cmx-api-types = { workspace = true }
+# OpenAPI 文档生成（handler #[utoipa::path] + Query 结构 IntoParams + MdmApiDoc）
+utoipa = { workspace = true }
 
 # Web 框架（handler 提取器 + Router）
 axum = { workspace = true }

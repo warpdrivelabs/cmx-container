@@ -296,13 +296,6 @@
       "relPath": "portal/mdm/supplier-detail.js"
     },
     {
-      "id": "portal.mdm.cr-detail",
-      "name": "MDM 变更申请详情",
-      "details": "并列标签页：变更申请只读详情（头+明细）+ 关联流程预留区，经 context 读 crId。",
-      "sourceType": "js",
-      "relPath": "portal/mdm/cr-detail.js"
-    },
-    {
       "id": "portal.mdm.health",
       "name": "MDM 健康检查",
       "details": "验证 MDM 后端端点可用性（health/activations/change-requests/merge-requests）+ 主数据治理概览 KPI。",

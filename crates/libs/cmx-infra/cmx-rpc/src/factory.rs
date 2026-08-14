@@ -1,14 +1,15 @@
 //! RPC 客户端工厂。
 //!
-//! 迭代 [`crate::bundle::default_bundles`] 初始化各领域客户端，注册到领域全局单例。
-//! 工厂本身不关心具体领域，新增领域零改动（OCP）。
+//! 迭代**调用方传入**的领域 Bundle 列表初始化各领域客户端，注册到领域全局单例。
+//! 工厂本身不关心具体领域，新增领域零改动（OCP）——"主应用提供哪些 RPC 服务"
+//! 由组装层（cmx-platform-app）显式收集的皮肤 crate Bundle 列表决定。
 
 use std::sync::Arc;
 
 use cmx_registry_config::registry::{ServiceInstanceCache, ServiceRegistry};
 use cmx_traits::rpc::RpcError;
 
-use crate::bundle::{self, RpcServiceBundle};
+use crate::bundle::RpcServiceBundle;
 use crate::client::infra::GrpcInfrastructure;
 use crate::config::RpcConfig;
 use crate::global::{GlobalRpcClient, GlobalRpcClientAlreadySetError};
@@ -24,15 +25,18 @@ pub enum ClientInitError {
     AlreadySet(#[from] GlobalRpcClientAlreadySetError),
 }
 
-/// 初始化全部内置领域客户端。
+/// 初始化调用方传入的领域客户端。
 ///
-/// 返回初始化完成的 Bundle 列表，调用方应将其传给
+/// 返回传入的 Bundle 列表（已完成客户端初始化），调用方应将其传给
 /// [`crate::server_runner::start_grpc_server`] 以注册服务端。
 ///
 /// # Arguments
 ///
 /// - `outbound_service_key`：本服务对外服务级凭证（`cmx_sk_xxx`），由客户端出站时
 ///   注入到 gRPC metadata。`None` 表示未配置（兼容 loopback/单体场景）。
+/// - `bundles`：组装层显式收集的领域 Bundle 列表（由皮肤 crate 提供，如
+///   `cmx-orchestrator-rpc::OrchestratorBundle`）——**主应用提供哪些 RPC 服务的
+///   唯一决定点**。
 ///
 /// # Errors
 ///
@@ -43,6 +47,7 @@ pub fn init_rpc_clients(
     cache: Arc<ServiceInstanceCache>,
     registry: Arc<dyn ServiceRegistry>,
     outbound_service_key: Option<String>,
+    bundles: Vec<Box<dyn RpcServiceBundle>>,
 ) -> Result<Vec<Box<dyn RpcServiceBundle>>, ClientInitError> {
     if config.protocol != "grpc" {
         return Err(ClientInitError::Rpc(RpcError::UnsupportedProtocol(
@@ -62,7 +67,6 @@ pub fn init_rpc_clients(
         GrpcInfrastructure::new(cache, config.grpc.clone(), registry)
             .with_outbound_service_key(outbound_service_key),
     );
-    let bundles = bundle::default_bundles();
     for b in &bundles {
         b.init_client(infra.clone());
     }

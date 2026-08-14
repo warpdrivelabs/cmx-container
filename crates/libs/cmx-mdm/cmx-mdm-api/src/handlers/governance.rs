@@ -22,7 +22,18 @@ use cmx_mdm_store_pg as store;
 
 use super::{default_page, default_page_size};
 
-/// 变更历史 / 版本留痕。GET `?dictCode=&recordId=&page=&pageSize=`。
+/// 列审计记录。
+///
+/// `GET /api/mdm/audit` —— 变更历史 / 版本留痕，按 `dictCode` / `recordId` 可选过滤 + 分页。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/audit",
+    params(GovListQuery),
+    responses(
+        (status = 200, description = "{ list, total, page, pageSize }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_audit_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -45,7 +56,18 @@ pub async fn mdm_audit_list(
     )))
 }
 
-/// 事件查询（delta）。GET `?dictCode=&since=&page=&pageSize=`。
+/// 列变更事件。
+///
+/// `GET /api/mdm/events` —— 事件 delta 查询，`since` 为序列起点（增量拉取）+ 分页。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/events",
+    params(GovListQuery),
+    responses(
+        (status = 200, description = "{ list, total, page, pageSize }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_events_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -68,7 +90,18 @@ pub async fn mdm_events_list(
     )))
 }
 
-/// 订阅配置列表。GET `?page=&pageSize=`。
+/// 列订阅配置。
+///
+/// `GET /api/mdm/subscriptions` —— 订阅配置分页列表。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/subscriptions",
+    params(GovListQuery),
+    responses(
+        (status = 200, description = "{ list, total, page, pageSize }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_subscriptions_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -83,7 +116,25 @@ pub async fn mdm_subscriptions_list(
     )))
 }
 
-/// 订阅配置保存。POST body `{ id?, target_sys, dict_code, channel, active, filter?, field_map? }`。
+/// 保存订阅配置。
+///
+/// `POST /api/mdm/subscriptions` —— upsert 订阅（id 缺省新建，非零更新）。body：
+///
+/// ```json
+/// { "id": 1, "target_sys": "wms", "dict_code": "supplier",
+///   "channel": "webhook", "active": true, "filter": {}, "field_map": {} }
+/// ```
+///
+/// 返回 `{ id }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/subscriptions",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ id }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_subscriptions_save(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -96,7 +147,24 @@ pub async fn mdm_subscriptions_save(
     Ok(Json(ApiResp::ok(json!({ "id": id }))))
 }
 
-/// 发布。POST body `{ dict }`（M5 分发前置；当前写一条 publish 事件占位）。
+/// 发布主数据。
+///
+/// `POST /api/mdm/publish` —— M5 分发前置（当前写一条 publish 事件占位）。body：
+///
+/// ```json
+/// { "dict": "supplier" }
+/// ```
+///
+/// 返回 `{ dict, published: true }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/publish",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ dict, published }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_publish(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -112,7 +180,8 @@ pub async fn mdm_publish(
 }
 
 /// 审计 / 事件 / 订阅 列表查询（分页，无 path variable）。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct GovListQuery {
     /// 字典代码（可选过滤）。
     #[serde(default, alias = "dictCode")]

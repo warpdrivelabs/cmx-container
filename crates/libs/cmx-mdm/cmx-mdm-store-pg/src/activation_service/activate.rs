@@ -202,10 +202,47 @@ async fn activate_inner(
         }
     };
 
-    // 4. 明细处理（plan_lines 已过滤 delete 行，这里只 insert）
-    let line_rows = plan_lines(&cfg, &cr_lines, record_id);
-    for (target_table, _parent_field, row) in line_rows {
-        dct_accessor::insert_header(mm, db_id, txn_id, &target_table, &row, operated_by).await?;
+    // 4. 明细处理（diff 方案：按明细类型比对 cm_* 现有 vs CR，算出 软删/update/insert）
+    let lines = plan_lines(&cfg, &cr_lines, record_id);
+    use std::collections::HashSet;
+    for lm in &cfg.line_mappings {
+        // cm_* 现有 published 明细 id（= 该主数据下、此明细类型的全部现存明细）
+        let existing: HashSet<i64> = dct_accessor::select_line_keys(
+            mm, db_id, txn_id, &lm.target_table, &lm.parent_field, record_id, &[],
+        )
+        .await?
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+        // CR 要 update 的明细（有 line_target_id 的行）
+        let cr_upd: Vec<_> = lines
+            .updates
+            .iter()
+            .filter(|(t, _, _)| t == &lm.target_table)
+            .map(|(_, id, row)| (*id, row))
+            .collect();
+        let cr_upd_ids: HashSet<i64> = cr_upd.iter().map(|(id, _)| *id).collect();
+        // ① cm_* 有但 CR 没要的 → 软删（用户删除的明细）
+        let to_delete: Vec<i64> = existing.difference(&cr_upd_ids).copied().collect();
+        if !to_delete.is_empty() {
+            dct_accessor::set_lifecycle_by_ids(
+                mm, db_id, txn_id, &lm.target_table, &to_delete, "published", "archived",
+            )
+            .await?;
+            tracing::info!(
+                target: "cmx_mdm::activation",
+                table = %lm.target_table, parent = record_id, archived = to_delete.len(),
+                "明细 diff：软删 CR 未保留的旧明细"
+            );
+        }
+        // ② CR 有 id 的 → update（id 稳定，只改业务字段）
+        for (id, row) in cr_upd {
+            dct_accessor::update_line(mm, db_id, txn_id, &lm.target_table, id, row).await?;
+        }
+    }
+    // ③ CR 无 id 的 → insert（新增明细）
+    for (target_table, _parent_field, row) in &lines.inserts {
+        dct_accessor::insert_header(mm, db_id, txn_id, target_table, row, operated_by).await?;
     }
 
     // 5. 记审计

@@ -2,7 +2,7 @@
 
 > AI 在本项目中开发时遵循的规范。
 
-> **定位**：cmx-container 是**后端公用库 + 插件平台 workspace**——本 workspace **无可执行 server bin**。可执行微服务已拆到独立仓库：门户主应用 `cmx-portal-server`（在 `cmx-portalservice/`）、流程服务 `cmx-flow-server`（在 `cmx-flowengine/`）。它们经 `path = "../cmx-container/crates/..."` 跨 workspace 反向引用本 workspace 的公用库（`cmx-core` / `cmx-database-pg` / `cmx-api` / `cmx-biz` 等）。改本仓库公用库 API / trait 时，注意这两个下游 workspace 的引用方，需分别 `cargo check` 验证。
+> **定位**：cmx-container 是**后端公用库 + 插件平台 workspace**——本 workspace **无可执行 server bin**。可执行微服务已拆到独立仓库：门户主应用 `cmx-portal-server`（在 `cmx-portalservice/`）、流程服务 `cmx-flow-server`（在 `cmx-flowengine/`）。它们经 `path = "../cmx-container/crates/..."` 跨 workspace 反向引用本 workspace 的公用库（`cmx-core` / `cmx-database-pg` / `cmx-apis/*` / `cmx-biz` 等）。改本仓库公用库 API / trait 时，注意这两个下游 workspace 的引用方，需分别 `cargo check` 验证。
 
 ---
 
@@ -269,13 +269,13 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 
 ---
 
-## 八、cmx-api Handler 规范
+## 八、cmx-*-api Handler 规范
 
 > 来源技能：`axum-handler-generator`。
 
 ### 8.1 职责边界（理想目标）
 
-**cmx-api 应保持为纯 HTTP 适配层**：Entity / BMC / Filter / Service 归业务 crate，cmx-api 通过 `use` 引用，**禁止**重新定义；跨 crate 共享 DTO 下沉到 `cmx-core/src/model/`。
+**各 `*-api` crate（cmx-apis/ 下的 cmx-common-api / cmx-biz-api / cmx-iam-api 等）应保持为纯 HTTP 适配层**：Entity / BMC / Filter / Service 归业务 crate，`*-api` 通过 `use` 引用，**禁止**重新定义；跨 crate 共享 DTO 下沉到 `cmx-core/src/model/`。
 
 > ⚠️ 现状有违规渗入（`portal/model_center`、`auth/api_key` 等 handler 内手写 SQL），列为 backlog，新增代码不得沿用。
 
@@ -290,8 +290,8 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 
 - 除 `get_by_id`（GET）外，CRUD 一律 **POST + application/json**；每个操作独立路径，**禁止**共享路径。
 - `ForCreate` 不含 `id` / `create_time` / `update_time`；`ForUpdate` 全 `Option`。
-- `declare_crud_handlers!` 宏（`cmx_api::routes::macros`）**仅限 cmx-api 内部使用**。
-- 所有 handler 模块实现 `ModuleRoutes` trait（`cmx_api::routes::traits`）。
+- `declare_crud_handlers!` 宏（`cmx_api_core::routes::macros`）**仅限各 `*-api` crate 内部使用**。
+- 所有 handler 模块实现 `ModuleRoutes` trait（`cmx_api_core::routes::traits`）。
 - 编写 handler / Service **前**先调 `axum-handler-generator`。
 
 ---
@@ -409,7 +409,40 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 
 ### 18.2 开发约束
 
-1. **新增字典功能** → 走 `/api/dct/*`（[dct.rs](file:///media/yqs/工作/rustspace/cmx/cmx-container/crates/libs/cmx-api/src/handlers/portal/dct.rs)），直读/写 PostgreSQL 表。
+1. **新增字典功能** → 走 `/api/dct/*`（[cmx-dct-api](file:///media/yqs/工作/rustspace/cmx/cmx-container/crates/libs/cmx-dct/cmx-dct-api/src/handlers.rs)），直读/写 PostgreSQL 表。
 2. **禁止参考** `cmx-model/src/dict/` 下的 `schema.rs`、`repo.rs`、`api.rs`、`write.rs` 等文件存储代码。
 3. **禁止参考** `data/dict/`、`data/fact/`、`data/form-pages/` 目录下的 JSON 文件结构。
 4. 旧代码仅做**维护兼容**使用，新增功能不得沿用其模式。
+
+---
+
+## 十九、RPC 皮肤规范（cmx-rpcs/）
+
+> 对标第八章 HTTP 层（`cmx-apis/*`）的三段式：**契约中心化 · 实现归域 · 装配显式**。
+
+### 19.1 三层职责（禁止越界）
+
+| 层 | crate | 职责 | 禁止 |
+|----|-------|------|------|
+| proto 契约 | `cmx-rpc-gen`（`idl/<域>/*.proto` + volo.yml + 别名模块） | 集中管理全部 proto、生成类型重导出 | 放任何运行时代码 |
+| 基础设施 | `cmx-infra/cmx-rpc` | Bundle trait / GrpcInfrastructure / with_retry / apply_auth_metadata / AuthVerifier / factory / server_runner / GlobalRpcClient | **禁止出现任何具体服务的 client/server impl**（皮肤已全部迁出） |
+| 皮肤 | `cmx-rpcs/cmx-<域>-rpc` | client 访问器 + server impl + Bundle（src/{lib,client,server}.rs） | **禁止依赖业务 service crate**（cmx-biz 等）——业务实现经 `ServerDeps` 由组装层注入 |
+
+### 19.2 硬约束
+
+- **主应用提供哪些 gRPC 服务 = cmx-platform-app `run_platform` 的 `rpc_bundles` 列表**——增删一行即增删服务，cmx-rpc 与皮肤 crate 零改动。裁剪部署形态（精简版/独立微服务）只改该列表。
+- 新增 gRPC 服务按 `cmx-rpc/README.md` 的 SOP 九步执行（proto → volo.yml → 别名 → 新建皮肤 → workspace 注册 → 组装层注册 → 消费方调用）。
+- 生成类型引用一律走便捷别名 `cmx_rpc_gen::orchestrator_proto::*` / `resource_data_proto::*`，不写四层深路径。
+- 消费方调用访问器前**必须**先 `cmx_rpc::GlobalRpcClient::is_initialized()` 守卫（未初始化访问器直接 panic）。
+- `with_retry` 闭包只返回原始 `volo_grpc::Status`，`into_inner`/proto 转换在重试返回后做一次。
+- 配置：`[rpc]`（enabled/protocol/grpc.port/timeout/retry/warmup_services）与 `[service_auth].outgoing_api_key`，皮肤与基础设施 crate 均不读配置（装配层 cmx-service-base 统一读）。
+
+### 19.3 关键路径
+
+```
+crates/libs/cmx-rpc-gen/                  # proto 契约（idl/orchestrator/、idl/resource/）
+crates/libs/cmx-infra/cmx-rpc/            # RPC 基础设施（纯共享设施）
+crates/libs/cmx-rpcs/cmx-orchestrator-rpc/  # 编排皮肤（OrchestratorBundle + orchestrator_client()）
+crates/libs/cmx-rpcs/cmx-resource-rpc/      # 资源导入皮肤（ResourceDataBundle + resource_data_client()）
+cmx-platform-app/src/lib.rs               # ★ rpc_bundles 显式装配点
+```

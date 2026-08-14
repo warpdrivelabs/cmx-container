@@ -6,12 +6,12 @@
 use std::sync::Arc;
 
 use cmx_core::model::service::SVRContext;
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
+use cmx_rpc_gen::orchestrator_proto::*;
 use cmx_traits::function_invoker::FunctionInvoker;
 use cmx_traits::service::ServiceInvoker;
 use tracing::instrument;
 
-use super::auth_layer::{AuthVerifier, VerifiedAuth, verify_request};
+use cmx_rpc::{AuthVerifier, VerifiedAuth, verify_request};
 
 /// [`CmxServiceOrchestrator`] 的 gRPC 服务端实现。
 #[derive(Clone)]
@@ -82,13 +82,12 @@ impl CmxServiceOrchestrator for CmxOrchestratorServerImpl {
                 request_id.unwrap_or_default(),
                 None,
                 async {
-                    let input: serde_json::Value =
-                        serde_json::from_str(&req.input).map_err(|e| {
-                            volo_grpc::Status::new(
-                                volo_grpc::Code::InvalidArgument,
-                                format!("输入 JSON 解析失败: {e}"),
-                            )
-                        })?;
+                    let input: serde_json::Value = serde_json::from_str(&req.input).map_err(|e| {
+                        volo_grpc::Status::new(
+                            volo_grpc::Code::InvalidArgument,
+                            format!("输入 JSON 解析失败: {e}"),
+                        )
+                    })?;
 
                     let options = cmx_traits::service::ServiceInvokeOptions {
                         include_steps: req.include_steps,
@@ -128,7 +127,7 @@ impl CmxServiceOrchestrator for CmxOrchestratorServerImpl {
                         }
                         Err(e) => {
                             tracing::error!(
-                                target: "cmx_rpc",
+                                target = "cmx_rpc",
                                 error = %e,
                                 "服务编排执行失败"
                             );
@@ -222,7 +221,7 @@ impl CmxServiceOrchestrator for CmxOrchestratorServerImpl {
                         }
                         Err(e) => {
                             tracing::error!(
-                                target: "cmx_rpc",
+                                target = "cmx_rpc",
                                 plugin_id = %plugin_id,
                                 function_name = %function_name,
                                 error = %e,

@@ -10,7 +10,7 @@ use cmx_utils::next_pk_id;
 use serde_json::{Map, Value};
 
 use crate::error::{api_err, api_err_db};
-use crate::sql_builder::{build_insert_sql, build_update_sql};
+use crate::sql_builder::{build_insert_sql, build_update_line_sql, build_update_sql};
 
 /// 新建主数据行（INSERT，头表/明细表共用）。返回新 id。
 ///
@@ -27,21 +27,22 @@ pub async fn insert_header(
 ) -> Result<i64, cmx_api_types::Error> {
     validate_ident(table)?;
     let id = next_pk_id();
-    // backfill:对缺失的公共 NOT NULL 列补默认值(不覆盖 row 已有值)
-    // 注:create_time/update_time 由 build_insert_sql 用 SQL now() 填充,这里只占位
+    // backfill:对缺失的公共列补默认值(不覆盖 row 已有值)。先查目标表实际列,只补目标表
+    // 拥有的列——避免给无 code/name 的明细表补这两列导致 INSERT「column does not exist」(D-07)。
+    // 注:create_time/update_time 由 build_insert_sql 用 SQL now() 填充,这里只占位(若列存在)。
+    let cols = load_table_columns(mm, db_id, Some(txn_id), table).await?;
     let mut full = row.clone();
-    // code/name 是 dictionaryCommonFields 的 NOT NULL 列;头表已由 plan_create 填 code,
-    // 明细表若缺则补基于 id 的占位码(避免 NOT NULL 约束失败)
     let id_str = id.to_string();
-    backfill(&mut full, "code", serde_json::json!(format!("MDM-{id_str}")));
-    backfill(&mut full, "name", serde_json::json!(format!("MDM-{id_str}")));
-    backfill(&mut full, "published_version", serde_json::json!(1));
-    backfill(&mut full, "sort_no", serde_json::json!(0));
-    backfill(&mut full, "status", serde_json::json!(1));
-    backfill(&mut full, "create_by", serde_json::json!(operated_by));
-    backfill(&mut full, "update_by", serde_json::json!(operated_by));
-    backfill(&mut full, "create_time", serde_json::Value::Null);
-    backfill(&mut full, "update_time", serde_json::Value::Null);
+    // code/name 属 dictionaryCommonFields:头表已由 plan_create/dict_upsert 填;明细表若有此两列且 CR 未提供则补占位
+    backfill_col(&cols, &mut full, "code", serde_json::json!(format!("MDM-{id_str}")));
+    backfill_col(&cols, &mut full, "name", serde_json::json!(format!("MDM-{id_str}")));
+    backfill_col(&cols, &mut full, "published_version", serde_json::json!(1));
+    backfill_col(&cols, &mut full, "sort_no", serde_json::json!(0));
+    backfill_col(&cols, &mut full, "status", serde_json::json!(1));
+    backfill_col(&cols, &mut full, "create_by", serde_json::json!(operated_by));
+    backfill_col(&cols, &mut full, "update_by", serde_json::json!(operated_by));
+    backfill_col(&cols, &mut full, "create_time", serde_json::Value::Null);
+    backfill_col(&cols, &mut full, "update_time", serde_json::Value::Null);
     let (sql, params) = build_insert_sql(table, &full, id);
     mm.execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
         .await
@@ -52,11 +53,84 @@ pub async fn insert_header(
     Ok(id)
 }
 
-/// 若 row 无该列则补默认值（不覆盖已有）。
-fn backfill(row: &mut Map<String, Value>, col: &str, default: Value) {
-    if !row.contains_key(col) {
+/// 若 row 无该列**且目标表实际拥有此列**，则补默认值（不覆盖已有，不补目标表没有的列）。
+fn backfill_col(
+    cols: &std::collections::HashSet<String>,
+    row: &mut Map<String, Value>,
+    col: &str,
+    default: Value,
+) {
+    if cols.contains(col) && !row.contains_key(col) {
         row.insert(col.to_string(), default);
     }
+}
+
+/// 查目标表的列名集合（information_schema.columns）。
+///
+/// 供 [`insert_header`] 判断哪些 backfill 列目标表实际拥有——避免给无 `code`/`name`
+/// 的明细表补这两列导致 INSERT「column does not exist」失败（D-07）。
+async fn load_table_columns(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: Option<&str>,
+    table: &str,
+) -> Result<std::collections::HashSet<String>, cmx_api_types::Error> {
+    let sql = "SELECT column_name FROM information_schema.columns WHERE table_name = $1";
+    let ds = mm
+        .query_sql_with_datavalues(
+            db_id,
+            txn_id,
+            sql,
+            vec![DataValue::String(table.into())],
+            "mdm_table_cols",
+        )
+        .await
+        .map_err(|e| api_err_db(&format!("查 {table} 列失败: {e}")))?;
+    let schema = ds.schema.as_ref();
+    Ok(ds
+        .rows
+        .iter()
+        .filter_map(|r| r.get_by_name_as::<String>(schema, "column_name"))
+        .collect())
+}
+
+/// 按名称模糊匹配主数据 id（合并历史名称搜索用，D-05）。
+///
+/// 在 `{table}.name` 上做 `ILIKE '%kw%'`，返回命中 id。目标表无 `name` 列时返回空 Vec
+/// （防御性：合并的 cm_* 主数据表通常都有 name，但仍避免无 name 列的表 SQL 报错）。
+///
+/// `kw` 作为绑定参数 `%kw%` 传入，无 SQL 注入风险；kw 中的 `%`/`_` 按 ILIKE 通配语义
+/// 处理（搜索词罕见此类字符，先不做 ESCAPE 转义）。
+pub async fn find_ids_by_name_like(
+    mm: &DatabaseManager,
+    db_id: &str,
+    table: &str,
+    kw: &str,
+) -> Result<Vec<i64>, cmx_api_types::Error> {
+    validate_ident(table)?;
+    let cols = load_table_columns(mm, db_id, None, table).await?;
+    if !cols.contains("name") {
+        return Ok(Vec::new());
+    }
+    let sql = format!("SELECT id FROM {table} WHERE name ILIKE $1");
+    let ds = mm
+        .query_sql_with_datavalues(
+            db_id,
+            None,
+            &sql,
+            vec![DataValue::String(format!("%{kw}%").into())],
+            "mdm_find_ids_by_name",
+        )
+        .await
+        .map_err(|e| api_err_db(&format!("按名称查 {table} 失败: {e}")))?;
+    let schema = ds.schema.as_ref();
+    let mut ids = Vec::with_capacity(ds.rows.len());
+    for row in ds.rows.iter() {
+        if let Some(id) = row.get_by_name_as::<i64>(schema, "id") {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
 }
 
 /// 变更主数据头（UPDATE by id + 乐观锁 CAS）。返回受影响行数（0=版本冲突）。
@@ -75,6 +149,26 @@ pub async fn update_header(
         .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
         .await
         .map_err(|e| api_err_db(&format!("UPDATE {table} 失败: {e}")))?;
+    Ok(n)
+}
+
+/// 明细 update（diff 方案）：按 id UPDATE 业务字段 + `update_time=now()` + `published_version+1`，
+/// `WHERE id=$ AND lifecycle_status='published'`（不 CAS——明细在激活器单事务内，CR 互斥已保护头）。
+/// 返回受影响行数（0 = 明细已非 published 状态）。
+pub async fn update_line(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: &str,
+    table: &str,
+    line_id: i64,
+    row: &Map<String, Value>,
+) -> Result<u64, cmx_api_types::Error> {
+    validate_ident(table)?;
+    let (sql, params) = build_update_line_sql(table, line_id, row);
+    let n = mm
+        .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
+        .await
+        .map_err(|e| api_err_db(&format!("UPDATE {table} 明细失败: {e}")))?;
     Ok(n)
 }
 

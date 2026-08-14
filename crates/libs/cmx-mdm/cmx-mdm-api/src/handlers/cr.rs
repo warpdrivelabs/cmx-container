@@ -6,7 +6,6 @@
 //! - `POST /mdm/change-requests/submit` → [`mdm_cr_submit`]
 //! - `POST /mdm/change-requests/approve` → [`mdm_cr_approve`]
 //! - `POST /mdm/change-requests/reject` → [`mdm_cr_reject`]
-//! - `POST /mdm/change-requests/clone-revise` → [`mdm_cr_clone_revise`]
 //! - `POST /mdm/change-requests/abort` → [`mdm_cr_abort`]
 //! - `GET /mdm/change-requests` → [`mdm_cr_list`]
 //! - `GET /mdm/change-requests/detail` → [`mdm_cr_detail`]
@@ -28,7 +27,25 @@ use cmx_mdm_store_pg as store;
 
 use super::{default_page, default_page_size};
 
-/// 提交审批：draft / rejected → approving（驳回后可直接编辑重新提交，无需 clone 新 CR）。
+/// 提交变更请求。
+///
+/// `POST /api/mdm/change-requests/submit` —— draft / rejected → approving（驳回后可直接编辑重新
+/// 提交，无需 clone 新 CR）。body：
+///
+/// ```json
+/// { "crId": 123 }
+/// ```
+///
+/// 返回 `{ crId, status: "approving" }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/change-requests/submit",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ crId, status }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_submit(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -42,9 +59,25 @@ pub async fn mdm_cr_submit(
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "approving" }))))
 }
 
-/// 审批通过：approving → 激活器单事务 → activated。
+/// 审批通过变更请求。
 ///
-/// 方案 A：直接对 approving 的 CR 调激活器（激活器接受 approving），失败回滚到 approving。
+/// `POST /api/mdm/change-requests/approve` —— approving → 激活器单事务 → activated（方案 A：
+/// 直接对 approving 的 CR 调激活器，失败回滚到 approving）。body `{ crId }`：
+///
+/// ```json
+/// { "crId": 123 }
+/// ```
+///
+/// 返回 `{ crId, status: "activated", recordId }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/change-requests/approve",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ crId, status: \"activated\", recordId }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_approve(
     State(_s): State<CmxAppState>,
     svr_ctx: CmxSvrContext,
@@ -62,7 +95,24 @@ pub async fn mdm_cr_approve(
     )))
 }
 
-/// 驳回：approving → rejected（`cm_*` 全程不动）。
+/// 驳回变更请求。
+///
+/// `POST /api/mdm/change-requests/reject` —— approving → rejected（`cm_*` 全程不动）。body：
+///
+/// ```json
+/// { "crId": 123, "reason": "字段缺失" }
+/// ```
+///
+/// 返回 `{ crId, status: "rejected" }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/change-requests/reject",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ crId, status }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_reject(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -76,23 +126,24 @@ pub async fn mdm_cr_reject(
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "rejected" }))))
 }
 
-/// 驳回复活：rejected → 克隆新 draft（`source_cr_id` 指向旧）。
-pub async fn mdm_cr_clone_revise(
-    State(_s): State<CmxAppState>,
-    svr_ctx: CmxSvrContext,
-    headers: HeaderMap,
-    Json(body): Json<CrIdBody>,
-) -> Result<Json<ApiResp<Value>>> {
-    let mm = get_default_pg_db_manager();
-    let db_id = resolve_db_id_from_headers(&headers).await;
-    let operated_by = actor_id_i64(&svr_ctx);
-    let new_id = store::clone_revise(mm, &db_id, body.cr_id, operated_by).await?;
-    Ok(Json(ApiResp::ok(
-        json!({ "newCrId": new_id, "sourceCrId": body.cr_id, "status": "draft" }),
-    )))
-}
-
-/// 作废：draft → aborted。
+/// 作废变更请求。
+///
+/// `POST /api/mdm/change-requests/abort` —— draft → aborted。body `{ crId }`：
+///
+/// ```json
+/// { "crId": 123 }
+/// ```
+///
+/// 返回 `{ crId, status: "aborted" }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/change-requests/abort",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ crId, status }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_abort(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -105,7 +156,18 @@ pub async fn mdm_cr_abort(
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "aborted" }))))
 }
 
-/// CR 列表（query: `?docStatus=&withPayload=`）。
+/// 列变更请求。
+///
+/// `GET /api/mdm/change-requests` —— 按 `docStatus` 可选过滤 + 分页，返回全部业务字段。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/change-requests",
+    params(CrListQuery),
+    responses(
+        (status = 200, description = "{ list, total, page, pageSize }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -115,14 +177,24 @@ pub async fn mdm_cr_list(
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
     let (list, total) =
-        store::list_cr(mm, &db_id, q.doc_status.as_deref(), q.page, q.page_size, q.with_payload)
-            .await?;
+        store::list_cr(mm, &db_id, q.doc_status.as_deref(), q.page, q.page_size).await?;
     Ok(Json(ApiResp::ok(json!({
         "list": list, "total": total, "page": q.page, "pageSize": q.page_size,
     }))))
 }
 
-/// CR 详情（query: `?crId=`，返回头 + 行）。
+/// 取变更请求详情。
+///
+/// `GET /api/mdm/change-requests/detail` —— 按 `crId` 取 CR 头 + 行。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/change-requests/detail",
+    params(CrDetailQuery),
+    responses(
+        (status = 200, description = "CR 头 + 行详情", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_detail(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -135,7 +207,7 @@ pub async fn mdm_cr_detail(
     Ok(Json(ApiResp::ok(detail)))
 }
 
-/// 通用 CR id body（submit/approve/reject/clone-revise/abort 复用）。
+/// 通用 CR id body（submit/approve/reject/abort 复用）。
 #[derive(serde::Deserialize)]
 pub struct CrIdBody {
     /// CR id。
@@ -155,7 +227,8 @@ pub struct RejectBody {
 }
 
 /// CR 列表查询（分页）。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct CrListQuery {
     /// 单据状态过滤（可选）。
     #[serde(default, alias = "docStatus")]
@@ -164,13 +237,11 @@ pub struct CrListQuery {
     pub page: i64,
     #[serde(default = "default_page_size", alias = "pageSize")]
     pub page_size: i64,
-    /// 是否返回 payload（列表默认 false 不查 payload，影响效率）。
-    #[serde(default, alias = "withPayload")]
-    pub with_payload: bool,
 }
 
 /// CR 详情查询。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct CrDetailQuery {
     /// CR id。
     #[serde(alias = "crId")]

@@ -88,6 +88,38 @@ pub(crate) fn build_update_sql(
     (sql, params)
 }
 
+/// 拼 UPDATE 明细 SQL（diff 方案）：SET row 业务列 + `update_time=now()` + `published_version+1`，
+/// `WHERE id=$ AND lifecycle_status='published'`。
+///
+/// 与 [`build_update_sql`] 区别：**不带 CAS**（明细在激活器单事务内，CR 互斥已保护头），
+/// `published_version` 由 SQL 自增（保持乐观锁语义）。`create_time` 跳过（创建时间不变）。
+pub(crate) fn build_update_line_sql(
+    table: &str,
+    line_id: i64,
+    row: &Map<String, Value>,
+) -> (String, Vec<DataValue>) {
+    let mut sets: Vec<String> = Vec::new();
+    let mut params: Vec<DataValue> = Vec::new();
+    let mut idx = 1;
+    for (col, val) in row {
+        if col == "create_time" || col == "update_time" {
+            continue; // 时间戳统一处理：update_time=now()，create_time 不改
+        }
+        sets.push(format!("{col} = ${idx}"));
+        params.push(to_dv(val));
+        idx += 1;
+    }
+    sets.push("update_time = now()".to_string());
+    sets.push("published_version = published_version + 1".to_string());
+    let id_idx = idx;
+    let sql = format!(
+        "UPDATE {table} SET {} WHERE id = ${id_idx} AND lifecycle_status = 'published'",
+        sets.join(", ")
+    );
+    params.push(DataValue::Int(line_id));
+    (sql, params)
+}
+
 /// Value → DataValue（覆盖 MDM 用到的类型）。
 ///
 /// - String → String

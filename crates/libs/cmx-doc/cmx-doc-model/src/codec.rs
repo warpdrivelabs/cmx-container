@@ -45,8 +45,11 @@ pub fn json_to_dv_typed(ft: &FieldType, v: &Value) -> DataValue {
             Err(_) if s.trim().is_empty() => DataValue::Null,
             Err(_) => DataValue::String(s.clone()),
         },
-        // Decimal/Date/DateTime 列的空白字符串 → NULL(避免绑定层报错)
-        (Value::String(s), FieldType::Decimal | FieldType::Date | FieldType::DateTime)
+        // Decimal/Date/DateTime/Json 列的空白字符串 → NULL（避免绑定层报错）
+        // Date/DateTime 的 "invalid input syntax"；Jsonb 空串非合法 JSON → `$p::jsonb` cast 失败，
+        // 被 brief_db_detail 兜底成「数据保存失败：请检查数据后重试」。统一转 NULL（PG jsonb 接受 NULL）。
+        (Value::String(s),
+            FieldType::Decimal | FieldType::Date | FieldType::DateTime | FieldType::Json)
             if s.trim().is_empty() =>
         {
             DataValue::Null

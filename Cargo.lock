@@ -1115,6 +1115,7 @@ dependencies = [
  "cmx-database-pg",
  "cmx-debug",
  "cmx-metadata",
+ "cmx-orchestrator-rpc",
  "cmx-plugin",
  "cmx-portal",
  "cmx-rpc",
@@ -1680,6 +1681,7 @@ version = "0.1.12"
 dependencies = [
  "axum",
  "cmx-api-core",
+ "cmx-api-types",
  "cmx-biz",
  "cmx-database-pg",
  "cmx-dct-store-pg",
@@ -1688,6 +1690,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "utoipa",
 ]
 
 [[package]]
@@ -1794,6 +1797,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-orchestrator-rpc"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "cmx-core",
+ "cmx-rpc",
+ "cmx-rpc-gen",
+ "cmx-traits",
+ "pilota",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
+ "volo-grpc",
+]
+
+[[package]]
 name = "cmx-platform-app"
 version = "0.1.12"
 dependencies = [
@@ -1823,9 +1844,11 @@ dependencies = [
  "cmx-job-store-pg",
  "cmx-mdm-api",
  "cmx-model-api",
+ "cmx-orchestrator-rpc",
  "cmx-plugin",
  "cmx-plugin-api",
  "cmx-registry-config",
+ "cmx-resource-rpc",
  "cmx-rpc",
  "cmx-rpt-api",
  "cmx-runtime",
@@ -1869,7 +1892,9 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "cmx-metadata",
+ "cmx-orchestrator-rpc",
  "cmx-registry-config",
+ "cmx-resource-rpc",
  "cmx-rpc",
  "cmx-service",
  "cmx-storage",
@@ -1987,6 +2012,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-resource-rpc"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "cmx-rpc",
+ "cmx-rpc-gen",
+ "cmx-traits",
+ "tokio",
+ "tracing",
+ "volo-grpc",
+]
+
+[[package]]
 name = "cmx-rowsource"
 version = "0.1.12"
 dependencies = [
@@ -2006,20 +2044,15 @@ version = "0.1.12"
 dependencies = [
  "anyhow",
  "async-broadcast",
- "async-trait",
- "chrono",
  "cmx-core",
  "cmx-registry-config",
- "cmx-rpc-gen",
  "cmx-traits",
  "cmx-utils",
- "pilota",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "uuid",
  "volo",
  "volo-grpc",
 ]

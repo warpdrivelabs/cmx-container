@@ -18,7 +18,7 @@ cmx-database-pg = { workspace = true }
 cmx-core = { workspace = true }
 # 内部依赖 - 主键铸号（next_pk_id / snowflake_id_str）
 cmx-utils = { workspace = true }
-# 内部依赖 - 编码引擎 trait（GlobalCodeMinter，clone_revise 铸 doc_no）
+# 内部依赖 - 编码引擎 trait（GlobalCodeMinter，激活器铸主数据 code）
 cmx-traits = { workspace = true }
 # 内部依赖 - 业务错误 + 错误码（BizError，DOC/DCT 共享）
 cmx-biz = { workspace = true }

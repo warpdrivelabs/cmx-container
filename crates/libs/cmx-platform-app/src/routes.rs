@@ -21,7 +21,7 @@ use cmx_dct_api::{DctApiDoc, DctModule};
 use cmx_doc_api::{DocApiDoc, DocModule};
 use cmx_flow_api::{FlowModule, FlowProxyModule};
 use cmx_job_api::JobModule;
-use cmx_mdm_api::MdmModule;
+use cmx_mdm_api::{MdmApiDoc, MdmModule};
 use cmx_model_api::ModelModule;
 use cmx_rpt_api::{ReportModule, ReportProxyModule};
 use cmx_storage_api::{StorageApiDoc, StorageModule};
@@ -199,6 +199,7 @@ fn merged_openapi() -> utoipa::openapi::OpenApi {
     doc.merge(IamApiDoc::openapi());
     doc.merge(DctApiDoc::openapi());
     doc.merge(DocApiDoc::openapi());
+    doc.merge(MdmApiDoc::openapi());
     doc.merge(PortalApiDoc::openapi());
     doc
 }
