@@ -152,7 +152,15 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     // ── RPC + AppState + 后台子系统 ──
     // RPC 默认关闭（需 [rpc] enabled = true）。BizFunctionInvoker 在组装层构造后注入 cmx-rpc，
     // 使基础设施层 cmx-rpc 无需直接依赖业务层 cmx-biz。
+    // ★ 主应用提供的 RPC 服务 = 此处显式收集的皮肤 crate Bundle 列表：
+    //   依赖哪个域的 *-rpc crate 并在此注册其 Bundle，即对外提供哪个 gRPC 服务；
+    //   裁剪能力（精简版/独立微服务形态）只需增删本列表，cmx-rpc 与皮肤 crate 零改动。
+    let rpc_bundles: Vec<Box<dyn cmx_rpc::bundle::RpcServiceBundle>> = vec![
+        Box::new(cmx_orchestrator_rpc::OrchestratorBundle),
+        Box::new(cmx_resource_rpc::ResourceDataBundle),
+    ];
     let grpc_port = init_rpc(
+        rpc_bundles,
         cmx_traits::service::GlobalServiceInvoker::get().clone(),
         build_function_invoker(),
         resource_data_importer.clone(),

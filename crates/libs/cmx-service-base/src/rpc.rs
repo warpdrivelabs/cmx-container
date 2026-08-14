@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use cmx_registry_config::GlobalServiceInstanceCache;
-use cmx_rpc::bundle::ServerDeps;
+use cmx_rpc::bundle::{RpcServiceBundle, ServerDeps};
 use cmx_rpc::config::RpcConfig;
 use cmx_rpc::{AuthVerifier, init_rpc_clients, start_grpc_server};
 use cmx_traits::auth::AuthService;
@@ -45,6 +45,9 @@ pub struct ServiceAuthConfig {
 ///
 /// # Arguments
 ///
+/// * `bundles` - 组装层显式收集的领域 Bundle 列表（由皮肤 crate 提供，如
+///   `cmx-orchestrator-rpc::OrchestratorBundle`）——**主应用提供哪些 RPC 服务的
+///   唯一决定点**。本库不依赖任何皮肤 crate（参数为 trait object）。
 /// * `service_invoker` - 服务调用器。
 /// * `function_invoker` - 插件函数调用器（封装 RuntimeInvoker + PluginQuery 完整调用链，
 ///   由调用方在组装层构造 cmx-biz 的 `BizFunctionInvoker` 实现后注入，使本库
@@ -59,6 +62,7 @@ pub struct ServiceAuthConfig {
 /// * `Ok(Option<u16>)` - RPC 启用且成功时返回 gRPC 端口，否则返回 `None`。
 /// * `Err(BaseError)` - 初始化失败。
 pub async fn init_rpc(
+    bundles: Vec<Box<dyn RpcServiceBundle>>,
     service_invoker: Arc<dyn ServiceInvoker>,
     function_invoker: Arc<dyn FunctionInvoker>,
     data_importer: Option<Arc<dyn ResourceDataImporter>>,
@@ -99,8 +103,8 @@ pub async fn init_rpc(
         Some(service_auth.outgoing_api_key)
     };
 
-    // 4. 初始化全部领域客户端（迭代 bundles，注册到领域全局单例）。
-    let bundles = init_rpc_clients(&rpc, cache, registry.clone(), outbound_service_key)
+    // 4. 初始化全部领域客户端（迭代组装层传入的 bundles，注册到领域全局单例）。
+    let bundles = init_rpc_clients(&rpc, cache, registry.clone(), outbound_service_key, bundles)
         .map_err(|e| BaseError::Setup(format!("初始化 RPC 客户端失败: {}", e)))?;
 
     let grpc_port = rpc.grpc.port;
