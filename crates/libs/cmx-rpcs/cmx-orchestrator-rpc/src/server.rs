@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use cmx_core::model::service::SVRContext;
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
+use cmx_rpc_gen::orchestrator_proto::*;
 use cmx_traits::function_invoker::FunctionInvoker;
 use cmx_traits::service::ServiceInvoker;
 use tracing::instrument;

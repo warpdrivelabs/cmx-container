@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use cmx_rpc_gen::cmx::cmx_resource_data_service::cmx_resource_data_service::cmx as resource_data_proto;
+use cmx_rpc_gen::resource_data_proto;
 use cmx_traits::resource::{
     ResourceDataCategory, ResourceDataCleanupRequest, ResourceDataImportRequest,
     ResourceDataImporter,

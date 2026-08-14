@@ -11,7 +11,7 @@ use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use cmx_core::CallServiceResponse;
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
+use cmx_rpc_gen::orchestrator_proto::*;
 use cmx_traits::rpc::{FunctionCallResult, RpcError, ServiceOrchestrationClient};
 use serde_json::Value;
 use tokio::sync::RwLock;
