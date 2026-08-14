@@ -129,6 +129,7 @@ impl HierService for DocHierService {
             actor_name: "系统".to_string(),
             doc_file: self.file.clone().unwrap_or_default(),
             op_override: None,
+            code_rule_overrides: std::collections::HashMap::new(),
         };
         let res = DocSaver::save(mm, &self.db_id, &meta, SaveMode::Merge, &changes_json, &sctx)
             .await

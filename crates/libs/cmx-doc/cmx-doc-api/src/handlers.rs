@@ -860,6 +860,8 @@ pub async fn doc_save(
     )
     .await?;
     let (mode, changes) = saver::parse_save_body(&body);
+    // 单据字段铸号规则覆盖（MDM cr-form 填 activation.doc_code_rules → body.codeRuleOverrides）。
+    let code_rule_overrides = saver::parse_code_rule_overrides(&body);
 
     // §14.2 后端二次校验：对 changeset 各行跑 validationRules，error 阻断保存。
     if !meta.validation_rules.is_empty()
@@ -874,7 +876,7 @@ pub async fn doc_save(
         &meta,
         mode,
         &changes,
-        &save_ctx(&ctx, &file, None),
+        &save_ctx(&ctx, &file, None, code_rule_overrides),
     )
     .await
     {
@@ -904,6 +906,7 @@ fn save_ctx(
     ctx: &CmxSvrContext,
     doc_file: &str,
     op_override: Option<&str>,
+    code_rule_overrides: std::collections::HashMap<String, String>,
 ) -> cmx_doc_store_pg::SaveCtx {
     let actor_id = actor_id_i64(ctx);
     let actor_name = actor_name(ctx);
@@ -912,6 +915,7 @@ fn save_ctx(
         actor_name,
         doc_file: doc_file.to_string(),
         op_override: op_override.map(String::from),
+        code_rule_overrides,
     }
 }
 
@@ -981,6 +985,7 @@ pub async fn doc_save_batch(
         let dc = (!raw_doc.is_empty()).then_some(raw_doc);
         let (meta, file) = resolve_doc_meta(dom, app, mdl, f, dc).await?;
         let (mode, changes) = saver::parse_save_body(d);
+        let code_rule_overrides = saver::parse_code_rule_overrides(d);
         // 后端二次校验（同单单路径）：有 error 违规即整批拒（atomic）/该单在 save 阶段无从表达，故这里统一先拒。
         if !meta.validation_rules.is_empty()
             && let Some(vr) = run_validation(&meta, &changes)
@@ -991,7 +996,7 @@ pub async fn doc_save_batch(
                 "validation": vr,
             }))));
         }
-        ctxs.push(save_ctx(&ctx, &file, None));
+        ctxs.push(save_ctx(&ctx, &file, None, code_rule_overrides));
         metas.push(meta);
         parsed.push((mode, changes));
     }
@@ -1199,7 +1204,7 @@ pub async fn doc_restore(
         &meta,
         cmx_doc_store_pg::SaveMode::Replace,
         &replace_input,
-        &save_ctx(&ctx, &file, Some("restore")),
+        &save_ctx(&ctx, &file, Some("restore"), std::collections::HashMap::new()),
     )
     .await?;
 
