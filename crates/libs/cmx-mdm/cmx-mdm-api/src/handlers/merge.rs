@@ -27,9 +27,18 @@ use cmx_mdm_store_pg as store;
 use super::dedup::{line_tables, load_match_config_defaults, resolve_dict_meta};
 use super::{default_page, default_page_size};
 
-/// 合并请求列表（默认排除 pending）。
+/// 列合并请求。
 ///
-/// query: `?dictCode=&status=&excludePending=&page=&pageSize=`。
+/// `GET /api/mdm/merge-requests` —— 分页查询合并请求，默认排除 pending。`kw` 名称搜索需配合 `dictCode`。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/merge-requests",
+    params(MergeListQuery),
+    responses(
+        (status = 200, description = "{ list, total, page, pageSize }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_merge_requests_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -185,7 +194,29 @@ async fn enrich_group_names(
     groups
 }
 
-/// 确认合并。body `{ dictCode, masterId, victimIds, survivorship? }`。
+/// 确认合并。
+///
+/// `POST /api/mdm/merge-requests` —— 执行主从合并（master 吸收 victims，明细 reparent + 去重）。
+/// `targetTable`/`surviveFields` 缺失时从 `md_match_config` 回填；`mergeId` 非空复用既有 group。
+/// body：
+///
+/// ```json
+/// { "dictCode": "supplier", "masterId": 1, "victimIds": [2, 3],
+///   "mergeId": 10, "targetTable": "cm_supplier", "surviveFields": ["code", "name"],
+///   "survivorship": { "name": "master" }, "overrides": { "tax_no": "911..." },
+///   "scanId": 5 }
+/// ```
+///
+/// 返回 `{ masterId, matchGroupId, reparentedTotal, dedupedTotal }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/merge-requests",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ masterId, matchGroupId, reparentedTotal, dedupedTotal }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_merge_requests_create(
     State(_s): State<CmxAppState>,
     svr_ctx: CmxSvrContext,
@@ -314,7 +345,18 @@ pub async fn mdm_merge_requests_create(
     }))))
 }
 
-/// 合并请求详情（红线 diff 用）。GET `?mergeId=`。返回 group + master + victims。
+/// 取合并请求详情。
+///
+/// `GET /api/mdm/merge-requests/detail` —— 红线 diff 用，按 `mergeId` 返回 group + master + victims 全字段。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/merge-requests/detail",
+    params(UndoBody),
+    responses(
+        (status = 200, description = "{ group, master, victims }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_merge_request_detail(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -367,7 +409,24 @@ pub async fn mdm_merge_request_detail(
     Ok(Json(ApiResp::ok(json!({ "group": group, "master": master, "victims": victims }))))
 }
 
-/// 驳回合并请求。body `{ mergeId, reason? }`。CAS pending→rejected + 审计（审查 C3/C5）。
+/// 驳回合并请求。
+///
+/// `POST /api/mdm/merge-requests/reject` —— CAS pending→rejected + 审计留痕。body：
+///
+/// ```json
+/// { "mergeId": 10, "reason": "误判" }
+/// ```
+///
+/// 返回 `{ mergeId, status: "rejected" }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/merge-requests/reject",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ mergeId, status }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_merge_request_reject(
     State(_s): State<CmxAppState>,
     svr_ctx: CmxSvrContext,
@@ -411,7 +470,25 @@ pub async fn mdm_merge_request_reject(
     )))
 }
 
-/// unmerge。body `{ mergeId }`。
+/// 还原合并。
+///
+/// `POST /api/mdm/merge-requests/undo` —— unmerge（明细重新 reparent 回 victim，恢复两条独立记录）。
+/// body `{ mergeId }`：
+///
+/// ```json
+/// { "mergeId": 10 }
+/// ```
+///
+/// 返回 `{ masterId, victimId, status: "unmerged" }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/merge-requests/undo",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ masterId, victimId, status }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_merge_requests_undo(
     State(_s): State<CmxAppState>,
     svr_ctx: CmxSvrContext,
@@ -466,7 +543,8 @@ pub async fn mdm_merge_requests_undo(
 }
 
 /// 合并请求列表查询（分页）。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct MergeListQuery {
     #[serde(default, alias = "dictCode")]
     pub dict_code: Option<String>,
@@ -516,7 +594,8 @@ pub struct MergeBody {
 }
 
 /// undo / detail 查询体。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct UndoBody {
     /// 合并请求 id。
     #[serde(alias = "mergeId")]

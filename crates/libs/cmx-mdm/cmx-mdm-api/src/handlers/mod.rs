@@ -100,7 +100,17 @@ fn default_kind() -> String {
     "Exact".into()
 }
 
-/// MDM 模块健康检查。
+/// 健康检查。
+///
+/// `GET /api/mdm/health` —— 探测 MDM 模块是否就绪，返回固定 `{ module, status }`。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/health",
+    responses(
+        (status = 200, description = "{ module: \"mdm\", status: \"ok\" }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_health(
     State(_s): State<CmxAppState>,
     cmx_api_core::middleware::CmxSvrContext(_ctx): cmx_api_core::middleware::CmxSvrContext,

@@ -29,16 +29,28 @@ use super::SpecDto;
 use super::dedup::{load_match_config_defaults, resolve_dict_meta};
 use super::{default_page, default_page_size};
 
-/// 全库扫描查重（管家工作台「发现未知重复」入口）。
+/// 全库扫描查重。
 ///
-/// body: `{ dictCode, targetTable?, specs?, clusterKeys?, surviveFields?, minScore? }`。
-/// 缺失字段从 md_match_config 按 dictCode 读默认；都没则报错。
+/// `POST /api/mdm/match-scan/run` —— 管家工作台「发现未知重复」入口，全库普查主动发现重复簇并落库。
+/// `targetTable`/`specs`/`clusterKeys`/`surviveFields` 缺失时从 `md_match_config` 按 `dictCode` 回填。
+/// body：
 ///
-/// 流程：回填默认 → [`load_suspects`](store::load_suspects) 拉嫌疑 →
-/// [`scan_clusters`] 聚类 → [`insert_findings`](store::insert_findings) 落库（cluster_hash 去重）→
-/// 返回 `{ newFindings, skipped, pendingTotal }`。
+/// ```json
+/// { "dictCode": "supplier", "targetTable": "cm_supplier",
+///   "specs": [{ "field": "name", "weight": 100, "kind": "EditDistance" }],
+///   "clusterKeys": ["tax_no"], "surviveFields": ["code", "name"], "minScore": 80 }
+/// ```
 ///
-/// 重复扫描时相同成员集合的 pending 不重复入库（cluster_hash 命中跳过）。
+/// 返回 `{ newFindings, skipped, pendingTotal }`（相同成员集合的 pending 不重复入库）。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/match-scan/run",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ newFindings, skipped, pendingTotal }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_match_scan_run(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -137,9 +149,19 @@ pub async fn mdm_match_scan_run(
     }))))
 }
 
-/// 发现项列表（管家工作台评审队列）。
+/// 列扫描发现项。
 ///
-/// query: `?dictCode=&status=&page=&pageSize=`。排序：max_score DESC → created_at DESC。
+/// `GET /api/mdm/match-scan` —— 管家工作台评审队列，按 `dictCode` / `status` 可选过滤 + 分页
+/// （排序：max_score DESC → created_at DESC）。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/match-scan",
+    params(ScanListQuery),
+    responses(
+        (status = 200, description = "{ list, total, page, pageSize }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_match_scan_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -165,9 +187,19 @@ pub async fn mdm_match_scan_list(
     }))))
 }
 
-/// 簇详情（成员字段对比表）。
+/// 取扫描簇详情。
 ///
-/// query: `?scanId=`。返回 scan 记录 + 簇内成员全字段（经 DCT meta 解析头表名 + 列清单）。
+/// `GET /api/mdm/match-scan/detail` —— 按 `scanId` 取 scan 记录 + 簇内成员全字段（经 DCT meta
+/// 解析头表名 + 列清单，供前端字段对比表）。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/match-scan/detail",
+    params(ScanDetailQuery),
+    responses(
+        (status = 200, description = "{ scan, members }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_match_scan_detail(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -205,9 +237,25 @@ pub async fn mdm_match_scan_detail(
     Ok(Json(ApiResp::ok(json!({ "scan": scan, "members": members }))))
 }
 
-/// 忽略簇（CAS pending→ignored）。
+/// 忽略扫描发现项。
 ///
-/// body: `{ scanId }`。已 resolved/ignored 的不可再忽略（CAS 0 行报错）。
+/// `POST /api/mdm/match-scan/ignore` —— CAS pending→ignored（已 resolved/ignored 的不可再忽略）。
+/// body：
+///
+/// ```json
+/// { "scanId": 5 }
+/// ```
+///
+/// 返回 `{ scanId, status: "ignored" }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/match-scan/ignore",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ scanId, status }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_match_scan_ignore(
     State(_s): State<CmxAppState>,
     svr_ctx: CmxSvrContext,
@@ -271,7 +319,8 @@ pub struct ScanRunBody {
 }
 
 /// 列表查询（分页 + 过滤）。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct ScanListQuery {
     #[serde(default, alias = "dictCode")]
     pub dict_code: Option<String>,
@@ -284,7 +333,8 @@ pub struct ScanListQuery {
 }
 
 /// 详情查询。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct ScanDetailQuery {
     /// 发现项 id。
     #[serde(alias = "scanId")]

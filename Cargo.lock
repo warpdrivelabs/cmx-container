@@ -1680,6 +1680,7 @@ version = "0.1.12"
 dependencies = [
  "axum",
  "cmx-api-core",
+ "cmx-api-types",
  "cmx-biz",
  "cmx-database-pg",
  "cmx-dct-store-pg",
@@ -1688,6 +1689,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "utoipa",
 ]
 
 [[package]]

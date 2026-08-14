@@ -140,10 +140,29 @@ fn parse_array_field<T: serde::de::DeserializeOwned>(v: &Value, field: &str) -> 
         .unwrap_or_default()
 }
 
-/// 实时查重（纯查询，不落库）。body `{ dictCode, recordId, targetTable, specs, clusterKeys, surviveFields }`。
+/// 实时查重。
 ///
-/// 返回目标记录字段值 + 每个候选的字段值（供前端做字段对比表）。
-/// 候选裁决：≥95 自动合并 / 80-94 待评审 / <80 不匹配（[`cmx_mdm_model::match_algo::decide`] 双阈值）。
+/// `POST /api/mdm/records/find-duplicates` —— 锚点查重（纯查询不落库），按 `recordId` 找同伙。
+/// `targetTable`/`specs`/`clusterKeys`/`surviveFields` 任一缺失时从 `md_match_config` 按 `dictCode`
+/// 读默认。body：
+///
+/// ```json
+/// { "dictCode": "supplier", "recordId": 101, "targetTable": "cm_supplier",
+///   "specs": [{ "field": "name", "weight": 100, "kind": "EditDistance" }],
+///   "clusterKeys": ["tax_no"], "surviveFields": ["code", "name"],
+///   "displayFields": ["label"] }
+/// ```
+///
+/// 候选裁决：≥95 自动合并 / 80-94 待评审 / <80 不匹配（双阈值）。返回目标字段 + 每个候选的字段值（供前端对比表）。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/records/find-duplicates",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ targetId, targetFields, candidates[{recordId,score,decision,fields}], thresholds }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_find_duplicates(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -234,15 +253,28 @@ pub async fn mdm_find_duplicates(
     }))))
 }
 
-/// 关键信息查重（V3.2 步骤条预校验：新建场景，无 recordId）。
+/// 关键信息查重。
 ///
-/// 与 [`mdm_find_duplicates`] 的区别：find-duplicates 需 recordId（从已发布记录查重）；
-/// check-key 是**新建场景**，用前端提交的关键信息构造虚拟 target（id=0），与激活区已发布记录比对。
-/// 命中（score ≥ 80）即视为重复，前端弹框阻断，不允许进入步骤2。
+/// `POST /api/mdm/check-key` —— V3.2 步骤条预校验（新建场景，无 recordId）。用前端提交的关键信息
+/// 构造虚拟 target（id=0）与激活区已发布记录比对；命中（score ≥ 80）即阻断。body：
 ///
-/// body: `{ dictCode, targetTable, keyValue, specs, clusterKeys }`
+/// ```json
+/// { "dictCode": "supplier", "targetTable": "cm_supplier",
+///   "keyValue": { "name": "A公司", "tax_no": "911..." },
+///   "specs": [{ "field": "name", "weight": 100, "kind": "EditDistance" }],
+///   "clusterKeys": ["tax_no"] }
+/// ```
 ///
-/// 返回: `{ exists: false }` 或 `{ exists: true, id, code, message }`。
+/// 返回 `{ exists: false }` 或 `{ exists: true, id, code, message }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/check-key",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ exists: false } 或 { exists: true, id, code, message }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_check_key(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,

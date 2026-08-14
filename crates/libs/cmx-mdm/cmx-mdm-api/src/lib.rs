@@ -11,6 +11,11 @@
 /// MDM 模块全部 axum handler 的实现集合（按业务域分文件组织）。
 pub mod handlers;
 
+/// OpenApi 切片（MdmApiDoc），由 platform-app `merged_openapi()` 合并进主文档。
+pub mod openapi;
+
+pub use openapi::MdmApiDoc;
+
 use axum::Router;
 use axum::routing::{get, post};
 

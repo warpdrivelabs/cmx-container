@@ -27,7 +27,25 @@ use cmx_mdm_store_pg as store;
 
 use super::{default_page, default_page_size};
 
-/// 提交审批：draft / rejected → approving（驳回后可直接编辑重新提交，无需 clone 新 CR）。
+/// 提交变更请求。
+///
+/// `POST /api/mdm/change-requests/submit` —— draft / rejected → approving（驳回后可直接编辑重新
+/// 提交，无需 clone 新 CR）。body：
+///
+/// ```json
+/// { "crId": 123 }
+/// ```
+///
+/// 返回 `{ crId, status: "approving" }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/change-requests/submit",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ crId, status }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_submit(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -41,9 +59,25 @@ pub async fn mdm_cr_submit(
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "approving" }))))
 }
 
-/// 审批通过：approving → 激活器单事务 → activated。
+/// 审批通过变更请求。
 ///
-/// 方案 A：直接对 approving 的 CR 调激活器（激活器接受 approving），失败回滚到 approving。
+/// `POST /api/mdm/change-requests/approve` —— approving → 激活器单事务 → activated（方案 A：
+/// 直接对 approving 的 CR 调激活器，失败回滚到 approving）。body `{ crId }`：
+///
+/// ```json
+/// { "crId": 123 }
+/// ```
+///
+/// 返回 `{ crId, status: "activated", recordId }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/change-requests/approve",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ crId, status: \"activated\", recordId }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_approve(
     State(_s): State<CmxAppState>,
     svr_ctx: CmxSvrContext,
@@ -61,7 +95,24 @@ pub async fn mdm_cr_approve(
     )))
 }
 
-/// 驳回：approving → rejected（`cm_*` 全程不动）。
+/// 驳回变更请求。
+///
+/// `POST /api/mdm/change-requests/reject` —— approving → rejected（`cm_*` 全程不动）。body：
+///
+/// ```json
+/// { "crId": 123, "reason": "字段缺失" }
+/// ```
+///
+/// 返回 `{ crId, status: "rejected" }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/change-requests/reject",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ crId, status }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_reject(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -75,7 +126,24 @@ pub async fn mdm_cr_reject(
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "rejected" }))))
 }
 
-/// 作废：draft → aborted。
+/// 作废变更请求。
+///
+/// `POST /api/mdm/change-requests/abort` —— draft → aborted。body `{ crId }`：
+///
+/// ```json
+/// { "crId": 123 }
+/// ```
+///
+/// 返回 `{ crId, status: "aborted" }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/change-requests/abort",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ crId, status }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_abort(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -88,7 +156,18 @@ pub async fn mdm_cr_abort(
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "aborted" }))))
 }
 
-/// CR 列表（query: `?docStatus=`，返回全部业务字段）。
+/// 列变更请求。
+///
+/// `GET /api/mdm/change-requests` —— 按 `docStatus` 可选过滤 + 分页，返回全部业务字段。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/change-requests",
+    params(CrListQuery),
+    responses(
+        (status = 200, description = "{ list, total, page, pageSize }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -104,7 +183,18 @@ pub async fn mdm_cr_list(
     }))))
 }
 
-/// CR 详情（query: `?crId=`，返回头 + 行）。
+/// 取变更请求详情。
+///
+/// `GET /api/mdm/change-requests/detail` —— 按 `crId` 取 CR 头 + 行。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/change-requests/detail",
+    params(CrDetailQuery),
+    responses(
+        (status = 200, description = "CR 头 + 行详情", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_cr_detail(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -137,7 +227,8 @@ pub struct RejectBody {
 }
 
 /// CR 列表查询（分页）。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct CrListQuery {
     /// 单据状态过滤（可选）。
     #[serde(default, alias = "docStatus")]
@@ -149,7 +240,8 @@ pub struct CrListQuery {
 }
 
 /// CR 详情查询。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct CrDetailQuery {
     /// CR id。
     #[serde(alias = "crId")]

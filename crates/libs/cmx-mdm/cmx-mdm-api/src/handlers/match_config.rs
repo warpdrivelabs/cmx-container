@@ -20,7 +20,18 @@ use cmx_api_core::{ApiResp, Result};
 use cmx_database_pg::get_default_pg_db_manager;
 use cmx_mdm_store_pg as store;
 
-/// 查重规则列表。GET `?dictCode=`（可空，空则列全部）。
+/// 列查重规则。
+///
+/// `GET /api/mdm/match-configs` —— 按 `dictCode` 可选过滤（空则列全部）。
+#[utoipa::path(
+    get,
+    path = "/api/mdm/match-configs",
+    params(MatchConfigQuery),
+    responses(
+        (status = 200, description = "查重规则列表数组", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_match_configs_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -33,9 +44,26 @@ pub async fn mdm_match_configs_list(
     Ok(Json(ApiResp::ok(json!(list))))
 }
 
-/// 查重规则保存（upsert）。POST body `{ id?, ruleName, dictCode, targetTable, specs, clusterKeys, surviveFields, thresholds? }`。
+/// 保存查重规则。
 ///
-/// id 缺省 / 0 = 新建；id 非零或 (dictCode, ruleName) 已存在 = 更新。返回规则 id（i64）。
+/// `POST /api/mdm/match-configs` —— upsert（id 缺省 / 0 = 新建；非零或 (dictCode, ruleName) 已存在 = 更新）。body：
+///
+/// ```json
+/// { "id": 0, "ruleName": "默认", "dictCode": "supplier", "targetTable": "cm_supplier",
+///   "specs": [{ "field": "name", "weight": 100, "kind": "EditDistance" }],
+///   "clusterKeys": ["tax_no"], "surviveFields": ["code", "name"], "thresholds": {} }
+/// ```
+///
+/// 返回 `{ id }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/match-configs",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ id }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_match_configs_save(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -48,7 +76,24 @@ pub async fn mdm_match_configs_save(
     Ok(Json(ApiResp::ok(json!({ "id": id }))))
 }
 
-/// 查重规则删除（软删 is_active=FALSE）。POST body `{ configId }`。
+/// 删除查重规则。
+///
+/// `POST /api/mdm/match-configs/delete` —— 软删（is_active=FALSE）。body：
+///
+/// ```json
+/// { "configId": 1 }
+/// ```
+///
+/// 返回 `{ configId, affected }`。
+#[utoipa::path(
+    post,
+    path = "/api/mdm/match-configs/delete",
+    request_body = Value,
+    responses(
+        (status = 200, description = "{ configId, affected }", body = ApiResp<Value>)
+    ),
+    tag = "MDM主数据接口"
+)]
 pub async fn mdm_match_configs_delete(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -64,7 +109,8 @@ pub async fn mdm_match_configs_delete(
 }
 
 /// 查重规则列表查询。
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct MatchConfigQuery {
     /// 字典代码（可选过滤，空则列全部）。
     #[serde(default, alias = "dictCode")]
