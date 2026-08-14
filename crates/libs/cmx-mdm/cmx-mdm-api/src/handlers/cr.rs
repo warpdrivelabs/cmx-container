@@ -88,7 +88,7 @@ pub async fn mdm_cr_abort(
     Ok(Json(ApiResp::ok(json!({ "crId": body.cr_id, "status": "aborted" }))))
 }
 
-/// CR 列表（query: `?docStatus=&withPayload=`）。
+/// CR 列表（query: `?docStatus=`，返回全部业务字段）。
 pub async fn mdm_cr_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
@@ -98,8 +98,7 @@ pub async fn mdm_cr_list(
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
     let (list, total) =
-        store::list_cr(mm, &db_id, q.doc_status.as_deref(), q.page, q.page_size, q.with_payload)
-            .await?;
+        store::list_cr(mm, &db_id, q.doc_status.as_deref(), q.page, q.page_size).await?;
     Ok(Json(ApiResp::ok(json!({
         "list": list, "total": total, "page": q.page, "pageSize": q.page_size,
     }))))
@@ -147,9 +146,6 @@ pub struct CrListQuery {
     pub page: i64,
     #[serde(default = "default_page_size", alias = "pageSize")]
     pub page_size: i64,
-    /// 是否返回 payload（列表默认 false 不查 payload，影响效率）。
-    #[serde(default, alias = "withPayload")]
-    pub with_payload: bool,
 }
 
 /// CR 详情查询。

@@ -13,7 +13,7 @@ use cmx_core::model::cell::DataValue;
 use cmx_database_pg::DatabaseManager;
 use serde_json::{json, Value};
 
-use crate::error::api_err;
+use crate::error::{api_err, parse_jsonb_field};
 use crate::md_accessor::set_cr_status;
 
 /// 校验 CR 当前状态,返回头 Map。状态不符报错。
@@ -62,7 +62,6 @@ pub async fn list_cr(
     doc_status: Option<&str>,
     page: i64,
     page_size: i64,
-    with_payload: bool,
 ) -> Result<(Vec<Value>, i64), cmx_api_types::Error> {
     let (where_sql, mut params): (String, Vec<DataValue>) = if let Some(st) = doc_status {
         ("doc_status = $1 AND delete_flag = 0".to_string(), vec![DataValue::String(st.into())])
@@ -85,17 +84,26 @@ pub async fn list_cr(
     let n = params.len() as i64;
     params.push(DataValue::Int(ps));
     params.push(DataValue::Int(off));
-    let payload_col = if with_payload { ", payload" } else { "" };
+    // SELECT *：元数据驱动加业务字段时列表自动带上，无需改 SQL；JSONB 列 parse 成对象
     let sql = format!(
-        "SELECT id, doc_no, subject_name, cr_type, doc_status, create_time{payload_col} \
-         FROM cv_mdm_apply WHERE {where_sql} ORDER BY create_time DESC \
+        "SELECT * FROM cv_mdm_apply WHERE {where_sql} ORDER BY create_time DESC \
          LIMIT ${} OFFSET ${}", n + 1, n + 2);
     let ds = mm
         .query_sql_with_datavalues(db_id, None, &sql, params, "mdm_cr_list")
         .await
         .map_err(|e| api_err(&format!("查 CR 列表失败: {e}")))?;
     let schema = ds.schema.as_ref();
-    Ok((ds.rows.iter().map(|r| r.to_json_value(schema)).collect(), total))
+    let list = ds
+        .rows
+        .iter()
+        .map(|r| {
+            let mut v = r.to_json_value(schema);
+            parse_jsonb_field(&mut v, "payload");
+            parse_jsonb_field(&mut v, "field_deltas");
+            v
+        })
+        .collect();
+    Ok((list, total))
 }
 
 /// CR 详情(头+行)。
