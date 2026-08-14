@@ -663,18 +663,19 @@ function lineSeedRows(lm) {
     if (!crLines.length) return []
     return crLines.map((l) => {
       lineSeq += 1
-      const row = { id: l.id || `cr_${Date.now()}_${lineSeq}`, _savedId: l.id }
+      const row = { id: l.id || `cr_${Date.now()}_${lineSeq}`, _savedId: l.id, lineTargetId: l.line_target_id ?? null }
       const p = (l.line_payload && typeof l.line_payload === 'object') ? l.line_payload : {}
       for (const [src] of lm.map) row[src] = p[src] != null ? String(p[src]) : ''
       return row
     })
   }
-  // update 变更：从字典加载的明细行预填（目标列 tgt → 源字段 src）。合成 id 无 _savedId → 保存走 insert
-  // （CR 单据统一新增；写回字典时由后端激活器按头 update + 明细先删后插处理）。
+  // update 变更：从字典加载的明细行预填（目标列 tgt → 源字段 src），并保留 cm_* 明细 id 到
+  // lineTargetId（激活器 diff 用：有 id=update，无 id=insert，cm_* 有但 CR 没=软删）。
+  // 合成 id 无 _savedId → 保存走 insert（CR 单据统一新增 cv_mdm_apply_line，带 line_target_id）。
   if (state.mode === 'update') {
     const rows = ((state.targetLines || {})[lm.lineType] || []).map((r, i) => {
       lineSeq += 1
-      const row = { id: `tg_${state.targetId}_${lm.lineType}_${i}` }
+      const row = { id: `tg_${state.targetId}_${lm.lineType}_${i}`, lineTargetId: r.id }
       for (const [src, tgt] of lm.map) row[src] = r[tgt] != null ? String(r[tgt]) : ''
       return row
     })
@@ -791,10 +792,11 @@ function collectLines() {
       for (const [src] of lm.map) payload[src] = r[src] != null ? r[src] : ''
       const upperId = state.savedCrId != null ? state.savedCrId : HEAD_TID
       if (r._savedId != null) {
-        updated.push({ id: r._savedId, fields: { line_no: i + 1, line_payload: payload } })
+        updated.push({ id: r._savedId, fields: { line_no: i + 1, line_payload: payload, line_target_id: r.lineTargetId ?? null } })
       } else {
         inserted.push({ id: r.id, upper_id: upperId, line_no: i + 1, fields: {
           line_type: lm.lineType, line_action: 'insert', line_payload: payload,
+          line_target_id: r.lineTargetId ?? null,
         } })
       }
     })

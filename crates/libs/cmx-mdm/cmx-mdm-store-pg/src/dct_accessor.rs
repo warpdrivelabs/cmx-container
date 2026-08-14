@@ -10,7 +10,7 @@ use cmx_utils::next_pk_id;
 use serde_json::{Map, Value};
 
 use crate::error::{api_err, api_err_db};
-use crate::sql_builder::{build_insert_sql, build_update_sql};
+use crate::sql_builder::{build_insert_sql, build_update_line_sql, build_update_sql};
 
 /// 新建主数据行（INSERT，头表/明细表共用）。返回新 id。
 ///
@@ -110,6 +110,26 @@ pub async fn update_header(
         .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
         .await
         .map_err(|e| api_err_db(&format!("UPDATE {table} 失败: {e}")))?;
+    Ok(n)
+}
+
+/// 明细 update（diff 方案）：按 id UPDATE 业务字段 + `update_time=now()` + `published_version+1`，
+/// `WHERE id=$ AND lifecycle_status='published'`（不 CAS——明细在激活器单事务内，CR 互斥已保护头）。
+/// 返回受影响行数（0 = 明细已非 published 状态）。
+pub async fn update_line(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: &str,
+    table: &str,
+    line_id: i64,
+    row: &Map<String, Value>,
+) -> Result<u64, cmx_api_types::Error> {
+    validate_ident(table)?;
+    let (sql, params) = build_update_line_sql(table, line_id, row);
+    let n = mm
+        .execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
+        .await
+        .map_err(|e| api_err_db(&format!("UPDATE {table} 明细失败: {e}")))?;
     Ok(n)
 }
 
