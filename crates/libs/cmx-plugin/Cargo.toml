@@ -18,6 +18,9 @@ cmx-utils = { workspace = true }
 cmx-traits = { workspace = true }
 # 内部依赖 - RPC 通信
 cmx-rpc = { workspace = true }
+# RPC 皮肤（orchestrator/resource_data 访问器；GlobalRpcClient 守卫仍在 cmx-rpc）
+cmx-orchestrator-rpc = { workspace = true }
+cmx-resource-rpc = { workspace = true }
 # 内部依赖 - 服务注册发现
 cmx-registry-config = { workspace = true }
 # 内部依赖 - 服务

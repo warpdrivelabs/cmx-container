@@ -230,7 +230,7 @@ impl PluginHostFunctions {
         }
         let rt = tokio::runtime::Handle::current();
         let result = rt.block_on(async {
-            cmx_rpc::orchestrator_client()
+            cmx_orchestrator_rpc::orchestrator_client()
                 .call_function(
                     server_name,
                     &req.plugin_id,
@@ -277,7 +277,7 @@ impl PluginHostFunctions {
         };
         let rt = tokio::runtime::Handle::current();
         let result = rt.block_on(async {
-            cmx_rpc::orchestrator_client()
+            cmx_orchestrator_rpc::orchestrator_client()
                 .call_service(server_name, &req.service_key, req.input.clone(), options)
                 .await
         });

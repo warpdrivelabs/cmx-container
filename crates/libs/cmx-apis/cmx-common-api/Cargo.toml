@@ -47,6 +47,8 @@ cmx-auth = { workspace = true }
 cmx-portal = { workspace = true }
 # 内部依赖 - RPC 通信
 cmx-rpc = { workspace = true }
+# RPC 皮肤（orchestrator/resource_data 访问器；GlobalRpcClient 守卫仍在 cmx-rpc）
+cmx-orchestrator-rpc = { workspace = true }
 # 内部依赖 - 服务
 cmx-service = { workspace = true }
 # 内部依赖 - 调试
