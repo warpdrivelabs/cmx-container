@@ -18,13 +18,13 @@ use crate::discover::RegistryAwareDiscover;
 
 /// gRPC 共享基础设施。
 ///
-/// 被 [`crate::client::orchestrator::OrchestratorGrpcClient`] 和
-/// [`crate::client::resource_data::ResourceDataGrpcClient`] 通过 `Arc` 共同持有。
+/// 被各领域客户端（`cmx-rpcs/*` 皮肤 crate，如 `cmx-orchestrator-rpc` /
+/// `cmx-resource-rpc` 的 `*GrpcClient`）通过 `Arc` 共同持有。
 ///
 /// 核心职责：按 `service_name` 缓存 [`RegistryAwareDiscover`]，避免重复订阅注册中心。
 ///
 /// 共享后多个领域客户端复用同一个 broadcast channel，默认
-/// `discover_channel_capacity = 1024` 对双客户端订阅仍充足（实例变更事件频率低）。
+/// `discover_channel_capacity = 1024` 对多客户端订阅仍充足（实例变更事件频率低）。
 pub struct GrpcInfrastructure {
     /// 服务实例缓存
     cache: Arc<ServiceInstanceCache>,

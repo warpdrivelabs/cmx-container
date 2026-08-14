@@ -9,7 +9,7 @@ use std::sync::Arc;
 use cmx_registry_config::registry::{ServiceInstanceCache, ServiceRegistry};
 use cmx_traits::rpc::RpcError;
 
-use crate::bundle::{self, RpcServiceBundle};
+use crate::bundle::RpcServiceBundle;
 use crate::client::infra::GrpcInfrastructure;
 use crate::config::RpcConfig;
 use crate::global::{GlobalRpcClient, GlobalRpcClientAlreadySetError};
@@ -67,14 +67,6 @@ pub fn init_rpc_clients(
         GrpcInfrastructure::new(cache, config.grpc.clone(), registry)
             .with_outbound_service_key(outbound_service_key),
     );
-    // TODO(rpc-皮肤迁移过渡)：以下循环为旧皮肤（cmx-rpc 内置的 orchestrator/resource_data
-    // client 单例）保留一轮初始化，使尚未切换到 cmx-rpcs/* 皮肤 crate 访问器的消费方
-    // 旧路径仍可用。旧皮肤 Bundle **不加入返回值**（不参与服务端注册，规避 volo 对
-    // 同名服务重复 add_service 导致的 panic）。消费方全部切换后由阶段 4 删除本循环
-    // 与 [`bundle::default_bundles`]。
-    for b in bundle::default_bundles() {
-        b.init_client(infra.clone());
-    }
     for b in &bundles {
         b.init_client(infra.clone());
     }

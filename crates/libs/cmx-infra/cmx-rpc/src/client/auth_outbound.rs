@@ -26,9 +26,10 @@
 //! # 用法
 //!
 //! ```ignore
-//! let mut req = volo_grpc::Request::new(ExecuteServiceRequest { ... });
+//! // 各领域客户端（cmx-rpcs/* 皮肤 crate）在发起调用前一行注入：
+//! let mut req = volo_grpc::Request::new(proto_request);
 //! apply_auth_metadata(&mut req, &self.service_key);
-//! client.execute_service(req).await
+//! client.some_rpc(req).await
 //! ```
 
 use cmx_traits::auth::context_scope;
