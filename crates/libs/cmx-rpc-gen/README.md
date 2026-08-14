@@ -17,7 +17,7 @@ cmx-rpc-gen = { workspace = true }
 ### 核心示例
 
 ```rust
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::{
+use cmx_rpc_gen::orchestrator_proto::{
     ExecuteServiceRequest, ExecuteServiceResponse,
     CallFunctionRequest, CallFunctionResponse,
     CmxServiceOrchestratorClient,
@@ -50,17 +50,23 @@ cmx-rpc-gen
 ├── build.rs                          # volo-build 代码生成入口
 ├── volo.yml                          # volo-build 构建配置
 ├── idl/
-│   └── cmx_service.proto             # Protobuf IDL 定义
+│   ├── orchestrator/
+│   │   └── cmx_service.proto         # 服务编排域 IDL
+│   └── resource/
+│       └── cmx_resource_data.proto   # 资源数据管理域 IDL
 └── src/
-    └── lib.rs                        # 重导出生成代码
+    └── lib.rs                        # 重导出生成代码 + 便捷别名模块
 ```
 
 ### 生成代码模块
 
-所有生成类型位于 `cmx_rpc_gen::cmx::cmx_service_orchestrator` 模块下：
+生成类型完整路径位于 `cmx_rpc_gen::cmx::<service>::<service>::cmx` 下，**推荐使用便捷别名**（lib.rs 提供）：
+
+- `cmx_rpc_gen::orchestrator_proto::*` — 服务编排域（ExecuteServiceRequest、CmxServiceOrchestratorClient 等）
+- `cmx_rpc_gen::resource_data_proto::*` — 资源数据管理域（ImportResourceDataRequest、CmxResourceDataServiceClient 等）
 
 ```
-cmx::cmx_service_orchestrator
+orchestrator_proto（别名）
 ├── ExecuteServiceRequest             # 服务编排执行请求
 ├── ExecuteServiceResponse            # 服务编排执行响应
 ├── ExecutionStep                     # 编排执行步骤
@@ -81,7 +87,7 @@ cmx::cmx_service_orchestrator
 #### 1.1 构建服务编排请求
 
 ```rust
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::ExecuteServiceRequest;
+use cmx_rpc_gen::orchestrator_proto::ExecuteServiceRequest;
 
 // 基本请求
 let request = ExecuteServiceRequest {
@@ -109,7 +115,7 @@ let debug_request = ExecuteServiceRequest {
 #### 1.2 处理服务编排响应
 
 ```rust
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::ExecuteServiceResponse;
+use cmx_rpc_gen::orchestrator_proto::ExecuteServiceResponse;
 
 let response: ExecuteServiceResponse = /* 从 gRPC 调用获取 */;
 
@@ -140,7 +146,7 @@ if response.success {
 #### 1.3 构建插件函数调用请求
 
 ```rust
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::CallFunctionRequest;
+use cmx_rpc_gen::orchestrator_proto::CallFunctionRequest;
 
 let request = CallFunctionRequest {
     plugin_id: "my-plugin".into(),
@@ -154,7 +160,7 @@ let request = CallFunctionRequest {
 #### 1.4 处理插件函数调用响应
 
 ```rust
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::CallFunctionResponse;
+use cmx_rpc_gen::orchestrator_proto::CallFunctionResponse;
 
 let response: CallFunctionResponse = /* 从 gRPC 调用获取 */;
 
@@ -175,7 +181,7 @@ if response.success {
 #### 2.1 实现 gRPC 服务 trait
 
 ```rust
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::CmxServiceOrchestrator;
+use cmx_rpc_gen::orchestrator_proto::CmxServiceOrchestrator;
 use volo_grpc::{Request, Response, Status};
 
 #[derive(Clone)]
@@ -229,7 +235,7 @@ impl CmxServiceOrchestrator for MyServiceImpl {
 #### 2.2 使用 gRPC 客户端
 
 ```rust
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::CmxServiceOrchestratorClient;
+use cmx_rpc_gen::orchestrator_proto::CmxServiceOrchestratorClient;
 use volo_grpc::Request;
 
 // 创建客户端（通常由 cmx-rpc 的 VoloGrpcClient 内部管理）
@@ -359,13 +365,13 @@ message HealthCheckResponse {
 
 ```yaml
 entries:
-  proto:
-    filename: cmx_service_orchestrator.rs  # 生成的文件名
+  orchestrator:
+    filename: cmx_service_orchestrator.rs  # 生成的文件名（决定 lib.rs 的 include 路径）
     protocol: protobuf                      # 协议类型
     services:
       - idl:
           source: local                     # IDL 来源（local/远程）
-          path: idl/cmx_service.proto       # proto 文件路径
+          path: idl/orchestrator/cmx_service.proto  # proto 文件路径（按域分子目录）
           includes:                         # include 搜索路径
             - idl
 ```
@@ -410,11 +416,13 @@ fn main() {
 ### 六、与其他 Crate 的关系
 
 ```
-cmx-traits (定义 RpcClient/ServiceInvoker/RuntimeInvoker trait)
+cmx-traits (定义 ServiceOrchestrationClient/ResourceDataClient/ServiceInvoker 等抽象)
     ↓
-cmx-rpc (实现 RpcClient，使用 cmx-rpc-gen 的类型)
+cmx-rpcs/* 皮肤 crate (cmx-orchestrator-rpc / cmx-resource-rpc：client + server impl + Bundle)
+    ↓                ↓
+cmx-rpc (RPC 基础设施：Bundle trait / 发现 / 重试 / 鉴权 / server_runner)
     ↓
-cmx-rpc-gen (提供 protobuf 生成代码)
+cmx-rpc-gen (提供 protobuf 生成代码，本 crate)
     ↓
 volo-build + volo-grpc + pilota (底层 gRPC 框架)
 ```
@@ -422,16 +430,14 @@ volo-build + volo-grpc + pilota (底层 gRPC 框架)
 **使用场景：**
 
 ```rust
-// 1. cmx-rpc — RPC 框架核心库
-//    使用 CmxServiceOrchestratorClient 进行 gRPC 调用
-//    使用 CmxServiceOrchestrator trait 实现服务端
-//    使用所有消息类型进行请求/响应构建
+// 1. 皮肤 crate（cmx-rpcs/*）— 使用生成类型实现 gRPC client/server 与 Bundle
+use cmx_rpc_gen::orchestrator_proto::*;
 
 // 2. 其他需要 gRPC 类型的 crate
-use cmx_rpc_gen::cmx::cmx_service_orchestrator::*;
+use cmx_rpc_gen::resource_data_proto::*;
 
-// 3. web-server 集成
-//    通过 cmx-rpc 的 init_rpc() 一键初始化客户端和服务端
+// 3. 组装层（cmx-platform-app）
+//    显式收集皮肤 Bundle 列表传入 init_rpc（主应用 RPC 能力的唯一决定点）
 ```
 
 ## 常见问题
