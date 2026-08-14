@@ -522,7 +522,13 @@ function buildKeyForm() {
   if (C.CmxColumnModel) {
     const cm = new C.CmxColumnModel({ datasetId: 'crKey' })
     const col = state.headCols.find((c) => c.id === state.nameFieldKey)
-    cm.setMembers(col ? [col] : [])
+    // step1 查重输入必须可编辑：克隆列实例（保留原型），按 _origEditMode 恢复，不污染 headCols
+    let member = null
+    if (col) {
+      member = Object.assign(Object.create(Object.getPrototypeOf(col)), col, { edit: { ...(col.edit || {}) } })
+      if (col._origEditMode !== 'readonly' && member.edit.mode === 'readonly') delete member.edit.mode
+    }
+    cm.setMembers(member ? [member] : [])
     form.setColumnModel(cm)
   }
   form.setLayout?.('S1 M1 L2 XL2')
@@ -540,12 +546,15 @@ function buildHeadForms() {
   const isView = state.mode === 'view' && !state.editing
   // 列只读处理：基于 _origEditMode 重置，避免 view↔editing 切换时 readonly 残留 / 系统列被误解锁。
   // 系统列（_origEditMode=readonly）恒只读；view 全只读；create 步骤2 nameFieldKey 只读回显。
+  // 用副本计算只读，不写回共享的 state.headCols：buildKeyForm 复用 nameFieldKey 列，
+  // 若在此改 c.edit.mode 会污染 headCols，导致回 step1 输入框只读、view↔editing 切换残留只读。
   const cols = state.headCols.map((c) => {
     const forceRo = c._origEditMode === 'readonly' || isView || (!isEdit && c.id === state.nameFieldKey) || SYS_HEAD_FIELDS.has(c.id)
-    c.edit = { ...(c.edit || {}) }
-    if (forceRo) c.edit.mode = 'readonly'
-    else if (c.edit.mode === 'readonly') delete c.edit.mode
-    return c
+    // 克隆列实例（保留 CmxColumn 原型 → toDescriptor 可用），改副本 edit.mode 不污染共享 headCols
+    const cc = Object.assign(Object.create(Object.getPrototypeOf(c)), c, { edit: { ...(c.edit || {}) } })
+    if (forceRo) cc.edit.mode = 'readonly'
+    else if (cc.edit.mode === 'readonly') delete cc.edit.mode
+    return cc
   })
   // 按 header_groups 包成 CmxColumnGroup；未归组字段：有分组配置时包「其他」组，无分组配置时散列
   const used = new Set()
