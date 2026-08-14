@@ -117,12 +117,17 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
 }
 
 /// 按配置产出流程模块路由：远程基址非空 → FlowProxyModule（转发）；否则 FlowModule（内嵌）。
+///
+/// F3a：反代模式下**同时**叠加页面反代层（`with_flow_page_proxy`）——流程拥有的 native/html
+/// 单页取页请求（`/api/native-pages/portal.flow.*`、`/api/html-pages/fi.cmxfico.gl.flow-*`）
+/// 转发到 flow-server（它自暴同款字节对齐 API），其余页请求落回门户内嵌 handler。前端零改。
 fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match flow_remote_base() {
         Some(base) => {
             let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
-            tracing::info!(flow_base = %base, "流程引擎：独立微服务模式（FlowProxy 转发 /api/flow/*）");
-            router.merge(FlowProxyModule::new(base, api_key).routes())
+            tracing::info!(flow_base = %base, "流程引擎：独立微服务模式（FlowProxy 转发 /api/flow/* + 页面反代 native/html）");
+            let router = router.merge(FlowProxyModule::new(base.clone(), api_key.clone()).routes());
+            cmx_flow_api::with_flow_page_proxy(router, base, api_key)
         }
         None => router.merge(FlowModule.routes()),
     }
@@ -130,12 +135,17 @@ fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
 
 /// 按配置产出报表模块路由：远程基址非空 → ReportProxyModule（转发到独立 cmx-rpt-server）；
 /// 否则 ReportModule（进程内嵌）。与 [`merge_flow`] 同构。
+///
+/// F3a：反代模式下**同时**叠加页面反代层（`with_report_page_proxy`）——报表拥有的 native/html
+/// 单页取页请求（`/api/native-pages/portal.rpt.*`、`/api/html-pages/fi.cmxfico.gl.rpt-*designer-*`）
+/// 转发到 report-server（它自暴同款字节对齐 API），其余页请求落回门户内嵌 handler。前端零改。
 fn merge_report(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match report_remote_base() {
         Some(base) => {
             let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
-            tracing::info!(report_base = %base, "报表引擎：独立微服务模式（ReportProxy 转发 /api/report-design/*）");
-            router.merge(ReportProxyModule::new(base, api_key).routes())
+            tracing::info!(report_base = %base, "报表引擎：独立微服务模式（ReportProxy 转发 /api/report-design/* + 页面反代 native/html）");
+            let router = router.merge(ReportProxyModule::new(base.clone(), api_key.clone()).routes());
+            cmx_rpt_api::with_report_page_proxy(router, base, api_key)
         }
         None => router.merge(ReportModule.routes()),
     }

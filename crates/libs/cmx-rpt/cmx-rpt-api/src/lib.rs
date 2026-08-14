@@ -14,7 +14,7 @@ use cmx_api_core::CmxAppState;
 use cmx_api_core::routes::traits::ModuleRoutes;
 
 mod proxy;
-pub use proxy::ReportProxyModule;
+pub use proxy::{ReportProxyModule, with_report_page_proxy};
 
 /// 报表模块路由聚合（实现 cmx-api-core 的 ModuleRoutes，由 web-server 合并进主路由）。
 pub struct ReportModule;
