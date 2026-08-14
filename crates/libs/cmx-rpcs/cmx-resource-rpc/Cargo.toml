@@ -1,0 +1,32 @@
+[package]
+name = "cmx-resource-rpc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# cmx-resource-rpc —— 资源数据管理域的 gRPC 皮肤（薄 crate）。
+#
+# 与 cmx-orchestrator-rpc 等同模式：client 访问器 + 服务端 impl + 装配 Bundle。
+# 依赖 cmx-rpc（Bundle trait / 共享客户端设施 / 鉴权）+ cmx-rpc-gen（proto 契约）
+# + cmx-traits（ResourceDataClient / ResourceDataImporter 抽象）；不依赖业务
+# service crate——业务实现经 ServerDeps 由组装层（cmx-platform-app）注入。
+# 主应用是否提供该 gRPC 服务，由组装层显式注册 ResourceDataBundle 决定。
+
+[dependencies]
+# 内部依赖 - RPC 基础设施（Bundle trait / GrpcInfrastructure / apply_auth_metadata / 鉴权）
+cmx-rpc = { workspace = true }
+# 内部依赖 - RPC proto 契约（volo-build 生成类型）
+cmx-rpc-gen = { workspace = true }
+# 内部依赖 - 特征定义（ResourceDataClient / ResourceDataImporter）
+cmx-traits = { workspace = true }
+# gRPC 框架
+volo-grpc = { workspace = true }
+# 异步运行时
+tokio = { workspace = true }
+# 异步 trait
+async-trait = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+
+[lib]
+path = "src/lib.rs"

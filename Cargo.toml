@@ -45,6 +45,9 @@ members = [
     "crates/libs/cmx-model/cmx-model-api",
     "crates/libs/cmx-rpc-gen",
     "crates/libs/cmx-infra/cmx-rpc",
+    # —— RPC 皮肤薄 crate（gRPC 服务归域，集中 cmx-rpcs/，对称 cmx-apis/）——
+    "crates/libs/cmx-rpcs/cmx-orchestrator-rpc",
+    "crates/libs/cmx-rpcs/cmx-resource-rpc",
     "crates/libs/cmx-ai",
     # 流程引擎核心 crate（model/bpmn/engine/store-pg/def/demo）+ cmx-flow-tests 已迁至
     # 独立 workspace ../cmx-flowengine/（S0：独立流程微服务）。此处仅保留平台适配层
@@ -143,6 +146,9 @@ cmx-registry-config = { path = "crates/libs/cmx-infra/cmx-registry-config", vers
 cmx-rpc = { path = "crates/libs/cmx-infra/cmx-rpc", version = "0.1.12", registry = "nora" }
 # 内部依赖 - RPC 代码生成
 cmx-rpc-gen = { path = "crates/libs/cmx-rpc-gen", version = "0.1.12", registry = "nora" }
+# 内部依赖 - RPC 皮肤（服务编排域 / 资源数据管理域 gRPC 皮肤）
+cmx-orchestrator-rpc = { path = "crates/libs/cmx-rpcs/cmx-orchestrator-rpc", version = "0.1.12", registry = "nora" }
+cmx-resource-rpc = { path = "crates/libs/cmx-rpcs/cmx-resource-rpc", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 存储
 cmx-storage = { path = "crates/libs/cmx-infra/cmx-storage", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 审计日志
