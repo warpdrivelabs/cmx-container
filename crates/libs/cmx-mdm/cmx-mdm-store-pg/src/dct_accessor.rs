@@ -27,21 +27,22 @@ pub async fn insert_header(
 ) -> Result<i64, cmx_api_types::Error> {
     validate_ident(table)?;
     let id = next_pk_id();
-    // backfill:对缺失的公共 NOT NULL 列补默认值(不覆盖 row 已有值)
-    // 注:create_time/update_time 由 build_insert_sql 用 SQL now() 填充,这里只占位
+    // backfill:对缺失的公共列补默认值(不覆盖 row 已有值)。先查目标表实际列,只补目标表
+    // 拥有的列——避免给无 code/name 的明细表补这两列导致 INSERT「column does not exist」(D-07)。
+    // 注:create_time/update_time 由 build_insert_sql 用 SQL now() 填充,这里只占位(若列存在)。
+    let cols = load_table_columns(mm, db_id, Some(txn_id), table).await?;
     let mut full = row.clone();
-    // code/name 是 dictionaryCommonFields 的 NOT NULL 列;头表已由 plan_create 填 code,
-    // 明细表若缺则补基于 id 的占位码(避免 NOT NULL 约束失败)
     let id_str = id.to_string();
-    backfill(&mut full, "code", serde_json::json!(format!("MDM-{id_str}")));
-    backfill(&mut full, "name", serde_json::json!(format!("MDM-{id_str}")));
-    backfill(&mut full, "published_version", serde_json::json!(1));
-    backfill(&mut full, "sort_no", serde_json::json!(0));
-    backfill(&mut full, "status", serde_json::json!(1));
-    backfill(&mut full, "create_by", serde_json::json!(operated_by));
-    backfill(&mut full, "update_by", serde_json::json!(operated_by));
-    backfill(&mut full, "create_time", serde_json::Value::Null);
-    backfill(&mut full, "update_time", serde_json::Value::Null);
+    // code/name 属 dictionaryCommonFields:头表已由 plan_create/dict_upsert 填;明细表若有此两列且 CR 未提供则补占位
+    backfill_col(&cols, &mut full, "code", serde_json::json!(format!("MDM-{id_str}")));
+    backfill_col(&cols, &mut full, "name", serde_json::json!(format!("MDM-{id_str}")));
+    backfill_col(&cols, &mut full, "published_version", serde_json::json!(1));
+    backfill_col(&cols, &mut full, "sort_no", serde_json::json!(0));
+    backfill_col(&cols, &mut full, "status", serde_json::json!(1));
+    backfill_col(&cols, &mut full, "create_by", serde_json::json!(operated_by));
+    backfill_col(&cols, &mut full, "update_by", serde_json::json!(operated_by));
+    backfill_col(&cols, &mut full, "create_time", serde_json::Value::Null);
+    backfill_col(&cols, &mut full, "update_time", serde_json::Value::Null);
     let (sql, params) = build_insert_sql(table, &full, id);
     mm.execute_sql_with_datavalues(db_id, Some(txn_id), &sql, params)
         .await
@@ -52,11 +53,45 @@ pub async fn insert_header(
     Ok(id)
 }
 
-/// 若 row 无该列则补默认值（不覆盖已有）。
-fn backfill(row: &mut Map<String, Value>, col: &str, default: Value) {
-    if !row.contains_key(col) {
+/// 若 row 无该列**且目标表实际拥有此列**，则补默认值（不覆盖已有，不补目标表没有的列）。
+fn backfill_col(
+    cols: &std::collections::HashSet<String>,
+    row: &mut Map<String, Value>,
+    col: &str,
+    default: Value,
+) {
+    if cols.contains(col) && !row.contains_key(col) {
         row.insert(col.to_string(), default);
     }
+}
+
+/// 查目标表的列名集合（information_schema.columns）。
+///
+/// 供 [`insert_header`] 判断哪些 backfill 列目标表实际拥有——避免给无 `code`/`name`
+/// 的明细表补这两列导致 INSERT「column does not exist」失败（D-07）。
+async fn load_table_columns(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: Option<&str>,
+    table: &str,
+) -> Result<std::collections::HashSet<String>, cmx_api_types::Error> {
+    let sql = "SELECT column_name FROM information_schema.columns WHERE table_name = $1";
+    let ds = mm
+        .query_sql_with_datavalues(
+            db_id,
+            txn_id,
+            sql,
+            vec![DataValue::String(table.into())],
+            "mdm_table_cols",
+        )
+        .await
+        .map_err(|e| api_err_db(&format!("查 {table} 列失败: {e}")))?;
+    let schema = ds.schema.as_ref();
+    Ok(ds
+        .rows
+        .iter()
+        .filter_map(|r| r.get_by_name_as::<String>(schema, "column_name"))
+        .collect())
 }
 
 /// 变更主数据头（UPDATE by id + 乐观锁 CAS）。返回受影响行数（0=版本冲突）。

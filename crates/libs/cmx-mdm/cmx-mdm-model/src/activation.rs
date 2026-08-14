@@ -89,6 +89,18 @@ pub struct ActivationPlan {
     pub line_rows: Vec<(String, String, Map<String, Value>)>,
 }
 
+/// 明细处理产出：inserts（新增/修改行）+ deletes（待软删明细）。
+///
+/// insert/update 行 → [`LinesPlan::inserts`]；delete 行 → [`LinesPlan::deletes`]，
+/// 由激活器调 `dct_accessor::set_lifecycle` 软删 `published→archived`（保留审计痕迹，不物理删）。
+#[derive(Debug, Clone, Default)]
+pub struct LinesPlan {
+    /// 新增/修改明细：(目标明细物理表, 关联列名, 行数据)
+    pub inserts: Vec<(String, String, Map<String, Value>)>,
+    /// 待软删明细：(目标明细物理表, 记录 id)
+    pub deletes: Vec<(String, i64)>,
+}
+
 /// 「未填」判断：`null` 或空字符串视作未提供（与 `cmx-biz` NOT NULL 校验「空串=missing」语义一致）。
 ///
 /// 激活器搬运时跳过这些值——让目标表 DEFAULT / 服务端 backfill（如 status=1、sort_no=0）生效，
@@ -190,31 +202,36 @@ pub fn plan_update(
     ActivationPlan { header_row, line_rows: vec![] }
 }
 
-/// 按 line_mappings 把 CR 行搬运成明细行。
+/// 按 line_mappings 把 CR 行搬运成明细变更（insert/update + delete 软删）。
 ///
-/// 遍历 cr_lines,按 line_type 匹配 mapping,产出 (目标明细表, 关联列, 行数据)。
+/// 遍历 cr_lines，按 line_type 匹配 mapping：
+/// - insert/update 行 → [`LinesPlan::inserts`]（目标明细表, 关联列, 行数据）
+/// - delete 行 → [`LinesPlan::deletes`]（目标明细表, 待删记录 id），由激活器调
+///   `set_lifecycle` 软删 `published→archived`，保留审计痕迹不物理删
 ///
-/// **M1 范围**:只处理 insert/update 行;**delete 行在此过滤掉**(activate_inner 不处理明细删除,
-/// 留 M3 merge 分支)。返回元组第 1 项是目标明细**物理表名**(target_table)。
+/// delete 行须带 `line_target_id` 指向主数据明细记录 id；无则忽略（无法定位删除目标）。
 pub fn plan_lines(
     cfg: &ActivationConfig,
     cr_lines: &[Value],
     header_id: i64,
-) -> Vec<(String, String, Map<String, Value>)> {
-    let mut out = vec![];
+) -> LinesPlan {
+    let mut plan = LinesPlan::default();
     for line in cr_lines {
         let Some(line_obj) = line.as_object() else { continue };
         let Some(line_type) = line_obj.get("line_type").and_then(|v| v.as_str()) else {
             continue;
         };
-        let line_action = line_obj.get("line_action").and_then(|v| v.as_str()).unwrap_or("insert");
-        // M1 跳过 delete 明细(留 M3)
-        if line_action == "delete" {
-            continue;
-        }
         let Some(lm) = cfg.line_mappings.iter().find(|m| m.line_type == line_type) else {
             continue;
         };
+        let line_action = line_obj.get("line_action").and_then(|v| v.as_str()).unwrap_or("insert");
+        if line_action == "delete" {
+            // 软删明细：line_target_id 指向主数据明细记录 id（无则忽略——无法定位删除目标）
+            if let Some(tid) = line_obj.get("line_target_id").and_then(|v| v.as_i64()) {
+                plan.deletes.push((lm.target_table.clone(), tid));
+            }
+            continue;
+        }
         let mut row = Map::new();
         if let Some(payload) = line_obj.get("line_payload").and_then(|v| v.as_object()) {
             for (src, tgt) in &lm.fields {
@@ -230,10 +247,9 @@ pub fn plan_lines(
         row.insert(lm.parent_field.clone(), Value::Number(header_id.into()));
         // 闸口:明细行也强制 published
         row.insert("lifecycle_status".into(), Value::String("published".to_string()));
-        // 元组:(目标明细物理表, 关联列名, 行数据)
-        out.push((lm.target_table.clone(), lm.parent_field.clone(), row));
+        plan.inserts.push((lm.target_table.clone(), lm.parent_field.clone(), row));
     }
-    out
+    plan
 }
 
 #[cfg(test)]
@@ -371,23 +387,27 @@ mod tests {
     }
 
     #[test]
-    fn plan_lines_fills_parent_and_skips_delete() {
+    fn plan_lines_handles_insert_and_delete() {
         let cfg = sample_cfg();
         let cr_lines = vec![
             json!({ "line_type": "bank_account", "line_action": "insert",
                     "line_payload": { "account_no": "工行6222" } }),
+            // delete 行：line_target_id 指向主数据明细记录 id（软删目标）
             json!({ "line_type": "bank_account", "line_action": "delete",
-                    "line_payload": { "account_no": "旧账号" } }),
+                    "line_target_id": 9001 }),
         ];
-        let rows = plan_lines(&cfg, &cr_lines, 8001);
-        // delete 行被过滤
-        assert_eq!(rows.len(), 1);
-        let (table, parent_col, row) = &rows[0];
+        let plan = plan_lines(&cfg, &cr_lines, 8001);
+        // insert 行进 inserts
+        assert_eq!(plan.inserts.len(), 1);
+        let (table, parent_col, row) = &plan.inserts[0];
         assert_eq!(table, "cm_bank_account");
         assert_eq!(parent_col, "supplier_id");
         assert_eq!(row.get("account_no").and_then(|v| v.as_str()), Some("工行6222"));
         assert_eq!(row.get("supplier_id").and_then(|v| v.as_i64()), Some(8001));
         assert_eq!(row.get("lifecycle_status").and_then(|v| v.as_str()), Some("published"));
+        // delete 行进 deletes（待软删，不再静默丢弃）
+        assert_eq!(plan.deletes.len(), 1);
+        assert_eq!(plan.deletes[0], ("cm_bank_account".to_string(), 9001));
     }
 
     #[test]

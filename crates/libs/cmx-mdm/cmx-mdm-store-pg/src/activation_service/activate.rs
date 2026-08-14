@@ -202,10 +202,22 @@ async fn activate_inner(
         }
     };
 
-    // 4. 明细处理（plan_lines 已过滤 delete 行，这里只 insert）
-    let line_rows = plan_lines(&cfg, &cr_lines, record_id);
-    for (target_table, _parent_field, row) in line_rows {
-        dct_accessor::insert_header(mm, db_id, txn_id, &target_table, &row, operated_by).await?;
+    // 4. 明细处理（insert/update 落库 + delete 软删）
+    let lines = plan_lines(&cfg, &cr_lines, record_id);
+    for (target_table, _parent_field, row) in &lines.inserts {
+        dct_accessor::insert_header(mm, db_id, txn_id, target_table, row, operated_by).await?;
+    }
+    // CR 标记删除的明细行 → 软删（lifecycle_status published→archived，保留审计痕迹不物理删）
+    for (target_table, line_id) in &lines.deletes {
+        match dct_accessor::set_lifecycle(mm, db_id, txn_id, target_table, *line_id, "published", "archived").await {
+            Ok(0) => tracing::warn!(
+                target: "cmx_mdm::activation",
+                table = %target_table, line_id,
+                "明细软删未命中（可能已非 published 状态）"
+            ),
+            Ok(_) => {}
+            Err(e) => return Err(e),
+        }
     }
 
     // 5. 记审计
