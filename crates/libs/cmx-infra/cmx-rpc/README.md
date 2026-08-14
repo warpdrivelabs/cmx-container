@@ -70,15 +70,18 @@ cmx-rpc/src
 
 | 字段 | 默认 | 说明 |
 |------|------|------|
-| `enabled` | false | RPC 总开关（关闭时 `init_rpc` 直接跳过，全本地调用） |
-| `protocol` | "grpc" | 目前仅支持 grpc |
-| `grpc.port` | — | gRPC 监听端口 |
-| `grpc.timeout_ms` | 30000 | 单次调用超时 + 重试总预算 |
-| `grpc.connect_timeout_ms` | 3000 | 连接超时 |
+| `enabled` | — | RPC 总开关（关闭时 `init_rpc` 直接跳过，全本地调用）；未启用时也不会把 `grpc_port` 写入注册实例 metadata |
+| `protocol` | — | 目前仅支持 `"grpc"`，其他值 `init_rpc_clients` 返回 `UnsupportedProtocol` |
+| `grpc.port` | — | gRPC 监听端口（注册实例时写入 `metadata["grpc_port"]`，消费方据此直连） |
+| `grpc.timeout_ms` | 30000 | 单次调用超时（volo `rpc_timeout`）+ 重试总预算（同源，已知设计债） |
+| `grpc.connect_timeout_ms` | 3000 | 连接超时（volo `connect_timeout`） |
 | `grpc.retry_count` | 0 | 重试次数（仅对 UNAVAILABLE/DEADLINE_EXCEEDED/RESOURCE_EXHAUSTED/ABORTED） |
-| `warmup_services` | [] | 启动时预订阅的服务名列表 |
+| `grpc.default_group` | None | `query_instances` 过滤分组（None = 不过滤） |
+| `grpc.default_clusters` | [] | `query_instances` 过滤集群列表（空 = 不过滤） |
+| `grpc.discover_channel_capacity` | 1024 | `RegistryAwareDiscover` 内部 broadcast 通道容量（0 回落默认） |
+| `warmup_services` | [] | 启动时预订阅的服务名列表（走 `subscribe_instances`，会注册 Nacos 监听器） |
 
-出站服务凭证：`[service_auth].outgoing_api_key`（`cmx_sk_xxx`），由 `apply_auth_metadata` 注入 `X-API-Key`。
+出站服务凭证：`[service_auth].outgoing_api_key`（`cmx_sk_xxx`），由 `apply_auth_metadata` 注入 `X-API-Key`；留空则出站不携带服务身份。入站鉴权由组装层是否向 `init_rpc` 注入 `auth_service` 决定（注入则构造 `AuthVerifier`，未注入则服务端跳过鉴权，兼容单体/loopback）。
 
 ## 重试机制
 

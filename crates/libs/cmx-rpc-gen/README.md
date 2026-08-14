@@ -80,6 +80,20 @@ orchestrator_proto（别名）
 └── CmxServiceOrchestratorResponseSend # gRPC 响应发送类型
 ```
 
+```
+resource_data_proto（别名）
+├── ImportResourceDataRequest          # 资源数据导入请求（含 zip_data）
+├── ImportResourceDataResponse         # 导入/清理响应（created/updated/deleted 计数）
+├── CleanupResourceDataRequest         # 资源数据清理请求
+├── ListResourceDataRequest            # 资源数据查询（导出）请求
+├── ListResourceDataResponse           # 查询响应（json_data 字节）
+├── CmxResourceDataService             # gRPC 服务 trait
+├── CmxResourceDataServiceClient       # gRPC 客户端
+├── CmxResourceDataServiceServer       # gRPC 服务端注册器
+├── CmxResourceDataServiceRequestRecv  # gRPC 请求接收类型
+└── CmxResourceDataServiceResponseSend # gRPC 响应发送类型
+```
+
 ## 使用指南
 
 ### 一、消息类型
@@ -263,7 +277,10 @@ let response = client.call_function(request).await?;
 
 #### 3.1 当前服务定义
 
+proto 按业务域分子目录存放：`idl/orchestrator/`（服务编排域）、`idl/resource/`(资源数据管理域)。
+
 ```protobuf
+// idl/orchestrator/cmx_service.proto
 syntax = "proto3";
 package cmx;
 
@@ -273,6 +290,25 @@ service CmxServiceOrchestrator {
   rpc ExecuteService(ExecuteServiceRequest) returns (ExecuteServiceResponse);
   // 调用插件函数（对应 POST /api/service/call）
   rpc CallFunction(CallFunctionRequest) returns (CallFunctionResponse);
+}
+```
+
+```protobuf
+// idl/resource/cmx_resource_data.proto
+syntax = "proto3";
+package cmx;
+
+// 资源数据导入 gRPC 服务
+// 用于将平台资源数据（权限/菜单/表单/流程）导入到基础服务中心
+// 以及从基础服务中心查询（导出）资源定义
+// 注意：gRPC 默认消息上限 4MB，大包建议使用 HTTP 模式
+service CmxResourceDataService {
+  // 导入资源数据（ZIP 包）
+  rpc ImportResourceData(ImportResourceDataRequest) returns (ImportResourceDataResponse);
+  // 清理资源数据
+  rpc CleanupResourceData(CleanupResourceDataRequest) returns (ImportResourceDataResponse);
+  // 查询（导出）资源数据，返回 JSON 字节
+  rpc ListResourceData(ListResourceDataRequest) returns (ListResourceDataResponse);
 }
 ```
 
@@ -337,12 +373,49 @@ service CmxServiceOrchestrator {
 | `elapsed_us` | `uint64` | 3 | 耗时（微秒） |
 | `error` | `optional string` | 4 | 错误信息 |
 
+**ImportResourceDataRequest（resource 域）：**
+
+| 字段 | 类型 | 序号 | 说明 |
+|------|------|------|------|
+| `category` | `string` | 1 | 数据类别：`perm` / `menu` / `form` / `flow` |
+| `domain_code` | `string` | 2 | 域编码 |
+| `application_code` | `string` | 3 | 应用编码 |
+| `module_code` | `string` | 4 | 模块编码 |
+| `plugin_id` | `string` | 5 | 插件 ID（Perm 类别必填） |
+| `app_id` | `string` | 6 | 应用 ID（Perm 类别必填） |
+| `version` | `string` | 7 | 版本（Perm 类别必填） |
+| `zip_data` | `bytes` | 8 | ZIP 压缩数据（gRPC 默认上限 4MB） |
+
+**ImportResourceDataResponse（resource 域，Import/Cleanup 共用）：**
+
+| 字段 | 类型 | 序号 | 说明 |
+|------|------|------|------|
+| `success` | `bool` | 1 | 是否成功 |
+| `message` | `string` | 2 | 结果消息 |
+| `created_count` | `uint32` | 3 | 新建条数 |
+| `updated_count` | `uint32` | 4 | 更新条数 |
+| `deleted_count` | `uint32` | 5 | 删除条数 |
+
+**CleanupResourceDataRequest（resource 域）：** `category` / `domain_code` / `application_code` / `module_code` / `plugin_id` / `app_id`（序号 1-6，无 `version` 与 `zip_data`）。
+
+**ListResourceDataRequest / ListResourceDataResponse（resource 域）：**
+
+| 字段 | 类型 | 序号 | 说明 |
+|------|------|------|------|
+| `category` | `string` | 1 | 数据类别 |
+| `domain_code` | `string` | 2 | 域编码（Perm 类别需要，其他可空） |
+| `application_code` | `string` | 3 | 应用编码 |
+| `module_code` | `string` | 4 | 模块编码（必填） |
+| 响应 `json_data` | `bytes` | 3 | JSON 序列化的定义列表（如 `Vec<FormDefinition>` 的 JSON 数组） |
+
 ### 四、修改 IDL 定义
 
 #### 4.1 添加新的 RPC 方法
 
-1. 编辑 `idl/cmx_service.proto`，添加新的 rpc 方法和对应的消息类型
-2. 重新编译项目，volo-build 会自动重新生成代码
+1. 编辑对应域的 proto（如 `idl/orchestrator/cmx_service.proto`），添加新的 rpc 方法和对应的消息类型
+2. 重新编译项目，volo-build 会按 `volo.yml` 自动重新生成代码
+
+> 新增一个全新的域：在 `idl/<新域>/` 建 proto → `volo.yml` 加 entry → `src/lib.rs` 加 include 模块与便捷别名 → 由对应的 `cmx-rpcs/*` 皮肤 crate 消费（完整 SOP 见 cmx-rpc/README.md）。
 
 ```protobuf
 // 在 service CmxServiceOrchestrator 中添加新方法
@@ -374,7 +447,18 @@ entries:
           path: idl/orchestrator/cmx_service.proto  # proto 文件路径（按域分子目录）
           includes:                         # include 搜索路径
             - idl
+  resource_data:
+    filename: cmx_resource_data_service.rs
+    protocol: protobuf
+    services:
+      - idl:
+          source: local
+          path: idl/resource/cmx_resource_data.proto
+          includes:
+            - idl
 ```
+
+> `filename` 决定生成文件名，进而决定 `src/lib.rs` 中 `include!` 的路径；`path` 指向按域分子目录的 proto 文件。新增域时两者需同步维护。
 
 #### 4.3 构建脚本
 
@@ -384,7 +468,7 @@ entries:
 fn main() {
     volo_build::ConfigBuilder::default()
         .write()
-        .expect("volo-build 失败：请确认 idl/cmx_service.proto 与 volo.yml 配置正确");
+        .expect("volo-build 失败：请确认 idl/ 下 proto 与 volo.yml 配置正确");
 }
 ```
 
@@ -448,11 +532,11 @@ use cmx_rpc_gen::resource_data_proto::*;
 
 ### Q: 如何查看生成的代码？
 
-**A**: 编译后，生成代码位于 `target/debug/build/cmx-rpc-gen-<hash>/out/cmx_service_orchestrator.rs`。也可以通过 `cargo expand` 查看宏展开后的代码。
+**A**: 编译后，生成代码位于 `target/debug/build/cmx-rpc-gen-<hash>/out/` 下，文件名与 `volo.yml` 的 `filename` 一致（`cmx_service_orchestrator.rs`、`cmx_resource_data_service.rs`；多个 hash 目录时以最新为准）。也可以通过 `cargo expand` 查看宏展开后的代码。
 
 ### Q: 修改 proto 文件后需要做什么？
 
-**A**: 只需重新编译项目（`cargo build`），volo-build 会在编译期自动检测 proto 文件变更并重新生成代码。无需手动运行任何代码生成命令。
+**A**: 只需重新编译（`cargo check -p cmx-rpc-gen` 即可触发 build.rs 重跑），volo-build 会在编译期自动检测 proto 文件变更并重新生成代码。无需手动运行任何代码生成命令。
 
 ### Q: input 字段为什么使用 string 而不是嵌套消息？
 
@@ -460,4 +544,9 @@ use cmx_rpc_gen::resource_data_proto::*;
 
 ### Q: 生成的类型路径是什么？
 
-**A**: 所有生成类型通过 `cmx_rpc_gen::cmx::cmx_service_orchestrator` 路径访问。这对应 proto 文件中的 `package cmx` 和 `service CmxServiceOrchestrator`。
+**A**: 生成类型的完整路径较深，按域分别为：
+
+- 服务编排域：`cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*`
+- 资源数据管理域：`cmx_rpc_gen::cmx::cmx_resource_data_service::cmx_resource_data_service::cmx::*`
+
+这对应各 proto 文件的 `package cmx` 与 `service` 名。**推荐直接使用便捷别名**：`cmx_rpc_gen::orchestrator_proto` / `cmx_rpc_gen::resource_data_proto`，无需记忆深路径。
