@@ -31,5 +31,11 @@ pub use discover::RegistryAwareDiscover;
 pub use error::RpcFrameworkError;
 pub use factory::{ClientInitError, init_rpc_clients};
 pub use global::{GlobalRpcClient, GlobalRpcClientAlreadySetError};
-pub use server::AuthVerifier;
 pub use server_runner::start_grpc_server;
+
+// 共享设施便捷 re-export（供 cmx-rpcs/* 皮肤 crate 以短路径使用）
+pub use client::auth_outbound::apply_auth_metadata;
+pub use client::infra::GrpcInfrastructure;
+pub use client::retry::{RetryStats, with_retry};
+pub use client::safe_parse_json;
+pub use server::{AuthVerifier, VerifiedAuth, verify_request};

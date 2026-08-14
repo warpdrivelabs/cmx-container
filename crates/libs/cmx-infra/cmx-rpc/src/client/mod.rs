@@ -17,7 +17,7 @@ pub use orchestrator::orchestrator_client;
 pub use resource_data::resource_data_client;
 
 /// 安全解析 JSON 字符串，解析失败时记录 warn 日志并降级为 [`serde_json::Value::Null`]。
-pub(crate) fn safe_parse_json(raw: &str, context: &str) -> serde_json::Value {
+pub fn safe_parse_json(raw: &str, context: &str) -> serde_json::Value {
     serde_json::from_str(raw).unwrap_or_else(|e| {
         tracing::warn!(
             target: "cmx_rpc",
