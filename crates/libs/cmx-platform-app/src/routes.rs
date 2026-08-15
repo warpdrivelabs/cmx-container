@@ -24,6 +24,7 @@ use cmx_job_api::JobModule;
 use cmx_mdm_api::{MdmApiDoc, MdmModule};
 use cmx_model_api::ModelModule;
 use cmx_rpt_api::{ReportModule, ReportProxyModule};
+use cmx_rule_api::RulesProxyModule;
 use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -53,6 +54,18 @@ pub(crate) fn report_remote_base() -> Option<String> {
     let cfg = cmx_plugin::center_client::CenterClientConfig::load();
     cfg.urls
         .report
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// 读 `[center_client.urls].rules`：非空=独立规则微服务部署（反代到它）。
+///
+/// 规则引擎**无进程内嵌壳**（始终独立微服务），故与 flow/report 的差异：没配 = 门户不挂规则路由，
+/// 而非回退内嵌。配了远程地址就转发 `/api/rules/*` + 规则拥有的 native 页，前端全零改。
+pub(crate) fn rules_remote_base() -> Option<String> {
+    let cfg = cmx_plugin::center_client::CenterClientConfig::load();
+    cfg.urls
+        .rules
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
 }
@@ -107,6 +120,16 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
             proxiable: true,
         },
     });
+    // rules：独立规则微服务——配了 [center_client.urls].rules 才挂（proxy），没配则不在拓扑里。
+    if let Some(base) = rules_remote_base() {
+        deps.push(cmx_web_monitor::ServiceDep {
+            key: "rules".into(),
+            label: "决策规则引擎".into(),
+            mode: "proxy".into(),
+            target: Some(base),
+            proxiable: true,
+        });
+    }
     deps.push(embedded("doc", "业务单据"));
     deps.push(embedded("dct", "数据字典"));
     deps.push(embedded("mdm", "主数据"));
@@ -151,6 +174,21 @@ fn merge_report(router: Router<CmxAppState>) -> Router<CmxAppState> {
     }
 }
 
+/// 按配置产出规则模块路由：远程基址非空 → RulesProxyModule（转发 `/api/rules/*`）+ 页面反代
+/// （规则拥有的 `portal.rules.*` native 页转发到 rules-server）；没配 → 不挂规则路由（规则无内嵌）。
+/// 与 [`merge_report`] 同构，但**无 embedded 分支**——规则始终独立微服务。
+fn merge_rules(router: Router<CmxAppState>) -> Router<CmxAppState> {
+    match rules_remote_base() {
+        Some(base) => {
+            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            tracing::info!(rules_base = %base, "规则引擎：独立微服务模式（RulesProxy 转发 /api/rules/* + 页面反代 native）");
+            let router = router.merge(RulesProxyModule::new(base.clone(), api_key.clone()).routes());
+            cmx_rule_api::with_rules_page_proxy(router, base, api_key)
+        }
+        None => router,
+    }
+}
+
 /// 配置所有 API 路由
 ///
 /// 直接调用 cmx-api 的统一路由注册，返回配置好的 Axum Router。
@@ -186,7 +224,8 @@ pub fn routes() -> Router<CmxAppState> {
         .merge(MarketplaceModule.routes())
         .merge(ModulePackageModule.routes());
     // 报表、流程各按 [center_client.urls].{report,flow} 二选一：配了=反代到独立微服务，没配=进程内嵌。
-    merge_flow(merge_report(base))
+    // 规则按 [center_client.urls].rules：配了=反代到独立 cmx-rule-server，没配=不挂（规则无内嵌）。
+    merge_flow(merge_report(merge_rules(base)))
 }
 
 /// 获取 Swagger 文档路由

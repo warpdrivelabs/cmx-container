@@ -1470,6 +1470,7 @@ version = "0.1.12"
 dependencies = [
  "cmx-flow-model",
  "roxmltree",
+ "serde_json",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -1867,6 +1868,7 @@ dependencies = [
  "cmx-resource-rpc",
  "cmx-rpc",
  "cmx-rpt-api",
+ "cmx-rule-api",
  "cmx-runtime",
  "cmx-service",
  "cmx-service-base",
@@ -2151,6 +2153,18 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-rule-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api-core",
+ "cmx-traits",
+ "reqwest",
+ "serde_json",
  "tracing",
 ]
 

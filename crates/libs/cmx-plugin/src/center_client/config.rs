@@ -51,6 +51,9 @@ pub struct CenterUrlsConfig {
     /// 报表中心（独立报表微服务 cmx-rpt-server）URL。非空=平台反代到它，空=进程内嵌。
     #[serde(default)]
     pub report: Option<String>,
+    /// 决策规则中心（独立规则微服务 cmx-rule-server）URL。非空=平台反代到它；规则无内嵌，空=门户无规则路由。
+    #[serde(default)]
+    pub rules: Option<String>,
 }
 
 /// 服务发现模式配置。
