@@ -159,6 +159,7 @@ fn ctx() -> SaveCtx {
         actor_name: "集成测试".into(),
         doc_file: "cmxfico_doc_meta_v2.json".into(),
         op_override: None,
+        code_rule_overrides: std::collections::HashMap::new(),
     }
 }
 

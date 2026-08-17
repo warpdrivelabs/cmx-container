@@ -4,7 +4,8 @@
  * 双层元数据驱动，零业务字段硬编码：
  *   1) activation 配置（按 source_doc_type + cr_type 定位）→ 给出目标字典、头字段映射
  *      （header_mapping：{源字段:目标列}）、头分组（header_groups）、明细映射（line_mappings）、
- *      主体名标识（subject_name_field）。
+ *      主体名标识（subject_name_field）、关键信息字段（key_fields → 步骤①表单；dedup=true
+ *      者进 /mdm/check-key 多字段加权查重；未配置则无步骤①，直接完整表单不查重）。
  *   2) 目标字典 dct/meta → 列模型经组件库标准管线 metaTableFieldsToColumns 派生
  *      （edit.mode / refDict→cmx-dict-select / enumValues→select / required / 系统列只读）。
  *   header_mapping 的 key 即 CR 录入字段名，value（目标列）去 dct/meta 取展示属性——一份配置两处复用。
@@ -84,9 +85,10 @@ const state = {
   headCols: [],            // CmxColumn[]（id=srcField，标准派生）—— 渲染用
   nameFieldKey: '',        // 提升到 subject_name 的录入字段 key
   nameCaption: '',         // 主体名字段 caption（查重表单标题/校验提示）
+  keyDefs: [],             // 关键信息查重字段定义 [{src,tgt,weight,kind}]（key_fields 配置 + 主体名保底）
   headerGroups: [],
   lineDefs: [],            // [{lineType, targetDict, targetTable, parentIdField, meta, map:[[src,tgt]], cols:[CmxColumn]}]
-  step: 1, keyName: '', savedCrId: null,
+  step: 1, keyVals: {}, savedCrId: null,
   crId: null, crHead: null, crLines: [],
   editing: false,              // view 模式草稿编辑态（true=表单可编辑、右侧操作区切保存/取消）
   autoEdit: false,             // 入口标志：修改重提打开 rejected/draft 原单据时直接进编辑态
@@ -201,7 +203,7 @@ function viewHtml() {
   const mode = state.mode
   const isView = mode === 'view'
   const isEdit = mode === 'update'
-  const showSteps = mode === 'create' // 仅新增显示步骤条（查重 → 完整信息）
+  const showSteps = mode === 'create' && state.keyDefs.length > 0 // 新增且配置了关键信息字段才显示步骤条（查重 → 完整信息）
   const step = state.step
   const stepBarHtml = showSteps ? `<div class="step-bar">
       <div class="step ${step >= 1 ? (step > 1 ? 'done' : 'cur') : 'pending'}"><span class="num">1</span><span>关键信息</span></div>
@@ -449,6 +451,20 @@ async function buildFieldModel() {
   }
   const nameCol = state.headCols.find((col) => col.id === state.nameFieldKey)
   state.nameCaption = nameCol ? (nameCol.caption || subjField) : (subjField || '名称')
+  // 关键信息字段 key_fields → keyDefs：{src 源字段, tgt 目标列, weight, kind, dedup}。
+  // field 是目标列名，须反查 header_mapping 找到 CR 侧源字段（映射不到的配置项丢弃——表单无处填）。
+  // dedup=false 仅进步骤①采集展示，不进查重请求（关键信息 ≠ 全部查重）。
+  // keyDefs 完全等于配置（不强制补主体名）：**未配置则无步骤①**——create 直接进完整表单，
+  // 不做查重，主体名作为普通字段在步骤②采集（required 由列元数据兜底）。
+  const kfCfg = Array.isArray(a.key_fields) ? a.key_fields.filter((k) => k && k.field) : []
+  const defs = []
+  for (const k of kfCfg) {
+    const e = state.headMap.find(([, tgt]) => tgt === k.field)
+    if (!e) continue
+    defs.push({ src: e[0], tgt: k.field, weight: Number(k.weight) || 100, kind: k.kind || 'EditDistance', dedup: k.dedup !== false })
+  }
+  state.keyDefs = defs
+  if (state.mode === 'create' && !defs.length) state.step = 2
   // 影子组（__order__）仅是未分组字段顺序的载体，不作分组渲染——剥除后其字段落入「其他」组/散列
   state.headerGroups = (a.header_groups || []).filter((g) => (g.groupCode || g.group_code || '') !== ORDER_GROUP_CODE)
   // 明细：先用局部数组构建，全部就绪后一次性赋值给 state.lineDefs。
@@ -515,24 +531,28 @@ const lineGrids = [] // 每明细 tab 一个 cmx-revo-grid
 let activeLineIdx = 0
 let lineSeq = 0
 
+// 关键信息表单：按 keyDefs 顺序渲染全部查重字段（多字段加权查重），初始值从 keyVals 回填。
 function buildKeyForm() {
-  const C = cmx(); const wrap = q('fKeyForm'); if (!wrap || !state.nameFieldKey) return
+  const C = cmx(); const wrap = q('fKeyForm'); if (!wrap || !state.keyDefs.length) return
   wrap.innerHTML = ''
   const form = document.createElement('cmx-ui5-form'); form.classList.add('cmx-form-neo')
   if (C.CmxColumnModel) {
     const cm = new C.CmxColumnModel({ datasetId: 'crKey' })
-    const col = state.headCols.find((c) => c.id === state.nameFieldKey)
     // step1 查重输入必须可编辑：克隆列实例（保留原型），按 _origEditMode 恢复，不污染 headCols
-    let member = null
-    if (col) {
-      member = Object.assign(Object.create(Object.getPrototypeOf(col)), col, { edit: { ...(col.edit || {}) } })
-      if (col._origEditMode !== 'readonly' && member.edit.mode === 'readonly') delete member.edit.mode
-    }
-    cm.setMembers(member ? [member] : [])
+    const members = state.keyDefs
+      .map((d) => state.headCols.find((c) => c.id === d.src)).filter(Boolean)
+      .map((col) => {
+        const m = Object.assign(Object.create(Object.getPrototypeOf(col)), col, { edit: { ...(col.edit || {}) } })
+        if (col._origEditMode !== 'readonly' && m.edit.mode === 'readonly') delete m.edit.mode
+        return m
+      })
+    cm.setMembers(members)
     form.setColumnModel(cm)
   }
   form.setLayout?.('S1 M1 L2 XL2')
-  form.setDataSet?.({ [state.nameFieldKey]: state.keyName || '' })
+  const init = {}
+  state.keyDefs.forEach((d) => { init[d.src] = state.keyVals[d.src] || '' })
+  form.setDataSet?.(init)
   wrap.appendChild(form); keyForm = form
 }
 
@@ -545,11 +565,11 @@ function buildHeadForms() {
   // view 只读（editing=true 时解锁为可编辑，用于草稿编辑态）
   const isView = state.mode === 'view' && !state.editing
   // 列只读处理：基于 _origEditMode 重置，避免 view↔editing 切换时 readonly 残留 / 系统列被误解锁。
-  // 系统列（_origEditMode=readonly）恒只读；view 全只读；create 步骤2 nameFieldKey 只读回显。
-  // 用副本计算只读，不写回共享的 state.headCols：buildKeyForm 复用 nameFieldKey 列，
+  // 系统列（_origEditMode=readonly）恒只读；view 全只读；create 步骤2 关键信息字段（已查重）只读回显。
+  // 用副本计算只读，不写回共享的 state.headCols：buildKeyForm 复用关键信息列，
   // 若在此改 c.edit.mode 会污染 headCols，导致回 step1 输入框只读、view↔editing 切换残留只读。
   const cols = state.headCols.map((c) => {
-    const forceRo = c._origEditMode === 'readonly' || isView || (!isEdit && c.id === state.nameFieldKey) || SYS_HEAD_FIELDS.has(c.id)
+    const forceRo = c._origEditMode === 'readonly' || isView || (!isEdit && state.keyDefs.some((d) => d.src === c.id)) || SYS_HEAD_FIELDS.has(c.id)
     // 克隆列实例（保留 CmxColumn 原型 → toDescriptor 可用），改副本 edit.mode 不污染共享 headCols
     const cc = Object.assign(Object.create(Object.getPrototypeOf(c)), c, { edit: { ...(c.edit || {}) } })
     if (forceRo) cc.edit.mode = 'readonly'
@@ -589,7 +609,7 @@ function buildHeadForms() {
 // 头字段初始值：
 //   view：从 CR 头回填（subject_name 顶层 + payload[srcField] 下沉）
 //   update：从 target 字典记录回填（按 tgtCol 取，兼容扁平/payload）
-//   create 步骤2：name 从步骤1 缓存的 keyName 回显
+//   create 步骤2：关键信息字段从步骤1 缓存的 keyVals 回显
 //   doc_status：始终显示中文（系统管理，不参与收集）
 function headInitialValue(srcField) {
   // 单据状态：显示中文（view 取实际状态，create/update 新建为 draft）
@@ -619,7 +639,7 @@ function headInitialValue(srcField) {
     const v = t[tgtCol] != null ? t[tgtCol] : (t.payload && t.payload[tgtCol]) != null ? t.payload[tgtCol] : ''
     return v != null ? String(v) : ''
   }
-  if (srcField === state.nameFieldKey) return state.keyName || ''
+  if (state.keyDefs.some((d) => d.src === srcField)) return state.keyVals[srcField] != null ? String(state.keyVals[srcField]) : ''
   // 单据字段 doc_date 默认今天（与 update 一致；base 同样以今天占位）
   if (srcField === 'doc_date') return todayStr()
   return ''
@@ -712,29 +732,47 @@ function lineSeedRows(lm) {
 }
 
 // ── 查重 ────────────────────────────────────────────────────────────────────
-async function checkKey(name) {
+// 多字段加权查重：仅 dedup !== false 的字段进请求（keyValue 按目标列名发，后端在目标表
+// 空间比较；specs/clusterKeys 由 keyDefs 生成，行序 = 簇键优先级）。后端 /mdm/check-key
+// 构造虚拟 target 与已发布记录比对，综合分 ≥80 即 exists=true 阻断；空值字段安全
+// （blocking 孤儿块 / compare 跳过）。
+async function checkKey(keyValue) {
   const a = state.activation
-  const subjField = a.subject_name_field || state.dictMeta?.labelField || 'name'
+  const dd = state.keyDefs.filter((d) => d.dedup)
+  const specs = dd.map((d) => ({ field: d.tgt, weight: d.weight, kind: d.kind }))
+  const clusterKeys = [...new Set(dd.map((d) => d.tgt))]
   return apiPost('/api/mdm/check-key', {
     dictCode: a.target_dict, targetTable: a.target_table,
-    keyValue: { [subjField]: name },
-    specs: [{ field: subjField, weight: 100, kind: 'EditDistance' }],
-    clusterKeys: [subjField],
+    keyValue, specs, clusterKeys,
   }, state.dbId)
 }
 function goStep(n) { state.deletedLineIds = []; state.step = n; refresh() }
 async function onNext() {
   const C = cmx()
   const row = (keyForm && keyForm.getData && keyForm.getData()) || {}
-  const name = (row[state.nameFieldKey] || '').trim()
-  if (!name) { C.cmxWarn?.(`${state.nameCaption}不能为空`); return }
+  // 主体名只在它进了步骤①表单时必填；未配置进关键信息的字段由步骤②列元数据 required 兜底
+  if (state.keyDefs.some((d) => d.src === state.nameFieldKey)) {
+    const name = (row[state.nameFieldKey] || '').trim()
+    if (!name) { C.cmxWarn?.(`${state.nameCaption}不能为空`); return }
+  }
+  // 收集全部关键信息字段值：keyValue（仅查重字段，目标列名空间，空值不发）
+  // + keyVals（全部字段，源字段空间，步骤2 回显）
+  const keyValue = {}
+  const keyVals = {}
+  for (const d of state.keyDefs) {
+    const v = (row[d.src] != null ? String(row[d.src]) : '').trim()
+    keyVals[d.src] = v
+    if (d.dedup && v) keyValue[d.tgt] = v
+  }
+  // 全部字段都不参与查重（dedup=false）→ 跳过查重直接进步骤2
+  if (!state.keyDefs.some((d) => d.dedup)) { state.keyVals = keyVals; goStep(2); return }
   try {
-    const d = await checkKey(name)
+    const d = await checkKey(keyValue)
     if (d && d.exists) {
       C.cmxError?.(d.message || `已存在相似记录（id=${d.id ?? ''}${d.code ? '，code=' + d.code : ''}），请确认是否继续`)
       return
     }
-    state.keyName = name; goStep(2)
+    state.keyVals = keyVals; goStep(2)
   } catch (e) {
     C.cmxError?.(`查重失败：${e.message}`)
   }
@@ -872,7 +910,10 @@ function doSave(submit) {
     try {
       const data = await C.saveDocData(null,
         { ...DOC_DEF, dbId: state.dbId },
-        { saveMode: 'merge', changes, tableNames: TABLE_NAMES })
+        { saveMode: 'merge', changes, tableNames: TABLE_NAMES,
+          // 单据字段铸号规则覆盖：activation 配置的 doc_code_rules 覆盖单据元数据 codeRule
+          // （激活配置优先）。state.activation 在 init 时按 docType+crType 加载。
+          codeRuleOverrides: (state.activation && state.activation.doc_code_rules) || undefined })
       const idMap = (data && data.idMap) || {}
       const isFirstSave = state.savedCrId == null
       if (isFirstSave && idMap[HEAD_TID] != null) state.savedCrId = idMap[HEAD_TID]
@@ -996,7 +1037,7 @@ function syncSavedLineIds(idMap) {
 function bind(root) {
   rootEl = root
   if (state.loading || state.loadErr) return
-  const showSteps = state.mode === 'create'
+  const showSteps = state.mode === 'create' && state.keyDefs.length > 0
   if (showSteps && state.step === 1) {
     try { buildKeyForm() } catch (e) { console.error('[cr-form] buildKeyForm fail', e) }
   } else {
@@ -1120,7 +1161,7 @@ export default {
       state.targetId = ctxGet('targetId') || p.targetId || null
       state.targetName = ctxGet('targetName') || p.targetName || ''
       state.step = state.mode === 'create' ? 1 : 2
-      state.keyName = ''; state.savedCrId = null
+      state.keyVals = {}; state.keyDefs = []; state.savedCrId = null
       state.crHead = null; state.crLines = []
       state.target = null; state.targetLines = {}
       state.editing = false

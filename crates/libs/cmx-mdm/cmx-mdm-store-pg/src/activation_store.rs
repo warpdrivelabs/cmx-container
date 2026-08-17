@@ -21,7 +21,8 @@ pub async fn find_by_doc_type(
     cr_type: &str,
 ) -> Result<Option<ActivationConfig>, cmx_api_types::Error> {
     let sql = r#"SELECT activation_code, source_doc_type, cr_type, target_dict, target_table,
-                        header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field
+                        header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field,
+                        doc_code_rules, key_fields
                  FROM cmx_mdm_activation
                  WHERE source_doc_type = $1 AND cr_type = $2 AND is_active = TRUE
                  LIMIT 1"#;
@@ -45,6 +46,8 @@ pub async fn find_by_doc_type(
     // header_mapping / line_mappings 是 JSONB，DB 里是 text，需 parse
     parse_jsonb_field(&mut v, "header_mapping");
     parse_jsonb_field(&mut v, "line_mappings");
+    parse_jsonb_field(&mut v, "doc_code_rules");
+    parse_jsonb_field(&mut v, "key_fields");
     let cfg = serde_json::from_value::<ActivationConfig>(v)
         .map_err(|e| api_err(&format!("激活映射反序列化失败: {e}")))?;
     Ok(Some(cfg))
@@ -73,7 +76,7 @@ pub async fn list(
     let sql = format!(
         r#"SELECT id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                   header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field,
-                  header_groups, is_active
+                  header_groups, doc_code_rules, key_fields, is_active
            FROM cmx_mdm_activation WHERE {} ORDER BY sort_order_of_none(), activation_code"#,
         where_clauses.join(" AND ")
     );
@@ -90,6 +93,8 @@ pub async fn list(
         parse_jsonb_field(&mut v, "header_mapping");
         parse_jsonb_field(&mut v, "line_mappings");
         parse_jsonb_field(&mut v, "header_groups");
+        parse_jsonb_field(&mut v, "doc_code_rules");
+        parse_jsonb_field(&mut v, "key_fields");
         out.push(v);
     }
     Ok(out)
@@ -108,11 +113,15 @@ pub async fn upsert(
         .map_err(|e| api_err(&format!("line_mappings 序列化失败: {e}")))?;
     let groups_json = serde_json::to_string(&cfg.header_groups)
         .map_err(|e| api_err(&format!("header_groups 序列化失败: {e}")))?;
+    let doc_rules_json = serde_json::to_string(&cfg.doc_code_rules)
+        .map_err(|e| api_err(&format!("doc_code_rules 序列化失败: {e}")))?;
+    let key_fields_json = serde_json::to_string(&cfg.key_fields)
+        .map_err(|e| api_err(&format!("key_fields 序列化失败: {e}")))?;
     let sql = r#"INSERT INTO cmx_mdm_activation
                    (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                     header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field,
-                    header_groups, is_active)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE)
+                    header_groups, doc_code_rules, key_fields, is_active)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,TRUE)
                  ON CONFLICT (activation_code) DO UPDATE SET
                    source_doc_type     = EXCLUDED.source_doc_type,
                    cr_type             = EXCLUDED.cr_type,
@@ -124,6 +133,8 @@ pub async fn upsert(
                    subject_name_field  = EXCLUDED.subject_name_field,
                    subject_code_field  = EXCLUDED.subject_code_field,
                    header_groups       = EXCLUDED.header_groups,
+                   doc_code_rules      = EXCLUDED.doc_code_rules,
+                   key_fields          = EXCLUDED.key_fields,
                    is_active           = TRUE,
                    updated_at          = now()"#;
     let params = dv![
@@ -139,6 +150,8 @@ pub async fn upsert(
         cfg.subject_name_field.clone().map(DataValue::String).unwrap_or(DataValue::Null),
         cfg.subject_code_field.clone().map(DataValue::String).unwrap_or(DataValue::Null),
         DataValue::Json(groups_json),
+        DataValue::Json(doc_rules_json),
+        DataValue::Json(key_fields_json),
     ];
     mm.execute_sql_with_datavalues(db_id, None, sql, params)
         .await

@@ -32,7 +32,9 @@ pub struct ActivationConfig {
     /// 主体名字段来源（payload 内字段名，前端按此填 subject_name）。
     #[serde(default)]
     pub subject_name_field: Option<String>,
-    /// 主体编码字段来源（为空则由 codeRule 铸号）。
+    /// 【已废弃】主体编码字段来源。从未接线——激活器不读此字段，字典 code 一律走
+    /// dictMeta.codeRule 铸号（与 dct 直存路径统一）。列保留不删（避免迁移风险），
+    /// 配置器 UI 已移除，保存时置空以清除旧数据。
     #[serde(default)]
     pub subject_code_field: Option<String>,
     /// 头映射分组（纯 UI 展示用，不影响激活器搬运）。
@@ -41,6 +43,21 @@ pub struct ActivationConfig {
     /// 外层 snake（对齐 line_mappings 范式 + DB 列名），内层 HeaderGroup 字段 camel。
     #[serde(default)]
     pub header_groups: Vec<HeaderGroup>,
+    /// 单据字段铸号规则覆盖 {单据字段: ruleCode}。
+    ///
+    /// 单据保存铸号时覆盖单据元数据 layers[].code_rule 同名字段（field 匹配）的 ruleCode
+    /// ——激活配置优先于单据元数据。空则不覆盖（回退元数据原 ruleCode）。
+    /// **激活器自身不读此字段**——由 cr-form 读取后经 saveDocData → /doc/save → saver
+    /// 的 codeRuleOverrides 覆盖铸号。外层 snake 对齐 DB 列名（同 header_groups 范式）。
+    #[serde(default)]
+    pub doc_code_rules: Map<String, Value>,
+    /// 关键信息查重字段（cr-form 步骤条 step1「关键信息」表单字段 + `/mdm/check-key` 的
+    /// specs/clusterKeys 来源）。数组顺序即簇键优先级（强标识字段排前）。
+    /// 空则无步骤①——create 直接进完整表单，不做查重（keyDefs 完全等于配置，不强制补主体名）。
+    /// **激活器不读此字段**——由 cr-form 读取渲染查重表单并构造查重请求（后端 check-key
+    /// 天生支持多字段：keyValue Map + specs 数组，加权分 ≥80 阻断）。
+    #[serde(default)]
+    pub key_fields: Vec<KeyField>,
 }
 
 /// 明细映射(一条 = 一类明细行,如 bank_account)。
@@ -64,6 +81,37 @@ pub struct LineMapping {
     /// 配置器把用户排的字段顺序存此保序数组；激活器 plan_lines 不读——遍历 fields 与顺序无关）。
     #[serde(default, rename = "fieldOrder")]
     pub field_order: Vec<String>,
+}
+
+/// 关键信息查重字段（一条 = 一个关键信息维度，如 name / tax_no）。
+///
+/// field 是**目标字典列名**（如 cm_supplier.name → "name"），与 header_mapping 的
+/// value 同空间。cr-form 按它反查 header_mapping 得 CR 侧源字段渲染步骤①表单。
+/// weight/kind 语义与 `/mdm/check-key` 的 SpecDto 一致（加权分 + Exact/EditDistance）。
+/// dedup=false 的字段仅进步骤①表单采集（提前录入），不进查重请求
+/// （specs/clusterKeys/keyValue 均不含）——关键信息 ≠ 全部查重。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KeyField {
+    /// 目标字典列名（如 "name" / "tax_no"）
+    pub field: String,
+    /// 查重权重（score = Σ(字段分 × weight) / Σweight），默认 100
+    #[serde(default = "default_key_weight")]
+    pub weight: u32,
+    /// 比较方式：Exact（全等）/ EditDistance（编辑距离），默认 EditDistance
+    #[serde(default = "default_key_kind")]
+    pub kind: String,
+    /// 是否参与查重（false = 仅步骤①展示采集，不进查重请求），默认 true
+    #[serde(default = "default_key_dedup")]
+    pub dedup: bool,
+}
+fn default_key_weight() -> u32 {
+    100
+}
+fn default_key_kind() -> String {
+    "EditDistance".into()
+}
+fn default_key_dedup() -> bool {
+    true
 }
 
 /// 头映射分组（一条 = 一个展示分组，如「基础信息」「工商资质」）。
@@ -281,6 +329,46 @@ mod tests {
             "subject_name_field": "name"
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn key_fields_default_empty_and_defaults_fill_weight_kind() {
+        // 旧数据无 key_fields 列 → serde default 空 Vec（回退单字段查重，兼容）
+        let cfg = sample_cfg();
+        assert!(cfg.key_fields.is_empty());
+        // 配置了 key_fields 但漏 weight/kind/dedup → 填默认（100 / EditDistance / true）
+        let v = serde_json::from_value::<ActivationConfig>(json!({
+            "activation_code": "x", "source_doc_type": "d", "cr_type": "create",
+            "target_dict": "supplier", "target_table": "cm_supplier",
+            "key_fields": [
+                { "field": "tax_no", "weight": 40, "kind": "Exact" },
+                { "field": "name" },
+                { "field": "supplier_type", "dedup": false }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(v.key_fields.len(), 3);
+        assert_eq!(v.key_fields[0].field, "tax_no");
+        assert_eq!(v.key_fields[0].weight, 40);
+        assert_eq!(v.key_fields[0].kind, "Exact");
+        assert!(v.key_fields[0].dedup);
+        assert_eq!(v.key_fields[1].field, "name");
+        assert_eq!(v.key_fields[1].weight, 100);
+        assert_eq!(v.key_fields[1].kind, "EditDistance");
+        assert!(v.key_fields[1].dedup);
+        // dedup=false：仅展示采集，不进查重
+        assert_eq!(v.key_fields[2].field, "supplier_type");
+        assert!(!v.key_fields[2].dedup);
+        // 序列化往返无损（配置器 collectForm 发的就是这套 camel 键）
+        let back = serde_json::to_value(&v).unwrap();
+        assert_eq!(
+            back.get("key_fields").unwrap(),
+            &json!([
+                { "field": "tax_no", "weight": 40, "kind": "Exact", "dedup": true },
+                { "field": "name", "weight": 100, "kind": "EditDistance", "dedup": true },
+                { "field": "supplier_type", "weight": 100, "kind": "EditDistance", "dedup": false }
+            ])
+        );
     }
 
     #[test]

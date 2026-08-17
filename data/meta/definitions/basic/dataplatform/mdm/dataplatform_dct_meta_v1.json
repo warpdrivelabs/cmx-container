@@ -207,7 +207,12 @@
         "codeField": "code",
         "labelField": "account_no",
         "remark": "供应商银行账户明细(独立 DCT,通过 supplier_id 关联 cm_supplier,无物理 FK)",
-        "codeLength": 32
+        "codeLength": 32,
+        "codeRule": {
+          "mode": "auto",
+          "field": "code",
+          "ruleCode": "MDM_GYS"
+        }
       },
       "fields": [
         {
@@ -294,5 +299,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-13T06:12:26.189Z"
+  "updatedAt": "2026-08-14T07:32:12.873Z"
 }
