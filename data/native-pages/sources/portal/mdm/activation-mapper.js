@@ -4,7 +4,7 @@
  * 布局：页头 → 左右分栏（左「映射列表」面板 / 右「映射配置」面板）。
  *   配置面板四张编号卡片：
  *     ① 基本信息（CR 路由键 → 目标字典定位）
- *     ② 单据编码规则覆盖（doc_code_rules）+ 主体识别（subject_name_field）+ 关键信息字段（key_fields）
+ *     ② 编码规则与查重（两小节：单据字段铸号覆盖 doc_code_rules / 主体识别与查重 subject_name_field + key_fields）
  *     ③ 头表字段映射（CR 源字段 → cm_* 目标列，扁平 {source:target} 落库）
  *     ④ 行表映射（按 line_type 折叠组，fields 改结构化源→目标子表，告别裸 JSON）
  *
@@ -262,6 +262,21 @@ function styleCss() {
   .card-hint { font-size:11px; color:var(--sapContent_LabelColor); }
   .card-body { padding:16px; }
 
+  /* 卡片内小节（卡片②分区：小节头一行「标题 + hint」代替大段 banner，内容区放行表） */
+  .sub { border:1px solid var(--sapList_BorderColor); border-radius:6px; overflow:hidden; }
+  .sub + .sub { margin-top:12px; }
+  .sub-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    padding:8px 12px; background:color-mix(in srgb,var(--sapBackgroundColor) 75%,#000 0%);
+    border-bottom:1px solid var(--sapList_BorderColor); }
+  .sub-title { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:600; color:var(--sapTitleColor); }
+  .sub-title .sub-tick { width:6px; height:6px; border-radius:50%; background:var(--neo-cyan,#00b4d8); flex-shrink:0; }
+  .sub-hint { font-size:11px; color:var(--sapContent_LabelColor); }
+  .sub-body { padding:10px 12px; }
+  /* 主体名字段紧凑行（小节内：标签 + 下拉同一行，不再占满 form-grid 一整行） */
+  .kf-subject { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+  .kf-subject > label { font-size:12px; color:var(--sapContent_LabelColor); white-space:nowrap; flex-shrink:0; }
+  .kf-subject ui5-select { width:280px; max-width:45%; }
+
   /* 表单网格 */
   .form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px 18px; }
   .f-item { display:flex; flex-direction:column; gap:5px; min-width:0; }
@@ -405,31 +420,39 @@ function cardBasic() {
   </div>`
 }
 
-// ── 卡片2：单据编码规则覆盖 + 主体识别 ─────────────────────────────────────────
+// ── 卡片2：编码规则与查重（卡片内分两小节）────────────────────────────────────
 // 职责重分配（2026-08-13）：activation 的「编码规则」从「管字典 code」改为「管单据字段铸号覆盖」。
 //   - 单据字段铸号：doc_code_rules {单据字段:ruleCode}，覆盖单据元数据 codeRule（激活配置优先）。
 //   - 字典 code 铸号：走字典自身 dictMeta.codeRule（不再用 activation 的 code_rule_code，已废弃）。
+// 布局（2026-08-17）：两张 banner 文字墙改为小节头一行 hint；subject_name_field 并入
+// 「主体识别与查重」小节（同为步骤①表单服务），不再孤零零占一整行 form-grid。
 function cardCodeSource() {
   const c = state.current || {}
   return `<div class="card">
-    <div class="card-head"><h3><span class="num">2</span> 单据编码规则覆盖 + 主体识别</h3>
-      <span class="card-hint">单据字段铸号规则覆盖 doc_code_rules + 主体识别 + 关键信息字段 key_fields</span></div>
+    <div class="card-head"><h3><span class="num">2</span> 编码规则与查重</h3>
+      <span class="card-hint">单据字段铸号覆盖 doc_code_rules · 主体识别与查重 key_fields</span></div>
     <div class="card-body">
-      <div class="banner info"><span class="ic">ℹ️</span><span><b>单据编码规则覆盖</b>：为单据字段指定铸号规则，<b>覆盖单据元数据 codeRule</b>（激活配置优先）。
-        例：<code>doc_no → MDM_GYS</code> 则该变更单的单据号用 MDM_GYS 铸号（而非单据元数据里的默认规则）。
-        字典 code 铸号走字典自身 <code>dictMeta.codeRule</code>（不在此配）。</span></div>
-      <div id="amDocRules"></div>
-      <div class="form-grid" style="margin-top:14px">
-        <div class="f-item">
-          <label>主体名字段 subject_name_field</label>
-          <ui5-select id="amSnf">${optHtml(cmOptions(), c.subject_name_field || '')}</ui5-select>
-          <span class="help">前端步骤条据此从 payload 取值填 subject_name</span></div>
+      <div class="sub">
+        <div class="sub-head">
+          <div class="sub-title"><span class="sub-tick"></span>单据字段铸号覆盖</div>
+          <span class="sub-hint">覆盖单据元数据 codeRule（激活配置优先，如 doc_no → MDM_GYS）；字典 code 走 dictMeta，不在此配</span>
+        </div>
+        <div class="sub-body"><div id="amDocRules"></div></div>
       </div>
-      <div class="banner info" style="margin-top:14px"><span class="ic">🔎</span><span><b>关键信息字段</b>：新增单据步骤①「关键信息」表单按此展示多字段。
-        勾选<b>参与查重</b>的字段做多字段加权查重（综合分 ≥80 阻断录入），不勾的仅提前采集展示；
-        行序 = 簇键优先级（强标识字段排前，如税号/信用代码建议用 Exact 全等比对）。
-        未配置：新增不出现关键信息步骤，直接进完整表单（不做查重）。</span></div>
-      <div id="amKeyFields"></div>
+      <div class="sub">
+        <div class="sub-head">
+          <div class="sub-title"><span class="sub-tick"></span>主体识别与关键信息查重</div>
+          <span class="sub-hint">勾选「参与查重」的字段加权比对，综合分 ≥80 阻断录入；行序 = 簇键优先级（强标识排前，税号/信用代码建议 Exact）</span>
+        </div>
+        <div class="sub-body">
+          <div class="kf-subject">
+            <label>主体名字段 <span class="mono">subject_name_field</span></label>
+            <ui5-select id="amSnf">${optHtml(cmOptions(), c.subject_name_field || '')}</ui5-select>
+            <span class="sub-hint">步骤①据此从 payload 取值填 subject_name</span>
+          </div>
+          <div id="amKeyFields"></div>
+        </div>
+      </div>
     </div>
   </div>`
 }
