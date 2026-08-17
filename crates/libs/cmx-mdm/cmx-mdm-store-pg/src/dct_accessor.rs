@@ -48,7 +48,9 @@ pub async fn insert_header(
         .await
         .map_err(|e| {
             tracing::error!(target: "cmx_mdm::db", table=table, sql=%sql, error=%e, "INSERT 失败");
-            api_err_db(&format!("INSERT {table} 失败"))
+            // 原始错误文本必须带给 api_err_db：classify_db_error 靠它识别唯一约束冲突等
+            // （吞掉会退化成「数据保存失败：请检查数据后重试」，如明细账号撞 uk_ 约束时不可排查）。
+            api_err_db(&format!("INSERT {table} 失败: {e}"))
         })?;
     Ok(id)
 }

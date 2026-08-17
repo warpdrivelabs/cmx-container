@@ -15,6 +15,7 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 
 use cmx_core::model::cell::{DataValue, FieldType};
 use cmx_core::model::data::dataset::Schema;
@@ -55,6 +56,10 @@ pub struct SaveCtx {
     pub doc_file: String,
     /// 操作类型覆盖（如 restore 传 Some("restore")）；None 时按 changeset 桶推断 create/update。
     pub op_override: Option<String>,
+    /// 单据字段铸号规则覆盖 {field: ruleCode}（激活配置优先于单据元数据 codeRule）。
+    /// 来自 save body 的 codeRuleOverrides（MDM cr-form 填 activation.doc_code_rules）。
+    /// 默认空——非 MDM 单据零影响；mint_codes_for_changeset 据此覆盖对应字段的 ruleCode。
+    pub code_rule_overrides: HashMap<String, String>,
 }
 
 /// 创建审计列（一旦写入不可变）：UPSERT 撞已存在 id 时，ON CONFLICT SET **不得**覆盖这两列，
@@ -331,7 +336,7 @@ impl DocSaver {
         let mut changes_owned = changes_owned;
         // 编码引擎铸号：遍历每张挂了 codeRule(mode=auto) 的层，为 code_field 为空的行铸业务编码。
         // 未配置编码引擎（code_rule=None 或 GlobalCodeMinter 未注入）→ 静默跳过（现状零影响）。
-        mint_codes_for_changeset(&mut changes_owned, meta, db_id, txn_id).await;
+        mint_codes_for_changeset(&mut changes_owned, meta, db_id, txn_id, &sctx.code_rule_overrides).await;
         let changes = &changes_owned;
         let affected = match mode {
             SaveMode::Merge => Self::apply_merge(mm, db_id, txn_id, meta, changes, &audit).await?,
@@ -617,17 +622,18 @@ impl DocSaver {
             if ncol == 0 {
                 continue;
             }
-            // 构建 JSONB 列掩码：对 FieldType::Json 的列加 `$p::jsonb` cast，规避 PG 在
-            // ON CONFLICT 上下文把 serde_json::Value 参数推断为 text 的问题。
-            let jsonb_col_mask: Vec<bool> = cols
+            // 按列类型构建占位符强转数组（$p::bigint / $p::jsonb / …）：规避 ON CONFLICT
+            // 上下文参数类型推断退化为 text（jsonb 早已单修，现推广到全部类型列——
+            // 修复明细行 line_target_id 落 NULL 报 bigint=text）。
+            let col_casts: Vec<&str> = cols
                 .iter()
                 .map(|c| {
                     layer
                         .schema
                         .get_index(c)
                         .and_then(|i| layer.schema.fields.get(i))
-                        .map(|f| matches!(f.field_type, FieldType::Json))
-                        .unwrap_or(false)
+                        .map(|f| pg_cast_for(&f.field_type))
+                        .unwrap_or("")
                 })
                 .collect();
             let rows_per_batch = (Self::MAX_PARAMS / ncol).max(1);
@@ -637,7 +643,7 @@ impl DocSaver {
                     &cols,
                     chunk.len(),
                     upsert,
-                    &jsonb_col_mask,
+                    &col_casts,
                 );
                 let flat: Vec<DataValue> = chunk.iter().flatten().cloned().collect();
                 affected += Self::exec(mm, db_id, txn_id, &sql, flat).await?;
@@ -713,17 +719,17 @@ impl DocSaver {
             let rows_per_batch = (Self::MAX_PARAMS / per_row).max(1);
             for chunk in id_rows.chunks(rows_per_batch) {
                 let oplock_col = if locked { Some("update_time") } else { None };
-                // JSONB 列掩码（与 batch_insert_grouped 对称）：FieldType::Json 的列占位符加 ::jsonb
-                // cast，规避 UPDATE 路径 serde_json::Value 被推断为 text 导致 jsonb 列类型不匹配。
-                let jsonb_mask: Vec<bool> = cols
+                // 按列类型构建占位符强转数组（与 batch_insert_grouped 对称）：规避
+                // FROM (VALUES ($p)) 无列上下文时参数被推断为 text。
+                let col_casts: Vec<&str> = cols
                     .iter()
                     .map(|c| {
                         layer
                             .schema
                             .get_index(c)
                             .and_then(|i| layer.schema.fields.get(i))
-                            .map(|f| matches!(f.field_type, FieldType::Json))
-                            .unwrap_or(false)
+                            .map(|f| pg_cast_for(&f.field_type))
+                            .unwrap_or("")
                     })
                     .collect();
                 let sql = build_multi_update_sql(
@@ -731,7 +737,7 @@ impl DocSaver {
                     &cols,
                     chunk.len(),
                     oplock_col,
-                    &jsonb_mask,
+                    &col_casts,
                 );
                 // 展平参数：每行 (id, col1..colN [, baseline])
                 let mut flat: Vec<DataValue> = Vec::with_capacity(chunk.len() * per_row);
@@ -1279,6 +1285,7 @@ async fn mint_codes_for_changeset(
     meta: &DocMetaView,
     db_id: &str,
     _txn_id: &str,
+    overrides: &HashMap<String, String>,
 ) {
     // 遍历每层，找挂了 codeRule(auto) 的层
     for layer in &meta.layers {
@@ -1295,6 +1302,20 @@ async fn mint_codes_for_changeset(
             .and_then(|v| v.as_str())
             .unwrap_or("doc_no")
             .to_string();
+
+        // 激活配置覆盖：若 overrides 含此 field，用其 ruleCode 替换（激活配置优先于单据元数据）。
+        // 场景：cmx_mdm_activation.doc_code_rules={doc_no:MDM_GYS} → cr-form 经 codeRuleOverrides
+        // 覆盖单据元数据 cv_mdm_apply.codeRule.ruleCode（MDM_BILL）→ 铸号用 MDM_GYS。
+        let effective_rule: Value = match overrides.get(&field) {
+            Some(rc) => {
+                let mut r = code_rule.clone();
+                if let Some(obj) = r.as_object_mut() {
+                    obj.insert("ruleCode".into(), Value::String(rc.clone()));
+                }
+                r
+            }
+            None => code_rule.clone(),
+        };
 
         let target = serde_json::json!({
             "kind": "doc",
@@ -1350,7 +1371,7 @@ async fn mint_codes_for_changeset(
             // 公共铸号流水线（cmx-traits）：mode 校验 + 引擎取号 + warn，返回 (attrs索引, code)。
             // txn_id=None：CodeEngine async 调用链跨线程，主事务 holder 不可用，反查 max 用独立连接。
             let attrs_list: Vec<Value> = pending.iter().map(|(_, a)| a.clone()).collect();
-            let minted = cmx_traits::code::mint_codes_batch(code_rule, &target, &attrs_list, db_id, None).await;
+            let minted = cmx_traits::code::mint_codes_batch(&effective_rule, &target, &attrs_list, db_id, None).await;
 
             if minted.is_empty() { continue; }
 
@@ -1555,6 +1576,28 @@ fn remove_cols(cols: &mut Vec<String>, vals: &mut Vec<DataValue>, drop: &[&str])
     }
 }
 
+/// 按列类型给占位符加显式 cast 后缀（空串 = 不加）。
+///
+/// 修复场景：`INSERT ... ON CONFLICT DO UPDATE` 与 `UPDATE ... FROM (VALUES ($p))` 上下文里，
+/// 占位符缺乏目标列上下文，PG 把参数推断为 text——非文本列落 NULL/数值时报
+/// 「column "line_target_id" is of type bigint but expression is of type text」
+/// （cr-form 新增带明细保存即触发：新明细行 line_target_id 恒为 NULL）。
+/// jsonb 列早已用 `$p::jsonb` 同法修复（见 [`build_multi_insert_sql`]），此处推广到全部类型列。
+/// 配套：值侧须用 [`codec::json_to_dv_typed`]（类型列 NULL → `DataValue::NullTyped`），
+/// 否则 text 型 NULL 绑到强转占位符上客户端 to_sql 校验不过。
+fn pg_cast_for(ft: &FieldType) -> &'static str {
+    match ft {
+        FieldType::Int => "::bigint",
+        FieldType::Float => "::float8",
+        FieldType::Decimal => "::numeric",
+        FieldType::Date => "::date",
+        FieldType::DateTime => "::timestamptz",
+        FieldType::Bool => "::boolean",
+        FieldType::Json => "::jsonb",
+        _ => "",
+    }
+}
+
 /// 构造多值 INSERT（方案 A）：`INSERT INTO t (c...) VALUES ($1..$k),($k+1..) [ON CONFLICT (id) DO ...]`。
 /// nrows 行 × cols.len() 列，占位符自 $1 连续编号。upsert=true 时加 ON CONFLICT 子句。
 /// 纯函数（无 IO），便于单测占位符/列数/冲突子句正确性。
@@ -1563,7 +1606,7 @@ fn build_multi_insert_sql(
     cols: &[String],
     nrows: usize,
     upsert: bool,
-    jsonb_cols_mask: &[bool],
+    col_casts: &[&str],
 ) -> String {
     let ncol = cols.len();
     let cols_sql = cols
@@ -1577,15 +1620,10 @@ fn build_multi_insert_sql(
             let group: Vec<String> = (0..ncol)
                 .map(|ci| {
                     p += 1;
-                    // JSONB 列加显式 cast：tokio-postgres 绑 serde_json::Value 时，
-                    // 在 ON CONFLICT DO UPDATE 上下文里 PG 参数类型推断会退化为 text，
-                    // 导致「column is of type jsonb but expression is of type text」。
-                    // `$p::jsonb` 强制 PG 按 jsonb 推断，to_sql_checked 收到 JSONB 正确编码。
-                    if jsonb_cols_mask.get(ci).copied().unwrap_or(false) {
-                        format!("${p}::jsonb")
-                    } else {
-                        format!("${p}")
-                    }
+                    // 按列类型显式强转：规避 ON CONFLICT 上下文参数类型推断退化为 text
+                    // （jsonb 当年已修，2026-08-14 推广到 bigint/numeric/date 等全部类型列）
+                    let cast = col_casts.get(ci).copied().unwrap_or("");
+                    format!("${p}{cast}")
                 })
                 .collect();
             format!("({})", group.join(", "))
@@ -1629,7 +1667,7 @@ fn build_multi_update_sql(
     cols: &[String],
     nrows: usize,
     oplock: Option<&str>,
-    jsonb_cols_mask: &[bool],
+    col_casts: &[&str],
 ) -> String {
     let extra = if oplock.is_some() { 2 } else { 1 }; // id (+ baseline)
     let ncol = cols.len() + extra;
@@ -1652,17 +1690,17 @@ fn build_multi_update_sql(
                 .map(|ci| {
                     p += 1;
                     // 每行 VALUES 布局：(id, col1..colN [, baseline])。
-                    // 仅 cols 区间（ci ∈ 1..=cols.len()）按 jsonb_cols_mask 加 `$p::jsonb` cast，
-                    // 与 build_multi_insert_sql 对称：规避 PG 把 serde_json::Value 参数推断为 text，
-                    // 导致「column is of type jsonb but expression is of type text」（实测 cv_mdm_apply
-                    // 第二次保存草稿走 UPDATE 路径时 payload 列必现）。
-                    let is_jsonb = (1..=cols.len()).contains(&ci)
-                        && jsonb_cols_mask.get(ci - 1).copied().unwrap_or(false);
-                    if is_jsonb {
-                        format!("${p}::jsonb")
+                    // 仅 cols 区间（ci ∈ 1..=cols.len()）按列类型加显式强转，
+                    // 与 build_multi_insert_sql 对称：规避 FROM (VALUES) 无列上下文时参数被
+                    // 推断为 text（jsonb 列当年已修；2026-08-14 推广到 bigint 等全部类型列，
+                    // 修复明细行 update 落 NULL line_target_id 报 bigint=text）。
+                    // id 与 baseline 不加强转：WHERE 比较上下文已给足类型。
+                    let cast = if (1..=cols.len()).contains(&ci) {
+                        col_casts.get(ci - 1).copied().unwrap_or("")
                     } else {
-                        format!("${p}")
-                    }
+                        ""
+                    };
+                    format!("${p}{cast}")
                 })
                 .collect();
             format!("({})", group.join(", "))
@@ -1721,6 +1759,23 @@ pub fn parse_save_body(body: &Value) -> (SaveMode, Value) {
     (mode, changes)
 }
 
+/// 从 save body 提取单据字段铸号规则覆盖 {field: ruleCode}（codeRuleOverrides）。
+///
+/// 与 [`parse_save_body`] 分离——overrides 是可选的铸号增强，非核心 changeset，
+/// 独立提取避免改动 parse_save_body 签名（它有多处调用 + 测试）。MDM cr-form 把
+/// activation.doc_code_rules 填进 body.codeRuleOverrides，handler 提取后注入
+/// SaveCtx.code_rule_overrides，最终由 mint_codes_for_changeset 覆盖单据元数据 codeRule。
+pub fn parse_code_rule_overrides(body: &Value) -> HashMap<String, String> {
+    body.get("codeRuleOverrides")
+        .and_then(|v| v.as_object())
+        .map(|obj| {
+            obj.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1746,6 +1801,28 @@ mod tests {
         assert_eq!(SaveMode::parse("replace"), SaveMode::Replace);
         assert_eq!(SaveMode::parse("merge"), SaveMode::Merge);
         assert_eq!(SaveMode::parse("xyz"), SaveMode::Merge);
+    }
+
+    #[test]
+    fn parse_code_rule_overrides_extracts_field_rule_map() {
+        // MDM cr-form 填 activation.doc_code_rules → body.codeRuleOverrides = {doc_no: MDM_GYS}
+        let body = json!({ "codeRuleOverrides": { "doc_no": "MDM_GYS", "other": "R2" } });
+        let m = parse_code_rule_overrides(&body);
+        assert_eq!(m.get("doc_no"), Some(&"MDM_GYS".to_string()));
+        assert_eq!(m.get("other"), Some(&"R2".to_string()));
+        assert_eq!(m.len(), 2);
+    }
+
+    #[test]
+    fn parse_code_rule_overrides_empty_when_missing_or_non_object() {
+        // 无 codeRuleOverrides → 空 map（非 MDM 单据零影响）
+        assert!(parse_code_rule_overrides(&json!({ "changes": {} })).is_empty());
+        // codeRuleOverrides 非 object（如数组）→ 空 map（容错）
+        assert!(parse_code_rule_overrides(&json!({ "codeRuleOverrides": [1, 2] })).is_empty());
+        // 值非字符串的项被跳过（filter_map as_str）
+        let m = parse_code_rule_overrides(&json!({ "codeRuleOverrides": { "doc_no": "MDM_GYS", "bad": 123 } }));
+        assert_eq!(m.len(), 1);
+        assert_eq!(m.get("doc_no"), Some(&"MDM_GYS".to_string()));
     }
 
     #[test]
@@ -1796,7 +1873,7 @@ mod tests {
     #[test]
     fn multi_update_from_values() {
         let cols = vec!["a".to_string(), "b".to_string()];
-        let sql = build_multi_update_sql("cv_header", &cols, 2, None, &[false, false]);
+        let sql = build_multi_update_sql("cv_header", &cols, 2, None, &["", ""]);
         // 每行 (id,a,b) = 3 参，2 行 = $1..$6
         assert_eq!(
             sql,
@@ -1810,7 +1887,7 @@ mod tests {
     fn multi_update_with_oplock_baseline() {
         // B2 乐观锁：带 update_time 基线 → 每行 (id, a, baseline) = 3 参，WHERE 加基线谓词。
         let cols = vec!["a".to_string()];
-        let sql = build_multi_update_sql("cv_batch", &cols, 2, Some("update_time"), &[false]);
+        let sql = build_multi_update_sql("cv_batch", &cols, 2, Some("update_time"), &[""]);
         assert_eq!(
             sql,
             "UPDATE \"cv_batch\" SET \"a\" = v.\"a\" \
@@ -1825,12 +1902,42 @@ mod tests {
         // 规避「column "payload" is of type jsonb but expression is of type text」
         // （cr-form 第二次保存草稿走 UPDATE 路径时 payload 列必现）。
         let cols = vec!["name".to_string(), "payload".to_string()];
-        let sql = build_multi_update_sql("cv_mdm_apply", &cols, 1, None, &[false, true]);
+        let sql = build_multi_update_sql("cv_mdm_apply", &cols, 1, None, &["", "::jsonb"]);
         assert_eq!(
             sql,
             "UPDATE \"cv_mdm_apply\" SET \"name\" = v.\"name\", \"payload\" = v.\"payload\" \
              FROM (VALUES ($1, $2, $3::jsonb)) AS v(id, \"name\", \"payload\") \
              WHERE \"cv_mdm_apply\".id = v.id"
+        );
+    }
+
+    #[test]
+    fn multi_insert_and_update_bigint_cast() {
+        // bigint 列（line_target_id）占位符加 ::bigint——修复明细行保存落 NULL 时
+        // 「column "line_target_id" is of type bigint but expression is of type text」
+        // （INSERT ON CONFLICT 与 UPDATE FROM VALUES 两个上下文均会推断退化为 text）。
+        let cols = vec!["line_payload".to_string(), "line_target_id".to_string()];
+        let sql = build_multi_insert_sql(
+            "cv_mdm_apply_line",
+            &cols,
+            1,
+            true,
+            &["::jsonb", "::bigint"],
+        );
+        assert_eq!(
+            sql,
+            "INSERT INTO \"cv_mdm_apply_line\" (\"line_payload\", \"line_target_id\") \
+             VALUES ($1::jsonb, $2::bigint) \
+             ON CONFLICT (id) DO UPDATE SET \"line_payload\" = EXCLUDED.\"line_payload\", \
+             \"line_target_id\" = EXCLUDED.\"line_target_id\""
+        );
+        let sql = build_multi_update_sql("cv_mdm_apply_line", &cols, 1, None, &["::jsonb", "::bigint"]);
+        assert_eq!(
+            sql,
+            "UPDATE \"cv_mdm_apply_line\" SET \"line_payload\" = v.\"line_payload\", \
+             \"line_target_id\" = v.\"line_target_id\" \
+             FROM (VALUES ($1, $2::jsonb, $3::bigint)) AS v(id, \"line_payload\", \"line_target_id\") \
+             WHERE \"cv_mdm_apply_line\".id = v.id"
         );
     }
 
@@ -2056,6 +2163,7 @@ mod tests {
             actor_name: "张三".into(),
             doc_file: "f.json".into(),
             op_override: None,
+            code_rule_overrides: HashMap::new(),
         }
     }
 
@@ -2131,6 +2239,7 @@ mod tests {
             actor_name: "张三".into(),
             doc_file: "f.json".into(),
             op_override: Some("restore".into()),
+            code_rule_overrides: HashMap::new(),
         };
         let snapshot = json!({ "cv_batch": { "rows": [ { "id": "4001" } ] } });
         let roots =

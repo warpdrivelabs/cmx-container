@@ -13,12 +13,31 @@
 //!   `ColumnView.data_type` 字符串分发(用于 SQL 绑定前的强校验),不走本模块。
 //! - **日期时间统一走 [`datetime_util`]**,避免再写一份 RFC3339 解析。
 
-use cmx_core::model::cell::{DataValue, FieldType};
+use cmx_core::model::cell::{DataValue, FieldType, SqlTypeMarker};
 use rust_decimal::Decimal;
 use serde_json::Value;
 use std::str::FromStr;
 
 use crate::datetime_util::{parse_datetime_utc, parse_naive_date};
+
+/// 类型列的 NULL → 带类型的 [`DataValue::NullTyped`]。
+///
+/// 绑定层把普通 [`DataValue::Null`] 绑成 `Option::<String>::None`（text 型 NULL）；
+/// saver 对非文本列占位符加了 `$p::bigint` 等显式强转后，text 型 NULL 会在客户端
+/// to_sql 校验被拒。故已知目标列类型时 NULL 必须带类型标记；String/Text 等文本列
+/// 保持普通 Null（text 本就是默认推断，无需标记）。
+fn null_typed_for(ft: &FieldType) -> DataValue {
+    match ft {
+        FieldType::Int => DataValue::NullTyped(SqlTypeMarker::Int),
+        FieldType::Float => DataValue::NullTyped(SqlTypeMarker::Float),
+        FieldType::Decimal => DataValue::NullTyped(SqlTypeMarker::Decimal),
+        FieldType::Date => DataValue::NullTyped(SqlTypeMarker::Date),
+        FieldType::DateTime => DataValue::NullTyped(SqlTypeMarker::Timestamp),
+        FieldType::Bool => DataValue::NullTyped(SqlTypeMarker::Bool),
+        FieldType::Json => DataValue::NullTyped(SqlTypeMarker::Json),
+        _ => DataValue::Null,
+    }
+}
 
 /// 按 [`FieldType`] 把 JSON [`Value`] 转 [`DataValue`](宽松策略)。
 ///
@@ -33,16 +52,19 @@ use crate::datetime_util::{parse_datetime_utc, parse_naive_date};
 /// * `v`  - JSON 值(通常来自前端 changeset)。
 pub fn json_to_dv_typed(ft: &FieldType, v: &Value) -> DataValue {
     match (v, ft) {
+        // 类型列的 JSON null → NullTyped（配合 saver 的 $p::<type> 强转占位符；
+        // 普通 Null 绑 text 型 NULL，遇到 bigint 等强转占位符客户端校验不过）
+        (Value::Null, _) => null_typed_for(ft),
         // 目标是整数列:数字字符串/数字 → Int,空白 → Null,其余保留原值
         (Value::String(s), FieldType::Int) => match s.trim().parse::<i64>() {
             Ok(n) => DataValue::Int(n),
-            Err(_) if s.trim().is_empty() => DataValue::Null,
+            Err(_) if s.trim().is_empty() => null_typed_for(ft),
             Err(_) => DataValue::String(s.clone()),
         },
         // 目标是浮点列:同上策略
         (Value::String(s), FieldType::Float) => match s.trim().parse::<f64>() {
             Ok(n) => DataValue::Float(n),
-            Err(_) if s.trim().is_empty() => DataValue::Null,
+            Err(_) if s.trim().is_empty() => null_typed_for(ft),
             Err(_) => DataValue::String(s.clone()),
         },
         // Decimal/Date/DateTime/Json 列的空白字符串 → NULL（避免绑定层报错）
@@ -52,7 +74,7 @@ pub fn json_to_dv_typed(ft: &FieldType, v: &Value) -> DataValue {
             FieldType::Decimal | FieldType::Date | FieldType::DateTime | FieldType::Json)
             if s.trim().is_empty() =>
         {
-            DataValue::Null
+            null_typed_for(ft)
         }
         // 目标是 Decimal 列的非空数字字符串 → Decimal(避免 text 绑 numeric 报错)
         (Value::String(s), FieldType::Decimal) => match s.trim().parse::<Decimal>() {
@@ -127,11 +149,22 @@ mod tests {
             json_to_dv_typed(&FieldType::Int, &json!("  -7 ")),
             DataValue::Int(-7)
         );
-        // 空白字符串 → Null
+        // 空白字符串 → NullTyped（bigint 等强转占位符需要带类型的 NULL）
         assert_eq!(
             json_to_dv_typed(&FieldType::Int, &json!("  ")),
-            DataValue::Null
+            DataValue::NullTyped(SqlTypeMarker::Int)
         );
+        // JSON null → NullTyped（line_target_id 等可空外键列的常态值）
+        assert_eq!(
+            json_to_dv_typed(&FieldType::Int, &json!(null)),
+            DataValue::NullTyped(SqlTypeMarker::Int)
+        );
+        assert_eq!(
+            json_to_dv_typed(&FieldType::Json, &json!(null)),
+            DataValue::NullTyped(SqlTypeMarker::Json)
+        );
+        // 文本列 null 保持普通 Null（text 本就是默认推断）
+        assert_eq!(json_to_dv_typed(&FieldType::String, &json!(null)), DataValue::Null);
         // 非数字 → 保留原值
         assert_eq!(
             json_to_dv_typed(&FieldType::Int, &json!("abc")),
@@ -145,10 +178,10 @@ mod tests {
         assert!(matches!(d, DataValue::Decimal(_)));
         let d = json_to_dv_typed(&FieldType::Decimal, &json!(3.14));
         assert!(matches!(d, DataValue::Decimal(_)));
-        // 空白 → Null
+        // 空白 → NullTyped
         assert_eq!(
             json_to_dv_typed(&FieldType::Decimal, &json!("")),
-            DataValue::Null
+            DataValue::NullTyped(SqlTypeMarker::Decimal)
         );
     }
 
