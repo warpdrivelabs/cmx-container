@@ -479,6 +479,16 @@ async function buildFieldModel() {
     const orderedFields = orderedLineFields(lm)
     const map = Object.keys(orderedFields).map((src) => [src, orderedFields[src]])
     const cols = pickAndRename(all, orderedFields)
+    // 明细列宽按比例转百分比：字典元数据固定 px 宽总和（如银行账户 3 列 ≈460px）在窄容器
+    // （分栏/窄窗，主区 < 列宽总和）下 revo-grid stretch 对纯 px 列「保持原宽 → 横向滚动」，
+    // 撑出页面底部横向滚动条。转百分比后 stretch 的百分比列机制随任意容器宽按比例收缩。
+    {
+      const total = cols.reduce((s, c) => s + (parseFloat(c.width) || 120), 0)
+      if (total > 0) cols.forEach((c) => {
+        const base = parseFloat(c.width) || 120
+        c.width = ((base / total) * 100).toFixed(2) + '%'
+      })
+    }
     lineDefs.push({
       lineType: lm.lineType, targetDict: lm.targetDict,
       targetTable: lm.targetTable, parentIdField: lm.parentIdField,
