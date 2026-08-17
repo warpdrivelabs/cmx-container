@@ -1,6 +1,6 @@
 # 微服务 RPC 调用架构 — 流程详解
 
-> **2026-08-14 重写**：本文是原《RPC架构流程详解.md》的全面重写版，与「RPC 皮肤归域 + 契约集中」重构落地代码完全同步（重构方案与落地记录见根仓库 [20260814_cmx-rpc_RPC皮肤归域与契约集中重构方案.md](../../../.trae/documents/20260814_cmx-rpc_RPC皮肤归域与契约集中重构方案.md)）。
+> **2026-08-14 重写**：本文是原《RPC架构流程详解.md》的全面重写版，与「RPC 皮肤归域 + 契约集中」重构落地代码完全同步（重构方案与落地记录见根仓库 [20260814_cmx-rpc_RPC皮肤归域与契约集中重构方案.md](../../../.trae/documents/20260814_cmx-rpc_RPC皮肤归域与契约集中重构方案.md)）。「皮肤 / 归域 / 契约集中 / 装配显式」等自造词的出处与含义见下方[术语说明](#术语说明)。
 >
 > 内容基于以下最新源码：
 > - `crates/libs/cmx-rpc-gen/`（proto 契约集中 crate：volo-build 代码生成 + 域别名）
@@ -13,9 +13,32 @@
 
 ---
 
+## 术语说明
+
+> 「皮肤」「归域」「契约集中」「装配显式」是**本次重构自造的缩略语**，不是行业通用术语，先解释以免后文看不懂。
+
+| 术语 | 含义 | 行业里对应的说法 |
+|------|------|----------------|
+| **皮肤（skin）** | 给"通用 gRPC 基础设施"套上某个业务域专用外壳的**薄代码层**——具体就是每域三件套：client 全局访问器 + server impl + Bundle。皮肤本身**不含业务逻辑**（业务经 `ServerDeps` 注入 server impl），只做协议翻译与装配 | facade / thin wrapper / 域适配层（adapter） |
+| **皮肤归域** | 把皮肤从通用基础设施 crate `cmx-rpc` 搬出去，按域放进专属 crate（`cmx-rpcs/cmx-orchestrator-rpc`、`cmx-rpcs/cmx-resource-rpc`）——"让域代码回到域的模块里" | 基础设施与领域逻辑分离；六边形架构语境下即把 adapter 下沉到各域模块 |
+| **契约集中** | 所有 `.proto` 契约集中在 `cmx-rpc-gen` 一个 crate（按域分子目录 `idl/<域>/`），两域皮肤的客户端与服务端类型引用同一份生成源 | IDL single source of truth / contract crate |
+| **装配显式** | 主应用对外提供哪些 gRPC 服务不再由"框架默认行为"隐式决定，而是在 `cmx-platform-app` **显式列出** `rpc_bundles` 列表——该列表是唯一决定点 | explicit composition / wiring |
+| **Bundle** | 装配单元——`RpcServiceBundle` trait 的一个实现，把一个域的"client 初始化 + server 注册"打包成一件，由 `init_rpc_clients` / `start_grpc_server` 批量迭代处理 | service module / 插件单元 |
+
+**背景**：重构前 `cmx-rpc` 是混合体——基础设施（Bundle trait、重试、鉴权、服务发现、server 启动器）与两个域的皮肤（orchestrator、resource_data）混住在同一个 crate，导致通用 crate 反向认识具体业务域。设计原则「**契约中心化 · 实现归域 · 装配显式**」三个短语正对应本次重构的三类动作：
+
+| 层 | 重构前 | 重构后 | 对应短语 |
+|------|--------|--------|----------|
+| 契约（proto） | cmx-rpc-gen 平铺 | cmx-rpc-gen 按域分子目录（`idl/orchestrator/`、`idl/resource/`）+ 别名模块 | 契约集中 |
+| 基础设施 | cmx-rpc（混着皮肤） | cmx-rpc 只留通用设施，**不含任何领域实现** | — |
+| 皮肤 | 住在 cmx-rpc 内 | `cmx-rpcs/cmx-orchestrator-rpc`、`cmx-rpcs/cmx-resource-rpc` | 皮肤归域（即"实现归域"） |
+| 装配 | 藏在框架默认行为里 | `cmx-platform-app` 显式列 `rpc_bundles` | 装配显式 |
+
+---
+
 ## 一、整体架构概览
 
-设计原则：**契约中心化 · 实现归域 · 装配显式**。
+设计原则：**契约中心化 · 实现归域 · 装配显式**（各短语含义见上方「术语说明」）。
 
 | 层 | crate | 职责 |
 |------|-------|------|
