@@ -1,5 +1,5 @@
 /**
- * MDM 供应商单据列表台（native-page · 企业级重设计）。
+ * MDM 单据列表台（native-page · 企业级重设计）。
  *
  * 布局：页头 → KPI 统计卡（草稿/待审批/已驳回/已处理，点击过滤）→ 列表面板
  * （cmx-filter-bar + 企业表格 + cmx-status-tag + 行内 ui5-button 操作）→ 详情弹层（cmx-desc-list）。
@@ -132,7 +132,7 @@ function fmtTime(t) { if (!t) return ''; const s = String(t); return s.length > 
 
 function viewHtml() {
   return `<div class="pg">
-    <div class="pg-head"><div class="pg-title">供应商单据列表</div>
+    <div class="pg-head"><div class="pg-title">单据列表</div>
       <div class="pg-sub">提交 / 审批 / 驳回 / 修改重提 / 作废，审批通过自动激活落字典</div></div>
     ${kpiHtml()}
     <div class="list-card">
@@ -154,8 +154,8 @@ function viewHtml() {
   </div>`
 }
 
-// 供应商单据列表用 cmx-revo-grid（只读 + 操作列）。操作列走 display.mode='actions'，
-// 按钮按 doc_status 通过 visible(model) 显隐；点击派发 cmx-cell-link-click（与 cr-editor 同模式）。
+// 单据列表用 cmx-revo-grid（只读 + 操作列）。操作列走 display.mode='actions'，
+// 按钮按 doc_status 通过 visible(model) 显隐；点击派发 cmx-cell-link-click（与 master-list 同模式）。
 function buildListGrid() {
   const C = cmx(); const wrap = rootEl && rootEl.querySelector('.tbl-wrap'); if (!wrap) return
   const old = wrap.querySelector('cmx-revo-grid'); if (old) old.remove()

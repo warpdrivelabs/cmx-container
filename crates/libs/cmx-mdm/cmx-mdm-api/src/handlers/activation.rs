@@ -23,7 +23,7 @@ use cmx_mdm_store_pg as store;
 
 /// 列激活映射配置。
 ///
-/// `GET /api/mdm/activations` —— 配置器 UI 用，按 `sourceDocType` / `crType` 可选过滤，返回全部激活映射。
+/// `GET /api/mdm/activations` —— 配置器 UI 用，按 `sourceDocType` / `crType` / `targetDict` 可选过滤，返回全部激活映射。
 #[utoipa::path(
     get,
     path = "/api/mdm/activations",
@@ -46,6 +46,7 @@ pub async fn mdm_activations_list(
         &db_id,
         q.source_doc_type.as_deref(),
         q.cr_type.as_deref(),
+        q.target_dict.as_deref(),
     )
     .await?;
     Ok(Json(ApiResp::ok(json!(list))))
@@ -168,6 +169,9 @@ pub struct ActivationListQuery {
     /// CR 类型（可选过滤）。
     #[serde(default, alias = "crType")]
     pub cr_type: Option<String>,
+    /// 目标主数据字典码（可选过滤；通用详情页按 targetDict 反查激活映射以发现子表）。
+    #[serde(default, alias = "targetDict")]
+    pub target_dict: Option<String>,
 }
 
 /// 手动激活请求体。

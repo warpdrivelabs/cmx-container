@@ -34,26 +34,33 @@
                     }
                 },
                 {
-                    "id": "mdm-cr-editor",
-                    "name": "cr-editor",
+                    "id": "mdm-supplier-list",
+                    "name": "supplier-list",
                     "caption": "供应商列表",
                     "type": "workspace-node",
                     "permissionId": null,
                     "icon": "tabler-outline/plus",
                     "workspace": {
-                        "id": "mdm_cr_editor",
+                        "id": "mdm_supplier_list",
                         "content": {
                             "caption": "供应商列表",
                             "icon": "tabler-outline/plus",
                             "views": [
                                 {
-                                    "id": "mdm-cr-editor-content",
-                                    "tabLabel": "录入",
+                                    "id": "mdm-supplier-list-content",
+                                    "tabLabel": "列表",
                                     "icon": "tabler-outline/plus",
                                     "type": "native_pages",
-                                    "native_page": "portal.mdm.cr-editor",
+                                    "native_page": "portal.mdm.master-list",
                                     "view": "content",
-                                    "props": {}
+                                    "props": {
+                                        "dictCode": "supplier",
+                                        "docType": "gys",
+                                        "title": "供应商列表",
+                                        "entityName": "供应商",
+                                        "icon": "supplier",
+                                        "columns": ["code", "name", "tax_no", "credit_code", "short_name", "published_version"]
+                                    }
                                 }
                             ]
                         }
@@ -62,14 +69,14 @@
                 {
                     "id": "mdm-cr-todo",
                     "name": "cr-todo",
-                    "caption": "供应商单据列表",
+                    "caption": "单据列表",
                     "type": "workspace-node",
                     "permissionId": null,
                     "icon": "tabler-outline/checklist",
                     "workspace": {
                         "id": "mdm_cr_todo",
                         "content": {
-                            "caption": "供应商单据列表",
+                            "caption": "单据列表",
                             "icon": "tabler-outline/checklist",
                             "views": [
                                 {

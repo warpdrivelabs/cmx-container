@@ -951,7 +951,7 @@ function readCoord(ctx) {
 }
 
 /**
- * 打开并列门户标签页（照抄 cr-editor.js 模式，域/应用取自 coord 不写死）。
+ * 打开并列门户标签页（照抄 master-list.js 模式，域/应用取自 coord 不写死）。
  * opts.single=true 单例复用（如「去工作台评审」重复点击聚焦同一 tab）；默认按 context 业务 id 多开。
  * addTab 按 id 去重：同 id 复用并同步 context，不同 id 新开。
  */
