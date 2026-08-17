@@ -1,0 +1,23 @@
+[package]
+name = "cmx-rule-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 决策规则引擎的**平台反代薄壳**（对标 cmx-rpt-api 的 ReportProxyModule）。规则引擎是**独立微服务**
+# （无进程内嵌壳）：本 crate 只含 RulesProxyModule——把平台 `/api/rules/*` + 规则拥有的 native 页
+# （`portal.rules.*`）透明转发到独立 cmx-rule-server（`[center_client.urls].rules`）。前端零改。
+
+[dependencies]
+# API 共享骨架层（CmxAppState / routes::traits::ModuleRoutes）。单向依赖，避免环。
+cmx-api-core = { workspace = true }
+# Web 框架（Router 类型）
+axum = { workspace = true }
+# 出站 HTTP 客户端（反代转发到独立 cmx-rule-server）
+reqwest = { workspace = true }
+# 三层出站鉴权上下文（current_original_token / current_request_id）
+cmx-traits = { workspace = true }
+# 502 兜底 JSON 信封
+serde_json = { workspace = true }
+# 转发失败日志
+tracing = { workspace = true }

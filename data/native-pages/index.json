@@ -163,55 +163,6 @@
       "relPath": "portal/doc/doc-service-test.js"
     },
     {
-      "id": "portal.rpt.design-workbench",
-      "name": "报表设计工作台",
-      "details": "native_pages 三栏报表设计工作台：explorer 报表类别、content 按 cr_period_type 分期间 tab 的报表列表、property 报表详情；全部数据来自 fico-db 数据库。",
-      "sourceType": "js",
-      "relPath": "portal/rpt/designer-workbench.js"
-    },
-    {
-      "id": "portal.flow.design-workbench",
-      "name": "流程设计工作台",
-      "details": "native_pages 四区流程设计工作台：explorer 流程定义列表、content bpmn-js 画布+工具条、property 选中节点属性；后端 /api/flow/* 由 cmx-flow-api 提供，引擎在 web-server 内单例运行。",
-      "sourceType": "js",
-      "relPath": "portal/flow/design-workbench.js"
-    },
-    {
-      "id": "portal.flow.todo-center",
-      "name": "待办中心",
-      "details": "native_pages 四区待办中心（F3）：explorer 待办分类（我的待办/待认领/我发起的/抄送我的/我已办）、content 待办列表卡片、property 流程轨迹+意见历史；数据源 /api/flow/tasks/my。点「办理」经 openWorkNode 打开 portal.flow.task-form。",
-      "sourceType": "js",
-      "relPath": "portal/flow/todo-center.js"
-    },
-    {
-      "id": "portal.flow.task-form",
-      "name": "任务表单宿主",
-      "details": "native_pages 任务办理表单（F3，由待办中心动态打开、不进菜单）：content 业务单据审阅区+审批意见区+同意/驳回，property 流程轨迹；办结走 /api/flow/tasks/{id}/complete，成功广播 cmx-flow-task-done 让待办中心刷新。",
-      "sourceType": "js",
-      "relPath": "portal/flow/task-form.js"
-    },
-    {
-      "id": "portal.rpt.designer",
-      "name": "报表设计器",
-      "details": "native_pages 多实例三区报表设计器：explorer 数据元素/多维模型，content SpreadJS 电子表格设计区，property 报表/单元格属性。",
-      "sourceType": "js",
-      "relPath": "portal/rpt/designer.js"
-    },
-    {
-      "id": "portal.rpt.report-app-workbench",
-      "name": "报表应用工作台",
-      "details": "native_pages 三栏报表应用(数据)工作台：explorer 会计期间下拉(cr_acct_calendar)+合并组织树(cr_consol_org)、content 报表类别按钮行+报表列表、property 报表属性+组织机构详情；打开报表进入 portal.rpt.report-applier 并传入 org+period 上下文。",
-      "sourceType": "js",
-      "relPath": "portal/rpt/report-app-workbench.js"
-    },
-    {
-      "id": "portal.rpt.report-applier",
-      "name": "报表应用器",
-      "details": "native_pages 多实例报表应用器：content SpreadJS 画布(取数/存数/导出) + property 报表属性/数据状态；按 org+period 装载存储 cr_cell_data。与设计器互不影响。",
-      "sourceType": "js",
-      "relPath": "portal/rpt/report-applier.js"
-    },
-    {
       "id": "portal.system.registry-editor",
       "name": "注册表编辑器",
       "details": "仿 Windows regedit 的注册表编辑器（native_pages）：左树右值 + 地址栏 + 搜索 + 右键菜单 + 导入/导出 .json；数据为 JSON 树（__values__ 存值，REG_SZ/REG_DWORD/REG_BOOL/REG_JSON 四类型），可编辑根存 localStorage，HKEY_PORTAL_RUNTIME 只读根实时接 /api/registry/dam。",

@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>微前端联邦方案 · 流程/报表菜单与页面资源各自治理、门户集中呈现</title>
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#111834; --card:#151d3a; --card2:#1a2344; --line:#243056; --fg:#e8ecff; --mut:#93a0cf;
+    --accent:#3aa0ff; --accent2:#00e6b8; --warn:#ffb454; --danger:#ff6b8b;
+    --grad1:#2a6bff; --grad2:#00e6b8; --shadow:rgba(0,0,0,.35); --code:#0d1430;
+    --portal:#3aa0ff; --flow:#00e6b8; --report:#c07bff;
+  }
+  html[data-theme="light"]{
+    --bg:#eef2fb; --bg2:#ffffff; --card:#ffffff; --card2:#f4f7ff; --line:#dde5f5; --fg:#16203a; --mut:#5a6689;
+    --accent:#1d74e0; --accent2:#00a884; --warn:#c9791a; --danger:#d63a5e;
+    --grad1:#1d74e0; --grad2:#00a884; --shadow:rgba(40,60,110,.12); --code:#f2f5fd;
+    --portal:#1d74e0; --flow:#00a884; --report:#8b45d6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14.5px/1.68 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(1300px 700px at 82% -12%,var(--bg2),var(--bg)) fixed;color:var(--fg);min-height:100vh}
+  .wrap{max-width:1080px;margin:0 auto;padding:36px 26px 90px}
+  header.top{display:flex;align-items:center;gap:16px;margin-bottom:10px}
+  .logo{width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,var(--grad1),var(--grad2));
+    display:grid;place-items:center;font-weight:800;color:#fff;box-shadow:0 8px 26px var(--shadow);position:relative;overflow:hidden;flex:none}
+  .logo::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 40%,rgba(255,255,255,.35) 50%,transparent 60%);
+    transform:translateX(-100%);animation:scan 3.4s linear infinite}
+  @keyframes scan{to{transform:translateX(100%)}}
+  h1{font-size:23px;margin:0;letter-spacing:.2px}
+  .sub{color:var(--mut);font-size:13px;margin-top:3px}
+  .spacer{flex:1}
+  button.toggle{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:10px;padding:8px 13px;cursor:pointer;font-size:13px}
+  .meta{color:var(--mut);font-size:12.5px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:9px 0;margin:14px 0 30px;display:flex;gap:20px;flex-wrap:wrap}
+  h2{font-size:19px;margin:44px 0 14px;padding-left:13px;border-left:4px solid transparent;border-image:linear-gradient(var(--grad1),var(--grad2)) 1;line-height:1.3}
+  h3{font-size:15.5px;margin:26px 0 10px;color:var(--fg)}
+  p{margin:11px 0}
+  .lead{font-size:15.5px;color:var(--fg)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.7px;background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1.5px 6px}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:12px;padding:15px 17px;overflow:auto;font-size:12.6px;line-height:1.6;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre .c{color:var(--mut)} pre .k{color:var(--accent)} pre .s{color:var(--accent2)} pre .w{color:var(--warn)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin:16px 0;box-shadow:0 8px 24px var(--shadow)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:780px){.grid2{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--mut);background:var(--card2);margin-right:5px}
+  .tag.portal{color:var(--portal);border-color:var(--portal)}
+  .tag.flow{color:var(--flow);border-color:var(--flow)}
+  .tag.report{color:var(--report);border-color:var(--report)}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut)}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:var(--card2);color:var(--fg);font-weight:600}
+  td.ok{color:var(--accent2)} td.no{color:var(--danger)} td.mid{color:var(--warn)}
+  .callout{border-left:4px solid var(--accent);background:var(--card2);border-radius:0 12px 12px 0;padding:13px 17px;margin:16px 0}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout.good{border-left-color:var(--accent2)}
+  .callout b{color:var(--fg)}
+  ul,ol{margin:10px 0;padding-left:22px} li{margin:6px 0}
+  .step{display:flex;gap:14px;margin:14px 0;align-items:flex-start}
+  .step .n{flex:none;width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--grad1),var(--grad2));color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px}
+  .step .b{flex:1}
+  .step .b h4{margin:3px 0 5px;font-size:14.5px}
+  .kbd{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--card2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--accent)}
+  .diagram{background:var(--code);border:1px solid var(--line);border-radius:14px;padding:20px;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.55;white-space:pre;color:var(--fg)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0;font-size:12.5px;color:var(--mut)}
+  footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--mut);font-size:12.5px;text-align:center}
+  .toc{columns:2;column-gap:30px;font-size:13.5px}
+  @media(max-width:640px){.toc{columns:1}}
+  .toc a{color:var(--accent);text-decoration:none} .toc a:hover{text-decoration:underline}
+  .anchor{scroll-margin-top:20px}
+  .num{color:var(--mut);font-variant-numeric:tabular-nums;margin-right:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="logo">联</div>
+    <div>
+      <h1>微前端联邦方案</h1>
+      <div class="sub">流程 / 报表 的菜单与页面资源「各自治理、门户集中呈现」 —— 把后端「一芯双壳」范式上抬到前端层</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="toggle" onclick="tt()">◑ 主题</button>
+  </header>
+
+  <div class="meta">
+    <span>版本 <b>草案 v1</b></span>
+    <span>范围 <b>方案设计（不动代码）</b></span>
+    <span>关联 <span class="tag portal">cmx-portalservice</span><span class="tag flow">cmx-flowengine</span><span class="tag report">cmx-report</span></span>
+    <span>前置 <b>后端已微服务化（proxy 挂载已就位）</b></span>
+  </div>
+
+  <p class="lead">后端三个能力中心（门户 :8080 / 流程 :8091 / 报表 :8092）已各自独立成微服务，并通过 <code>center_client.urls</code> 的
+  <b>「一芯双壳」</b>开关在门户里内嵌↔反代自由切换。但<b>前端仍未解耦</b>：流程、报表的页面文件塞在门户后端目录、菜单行灌进门户库，
+  两者仍强依赖门户。本方案回答一个问题 —— <b>如何让各微服务也拥有并治理自己的菜单 / 页面 / 静态资源，同时门户仍能集中聚合、统一交互与展示</b>。
+  核心思路：<b>把后端已验证的「一芯双壳」范式，原样上抬到前端资源层</b>。</p>
+
+  <div class="card">
+    <b>目录</b>
+    <div class="toc" style="margin-top:10px">
+      <a href="#s1">1. 现状：前端资源为何还锁在门户</a><br/>
+      <a href="#s2">2. 目标与设计原则</a><br/>
+      <a href="#s3">3. 三类资源的所有权重划</a><br/>
+      <a href="#s4">4. 核心架构：一芯双壳上抬到前端</a><br/>
+      <a href="#s5">5. 菜单联邦（Menu Federation）</a><br/>
+      <a href="#s6">6. 页面服务：内嵌镜像 ↔ 反代联邦</a><br/>
+      <a href="#s7">7. 共享运行时与静态资源</a><br/>
+      <a href="#s8">8. 统一外壳：门户如何集中呈现</a><br/>
+      <a href="#s9">9. 迁移路线（四阶段·零回归）</a><br/>
+      <a href="#s10">10. 配置开关一览</a><br/>
+      <a href="#s11">11. 收益 / 取舍 / 风险</a><br/>
+      <a href="#s12">12. 待定决策（需拍板）</a>
+    </div>
+  </div>
+
+  <!-- ============ 1 ============ -->
+  <h2 id="s1" class="anchor">1. 现状：前端资源为何还锁在门户</h2>
+  <p>调研当前代码库，流程 / 报表的前端资源分布在门户后端的三个位置，全部由门户进程负责存储与投递：</p>
+
+  <table>
+    <tr><th>资源</th><th>今天在哪</th><th>谁投递</th><th>归属编码</th></tr>
+    <tr>
+      <td><b>页面（native 页）</b></td>
+      <td><code>cmx-container/data/native-pages/sources/portal/flow/{design-workbench,todo-center,task-form}.js</code><br/>
+          <code>.../portal/rpt/{designer,designer-workbench,report-applier,report-app-workbench,formula-eval}.js</code></td>
+      <td>门户进程 <code>ServeDir</code> 静态投递（<code>router.rs</code> 挂 <code>web_folder</code> / <code>/portal</code> / <code>/html</code>）</td>
+      <td>目录名 <code>flow</code> / <code>rpt</code>（约定，非强绑定）</td>
+    </tr>
+    <tr>
+      <td><b>菜单（导航 + 工作台定义）</b></td>
+      <td>门户库 <code>cmx_menu</code> 表；由 <code>data/sql/init_menu.sql</code> 等 seed 灌入</td>
+      <td>门户读 <code>cmx_menu</code> 装配菜单树；<code>menu_pages.rs</code> 解析「菜单 → 页面」</td>
+      <td>行上有 <code>domain_code/application_code/module_code</code>（如 <code>fi/cmxfico/gl</code>）</td>
+    </tr>
+    <tr>
+      <td><b>静态资源 / 共享运行时</b></td>
+      <td>门户 <code>web_folder</code> 与 <code>/portal</code>、<code>/html</code> dist（组件库、图标、vendor）</td>
+      <td>门户进程 <code>ServeDir</code></td>
+      <td>全局共享，无模块归属</td>
+    </tr>
+  </table>
+
+  <div class="callout warn">
+    <b>症结</b>：<code>cmx_menu</code> 行里其实<b>已经带了 <code>domain/application/module</code> 归属编码</b>，页面文件也已按 <code>flow/</code>、<code>rpt/</code> 分目录 ——
+    <b>「谁拥有什么」在数据上早已清晰，缺的只是「让拥有者自己保管、门户按归属聚合」这一层机制</b>。今天所有权是逻辑上的，物理上仍全挤在门户。
+  </div>
+
+  <p>后果：流程 / 报表团队每改一个页面或菜单，都要动门户仓、灌门户库、随门户发布 —— 微服务化在后端已完成，前端却仍是单体。</p>
+
+  <!-- ============ 2 ============ -->
+  <h2 id="s2" class="anchor">2. 目标与设计原则</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>要达成的</h3>
+      <ul>
+        <li><b>各自治理</b>：流程页面 / 菜单进 <code>cmx-flowengine</code> 仓，报表的进 <code>cmx-report</code> 仓，随各自服务发布，不再碰门户。</li>
+        <li><b>集中呈现</b>：用户仍在<b>同一个门户外壳</b>里看到统一菜单树、在同一套四区工作台里打开流程 / 报表页，URL 同源、体验无缝。</li>
+        <li><b>一键切换</b>：内嵌（门户自投递）↔ 联邦（微服务自投递、门户聚合）由配置切换，<b>复用后端已有的 <code>center_client.urls</code> 开关</b>。</li>
+        <li><b>零回归</b>：任一阶段都能回退到「门户全包」的今天，前端浏览器请求不变。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>设计原则</h3>
+      <ul>
+        <li><b>范式复用，不造新基建</b>：后端 <code>ReportProxyModule</code>/<code>FlowProxyModule</code> + <code>center_client</code> 开关已验证，前端资源走同一套。</li>
+        <li><b>所有权即归属编码</b>：以 <code>cmx_menu</code> 既有的 <code>domain/application/module</code> 作为联邦聚合键，不发明新标识。</li>
+        <li><b>契约先行</b>：微服务只需对外暴露两个东西 —— 一份<b>菜单清单（manifest）</b> + 一个<b>页面/资源目录</b>，其余门户不关心其内部。</li>
+        <li><b>外壳单一**</b>：只有门户持有 Shell（登录、导航框架、四区工作台容器）；微服务只提供「被嵌进去的内容」，不各自造壳。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ 3 ============ -->
+  <h2 id="s3" class="anchor">3. 三类资源的所有权重划</h2>
+  <p>把「门户拥有一切」拆成「门户拥有外壳 + 聚合，微服务拥有各自内容」：</p>
+  <table>
+    <tr><th>资源</th><th>迁后归属</th><th>门户角色</th><th>微服务角色</th></tr>
+    <tr><td><b>登录 / 外壳 / 导航框架 / 四区工作台容器</b></td><td class="ok">门户</td><td>唯一持有者</td><td>无</td></tr>
+    <tr><td><b>流程页面</b>（设计器 / 待办 / 办理表单）</td><td class="ok">流程微服务</td><td>聚合 / 代理投递</td><td>存储 + 投递源</td></tr>
+    <tr><td><b>报表页面</b>（设计器 / 应用器 / 大盘）</td><td class="ok">报表微服务</td><td>聚合 / 代理投递</td><td>存储 + 投递源</td></tr>
+    <tr><td><b>流程 / 报表菜单</b></td><td class="ok">各自微服务</td><td>联邦合并 + 权限过滤 + 渲染</td><td>产出 menu manifest</td></tr>
+    <tr><td><b>共享运行时</b>（组件库 / 图标 / vendor）</td><td class="mid">门户（版本化契约）</td><td>唯一投递，跨源可取</td><td>引用门户源，不自带副本</td></tr>
+    <tr><td><b>门户自身页面 / 菜单</b>（基础数据、系统控制…）</td><td class="ok">门户</td><td>不变</td><td>无</td></tr>
+  </table>
+  <div class="callout good">
+    <b>关键判断</b>：<b>Shell 与共享运行时必须留门户单一持有</b>（否则多壳、组件库多副本会漂移）；<b>页面与菜单按模块下放</b>（它们本就有归属编码，且变更频率高、最该解耦）。这条线划对了，方案就成立。
+  </div>
+
+  <!-- ============ 4 ============ -->
+  <h2 id="s4" class="anchor">4. 核心架构：一芯双壳上抬到前端</h2>
+  <p>后端每个能力已经是「一芯双壳」：同一套 handler（芯），既能内嵌进门户进程（<code>ReportModule</code>），又能独立跑 + 门户反代（<code>ReportProxyModule</code>），
+  由 <code>center_client.urls.report</code> 配没配来切换。<b>本方案把同一结构复制到前端资源</b> —— 每个微服务额外产出「菜单清单 + 页面目录」两件前端制品，门户对它们也做「内嵌镜像 ↔ 反代联邦」双模。</p>
+
+  <div class="diagram">┌──────────────────────────────── 浏览器（单一同源门户外壳） ─────────────────────────────┐
+│  登录 · 顶栏 · <b>聚合菜单树</b> · 四区工作台容器（explorer/content/property/bottom）              │
+└───────────────▲───────────────────────────▲───────────────────────────▲──────────────┘
+                │ GET /api/menu/tree         │ GET /portal/flow/*.js      │ GET /portal/rpt/*.js
+                │ （聚合后的统一菜单）        │ （流程页面）               │ （报表页面）
+        ┌───────┴───────────────────────────┴───────────────────────────┴───────┐
+        │                    门户 cmx-portalservice :8080  ——  <b>聚合器 / 外壳</b>            │
+        │                                                                          │
+        │   菜单聚合器 ── 合并 [门户本地] + [流程 manifest] + [报表 manifest] → 一棵树      │
+        │   页面投递   ── 按 center_client.urls 决定：                                │
+        │                 ● 空  → 内嵌镜像（ServeDir 门户本地副本，= 今天）           │
+        │                 ● 有  → 反代联邦（转发到微服务的 /ui 与 /api/menu/manifest） │
+        └───────────────▲───────────────────────────────────▲─────────────────────┘
+             proxy（可选）│                          proxy（可选）│
+        ┌────────────────┴──────────────┐        ┌─────────────┴───────────────────┐
+        │ cmx-flowengine :8091           │        │ cmx-report :8092                 │
+        │  芯：flow handler（已有）      │        │  芯：rpt handler（已有）         │
+        │  <b>+ web/ui/  流程页面（新）</b>      │        │  <b>+ web/ui/  报表页面（新）</b>       │
+        │  <b>+ /api/menu/manifest（新）</b>    │        │  <b>+ /api/menu/manifest（新）</b>     │
+        └────────────────────────────────┘        └──────────────────────────────────┘</div>
+
+  <div class="legend">
+    <span class="pill"><span class="dot" style="background:var(--portal)"></span>门户：外壳 + 聚合，唯一 Shell</span>
+    <span class="pill"><span class="dot" style="background:var(--flow)"></span>流程：自持页面 + 菜单清单</span>
+    <span class="pill"><span class="dot" style="background:var(--report)"></span>报表：自持页面 + 菜单清单</span>
+  </div>
+
+  <p>与后端完全同构的一句话：<b>「配了远程地址就联邦（微服务自投递、门户聚合代理），没配就内嵌（门户本地镜像，即今天）—— 前端浏览器请求零改」</b>。</p>
+
+  <!-- ============ 5 ============ -->
+  <h2 id="s5" class="anchor">5. 菜单联邦（Menu Federation）</h2>
+  <p>今天门户读一张 <code>cmx_menu</code> 全表装配菜单树。联邦后：<b>门户只保管自己的菜单，流程 / 报表菜单由各微服务产出 manifest，门户在渲染前合并</b>。</p>
+
+  <h3>5.1 菜单清单契约（各微服务对外暴露）</h3>
+  <p>每个微服务提供一个只读端点，返回自己那棵子树。结构直接复用 <code>cmx_menu.definition</code> 的四区 workspace-node 语义 —— <b>门户已能渲染它，零新渲染逻辑</b>：</p>
+  <pre><span class="c">// GET  http://cmx-flowengine:8091/api/menu/manifest</span>
+{
+  <span class="k">"owner"</span>: { <span class="k">"domain"</span>:<span class="s">"wf"</span>, <span class="k">"application"</span>:<span class="s">"cmxflow"</span>, <span class="k">"module"</span>:<span class="s">"flow"</span> },   <span class="c">// 聚合键 = 既有归属编码</span>
+  <span class="k">"version"</span>: <span class="s">"2026.08.12"</span>,                                        <span class="c">// 变更即失缓存</span>
+  <span class="k">"nodes"</span>: [
+    { <span class="k">"code"</span>:<span class="s">"flow-designer"</span>, <span class="k">"name"</span>:<span class="s">"流程设计器"</span>, <span class="k">"icon"</span>:<span class="s">"flow-chart"</span>, <span class="k">"funCode"</span>:<span class="s">"WF_DESIGN"</span>,
+      <span class="k">"definition"</span>: { <span class="c">/* 四区 workspace-node：explorer/content/property/bottom → views[] */</span>
+        <span class="k">"content"</span>: { <span class="k">"views"</span>:[ { <span class="k">"type"</span>:<span class="s">"native"</span>, <span class="k">"page"</span>:<span class="s">"flow/design-workbench"</span> } ] } } },
+    { <span class="k">"code"</span>:<span class="s">"flow-todo"</span>,     <span class="k">"name"</span>:<span class="s">"我的待办"</span>,   <span class="k">"page"</span>:<span class="s">"flow/todo-center"</span>, <span class="k">"funCode"</span>:<span class="s">"WF_TODO"</span> }
+  ]
+}</pre>
+
+  <div class="callout">
+    <b>为什么直接复用 <code>definition</code>？</b> 现在的菜单树、四区工作台、<code>menu_pages.rs</code> 的「菜单→页面」解析全部围绕这套 JSON。
+    manifest 里原样承载它，门户合并后走的还是老渲染路径 —— <b>联邦只改「菜单从哪来」，不改「菜单怎么画」</b>。
+  </div>
+
+  <h3>5.2 门户侧聚合器</h3>
+  <div class="step"><div class="n">1</div><div class="b"><h4>取</h4>启动时（或带 TTL 缓存地）拉各微服务 <code>/api/menu/manifest</code>；配置里没登记的服务跳过。</div></div>
+  <div class="step"><div class="n">2</div><div class="b"><h4>并</h4>把 manifest 的 <code>nodes</code> 按 <code>owner</code> 归属编码<b>挂到菜单树对应位置</b>（门户仍持有顶层域/应用骨架，微服务只填自己的模块子树）。</div></div>
+  <div class="step"><div class="n">3</div><div class="b"><h4>滤</h4>合并后统一过<b>门户的权限层</b>（<code>funCode</code> → 用户可见性），联邦不绕过鉴权。</div></div>
+  <div class="step"><div class="n">4</div><div class="b"><h4>降级</h4>某微服务不可达 → 用<b>上次缓存的 manifest</b> 或门户本地镜像；绝不让整棵菜单树塌掉（对齐后端「子查询失败降级 0」哲学）。</div></div>
+
+  <h3>5.3 两种落地形态（可分阶段）</h3>
+  <table>
+    <tr><th></th><th>A. 构建期镜像（保守）</th><th>B. 运行期联邦（彻底）</th></tr>
+    <tr><td>manifest 来源</td><td>发布时把各微服务 manifest <b>灌进门户 <code>cmx_menu</code></b>（同今天，但源在微服务仓）</td><td>门户启动/定时<b>实时拉取</b>，不落门户库</td></tr>
+    <tr><td>解耦程度</td><td class="mid">仓库解耦（源码归位），运行时仍集中</td><td class="ok">仓库 + 运行时全解耦</td></tr>
+    <tr><td>门户库 <code>cmx_menu</code></td><td>仍存流程/报表行（但由 seed 自动同步，非手工）</td><td class="ok">只存门户自己的行</td></tr>
+    <tr><td>风险</td><td class="ok">极低（机制不变）</td><td class="mid">需处理拉取失败/缓存/版本</td></tr>
+  </table>
+  <p>建议<b>先 A 后 B</b>：A 立即拿到「源码归各仓」的解耦收益且零风险，B 再拿「运行时不依赖门户库」的彻底收益。</p>
+
+  <!-- ============ 6 ============ -->
+  <h2 id="s6" class="anchor">6. 页面服务：内嵌镜像 ↔ 反代联邦</h2>
+  <p>页面（<code>*.js</code> native 模块）今天由门户 <code>ServeDir</code> 从 <code>web_folder</code> 投递。联邦后同样双模，<b>浏览器 URL 保持 <code>/portal/flow/*.js</code> 不变</b>：</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3><span class="tag">内嵌镜像</span>（默认 = 今天）</h3>
+      <p><code>center_client.urls.flow</code> 未配 → 门户 <code>ServeDir</code> 投递本地副本。副本由发布流水线从 <code>cmx-flowengine/web/ui/</code> <b>同步</b>而来（源在微服务仓，门户只是镜像），行为与今天逐字节一致。</p>
+    </div>
+    <div class="card">
+      <h3><span class="tag flow">反代联邦</span>（配了远程地址）</h3>
+      <p>配了 → 门户把 <code>/portal/flow/*</code> 透明转发到 <code>cmx-flowengine</code> 的 <code>/ui/*</code>。<b>完全复用后端 <code>FlowProxyModule</code> 的转发机制</b>（同源出站、三层鉴权头 <code>X-API-Key</code> / <code>X-Delegated-User-Token</code> / <code>X-Request-Id</code>），只是转发的是静态资源而非 API。</p>
+    </div>
+  </div>
+
+  <h3>6.1 微服务侧要补的能力（很小）</h3>
+  <ul>
+    <li><b>chassis 加静态目录投递</b>：今天 <code>cmx-web-chassis</code> 只挂路由 + 大盘（<code>include_str!</code> 单页），<b>尚无 <code>ServeDir</code></b>。补一个可选「静态目录」能力，让 flow-server / report-server 能投递自己的 <code>web/ui/</code>。这是<b>加法、不改现状</b>（大盘等仍在）。</li>
+    <li><b>页面目录归位</b>：<code>data/native-pages/sources/portal/flow/*</code> → <code>cmx-flowengine/web/ui/</code>；<code>.../rpt/*</code> → <code>cmx-report/web/ui/</code>。（对标本会话已做的后端 crate 物理迁移。）</li>
+  </ul>
+
+  <div class="callout">
+    <b>转发范围问题</b>：现有 proxy 只转 <code>/api/*</code>。前端联邦需要门户能把<b>一段前缀（如 <code>/portal/flow/</code>）</b>整体转发到微服务的 <code>/ui/</code>。这是对现有 proxy「路径映射」的<b>一处扩展</b>（恒等或前缀替换），机制同构、复杂度低。</p>
+  </div>
+
+  <!-- ============ 7 ============ -->
+  <h2 id="s7" class="anchor">7. 共享运行时与静态资源</h2>
+  <p>流程 / 报表页面并非孤立文件 —— 它们 <code>&lt;script&gt;</code> / <code>import</code> 依赖门户提供的共享运行时（组件库 <code>cmx-data-comp</code>、电子表格内核、图标、UI5 runtime、vendor）。这是联邦里<b>最需要拍板</b>的一环。</p>
+
+  <table>
+    <tr><th>策略</th><th>做法</th><th>利</th><th>弊</th></tr>
+    <tr><td><b>① 门户单源（推荐）</b></td><td>共享运行时只由门户在稳定 URL（如 <code>/portal/vendor/…</code>）投递并<b>版本化</b>；微服务页面跨源引用它</td><td class="ok">零副本、零漂移、体积小</td><td>微服务页面对门户 vendor URL + 版本有契约依赖；跨源需 CORS</td></tr>
+    <tr><td>② 各自打包</td><td>每个微服务把运行时打进自己的 <code>web/ui/</code></td><td>页面自包含、可独立部署验证</td><td class="no">多副本、易版本漂移、体积膨胀</td></tr>
+    <tr><td>③ 独立 CDN</td><td>运行时抽到独立 CDN，三方都引</td><td class="ok">彻底中立</td><td class="mid">多一个部署物 + 缓存治理</td></tr>
+  </table>
+
+  <div class="callout good">
+    <b>建议 ①</b>：门户作为「共享运行时的唯一发行方」，用<b>版本化契约</b>（<code>/portal/vendor/@2026.08/…</code>）锁住兼容性。这既保留了本会话记忆里 <code>[[cmx-megasheet-vendor-dual-bundle]]</code> 的「三产物同步纪律」精神（避免副本漂移），又不逼各微服务重复打包重型组件库。CORS 头由门户/反代统一注入。
+  </div>
+
+  <!-- ============ 8 ============ -->
+  <h2 id="s8" class="anchor">8. 统一外壳：门户如何集中呈现</h2>
+  <p>用户视角<b>完全不变</b>：仍登录门户、仍在左侧看一棵菜单树、点节点在四区工作台里开 Tab。联邦只发生在幕后：</p>
+  <ol>
+    <li>门户 Shell 请求 <code>/api/menu/tree</code> → 拿到<b>聚合后</b>的统一树（门户本地 + 流程 + 报表，已按权限过滤）。</li>
+    <li>用户点「流程设计器」→ Shell 读该节点 <code>definition</code> 的四区 workspace-node（同今天）。</li>
+    <li>节点 view 指向 <code>flow/design-workbench</code> → Shell 按老路 <code>import()</code> 该 native 模块，浏览器发 <code>GET /portal/flow/design-workbench.js</code>。</li>
+    <li>该请求命中门户：<b>内嵌模式</b>→本地副本；<b>联邦模式</b>→反代到 <code>cmx-flowengine</code>。Shell 与浏览器<b>都不感知</b>差别。</li>
+    <li>页面在四区容器内渲染，调 <code>/api/flow/*</code>（后端也走内嵌/反代双模）—— 前后端联邦对齐。</li>
+  </ol>
+  <div class="callout"><b>一句话</b>：门户从「流程/报表页面与菜单的<b>所有者</b>」退位为「<b>聚合器 + 外壳 + 共享运行时发行方</b>」；微服务升格为各自前端资源的<b>源</b>。交互面 100% 不变。</div>
+
+  <!-- ============ 9 ============ -->
+  <h2 id="s9" class="anchor">9. 迁移路线（四阶段 · 每阶段零回归）</h2>
+
+  <div class="step"><div class="n">F0</div><div class="b"><h4>契约定型（纯设计，本文档）</h4>
+    敲定 menu manifest 契约、页面目录约定（<code>&lt;svc&gt;/web/ui/</code>）、共享运行时策略（建议门户单源版本化）、URL 前缀（<code>/portal/flow/</code>、<code>/portal/rpt/</code> 不变）。<b>不动代码。</b></div></div>
+
+  <div class="step"><div class="n">F1</div><div class="b"><h4>源码归位（仓库解耦，运行时不变）</h4>
+    流程页面物理迁到 <code>cmx-flowengine/web/ui/</code>、报表迁到 <code>cmx-report/web/ui/</code>；发布流水线把它们<b>同步镜像</b>回门户 <code>web_folder</code>。菜单走「构建期镜像 A」：manifest 源在微服务仓，seed 自动灌门户库。
+    <b>浏览器请求、门户投递、菜单渲染全部逐字节不变</b> —— 纯迁源，对标本会话后端 crate 的物理迁移。</div></div>
+
+  <div class="step"><div class="n">F2</div><div class="b"><h4>微服务自投递能力（加法）</h4>
+    给 <code>cmx-web-chassis</code> 补可选 <code>ServeDir</code>；flow-server / report-server 能投递自己的 <code>web/ui/</code> + 暴露 <code>/api/menu/manifest</code>。此时<b>两条路并存</b>：门户镜像仍在跑，微服务自投递可独立验证（curl 微服务 <code>/ui/…</code>、<code>/api/menu/manifest</code>）。默认仍走门户镜像，<b>零回归</b>。</div></div>
+
+  <div class="step"><div class="n">F3</div><div class="b"><h4>联邦开关上线（运行时解耦）</h4>
+    门户菜单聚合器实时拉 manifest（形态 B）；页面前缀反代扩展就位。<code>center_client.urls.{flow,report}</code> 配了远程地址 → 切联邦（微服务自投递 + 门户聚合代理）；没配 → 回内嵌镜像。<b>与后端 API 的一芯双壳开关同一把钥匙</b>。任何异常配空即回退。</div></div>
+
+  <div class="callout good"><b>回退保证</b>：F1–F3 每一阶段，把 <code>center_client.urls</code> 相关项配空，就回到「门户全包」的今天。开关是配置级的，不需回滚代码。</div>
+
+  <!-- ============ 10 ============ -->
+  <h2 id="s10" class="anchor">10. 配置开关一览</h2>
+  <pre><span class="c"># portal-server.toml —— 复用后端已有的 [center_client.urls]，前后端联邦同一开关</span>
+[center_client.urls]
+flow   = <span class="s">"http://127.0.0.1:8091"</span>   <span class="c"># 配了：流程 API + 页面 + 菜单都联邦到 flow-server；空=门户内嵌镜像</span>
+report = <span class="s">"http://127.0.0.1:8092"</span>   <span class="c"># 配了：报表 API + 页面 + 菜单都联邦到 report-server；空=门户内嵌镜像</span>
+
+<span class="c"># 可选：前端联邦的细粒度旋钮（若想 API 联邦但页面仍内嵌，用于灰度）</span>
+[federation]
+menu_mode  = <span class="s">"manifest"</span>   <span class="c"># "seed"(构建期镜像A) | "manifest"(运行期联邦B)</span>
+ui_mode    = <span class="s">"proxy"</span>      <span class="c"># "mirror"(门户本地副本) | "proxy"(反代到微服务 /ui)</span>
+manifest_ttl_secs = <span class="w">300</span>       <span class="c"># manifest 缓存，拉取失败用旧值降级</span></pre>
+  <p>沿用后端惯例：<b>URL 配了就联邦、没配就内嵌</b>；<code>[federation]</code> 段仅为灰度/回退提供更细的旋钮，缺省即「跟随 URL 开关」。</p>
+
+  <!-- ============ 11 ============ -->
+  <h2 id="s11" class="anchor">11. 收益 / 取舍 / 风险</h2>
+  <div class="grid2">
+    <div class="card"><h3>收益</h3><ul>
+      <li>流程 / 报表团队<b>独立发布</b>前端，不排队等门户。</li>
+      <li>门户库 <code>cmx_menu</code> 瘦身，只管自己的行（形态 B）。</li>
+      <li><b>前后端联邦对齐</b>：API 与页面用同一把 <code>center_client</code> 钥匙，心智统一。</li>
+      <li>微服务可<b>独立演示</b>（自投递 <code>/ui</code> + manifest），脱离门户也能跑通自己的界面。</li>
+    </ul></div>
+    <div class="card"><h3>取舍 / 风险</h3><ul>
+      <li><b>共享运行时契约</b>是命门：跨源引用 + 版本化必须治理好，否则组件库漂移（见 §7，建议门户单源）。</li>
+      <li>运行期联邦（B）引入<b>拉取失败/缓存/版本</b>三件事 —— 用 TTL + 降级缓存 + 版本号解决，对齐后端降级哲学。</li>
+      <li>chassis 加 <code>ServeDir</code>、proxy 扩展前缀转发 —— 都是<b>加法</b>，但需一次性做对（路径映射、CORS、鉴权头透传）。</li>
+      <li>权限过滤必须在<b>门户聚合后统一做</b>，联邦不能成为绕过 <code>funCode</code> 鉴权的后门。</li>
+    </ul></div>
+  </div>
+
+  <!-- ============ 12 ============ -->
+  <h2 id="s12" class="anchor">12. 待定决策（需拍板）</h2>
+  <table>
+    <tr><th>#</th><th>决策点</th><th>选项</th><th>建议</th></tr>
+    <tr><td>1</td><td>菜单联邦形态</td><td>A 构建期镜像 / B 运行期联邦</td><td class="ok">先 A 后 B（先拿源码解耦，再拿运行时解耦）</td></tr>
+    <tr><td>2</td><td>共享运行时</td><td>①门户单源版本化 / ②各自打包 / ③独立 CDN</td><td class="ok">① 门户单源 + 版本化契约</td></tr>
+    <tr><td>3</td><td>页面前缀是否保持</td><td>保持 <code>/portal/flow/*</code> / 改新前缀</td><td class="ok">保持不变（浏览器零改、可回退）</td></tr>
+    <tr><td>4</td><td>manifest 挂载位置</td><td>微服务 <code>/api/menu/manifest</code></td><td class="ok">是（免认证只读，或走服务鉴权）</td></tr>
+    <tr><td>5</td><td>先做哪个模块</td><td>流程先 / 报表先</td><td class="mid">报表先（本会话刚抽出，最热、上下文全）</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <b>本文档只给方案，不动代码。</b> 确认以上决策后，可按 §9 的 F0→F3 分阶段落地；每阶段均以「配置配空即回退今天」为验收底线，并用两 workspace <code>cargo check</code> + 门户 curl parity + 微服务独立 curl 三道门校验（对齐本会话后端抽取的验证范式）。
+  </div>
+
+  <footer>
+    微前端联邦方案 · 草案 v1 · 流程/报表菜单与页面资源各自治理、门户集中呈现<br/>
+    与 [cmx-report-standalone-microservice] / [report-microservice-proxy-mount] / [menu-manager-two-region-refactor] 关联 · 不含代码改动
+  </footer>
+
+</div>
+<script>
+  function tt(){const h=document.documentElement;h.dataset.theme=h.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('fed-theme',h.dataset.theme)}catch(e){}}
+  (function(){try{const t=localStorage.getItem('fed-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}})();
+</script>
+</body>
+</html>

@@ -84,6 +84,12 @@ impl ModuleRoutes for ReportProxyModule {
 
 /// 转发 handler：拼目标 URL → 注入三层鉴权 → 流式转发请求/响应。
 async fn proxy_handler(State(px): State<std::sync::Arc<ProxyState>>, req: Request) -> Response {
+    forward(&px, req).await
+}
+
+/// 复用的转发核：拼 `{report_base}/api{path}{query}` → 注入三层鉴权 → 流式转发。
+/// 被 `proxy_handler`（API 反代）与 `page_proxy_mw`（页面反代）共用。
+async fn forward(px: &ProxyState, req: Request) -> Response {
     let method = req.method().clone();
     let uri = req.uri().clone();
     let headers = req.headers().clone();
@@ -179,4 +185,65 @@ fn build_response(resp: reqwest::Response) -> Response {
     let mut out = (status, body).into_response();
     *out.headers_mut() = headers;
     out
+}
+
+// ============================================================================
+// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 [center_client.urls].report
+// 把**报表拥有的**页面取页请求反代到独立 cmx-rpt-server（它自暴同款字节对齐 API）。
+// ----------------------------------------------------------------------------
+// 与 API 反代的差异：native/html-pages 是**共享端点**（/api/native-pages/{id}），只有**部分 id**
+// 属报表，其余是门户自己的页。故不能整前缀反代，改用**中间件按 id 归属判定**：
+//   - 命中报表拥有的 id → 转发到 report-server；
+//   - 未命中           → next.run(req) 落回门户自己的 handler（内嵌页零改）。
+// 这样门户菜单打开报表页 → 浏览器 GET /api/native-pages/portal.rpt.designer → 命中反代 →
+// report-server 返回逐字节一致的页面源（rev 一致，ETag/缓存不错位），shell 零感知。
+// ============================================================================
+
+/// 判定一个前端页 id 是否属报表（与 cmx-report/web 的清单一致）：
+///   native：`portal.rpt.*`
+///   html  ：`fi.cmxfico.gl.rpt-designer-*`、`fi.cmxfico.gl.rpt-spreadjs-designer-*`
+fn is_report_owned_page(id: &str) -> bool {
+    id.starts_with("portal.rpt.")
+        || id.starts_with("fi.cmxfico.gl.rpt-designer-")
+        || id.starts_with("fi.cmxfico.gl.rpt-spreadjs-designer-")
+}
+
+/// 从 path 提取页面 id：`/native-pages/{id}` 或 `/html-pages/{id}`（已剥 `/api`）。
+/// batch/list（`/native-pages/batch`、`/native-pages`）不在此拦截（含混合 id，留门户聚合）。
+fn page_id_of(path: &str) -> Option<&str> {
+    for pfx in ["/native-pages/", "/html-pages/"] {
+        if let Some(rest) = path.strip_prefix(pfx) {
+            if !rest.is_empty() && rest != "batch" && !rest.contains('/') {
+                return Some(rest);
+            }
+        }
+    }
+    None
+}
+
+/// 页面反代中间件：报表拥有的单页取页请求 → 转发 report-server；其余 → 落回门户 handler。
+/// 由平台在 `report_remote_base()` 非空时对 api 路由 `layer` 之。
+async fn page_proxy_mw(
+    State(px): State<std::sync::Arc<ProxyState>>,
+    req: Request,
+    next: axum::middleware::Next,
+) -> Response {
+    if let Some(id) = page_id_of(req.uri().path()) {
+        if is_report_owned_page(id) {
+            return forward(&px, req).await;
+        }
+    }
+    next.run(req).await
+}
+
+/// 给 api 路由叠加**报表页面反代**层：报表拥有的 native/html 单页取页请求转发到独立 cmx-rpt-server，
+/// 其余落回门户内嵌 handler。复用 `ReportProxyModule` 的远程基址 + 出站凭证 + HTTP 客户端。
+/// 平台 `merge_report` 在 `report_remote_base()` 非空时调它（返回叠层后的同类型路由）。
+pub fn with_report_page_proxy(
+    router: Router<CmxAppState>,
+    report_base: impl Into<String>,
+    api_key: Option<String>,
+) -> Router<CmxAppState> {
+    let state = ReportProxyModule::new(report_base, api_key).inner;
+    router.layer(axum::middleware::from_fn_with_state(state, page_proxy_mw))
 }

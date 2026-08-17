@@ -191,3 +191,94 @@ fn build_response(resp: reqwest::Response) -> Response {
 /// 保留 Uri 供未来扩展（当前 target 拼接直接用 path/query）。
 #[allow(dead_code)]
 fn _uri_hint(_u: &Uri) {}
+
+// ============================================================================
+// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 [center_client.urls].flow
+// 把**流程拥有的**页面取页请求反代到独立 cmx-flow-server（它自暴同款字节对齐 API）。
+// ----------------------------------------------------------------------------
+// 与 flow API 反代的差异：页面**不升级 /v1**（flow-server 页面挂在 `/api/native-pages`、
+// `/api/html-pages`，不在 `/api/flow/v1` 下），故用**恒等**转发 `{flow_base}/api{path}{query}`。
+// 且 native/html-pages 是共享端点、仅部分 id 属流程，故按 id 归属判定：命中→转发，未命中→
+// next.run 落回门户内嵌 handler。
+// ============================================================================
+
+/// 判定一个前端页 id 是否属流程（与 cmx-flowengine/web 的清单一致）：
+///   native：`portal.flow.*`
+///   html  ：`fi.cmxfico.gl.flow-pay-review-form`（及未来 flow-* 表单）
+fn is_flow_owned_page(id: &str) -> bool {
+    id.starts_with("portal.flow.") || id.starts_with("fi.cmxfico.gl.flow-")
+}
+
+/// 从 path 提取页面 id：`/native-pages/{id}` 或 `/html-pages/{id}`（已剥 `/api`）。
+/// batch/list 不在此拦截（含混合 id，留门户聚合）。
+fn page_id_of(path: &str) -> Option<&str> {
+    for pfx in ["/native-pages/", "/html-pages/"] {
+        if let Some(rest) = path.strip_prefix(pfx) {
+            if !rest.is_empty() && rest != "batch" && !rest.contains('/') {
+                return Some(rest);
+            }
+        }
+    }
+    None
+}
+
+/// 恒等转发到 `{flow_base}/api{path}{query}`（页面反代专用，不升 /v1）。
+async fn forward_page(px: &ProxyState, req: Request) -> Response {
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let headers = req.headers().clone();
+    let path = uri.path();
+    let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
+    let target = format!("{}/api{path}{query}", px.flow_base);
+
+    let body = req.into_body();
+    let reqwest_body = reqwest::Body::wrap_stream(body.into_data_stream());
+    let mut rb = px.client.request(method, &target).body(reqwest_body);
+    rb = rb.headers(forward_request_headers(&headers));
+    if let Some(key) = &px.api_key {
+        rb = rb.header("X-API-Key", key);
+    }
+    if let Some(user_jwt) = cmx_traits::auth::context_scope::current_original_token() {
+        rb = rb.header("X-Delegated-User-Token", format!("Bearer {user_jwt}"));
+    }
+    if let Some(rid) = cmx_traits::auth::context_scope::current_request_id() {
+        rb = rb.header("X-Request-Id", rid);
+    }
+    match rb.send().await {
+        Ok(resp) => build_response(resp),
+        Err(e) => {
+            tracing::error!(error = %e, %target, "FlowProxy 页面转发失败");
+            (
+                StatusCode::BAD_GATEWAY,
+                axum::Json(serde_json::json!({ "code": 502, "msg": format!("流程服务不可达: {e}") })),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// 页面反代中间件：流程拥有的单页取页请求 → 转发 flow-server；其余 → 落回门户 handler。
+async fn page_proxy_mw(
+    State(px): State<std::sync::Arc<ProxyState>>,
+    req: Request,
+    next: axum::middleware::Next,
+) -> Response {
+    if let Some(id) = page_id_of(req.uri().path()) {
+        if is_flow_owned_page(id) {
+            return forward_page(&px, req).await;
+        }
+    }
+    next.run(req).await
+}
+
+/// 给 api 路由叠加**流程页面反代**层：流程拥有的 native/html 单页取页请求转发到独立
+/// cmx-flow-server，其余落回门户内嵌 handler。复用 `FlowProxyModule` 的基址 + 凭证 + 客户端。
+/// 平台 `merge_flow` 在 `flow_remote_base()` 非空时调它。
+pub fn with_flow_page_proxy(
+    router: Router<CmxAppState>,
+    flow_base: impl Into<String>,
+    api_key: Option<String>,
+) -> Router<CmxAppState> {
+    let state = FlowProxyModule::new(flow_base, api_key).inner;
+    router.layer(axum::middleware::from_fn_with_state(state, page_proxy_mw))
+}

@@ -1448,6 +1448,7 @@ dependencies = [
  "cmx-flow-bpmn",
  "cmx-flow-def",
  "cmx-flow-engine",
+ "cmx-flow-identity",
  "cmx-flow-model",
  "cmx-flow-store-pg",
  "cmx-web-monitor",
@@ -1460,6 +1461,7 @@ dependencies = [
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -1468,6 +1470,7 @@ version = "0.1.12"
 dependencies = [
  "cmx-flow-model",
  "roxmltree",
+ "serde_json",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -1501,6 +1504,20 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "cmx-flow-identity"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "cmx-core",
+ "cmx-database-pg",
+ "cmx-flow-model",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
@@ -1851,6 +1868,7 @@ dependencies = [
  "cmx-resource-rpc",
  "cmx-rpc",
  "cmx-rpt-api",
+ "cmx-rule-api",
  "cmx-runtime",
  "cmx-service",
  "cmx-service-base",
@@ -2093,6 +2111,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -2134,6 +2153,18 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-rule-api"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api-core",
+ "cmx-traits",
+ "reqwest",
+ "serde_json",
  "tracing",
 ]
 

@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS cmx_mdm_activation (
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
+-- 幂等演进：CREATE TABLE IF NOT EXISTS 对「表已存在但为旧版结构」的库会整条跳过，
+-- 导致新增列缺失、后续 COMMENT/索引引用报「column does not exist」。故显式补列，
+-- 全新库上是 no-op（列已由 CREATE 建好），旧库上把缺列补齐，两种情况都幂等。
+ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS subject_name_field VARCHAR(64);
+ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS subject_code_field VARCHAR(64);
+ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS header_groups   JSONB       NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS is_active       BOOLEAN     NOT NULL DEFAULT TRUE;
+ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS created_at      TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ NOT NULL DEFAULT now();
 COMMENT ON TABLE  cmx_mdm_activation IS 'MDM 激活映射配置（单据→主数据），UI 配置器维护，激活器读取执行';
 COMMENT ON COLUMN cmx_mdm_activation.id              IS '主键（snowflake，应用层生成）';
 COMMENT ON COLUMN cmx_mdm_activation.activation_code IS '映射码（如 supplier_apply）';
