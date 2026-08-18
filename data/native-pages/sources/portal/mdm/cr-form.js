@@ -224,6 +224,7 @@ function styleCss() {
   .fh-dot-submit { background:var(--sapInformationColor,#0a6ed1); }
   .fh-dot-approve { background:var(--sapSuccessColor,#107e3e); }
   .fh-dot-reject { background:var(--sapNegativeColor,#bb0000); }
+  .fh-dot-return { background:var(--sapWarningColor,#e9730c); }
   .fh-dot-pending { width:8px; height:8px; background:transparent; border:2px dashed var(--sapContent_LabelColor,#8a8d90); }
   .fh-body { flex:1 1 auto; min-width:0; padding-bottom:10px; }
   .fh-node-hd { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; font-weight:600; color:var(--sapTitleColor); }
@@ -392,7 +393,11 @@ function flowHistoryHtml() {
   }
   const FLOW_STATE = { ACTIVE: ['进行中', 'warning'], COMPLETED: ['已审结', 'success'], TERMINATED: ['已终止', 'neutral'] }
   const NODE_LABEL = { apply: '单据提交', review: '审批' }
-  const DECISION = { approve: '同意', reject: '驳回' }
+  // decision 落库值全集：complete 透传（approve/reject）+ return 端点固定 "return"（退回发起人）。
+  // 未映射的新值兜底显示原串 + 中性色，避免像 return 一样漏译。
+  const DECISION = { approve: '同意', reject: '驳回', return: '退回' }
+  const DECISION_TONE = { approve: 'success', reject: 'danger', return: 'warning' }
+  const DOT_CLS = { approve: 'fh-dot-approve', reject: 'fh-dot-reject', return: 'fh-dot-return' }
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   // createdAt 为 UTC ISO 串（如 2026-08-18T06:47:58.141116+00:00），须转浏览器本地时区
   // （UTC+8）显示；微秒位超 ES 规范的 3 位毫秒，截断后再交给 Date 解析，非法串原样兜底。
@@ -407,19 +412,24 @@ function flowHistoryHtml() {
   const [lsName, lsTone] = FLOW_STATE[latest.state] || [latest.state || '—', 'neutral']
   const stateCard = `<div class="fh-state fh-state-${lsTone}"><span class="st-dot"></span><span>${esc(lsName)}</span>
     <span class="fh-state-biz">${esc(latest.businessKey || latest.instanceId || '')}</span></div>`
-  const pendingNode = `<div class="fh-node"><div class="fh-rail"><span class="fh-dot fh-dot-pending"></span></div>
-      <div class="fh-body"><div class="fh-node-hd muted">等待办理中…</div></div></div>`
   const secs = insts.map((inst, i) => {
     const [stName] = FLOW_STATE[inst.state] || [inst.state || '—', 'neutral']
     // 多轮（驳回重提）才显示轮次头；单轮时状态已在顶部卡，不重复
     const round = insts.length > 1 ? `<div class="fh-round">第 ${insts.length - i} 轮<span class="sub">${esc(stName)}</span></div>` : ''
+    // 进行中实例的时间线末梢占位：退回场景提示等待发起人重提，其余提示等待办理
+    const cs = inst.comments || []
+    const lastDecision = cs.length ? cs[cs.length - 1].decision : ''
+    const pendingText = lastDecision === 'return' ? '已退回，等待发起人修改重提…' : '等待办理中…'
+    const pendingNode = `<div class="fh-node"><div class="fh-rail"><span class="fh-dot fh-dot-pending"></span></div>
+      <div class="fh-body"><div class="fh-node-hd muted">${esc(pendingText)}</div></div></div>`
     const nodes = (inst.comments || []).map((c) => {
-      const d = DECISION[c.decision] || ''
-      const dotCls = c.decision === 'approve' ? 'fh-dot-approve' : (c.decision === 'reject' ? 'fh-dot-reject' : 'fh-dot-submit')
+      const d = c.decision ? (DECISION[c.decision] || c.decision) : ''
+      const tone = DECISION_TONE[c.decision] || 'neutral'
+      const dotCls = DOT_CLS[c.decision] || 'fh-dot-submit'
       return `<div class="fh-node">
         <div class="fh-rail"><span class="fh-dot ${dotCls}"></span><span class="fh-link"></span></div>
         <div class="fh-body">
-          <div class="fh-node-hd">${esc(NODE_LABEL[c.nodeBpmnId] || c.nodeBpmnId || '办理')}${d ? `<cmx-status-tag tone="${c.decision === 'reject' ? 'danger' : 'success'}" variant="subtle" dot size="sm">${esc(d)}</cmx-status-tag>` : ''}</div>
+          <div class="fh-node-hd">${esc(NODE_LABEL[c.nodeBpmnId] || c.nodeBpmnId || '办理')}${d ? `<cmx-status-tag tone="${tone}" variant="subtle" dot size="sm">${esc(d)}</cmx-status-tag>` : ''}</div>
           <div class="fh-user">${esc(c.userId || '—')}</div>
           <div class="fh-time">${esc(fmtCmtTime(c.createdAt))}</div>
           ${c.comment ? `<div class="fh-comment">${esc(c.comment)}</div>` : ''}
@@ -1081,11 +1091,10 @@ function doSave(submit) {
         // 同步 crId：create/update 新建保存并提交后切 view 详情页，doCrAction（提交/通过/驳回/作废）
         // 读 state.crId；不同步则 !crId 静默 return → 详情页操作无反应（无弹窗/无接口/无报错）。
         state.crId = crId
-        try {
-          const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
-          state.crHead = (detail && detail.head) || {}
-          state.crLines = (detail && detail.lines) || []
-        } catch (e) { /* 重载失败不阻断，按当前内存数据渲染只读 */ }
+        // 提交后 CR 已进审批流：detail + 流程上下文一起重拉，按钮组（发起人撤回等）与
+        // 流程卡随 approving 态渲染，否则显示"无操作权限/暂无审批记录"的过期内容。
+        await reloadDetail()
+        await reloadFlowCtx()
         refresh()
       }
     } catch (e) {
@@ -1126,11 +1135,15 @@ async function doCrAction(act, confirmFirst = false, needReason = false) {
     await apiPost(url, { crId }, state.dbId)
     const msgMap = { submit: '已提交审批', abort: '已作废' }
     C.cmxInfo?.(`CR-${crId} ${msgMap[act] || '操作成功'}`)
+    // 提交/作废会改变流程状态与操作权限：detail + 流程上下文都要重拉，
+    // 否则按钮区/流程卡仍按旧 reviewCtx/flowHistory 渲染（如提交后误显示"无操作权限"）。
     await reloadDetail()
+    await reloadFlowCtx()
+    refresh()
   } catch (e) { C.cmxError?.(`操作失败：${e.message}`) }
 }
 
-// 状态操作后重新拉详情，刷新 doc_status 与表单回显（编辑态强制回只读）
+// 状态操作后重新拉详情（doc_status 与表单回显数据源）；刷新由调用方在全部数据就绪后统一执行。
 async function reloadDetail() {
   if (state.crId == null) return
   try {
@@ -1138,8 +1151,18 @@ async function reloadDetail() {
     state.crHead = (detail && detail.head) || {}
     state.crLines = (detail && detail.lines) || []
     state.editing = false
-    refresh()
   } catch (e) { cmx().cmxError?.(`刷新详情失败：${e.message}`) }
+}
+
+// 重拉流程上下文（review-context 按钮权限 + flow-history 审批历史）。
+// 状态动作（提交/作废/审批/撤回）后必须重拉——doc_status 变了，按钮组与流程卡数据源都会变；
+// 失败保持现状不阻断（详情已刷，流程区旧数据可用）。
+async function reloadFlowCtx() {
+  if (state.crId == null) return
+  try {
+    state.reviewCtx = await apiGet(`/api/mdm/change-requests/review-context?crId=${state.crId}`, state.dbId)
+    state.flowHistory = await apiGet(`/api/mdm/change-requests/flow-history?crId=${state.crId}`, state.dbId)
+  } catch { /* noop */ }
 }
 
 function syncSavedLineIds(idMap) {
@@ -1201,10 +1224,7 @@ function bind(root) {
       }
       await reloadDetail()
       // 重新拉流程上下文（按钮随状态/权限刷新）。
-      try {
-        state.reviewCtx = await apiGet(`/api/mdm/change-requests/review-context?crId=${state.crId}`, state.dbId)
-        state.flowHistory = await apiGet(`/api/mdm/change-requests/flow-history?crId=${state.crId}`, state.dbId)
-      } catch { /* 刷新失败保持现状 */ }
+      await reloadFlowCtx()
       refresh()
     } catch (e) { M.cmxError?.(`操作失败：${e.message}`) }
   }
