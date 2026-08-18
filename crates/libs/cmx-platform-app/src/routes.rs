@@ -19,11 +19,11 @@ use cmx_plugin_api::{
 use cmx_iam_api::{AuthModule, IamApiDoc, IamModule};
 use cmx_dct_api::{DctApiDoc, DctModule};
 use cmx_doc_api::{DocApiDoc, DocModule};
-use cmx_flow_api::{FlowModule, FlowProxyModule};
+use cmx_flow_api::FlowProxyModule;
 use cmx_job_api::JobModule;
 use cmx_mdm_api::{MdmApiDoc, MdmModule};
 use cmx_model_api::ModelModule;
-use cmx_rpt_api::{ReportModule, ReportProxyModule};
+use cmx_rpt_api::ReportProxyModule;
 use cmx_rule_api::RulesProxyModule;
 use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
@@ -139,11 +139,15 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
     deps
 }
 
-/// 按配置产出流程模块路由：远程基址非空 → FlowProxyModule（转发）；否则 FlowModule（内嵌）。
+/// 按配置产出流程模块路由：远程基址非空 → FlowProxyModule（转发 `/api/flow/*`）+ 页面反代；
+/// 没配 → 不挂流程路由（流程无进程内嵌，始终独立微服务）。与 [`merge_rules`] 同构。
 ///
 /// F3a：反代模式下**同时**叠加页面反代层（`with_flow_page_proxy`）——流程拥有的 native/html
 /// 单页取页请求（`/api/native-pages/portal.flow.*`、`/api/html-pages/fi.cmxfico.gl.flow-*`）
 /// 转发到 flow-server（它自暴同款字节对齐 API），其余页请求落回门户内嵌 handler。前端零改。
+///
+/// 引擎核 cmx-flow-app 在独立 workspace ../cmx-flowengine，由 cmx-flow-server 承载；门户只反代，
+/// 编译期不再依赖引擎源码（本壳 cmx-flow-api 已瘦成纯反代，无 embedded 分支）。
 fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match flow_remote_base() {
         Some(base) => {
@@ -152,16 +156,22 @@ fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
             let router = router.merge(FlowProxyModule::new(base.clone(), api_key.clone()).routes());
             cmx_flow_api::with_flow_page_proxy(router, base, api_key)
         }
-        None => router.merge(FlowModule.routes()),
+        None => {
+            tracing::warn!("流程引擎：未配置 [center_client.urls].flow → 门户不挂 /api/flow/* 路由；请启动独立 cmx-flow-server 并配置其地址");
+            router
+        }
     }
 }
 
-/// 按配置产出报表模块路由：远程基址非空 → ReportProxyModule（转发到独立 cmx-rpt-server）；
-/// 否则 ReportModule（进程内嵌）。与 [`merge_flow`] 同构。
+/// 按配置产出报表模块路由：远程基址非空 → ReportProxyModule（转发到独立 cmx-rpt-server）+ 页面反代；
+/// 没配 → 不挂报表路由（报表无进程内嵌，始终独立微服务）。与 [`merge_flow`]/[`merge_rules`] 同构。
 ///
 /// F3a：反代模式下**同时**叠加页面反代层（`with_report_page_proxy`）——报表拥有的 native/html
 /// 单页取页请求（`/api/native-pages/portal.rpt.*`、`/api/html-pages/fi.cmxfico.gl.rpt-*designer-*`）
 /// 转发到 report-server（它自暴同款字节对齐 API），其余页请求落回门户内嵌 handler。前端零改。
+///
+/// 中立核 cmx-rpt-app 在独立 workspace ../cmx-report，由 cmx-rpt-server 承载；门户只反代，
+/// 编译期不再依赖报表引擎源码（本壳 cmx-rpt-api 已瘦成纯反代，无 embedded 分支）。
 fn merge_report(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match report_remote_base() {
         Some(base) => {
@@ -170,7 +180,10 @@ fn merge_report(router: Router<CmxAppState>) -> Router<CmxAppState> {
             let router = router.merge(ReportProxyModule::new(base.clone(), api_key.clone()).routes());
             cmx_rpt_api::with_report_page_proxy(router, base, api_key)
         }
-        None => router.merge(ReportModule.routes()),
+        None => {
+            tracing::warn!("报表引擎：未配置 [center_client.urls].report → 门户不挂报表路由；请启动独立 cmx-rpt-server 并配置其地址");
+            router
+        }
     }
 }
 
@@ -192,11 +205,12 @@ fn merge_rules(router: Router<CmxAppState>) -> Router<CmxAppState> {
 /// 配置所有 API 路由
 ///
 /// 直接调用 cmx-api 的统一路由注册，返回配置好的 Axum Router。
-/// 外部模块路由（报表 ReportModule、流程 FlowModule/FlowProxyModule、业务单据 DocModule、
-/// 数据字典 DctModule、主数据 MdmModule、异步任务中心 JobModule、模型中心 ModelModule、
+/// 外部模块路由（报表 ReportProxyModule、流程 FlowProxyModule、规则 RulesProxyModule、业务单据
+/// DocModule、数据字典 DctModule、主数据 MdmModule、异步任务中心 JobModule、模型中心 ModelModule、
 /// 编码引擎 CodeModule）在此合并——cmx-api 不依赖它们，避免循环依赖。
 ///
-/// 流程、报表模块各按 `[center_client.urls].{flow,report}` 二选一：配了=反代到独立微服务，没配=进程内嵌。
+/// 流程/报表/规则三引擎均为**独立微服务**：各按 `[center_client.urls].{flow,report,rules}` 决定——
+/// 配了=反代到独立微服务，没配=不挂该模块路由（三者无进程内嵌，编译期均不依赖引擎源码）。
 ///
 /// # Returns
 ///

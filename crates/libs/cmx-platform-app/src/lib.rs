@@ -32,7 +32,7 @@ use crate::router::build_router;
 use cmx_utils::ConfigManager;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tracing::{info, warn};
+use tracing::info;
 
 /// 平台服务入口：装配并运行平台聚合服务。
 ///
@@ -95,14 +95,13 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     // 活体探测器：对 proxy 目标（如独立 flow-server）周期打 /_mon/tech-stats 判可达/延迟/版本。
     cmx_web_monitor::spawn_topology_prober();
 
-    // 流程引擎就绪：装载已发布定义 + 启动定时器 poller（依赖数据源，故在 init_datasources 之后）。
-    // 非致命：流程 DB/schema 不可用时只 warn，不阻塞 web-server 启动。
-    // S6：独立微服务模式（配了 [center_client.urls].flow）时引擎在远程，本进程不起引擎/poller，
-    // /api/flow/* 由 FlowProxyModule 转发（见 routes.rs）。
+    // 流程引擎：**独立微服务**（引擎核 cmx-flow-app 在独立 ws ../cmx-flowengine，由 cmx-flow-server
+    // 承载）。门户不再进程内嵌引擎/poller——只按 [center_client.urls].flow 反代 /api/flow/*（见
+    // routes.rs merge_flow）。故此处不再调 spawn_timer_poller（那条依赖已随壳瘦身移除）。
     if routes::flow_is_proxied() {
         info!("流程引擎：独立微服务模式，本进程不启动内嵌引擎 poller（转发到远程 flow-server）");
-    } else if let Err(e) = cmx_flow_api::spawn_timer_poller().await {
-        warn!("流程引擎初始化失败（流程功能不可用，其余服务照常）: {}", e);
+    } else {
+        info!("流程引擎：未配置 [center_client.urls].flow → 门户无流程路由；请启动独立 cmx-flow-server 并配置其地址");
     }
 
     init_web_config().map_err(|e| Error::ConfigError(format!("加载 Web 配置失败: {}", e)))?;
