@@ -69,24 +69,27 @@
                 {
                     "id": "mdm-cr-todo",
                     "name": "cr-todo",
-                    "caption": "单据列表",
+                    "caption": "供应商单据列表",
                     "type": "workspace-node",
                     "permissionId": null,
                     "icon": "tabler-outline/checklist",
                     "workspace": {
                         "id": "mdm_cr_todo",
                         "content": {
-                            "caption": "单据列表",
+                            "caption": "供应商单据列表",
                             "icon": "tabler-outline/checklist",
                             "views": [
                                 {
                                     "id": "mdm-cr-todo-content",
-                                    "tabLabel": "待办",
+                                    "tabLabel": "单据列表",
                                     "icon": "tabler-outline/checklist",
                                     "type": "native_pages",
                                     "native_page": "portal.mdm.cr-todo",
                                     "view": "content",
-                                    "props": {}
+                                    "props": {
+                                        "docType": "gys",
+                                        "title": "供应商单据列表"
+                                    }
                                 }
                             ]
                         }

@@ -54,20 +54,35 @@ pub async fn check_status_in(
     Ok(head)
 }
 
-/// CR 列表（分页，返回 total）。可选过滤 docStatus。
+/// CR 列表（分页，返回 total）。可选过滤 docStatus / docType / keyword（单据号·主体名模糊）。
 /// 返回 (list, total)。page 从 1 起；page_size<=0 时默认 20。
 pub async fn list_cr(
     mm: &DatabaseManager,
     db_id: &str,
     doc_status: Option<&str>,
+    doc_type: Option<&str>,
+    keyword: Option<&str>,
     page: i64,
     page_size: i64,
 ) -> Result<(Vec<Value>, i64), cmx_api_types::Error> {
-    let (where_sql, mut params): (String, Vec<DataValue>) = if let Some(st) = doc_status {
-        ("doc_status = $1 AND delete_flag = 0".to_string(), vec![DataValue::String(st.into())])
-    } else {
-        ("delete_flag = 0".to_string(), vec![])
-    };
+    // 动态过滤：doc_status / doc_type / keyword 均可选，占位符序号随入参递增
+    let mut conds = vec!["delete_flag = 0".to_string()];
+    let mut params: Vec<DataValue> = Vec::new();
+    if let Some(st) = doc_status {
+        params.push(DataValue::String(st.into()));
+        conds.push(format!("doc_status = ${}", params.len()));
+    }
+    if let Some(dt) = doc_type {
+        params.push(DataValue::String(dt.into()));
+        conds.push(format!("doc_type = ${}", params.len()));
+    }
+    // keyword：单据号 / 主体名模糊匹配（与列表页搜索框 placeholder 语义一致）
+    if let Some(kw) = keyword.map(str::trim).filter(|k| !k.is_empty()) {
+        params.push(DataValue::String(format!("%{kw}%")));
+        let n = params.len();
+        conds.push(format!("(doc_no ILIKE ${n} OR subject_name ILIKE ${n})"));
+    }
+    let where_sql = conds.join(" AND ");
     // 总数
     let cnt_sql = format!("SELECT COUNT(*) AS c FROM cv_mdm_apply WHERE {where_sql}");
     let cds = mm

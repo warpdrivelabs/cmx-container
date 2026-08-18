@@ -54,7 +54,7 @@ function initState() {
     coord: null, dbId: '',
     dictCode: '', docType: '', title: '', entityName: '', icon: '',
     columns: null, searchPlaceholder: '',
-    dictMeta: null, rows: [], kw: '', page: 1, pageSize: 20, total: 0, cfgErr: '',
+    dictMeta: null, rows: [], kw: '', page: 1, pageSize: 20, total: 0, cfgErr: '', grid: null,
   }
 }
 function getState(host) { if (host && !_hostState.has(host)) _hostState.set(host, initState()); return host ? _hostState.get(host) : null }
@@ -188,7 +188,7 @@ function viewHtml(st) {
     <div class="pg-head"><div class="pg-title">${esc(st.title || '主数据列表')}</div>
       <div class="pg-sub">浏览已发布${esc(ent)}；新增/变更/详情以并列标签页打开</div></div>
     <div class="card">
-      <div class="card-hd"><div class="card-title">${esc(st.title || '主数据列表')}（共 ${st.total} 条）</div>
+      <div class="card-hd"><div class="card-title" id="mlTotal">${esc(st.title || '主数据列表')}（共 ${st.total} 条）</div>
         <cmx-toolbar><ui5-button design="Emphasized" icon="add" id="mlAdd">新增${esc(ent)}</ui5-button><ui5-button design="Transparent" icon="refresh" slot="actions" id="mlReload">刷新</ui5-button></cmx-toolbar></div>
       <cmx-filter-bar id="mlFilter" search-placeholder="${esc(placeholderOf(st))}"></cmx-filter-bar>
       <div class="tbl-wrap"><cmx-revo-grid id="mlGrid"></cmx-revo-grid></div>
@@ -197,17 +197,19 @@ function viewHtml(st) {
 }
 function esc(s) { return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) }
 
-// 列表 grid（元数据列 + 操作列），每次 refresh 重建。
+// 列表 grid（元数据列 + 操作列）：仅建列模型与事件（bind 时一次）；
+// 数据填充由 applyData 负责——页面局部更新，不整页重绘（保留输入框文字/焦点/滚动/列宽）。
 function buildListGrid(host) {
   const st = getState(host); if (!st) return
   const C = cmx(); const root = host && (host.renderRoot || host.shadowRoot)
   const wrap = root && root.querySelector('.tbl-wrap'); if (!wrap) return
-  const old = wrap.querySelector('cmx-revo-grid'); if (old) old.remove()
-  const grid = document.createElement('cmx-revo-grid')
+  // 复用模板里的 grid 壳（.tbl-wrap 内唯一），仅配列模型/选项/事件——不新建，避免双框。
+  const grid = wrap.querySelector('cmx-revo-grid')
+  if (!grid) return
   grid.setAttribute('data-cmx-fill-height', '')
   grid.setAttribute('data-cmx-options', '{"editable":false,"showTotals":false,"showRequiredMark":false}')
   grid.classList.add('cmx-grid-neo')
-  wrap.appendChild(grid)
+  st.grid = grid
   if (C.CmxColumnModel && C.CmxColumn) {
     const cm = new C.CmxColumnModel({ datasetId: 'master-list' })
     const cols = buildColumns(st)
@@ -230,39 +232,46 @@ function buildListGrid(host) {
     if (d.actionRef === 'view') openTab(host, s, `${s.entityName || ''}·${label}`, 'portal.mdm.master-detail', { dictCode: s.dictCode, recordId: rec.id, title: s.title, icon: s.icon, columns: s.columns, ...coordCtx(s) })
     else if (d.actionRef === 'edit') openTab(host, s, `变更·${label}`, 'portal.mdm.cr-form', { mode: 'update', docType: s.docType, crType: 'update', targetId: rec.id, targetName: label, ...coordCtx(s) })
   })
+}
+
+// 数据落地（局部更新）：只动 total 文案、grid 数据、pager 属性——DOM/事件/焦点/滚动/列宽全保留。
+// first=true（bind 后首帧）双 rAF 等 grid 布局就绪再填，其后直接填。
+function applyData(host, first = false) {
+  const st = getState(host); if (!st) return
+  const C = cmx()
+  const root = host && (host.renderRoot || host.shadowRoot); if (!root) return
+  const t = root.querySelector('#mlTotal')
+  if (t) t.textContent = `${st.title || '主数据列表'}（共 ${st.total} 条）`
+  const pager = root.querySelector('#mlPager')
+  if (pager) { pager.total = st.total; pager.page = st.page; pager.pageSize = st.pageSize }
+  const grid = st.grid
+  if (!grid) return
   const fill = () => {
     if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows(st.rows); grid.setDataSet(ds) }
     else grid.setDataSet?.(st.rows)
     grid.refreshLayout?.()
   }
-  requestAnimationFrame(() => requestAnimationFrame(fill))
+  if (first) requestAnimationFrame(() => requestAnimationFrame(fill))
+  else fill()
 }
 
 function bind(host, root) {
   const st = getState(host); if (!st) return
   root.querySelector('#mlAdd')?.addEventListener('click', () => openTab(host, st, `新增${st.entityName || ''}`, 'portal.mdm.cr-form', { mode: 'create', docType: st.docType, crType: 'create', ...coordCtx(st) }, { single: true }))
-  root.querySelector('#mlReload')?.addEventListener('click', () => { loadRows(st).then(() => refresh(host)) })
-  root.querySelector('#mlFilter')?.addEventListener('cmx-filter-search', (e) => { st.kw = e.detail?.text || ''; st.page = 1; loadRows(st).then(() => refresh(host)) })
-  root.querySelector('#mlFilter')?.addEventListener('cmx-filter-reset', () => { st.kw = ''; st.page = 1; loadRows(st).then(() => refresh(host)) })
+  root.querySelector('#mlReload')?.addEventListener('click', () => { loadRows(st).then(() => applyData(host)) })
+  root.querySelector('#mlFilter')?.addEventListener('cmx-filter-search', (e) => { st.kw = e.detail?.text || ''; st.page = 1; loadRows(st).then(() => applyData(host)) })
+  root.querySelector('#mlFilter')?.addEventListener('cmx-filter-reset', () => { st.kw = ''; st.page = 1; loadRows(st).then(() => applyData(host)) })
   const pager = root.querySelector('#mlPager')
   if (pager) {
-    pager.total = st.total; pager.page = st.page; pager.pageSize = st.pageSize
     pager.addEventListener('page-change', (e) => {
       const d = e.detail || {}
       if (d.pageSize && d.pageSize !== st.pageSize) { st.pageSize = d.pageSize; st.page = 1 }
       else st.page = d.page || 1
-      loadRows(st).then(() => refresh(host))
+      loadRows(st).then(() => applyData(host))
     })
   }
   buildListGrid(host)
-}
-
-function refresh(host) {
-  if (!host) return
-  const st = getState(host); if (!st) return
-  const root = host.renderRoot || host.shadowRoot; if (!root) return
-  root.innerHTML = `<style>${styleCss()}</style>${viewHtml(st)}`
-  if (!st.cfgErr) bind(host, root)
+  applyData(host, true)
 }
 function whenRendered(host, sel, cb, t) {
   const n = t == null ? 60 : t
