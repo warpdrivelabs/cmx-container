@@ -186,7 +186,7 @@ pub async fn mdm_cr_abort(
 
 /// 列变更请求。
 ///
-/// `GET /api/mdm/change-requests` —— 按 `docStatus` 可选过滤 + 分页，返回全部业务字段。
+/// `GET /api/mdm/change-requests` —— 按 `docStatus` / `docType` / `keyword`（单据号·主体名模糊）可选过滤 + 分页，返回全部业务字段。
 #[utoipa::path(
     get,
     path = "/api/mdm/change-requests",
@@ -204,8 +204,11 @@ pub async fn mdm_cr_list(
 ) -> Result<Json<ApiResp<Value>>> {
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
-    let (list, total) =
-        store::list_cr(mm, &db_id, q.doc_status.as_deref(), q.page, q.page_size).await?;
+    let (list, total) = store::list_cr(
+        mm, &db_id, q.doc_status.as_deref(), q.doc_type.as_deref(), q.keyword.as_deref(), q.page,
+        q.page_size,
+    )
+    .await?;
     Ok(Json(ApiResp::ok(json!({
         "list": list, "total": total, "page": q.page, "pageSize": q.page_size,
     }))))
@@ -250,6 +253,12 @@ pub struct CrListQuery {
     /// 单据状态过滤（可选）。
     #[serde(default, alias = "docStatus")]
     pub doc_status: Option<String>,
+    /// 单据类型过滤（可选；= 激活映射 source_doc_type，如 gys/kh）。
+    #[serde(default, alias = "docType")]
+    pub doc_type: Option<String>,
+    /// 关键字过滤（可选；单据号 / 主体名模糊匹配）。
+    #[serde(default)]
+    pub keyword: Option<String>,
     #[serde(default = "default_page")]
     pub page: i64,
     #[serde(default = "default_page_size", alias = "pageSize")]
