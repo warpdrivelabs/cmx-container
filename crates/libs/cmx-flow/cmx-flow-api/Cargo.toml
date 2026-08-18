@@ -4,17 +4,15 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
-# cmx-flow 流程引擎的**平台适配薄壳**（抽核后仅剩装配）。
+# cmx-flow 流程引擎的**平台反代薄壳**（对标 cmx-rule-api 的纯反代形态）。
 #
-# 业务已全部下沉到平台中立核 cmx-flow-app（引擎单例 + handler + 路由 + 信封）。本 crate 只做
-# 两件平台专属的事：①把 core 的 flow_routes::<CmxAppState>() 包成 FlowModule(impl
-# cmx_api::ModuleRoutes)，供 web-server 合并；②re-export spawn_timer_poller 供 main 启动。
-# 故 cmx-flow-api → cmx-flow-app + cmx-api（装配）；不再直依赖引擎各层/cmx-biz/cmx-core/DB。
-# 独立部署形态见 ../../cmx-flowengine 的 cmx-flow-server（同核，另一壳）。
+# 流程引擎是**独立微服务**：引擎核 cmx-flow-app 在独立 workspace ../../cmx-flowengine，由那边的
+# cmx-flow-server 承载。门户不再进程内嵌引擎，故本 crate **不依赖 cmx-flow-app**（这条跨 workspace
+# path 依赖曾把整个引擎源码拖进门户编译图，改前 `cargo run -p cmx-portal-server` 会连带编译
+# cmx-flowengine 的 .rs）。本 crate 只含反代：FlowProxyModule 把平台 `/api/flow/*` + 流程拥有的
+# native/html 页取页请求透明转发到远程 flow-server（`[center_client.urls].flow`）。前端零改。
 
 [dependencies]
-# 平台中立核（引擎单例 + 全部 handler + flow_routes + 信封）——跨 workspace path 进 cmx-flowengine
-cmx-flow-app = { workspace = true }
 # API 框架（CmxAppState / routes::traits::ModuleRoutes）。单向依赖 cmx-flow-api → cmx-api。
 cmx-api-core = { workspace = true }
 
