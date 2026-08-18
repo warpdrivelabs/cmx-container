@@ -19,11 +19,18 @@ use utoipa::OpenApi;
         crate::handlers::mdm_cr_activate,
         // change-requests（CR 变更请求审批流转 / 列表 / 详情）
         crate::handlers::mdm_cr_submit,
-        crate::handlers::mdm_cr_approve,
-        crate::handlers::mdm_cr_reject,
         crate::handlers::mdm_cr_abort,
         crate::handlers::mdm_cr_list,
         crate::handlers::mdm_cr_detail,
+        // flow（M7 流程平台对接：webhook 回调 / 撤回 / 流程状态与历史）
+        crate::handlers::flow_cb::mdm_flow_callback,
+        crate::handlers::flow_cb::mdm_cr_withdraw,
+        crate::handlers::flow_cb::mdm_cr_flow_status,
+        crate::handlers::flow_cb::mdm_cr_flow_history,
+        // review（M7.1 审批动作业务封装：同意/驳回/退回 + 按钮数据源）
+        crate::handlers::review::mdm_cr_review,
+        crate::handlers::review::mdm_cr_return,
+        crate::handlers::review::mdm_cr_review_context,
         // dedup（实时查重 + 关键信息查重）
         crate::handlers::mdm_find_duplicates,
         crate::handlers::mdm_check_key,

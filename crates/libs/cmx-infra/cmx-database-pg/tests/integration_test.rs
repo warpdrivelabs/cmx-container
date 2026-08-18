@@ -434,3 +434,44 @@ async fn test_guard_drop_auto_rollback() -> cmx_database_pg::Result<()> {
     manager.shutdown().await?;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// 错误明细透出（Display / pg_detail / serde 序列化都应携带真实 PG 错误）
+// ---------------------------------------------------------------------------
+
+/// 执行必然失败的 SQL（`1/0` → SQLSTATE 22012 division by zero），验证
+/// `Error::Postgres` 的 Display、`pg_detail` 与 serde 序列化均含真实明细，
+/// 而非 tokio-postgres Display 的固定串 `db error`。
+#[tokio::test]
+#[ignore]
+async fn test_error_detail_rendering() {
+    let manager = setup_db_manager().await;
+
+    let err = match manager
+        .query_sql(TEST_DB_KEY, None, "SELECT 1/0 AS v", "err_detail")
+        .await
+    {
+        Ok(_) => panic!("SELECT 1/0 应返回数据库错误"),
+        Err(e) => e,
+    };
+
+    let detail = cmx_database_pg::pg_detail(&err);
+    assert!(
+        detail.contains("division by zero"),
+        "pg_detail 应含真实 PG 明细: {detail}"
+    );
+
+    let display = err.to_string();
+    assert!(
+        display.contains("division by zero"),
+        "Display 应含真实 PG 明细: {display}"
+    );
+
+    let json = serde_json::to_string(&err).expect("Error 序列化应成功");
+    assert!(
+        json.contains("division by zero"),
+        "serde 序列化应含真实 PG 明细: {json}"
+    );
+
+    manager.shutdown().await.unwrap();
+}

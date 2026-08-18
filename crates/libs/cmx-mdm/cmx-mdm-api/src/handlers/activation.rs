@@ -23,7 +23,7 @@ use cmx_mdm_store_pg as store;
 
 /// 列激活映射配置。
 ///
-/// `GET /api/mdm/activations` —— 配置器 UI 用，按 `sourceDocType` / `crType` 可选过滤，返回全部激活映射。
+/// `GET /api/mdm/activations` —— 配置器 UI 用，按 `sourceDocType` / `crType` / `targetDict` 可选过滤，返回全部激活映射。
 #[utoipa::path(
     get,
     path = "/api/mdm/activations",
@@ -46,6 +46,7 @@ pub async fn mdm_activations_list(
         &db_id,
         q.source_doc_type.as_deref(),
         q.cr_type.as_deref(),
+        q.target_dict.as_deref(),
     )
     .await?;
     Ok(Json(ApiResp::ok(json!(list))))
@@ -127,10 +128,11 @@ pub struct ActivationDeleteBody {
     pub activation_code: String,
 }
 
-/// 手动触发激活。
+/// 手动触发激活（**运维兜底端点**，默认关闭）。
 ///
 /// `POST /api/mdm/change-requests/activate` —— 审批型 CR 兜底入口 / 内部 CR 直接调激活器。
-/// body `{ crId }`，返回激活后的主数据记录 id：
+/// M7 起受 `[mdm.flow].manual_override_enabled` 开关保护（默认 403）——webhook 丢失且
+/// 懒同步失效时的终极兜底。body `{ crId }`，返回激活后的主数据记录 id：
 ///
 /// ```json
 /// { "crId": 123 }
@@ -150,6 +152,7 @@ pub async fn mdm_cr_activate(
     headers: HeaderMap,
     Json(body): Json<ActivateBody>,
 ) -> Result<Json<ApiResp<Value>>> {
+    super::flow_cb::manual_override_guard()?;
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
     let operated_by = actor_id_i64(&svr_ctx);
@@ -168,6 +171,9 @@ pub struct ActivationListQuery {
     /// CR 类型（可选过滤）。
     #[serde(default, alias = "crType")]
     pub cr_type: Option<String>,
+    /// 目标主数据字典码（可选过滤；通用详情页按 targetDict 反查激活映射以发现子表）。
+    #[serde(default, alias = "targetDict")]
+    pub target_dict: Option<String>,
 }
 
 /// 手动激活请求体。

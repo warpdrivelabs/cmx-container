@@ -93,6 +93,11 @@ const state = {
   editing: false,              // view 模式草稿编辑态（true=表单可编辑、右侧操作区切保存/取消）
   autoEdit: false,             // 入口标志：修改重提打开 rejected/draft 原单据时直接进编辑态
   deletedLineIds: [],          // 被删的已入库明细行真实 id（仿 cmx-doc merge：deleted 增量删；未入库新建行不记）
+  // M7 流程审批态：待办中心经表单绑定打开本页时注入 formMode:'approve'（bizId/taskId/instanceId
+  // 随 props；宿主注入的 mode:'task' 被显式忽略——本页 mode 只认 view/update/create）。
+  flowApprove: false, taskId: '', instanceId: '',
+  flowHistory: null,           // 分段审批历史（flow-history 接口，流程卡数据源）
+  reviewCtx: null,             // M7.1 流程按钮数据源 { canReview, canWithdraw, taskId, instanceId }
   loading: true, loadErr: '',
 }
 let rootEl = null
@@ -193,6 +198,42 @@ function styleCss() {
   .ap-actions { display:flex; flex-direction:column; gap:8px; }
   .ap-actions ui5-button { width:100%; }
   .ap-opinion { width:100%; }
+  .ap-hint { font-size:12.5px; color:var(--sapContent_LabelColor); line-height:1.6; }
+  .ap-btn-row { display:flex; gap:8px; }
+  .ap-btn-row ui5-button { flex:1; }
+  /* M7 审批历史：顶部最新流程状态卡 + 逐轮垂直时间线（节点圆点 + ↓ 连线）。
+     面板窄：节点名/用户/时间/意见逐行竖排，意见 pre-wrap 软换行。 */
+  .fh { display:flex; flex-direction:column; }
+  .fh-state { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:7px 10px; border-radius:6px; font-size:13px; font-weight:600; }
+  .fh-state .st-dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  .fh-state-success { color:var(--sapSuccessColor,#107e3e); background:var(--sapSuccessBG,#effaf4); }
+  .fh-state-success .st-dot { background:var(--sapSuccessColor,#107e3e); }
+  .fh-state-warning { color:var(--sapWarningColor,#e9730c); background:var(--sapWarningBG,#fef7f0); }
+  .fh-state-warning .st-dot { background:var(--sapWarningColor,#e9730c); }
+  .fh-state-neutral { color:var(--sapContent_LabelColor,#6a6d70); background:var(--sapNeutralBG,#f4f4f4); }
+  .fh-state-neutral .st-dot { background:var(--sapContent_LabelColor,#6a6d70); }
+  .fh-state-biz { font-weight:400; font-size:11.5px; color:var(--sapContent_LabelColor); word-break:break-all; }
+  .fh-round { margin:10px 0 2px; font-size:12.5px; font-weight:600; color:var(--sapTitleColor); }
+  .fh-round .sub { margin-left:6px; font-weight:400; font-size:11.5px; color:var(--sapContent_LabelColor); }
+  .fh-timeline { margin-top:4px; }
+  .fh-node { display:flex; gap:8px; }
+  .fh-rail { display:flex; flex-direction:column; align-items:center; flex:none; width:12px; }
+  .fh-dot { width:10px; height:10px; border-radius:50%; margin-top:4px; flex:none; }
+  .fh-link { width:2px; flex:1 1 auto; min-height:12px; margin-top:2px; border-radius:1px; background:var(--sapList_VerticalBorderColor,#d8d8d8); }
+  .fh-node:last-child .fh-link { display:none; }
+  .fh-dot-submit { background:var(--sapInformationColor,#0a6ed1); }
+  .fh-dot-approve { background:var(--sapSuccessColor,#107e3e); }
+  .fh-dot-reject { background:var(--sapNegativeColor,#bb0000); }
+  .fh-dot-return { background:var(--sapWarningColor,#e9730c); }
+  .fh-dot-pending { width:8px; height:8px; background:transparent; border:2px dashed var(--sapContent_LabelColor,#8a8d90); }
+  .fh-body { flex:1 1 auto; min-width:0; padding-bottom:10px; }
+  .fh-node-hd { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; font-weight:600; color:var(--sapTitleColor); }
+  .fh-user { margin-top:2px; font-size:12px; font-weight:600; color:var(--sapTitleColor); word-break:break-all; }
+  .fh-time { display:block; margin-top:2px; color:var(--sapContent_LabelColor); font-size:11.5px; }
+  .fh-comment { margin-top:3px; font-size:12px; color:var(--sapTextColor); white-space:pre-wrap; word-break:break-word; }
+  .fh .muted { color:var(--sapContent_LabelColor); font-size:12px; }
+  .fh-empty { padding:4px 0 6px; }
+  .fh .muted { color:var(--sapContent_LabelColor); font-size:12px; }
   `
 }
 function esc(s) { return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) }
@@ -271,10 +312,13 @@ function viewHtml() {
 function actionPanelHtml() {
   const mode = state.mode
   const apCard = (title, inner) => `<div class="ap-card"><div class="ap-title">${title}</div><div class="ap-actions">${inner}</div></div>`
-  // 流程占位仅在「已进入流转的单据查看态」展示：view 非编辑 且 非草稿（draft）。
-  // 新建 / 变更 / 草稿 / 编辑态都尚未进入审批流，不展示流程。
-  const showFlow = mode === 'view' && !state.editing && (state.crHead?.doc_status || '') !== 'draft'
-  const flow = showFlow ? flowPlaceholderHtml() : ''
+  // 流程卡在「已进入流转的单据查看态」展示：view 非编辑 且 非草稿（draft）；审批态（待办打开）也展示。
+  const showFlow = (mode === 'view' && !state.editing && (state.crHead?.doc_status || '') !== 'draft') || state.flowApprove
+  const flow = showFlow ? flowHistoryHtml() : ''
+  // M7.1 审批态（待办中心 console='none' 全屏打开）：操作按钮与详情页同一套（业务封装端点）。
+  if (state.flowApprove) {
+    return reviewPanelHtml(apCard) + flow
+  }
   // create step2：上一步 / 保存草稿 / 保存并提交
   if (mode === 'create' && state.step === 2) {
     return apCard('操作', `<ui5-button design="Transparent" icon="navigation-left-arrow" id="fPrev">上一步</ui5-button>
@@ -301,19 +345,103 @@ function actionPanelHtml() {
         <ui5-button design="Emphasized" icon="paper-plane" id="fCrSubmit">提交</ui5-button>`
       if (st === 'draft') actions += `<ui5-button design="Transparent" icon="cancel" id="fAbort">作废</ui5-button>`
     } else if (st === 'approving') {
-      actions = `<ui5-textarea id="fOpinion" placeholder="审批意见（可选）" rows="3" class="ap-opinion"></ui5-textarea>
-        <ui5-button design="Emphasized" icon="accept" id="fApprove">通过</ui5-button>
-        <ui5-button design="Transparent" icon="decline" id="fReject">驳回</ui5-button>`
+      // M7.1：审批动作业务封装——审批人（通过/驳回/退回+意见）与发起人（撤回）按钮组。
+      actions = reviewActionsHtml()
+    } else if (st === 'activating') {
+      actions = `<div class="ap-hint">激活中（流程回写进行中），请稍候刷新。</div>`
     }
     return (actions ? apCard('操作', actions) : '') + flow
   }
   return ''
 }
 
-// 流程节点/审批历史占位（暂不开发，等流程能力落地后填充真实节点/历史）
-function flowPlaceholderHtml() {
-  return `<div class="ap-card"><div class="ap-title">流程</div>
-    <cmx-empty-state icon="process" title="流程功能开发中" description="后续展示流程节点与审批历史"></cmx-empty-state></div>`
+// M7.1 流程操作按钮组（详情页 approving 态与待办打开的审批态共用）。
+// 可见性由后端 review-context 判定（canReview=assignee∪候选；canWithdraw=发起人），
+// 服务端再校验一道（review/withdraw 端点），前端显隐仅为交互优化。
+function reviewActionsHtml() {
+  const rc = state.reviewCtx || {}
+  let html = ''
+  if (rc.canReview) {
+    html += `<ui5-textarea id="fOpinion" placeholder="审批意见（同意/驳回/退回均可附言）" rows="3" class="ap-opinion"></ui5-textarea>
+      <div class="ap-btn-row">
+        <ui5-button design="Emphasized" icon="accept" id="fReviewApprove">通过</ui5-button>
+        <ui5-button design="Negative" icon="decline" id="fReviewReject">驳回</ui5-button>
+      </div>
+      <ui5-button design="Transparent" icon="undo" id="fReviewReturn">退回发起人</ui5-button>`
+  }
+  if (rc.canWithdraw) {
+    html += `<ui5-button design="Transparent" icon="undo" id="fWithdraw">撤回</ui5-button>`
+  }
+  if (!html) html = `<div class="ap-hint">审批中（流程），当前用户无操作权限；可在流程待办中心查看进度。</div>`
+  return html
+}
+
+// 审批态（flowApprove）右侧操作区：同 reviewActionsHtml，标题为「审批」。
+function reviewPanelHtml(apCard) {
+  return apCard('操作', reviewActionsHtml())
+}
+
+// 流程审批历史（M7）：顶部=最新实例的流程状态卡；下方=逐轮垂直时间线（节点圆点 + ↓ 连线）。
+// 节点步骤名按 nodeBpmnId 映射（apply=单据提交、review=审批，未识别节点显示原 id），
+// decision（同意/驳回）仅作节点标题旁的辅助徽章；用户/时间/意见逐行竖排（右侧面板窄）。
+// instances 倒序（最新在前）；进行中实例在时间线末尾补「等待办理」占位节点。
+function flowHistoryHtml() {
+  const insts = (state.flowHistory && state.flowHistory.instances) || []
+  if (!insts.length) {
+    return `<div class="ap-card"><div class="ap-title">流程</div>
+      <cmx-empty-state icon="process" title="暂无审批记录" description="提交后此处展示流程进度与审批历史"></cmx-empty-state></div>`
+  }
+  const FLOW_STATE = { ACTIVE: ['进行中', 'warning'], COMPLETED: ['已审结', 'success'], TERMINATED: ['已终止', 'neutral'] }
+  const NODE_LABEL = { apply: '单据提交', review: '审批' }
+  // decision 落库值全集：complete 透传（approve/reject）+ return 端点固定 "return"（退回发起人）。
+  // 未映射的新值兜底显示原串 + 中性色，避免像 return 一样漏译。
+  const DECISION = { approve: '同意', reject: '驳回', return: '退回' }
+  const DECISION_TONE = { approve: 'success', reject: 'danger', return: 'warning' }
+  const DOT_CLS = { approve: 'fh-dot-approve', reject: 'fh-dot-reject', return: 'fh-dot-return' }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  // createdAt 为 UTC ISO 串（如 2026-08-18T06:47:58.141116+00:00），须转浏览器本地时区
+  // （UTC+8）显示；微秒位超 ES 规范的 3 位毫秒，截断后再交给 Date 解析，非法串原样兜底。
+  const fmtCmtTime = (t) => {
+    if (!t) return ''
+    const d = new Date(String(t).replace(/(\.\d{3})\d+/, '$1'))
+    if (Number.isNaN(d.getTime())) return String(t)
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  }
+  const latest = insts[0]
+  const [lsName, lsTone] = FLOW_STATE[latest.state] || [latest.state || '—', 'neutral']
+  const stateCard = `<div class="fh-state fh-state-${lsTone}"><span class="st-dot"></span><span>${esc(lsName)}</span>
+    <span class="fh-state-biz">${esc(latest.businessKey || latest.instanceId || '')}</span></div>`
+  const secs = insts.map((inst, i) => {
+    const [stName] = FLOW_STATE[inst.state] || [inst.state || '—', 'neutral']
+    // 多轮（驳回重提）才显示轮次头；单轮时状态已在顶部卡，不重复
+    const round = insts.length > 1 ? `<div class="fh-round">第 ${insts.length - i} 轮<span class="sub">${esc(stName)}</span></div>` : ''
+    // 进行中实例的时间线末梢占位：退回场景提示等待发起人重提，其余提示等待办理
+    const cs = inst.comments || []
+    const lastDecision = cs.length ? cs[cs.length - 1].decision : ''
+    const pendingText = lastDecision === 'return' ? '已退回，等待发起人修改重提…' : '等待办理中…'
+    const pendingNode = `<div class="fh-node"><div class="fh-rail"><span class="fh-dot fh-dot-pending"></span></div>
+      <div class="fh-body"><div class="fh-node-hd muted">${esc(pendingText)}</div></div></div>`
+    const nodes = (inst.comments || []).map((c) => {
+      const d = c.decision ? (DECISION[c.decision] || c.decision) : ''
+      const tone = DECISION_TONE[c.decision] || 'neutral'
+      const dotCls = DOT_CLS[c.decision] || 'fh-dot-submit'
+      return `<div class="fh-node">
+        <div class="fh-rail"><span class="fh-dot ${dotCls}"></span><span class="fh-link"></span></div>
+        <div class="fh-body">
+          <div class="fh-node-hd">${esc(NODE_LABEL[c.nodeBpmnId] || c.nodeBpmnId || '办理')}${d ? `<cmx-status-tag tone="${tone}" variant="subtle" dot size="sm">${esc(d)}</cmx-status-tag>` : ''}</div>
+          <div class="fh-user">${esc(c.userId || '—')}</div>
+          <div class="fh-time">${esc(fmtCmtTime(c.createdAt))}</div>
+          ${c.comment ? `<div class="fh-comment">${esc(c.comment)}</div>` : ''}
+        </div>
+      </div>`
+    }).join('')
+    let tail = ''
+    if (!nodes) tail = inst.state === 'ACTIVE' ? pendingNode : '<div class="fh-empty muted">暂无办理记录</div>'
+    else if (inst.state === 'ACTIVE') tail = pendingNode
+    return `${round}<div class="fh-timeline">${nodes}${tail}</div>`
+  }).join('')
+  return `<div class="ap-card"><div class="ap-title">审批历史</div><div class="fh">${stateCard}${secs}</div></div>`
 }
 
 // ── 元数据加载 ──────────────────────────────────────────────────────────────
@@ -479,6 +607,16 @@ async function buildFieldModel() {
     const orderedFields = orderedLineFields(lm)
     const map = Object.keys(orderedFields).map((src) => [src, orderedFields[src]])
     const cols = pickAndRename(all, orderedFields)
+    // 明细列宽按比例转百分比：字典元数据固定 px 宽总和（如银行账户 3 列 ≈460px）在窄容器
+    // （分栏/窄窗，主区 < 列宽总和）下 revo-grid stretch 对纯 px 列「保持原宽 → 横向滚动」，
+    // 撑出页面底部横向滚动条。转百分比后 stretch 的百分比列机制随任意容器宽按比例收缩。
+    {
+      const total = cols.reduce((s, c) => s + (parseFloat(c.width) || 120), 0)
+      if (total > 0) cols.forEach((c) => {
+        const base = parseFloat(c.width) || 120
+        c.width = ((base / total) * 100).toFixed(2) + '%'
+      })
+    }
     lineDefs.push({
       lineType: lm.lineType, targetDict: lm.targetDict,
       targetTable: lm.targetTable, parentIdField: lm.parentIdField,
@@ -953,11 +1091,10 @@ function doSave(submit) {
         // 同步 crId：create/update 新建保存并提交后切 view 详情页，doCrAction（提交/通过/驳回/作废）
         // 读 state.crId；不同步则 !crId 静默 return → 详情页操作无反应（无弹窗/无接口/无报错）。
         state.crId = crId
-        try {
-          const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${crId}`, state.dbId)
-          state.crHead = (detail && detail.head) || {}
-          state.crLines = (detail && detail.lines) || []
-        } catch (e) { /* 重载失败不阻断，按当前内存数据渲染只读 */ }
+        // 提交后 CR 已进审批流：detail + 流程上下文一起重拉，按钮组（发起人撤回等）与
+        // 流程卡随 approving 态渲染，否则显示"无操作权限/暂无审批记录"的过期内容。
+        await reloadDetail()
+        await reloadFlowCtx()
         refresh()
       }
     } catch (e) {
@@ -973,8 +1110,6 @@ function doSave(submit) {
 // view 模式单据状态操作的确认文案（提交/通过/驳回/作废）。danger=true 走警示红，用于不可恢复操作。
 const CR_ACTION_CONFIRM = {
   submit:  { title: '提交审批', msg: (id) => `确认提交 CR-${id}？提交后进入审批流程，单据内容将无法在此页修改。`, danger: false },
-  approve: { title: '审批通过', msg: (id) => `确认通过 CR-${id}？通过后将自动激活并写入主数据，此操作不可撤销。`, danger: false },
-  reject:  { title: '驳回',     msg: (id) => `确认驳回 CR-${id}？驳回后申请人可修改重提，主数据不受影响。`, danger: true },
   abort:   { title: '作废',     msg: (id) => `确认作废 CR-${id}？作废后该单据终止，不可恢复。`, danger: true },
 }
 
@@ -994,23 +1129,21 @@ async function doCrAction(act, confirmFirst = false, needReason = false) {
       })
       if (ok === false) return
     }
-    let url = ''; let payload = { crId }
+    let url = ''
     if (act === 'submit') url = '/api/mdm/change-requests/submit'
     else if (act === 'abort') url = '/api/mdm/change-requests/abort'
-    else if (act === 'approve') url = '/api/mdm/change-requests/approve'
-    else if (act === 'reject') {
-      url = '/api/mdm/change-requests/reject'
-      const reason = needReason ? ((rootEl.querySelector('#fOpinion')?.value || '').trim() || '详情页驳回') : undefined
-      payload = reason ? { crId, reason } : { crId }
-    }
-    await apiPost(url, payload, state.dbId)
-    const msgMap = { submit: '已提交审批', abort: '已作废', approve: '已通过并激活', reject: '已驳回' }
+    await apiPost(url, { crId }, state.dbId)
+    const msgMap = { submit: '已提交审批', abort: '已作废' }
     C.cmxInfo?.(`CR-${crId} ${msgMap[act] || '操作成功'}`)
+    // 提交/作废会改变流程状态与操作权限：detail + 流程上下文都要重拉，
+    // 否则按钮区/流程卡仍按旧 reviewCtx/flowHistory 渲染（如提交后误显示"无操作权限"）。
     await reloadDetail()
+    await reloadFlowCtx()
+    refresh()
   } catch (e) { C.cmxError?.(`操作失败：${e.message}`) }
 }
 
-// 状态操作后重新拉详情，刷新 doc_status 与表单回显（编辑态强制回只读）
+// 状态操作后重新拉详情（doc_status 与表单回显数据源）；刷新由调用方在全部数据就绪后统一执行。
 async function reloadDetail() {
   if (state.crId == null) return
   try {
@@ -1018,8 +1151,18 @@ async function reloadDetail() {
     state.crHead = (detail && detail.head) || {}
     state.crLines = (detail && detail.lines) || []
     state.editing = false
-    refresh()
   } catch (e) { cmx().cmxError?.(`刷新详情失败：${e.message}`) }
+}
+
+// 重拉流程上下文（review-context 按钮权限 + flow-history 审批历史）。
+// 状态动作（提交/作废/审批/撤回）后必须重拉——doc_status 变了，按钮组与流程卡数据源都会变；
+// 失败保持现状不阻断（详情已刷，流程区旧数据可用）。
+async function reloadFlowCtx() {
+  if (state.crId == null) return
+  try {
+    state.reviewCtx = await apiGet(`/api/mdm/change-requests/review-context?crId=${state.crId}`, state.dbId)
+    state.flowHistory = await apiGet(`/api/mdm/change-requests/flow-history?crId=${state.crId}`, state.dbId)
+  } catch { /* noop */ }
 }
 
 function syncSavedLineIds(idMap) {
@@ -1060,8 +1203,48 @@ function bind(root) {
   root.querySelector('#fEditSave')?.addEventListener('click', () => doSave(false))
   root.querySelector('#fCrSubmit')?.addEventListener('click', () => doCrAction('submit', true))
   root.querySelector('#fAbort')?.addEventListener('click', () => doCrAction('abort', true))
-  root.querySelector('#fApprove')?.addEventListener('click', () => doCrAction('approve', true))
-  root.querySelector('#fReject')?.addEventListener('click', () => doCrAction('reject', true, true))
+  // M7.1：审批动作业务封装端点（通过/驳回/退回）——流程调用全在 MDM 后端。
+  const doReviewAction = async (action) => {
+    const M = cmx()
+    const confirmMeta = {
+      approve: { title: '审批通过', msg: '确认通过？通过后将自动激活并写入主数据，不可撤销。', danger: false },
+      reject: { title: '驳回', msg: '确认驳回？申请人可修改后重新提交，主数据不受影响。', danger: true },
+      ret: { title: '退回发起人', msg: '确认退回？流程将打回发起人确认节点（实例继续），单据数据不变。', danger: true },
+    }[action]
+    const ok = await M.cmxConfirm?.({ title: confirmMeta.title, message: confirmMeta.msg, danger: confirmMeta.danger })
+    if (ok === false) return
+    try {
+      const comment = (rootEl.querySelector('#fOpinion')?.value || '').trim() || undefined
+      if (action === 'ret') {
+        await apiPost('/api/mdm/change-requests/return', { crId: Number(state.crId), reason: comment }, state.dbId)
+        M.cmxInfo?.('已退回发起人确认')
+      } else {
+        const d = await apiPost('/api/mdm/change-requests/review', { crId: Number(state.crId), action, comment }, state.dbId)
+        M.cmxInfo?.(action === 'approve' ? `已通过并激活（状态：${d.status}）` : '已驳回，申请人可修改重提')
+      }
+      await reloadDetail()
+      // 重新拉流程上下文（按钮随状态/权限刷新）。
+      await reloadFlowCtx()
+      refresh()
+    } catch (e) { M.cmxError?.(`操作失败：${e.message}`) }
+  }
+  root.querySelector('#fReviewApprove')?.addEventListener('click', () => doReviewAction('approve'))
+  root.querySelector('#fReviewReject')?.addEventListener('click', () => doReviewAction('reject'))
+  root.querySelector('#fReviewReturn')?.addEventListener('click', () => doReviewAction('ret'))
+  // M7：发起人撤回（终止当前审批实例 + 回草稿）。
+  root.querySelector('#fWithdraw')?.addEventListener('click', async () => {
+    const M = cmx()
+    const ok = await M.cmxConfirm?.({ title: '撤回申请', message: `确认撤回 CR-${state.crId}？当前审批将终止，单据回到草稿可修改后重新提交。`, danger: true })
+    if (ok === false) return
+    try {
+      await apiPost('/api/mdm/change-requests/withdraw', { crId: Number(state.crId) }, state.dbId)
+      M.cmxInfo?.('已撤回，单据回到草稿')
+      const detail = await apiGet(`/api/mdm/change-requests/detail?crId=${state.crId}`, state.dbId)
+      state.crHead = (detail && detail.head) || state.crHead
+      state.flowHistory = null; state.reviewCtx = null
+      refresh()
+    } catch (e) { M.cmxError?.(`撤回失败：${e.message}`) }
+  })
 }
 
 function bindLineToolbar() {
@@ -1123,6 +1306,16 @@ async function init(tok) {
       if (state.autoEdit && (state.crHead.doc_status === 'rejected' || state.crHead.doc_status === 'draft')) {
         state.editing = true
       }
+      // M7：已进入流转的单据拉审批历史（流程卡数据源；失败不阻断表单）。
+      if (state.crHead.doc_status !== 'draft') {
+        try {
+          state.flowHistory = await apiGet(`/api/mdm/change-requests/flow-history?crId=${state.crId}`, state.dbId)
+        } catch (e) { console.warn('[cr-form] 流程历史加载失败', e) }
+        // M7.1：流程操作按钮数据源（canReview=当前用户可审；canWithdraw=发起人可撤回）。
+        try {
+          state.reviewCtx = await apiGet(`/api/mdm/change-requests/review-context?crId=${state.crId}`, state.dbId)
+        } catch (e) { console.warn('[cr-form] 流程按钮上下文加载失败', e) }
+      }
     }
     state.activation = await loadActivation()
     if (stale()) return
@@ -1156,8 +1349,21 @@ export default {
       state.crId = ctxGet('crId') || p.crId || null
       state.docType = ctxGet('docType') || p.docType || ''
       state.crType = ctxGet('crType') || p.crType || 'create'
+      // M7 审批态（待办中心打开）：formMode=approve + bizId 定位单据，复用 view 只读渲染；
+      // 宿主注入的 mode:'task' 显式忽略（'task' 会落入 create 式可编辑渲染）。
+      state.flowApprove = (ctxGet('formMode') || p.formMode) === 'approve'
+      if (state.flowApprove) {
+        state.crId = ctxGet('bizId') || p.bizId || state.crId
+        state.taskId = ctxGet('taskId') || p.taskId || ''
+        state.instanceId = ctxGet('instanceId') || p.instanceId || ''
+      } else {
+        state.taskId = ''; state.instanceId = ''
+      }
       // mode：view（只读详情，由 cr-todo 传 crId）/ update（变更，列表台传 target）/ create（新增）
-      state.mode = ctxGet('mode') || p.mode || (state.crId ? 'view' : (state.crType === 'update' ? 'update' : 'create'))
+      let modeVal = ctxGet('mode') || p.mode || ''
+      if (modeVal === 'task') modeVal = '' // 待办中心宿主标识，非本页模式
+      state.mode = state.flowApprove ? 'view'
+        : (modeVal || (state.crId ? 'view' : (state.crType === 'update' ? 'update' : 'create')))
       state.targetId = ctxGet('targetId') || p.targetId || null
       state.targetName = ctxGet('targetName') || p.targetName || ''
       state.step = state.mode === 'create' ? 1 : 2

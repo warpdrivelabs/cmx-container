@@ -11,6 +11,9 @@
 /// MDM 模块全部 axum handler 的实现集合（按业务域分文件组织）。
 pub mod handlers;
 
+/// M7 流程平台客户端（回环调本进程 `/api/flow/*`，双部署模式透明）。
+pub mod flow_client;
+
 /// OpenApi 切片（MdmApiDoc），由 platform-app `merged_openapi()` 合并进主文档。
 pub mod openapi;
 
@@ -42,11 +45,20 @@ impl ModuleRoutes for MdmModule {
             .route("/mdm/change-requests/activate", post(mdm::mdm_cr_activate))
             // M2 · CR 变更请求:审批流转/列表/详情（新建走标准 /doc/save）
             .route("/mdm/change-requests/submit", post(mdm::mdm_cr_submit))
-            .route("/mdm/change-requests/approve", post(mdm::mdm_cr_approve))
-            .route("/mdm/change-requests/reject", post(mdm::mdm_cr_reject))
+            // M7.1 决议：approve/reject 旧端点删除（与 review 封装重叠），activate 保留兜底
             .route("/mdm/change-requests/abort", post(mdm::mdm_cr_abort))
             .route("/mdm/change-requests", get(mdm::mdm_cr_list))
             .route("/mdm/change-requests/detail", get(mdm::mdm_cr_detail))
+            // M7 · 流程平台对接：webhook 回调（免用户鉴权路径，HMAC 签名即凭证）+
+            // 撤回（发起人 cancel+回草稿）+ 流程状态懒同步 + 审批历史
+            .route("/mdm/flow/callback", post(mdm::flow_cb::mdm_flow_callback))
+            .route("/mdm/change-requests/withdraw", post(mdm::flow_cb::mdm_cr_withdraw))
+            .route("/mdm/change-requests/flow-status", get(mdm::flow_cb::mdm_cr_flow_status))
+            .route("/mdm/change-requests/flow-history", get(mdm::flow_cb::mdm_cr_flow_history))
+            // M7.1 审批动作业务封装（前端只传 crId+action+comment，流程调用全在 MDM 内）
+            .route("/mdm/change-requests/review", post(mdm::review::mdm_cr_review))
+            .route("/mdm/change-requests/return", post(mdm::review::mdm_cr_return))
+            .route("/mdm/change-requests/review-context", get(mdm::review::mdm_cr_review_context))
             // M3 · 匹配合并（禁用 Path Variable，参数走 body/query）
             .route("/mdm/records/find-duplicates", post(mdm::mdm_find_duplicates))
             // V3.2 · 步骤条关键信息查重（新建场景，无 recordId）

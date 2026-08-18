@@ -53,25 +53,29 @@ pub async fn find_by_doc_type(
     Ok(Some(cfg))
 }
 
-/// 列表（配置器 UI）。可选过滤 sourceDocType/crType。
+/// 列表（配置器 UI / 通用详情页）。可选过滤 sourceDocType/crType/targetDict。
 pub async fn list(
     mm: &DatabaseManager,
     db_id: &str,
     source_doc_type: Option<&str>,
     cr_type: Option<&str>,
+    target_dict: Option<&str>,
 ) -> Result<Vec<Value>, cmx_api_types::Error> {
-    // 动态拼 WHERE（参数化，防注入）
+    // 动态拼 WHERE（参数化，防注入）：占位符序号取 push 后的 params.len()，
+    // 天然与参数个数一致，避免手工计数在多过滤条件同传时撞 $n。
     let mut where_clauses = vec!["is_active = TRUE".to_string()];
     let mut params: Vec<DataValue> = Vec::new();
-    let mut idx = 1;
     if let Some(sdt) = source_doc_type {
-        where_clauses.push(format!("source_doc_type = ${idx}"));
         params.push(DataValue::String(sdt.into()));
-        idx += 1;
+        where_clauses.push(format!("source_doc_type = ${}", params.len()));
     }
     if let Some(ct) = cr_type {
-        where_clauses.push(format!("cr_type = ${idx}"));
         params.push(DataValue::String(ct.into()));
+        where_clauses.push(format!("cr_type = ${}", params.len()));
+    }
+    if let Some(td) = target_dict {
+        params.push(DataValue::String(td.into()));
+        where_clauses.push(format!("target_dict = ${}", params.len()));
     }
     let sql = format!(
         r#"SELECT id, activation_code, source_doc_type, cr_type, target_dict, target_table,

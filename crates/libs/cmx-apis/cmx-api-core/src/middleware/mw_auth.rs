@@ -296,6 +296,7 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
     //    - X-API-Key：服务级 API Key（cmx_sk_）或 API 客户端 key
     //    - Authorization: Bearer <jwt>：终端用户 JWT（严格遵循 OAuth2 Bearer 语义，
     //      不承载服务 key；服务 key 只走 X-API-Key）
+    let mut bearer_token: Option<String> = None;
     let mut auth_ctx = if let Some(api_key) = extract_api_key(&req) {
         // 2.1 修复：直接验证 API Key 返回 AuthContext（无状态，不创建会话）
         debug!(path = %path, "检测到 X-API-Key 头，使用 API Key 认证");
@@ -304,6 +305,7 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
             StatusCode::UNAUTHORIZED
         })?
     } else if let Some(token) = extract_bearer_token(&req) {
+        bearer_token = Some(token.clone());
         auth_service.validate_token(&token).await.map_err(|e| {
             warn!(method = %method, path = %path, query = %query, error = %e, "Token 验证失败，返回 401");
             StatusCode::UNAUTHORIZED
@@ -315,7 +317,10 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
 
     // 4. 可选：on-behalf-of 委托用户。若携带 X-Delegated-User-Token，验证之；
     //    成功则用用户身份覆盖（标记 auth_method）；失败仅 warn 并回落服务身份（不阻断 M2M）。
-    let original_user_token = extract_delegated_user_token(&req);
+    //    未携带时回退本请求的 Bearer JWT——「当前请求的原始终端用户 JWT」语义上应含
+    //    Bearer 登录态（此前仅委托头有值，导致反代出站（如 FlowProxy）对普通登录用户
+    //    拿不到 current_original_token()，下游无法识别办理人身份）。
+    let original_user_token = extract_delegated_user_token(&req).or(bearer_token);
     if let Some(jwt) = original_user_token.as_deref() {
         match auth_service.validate_token(jwt).await {
             Ok(user_ctx) => {
