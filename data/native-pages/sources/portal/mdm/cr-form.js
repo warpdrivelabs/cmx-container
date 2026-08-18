@@ -201,18 +201,37 @@ function styleCss() {
   .ap-hint { font-size:12.5px; color:var(--sapContent_LabelColor); line-height:1.6; }
   .ap-btn-row { display:flex; gap:8px; }
   .ap-btn-row ui5-button { flex:1; }
-  /* M7 审批历史时间线（分段 = 每个流程实例一段，倒序） */
-  .fh { display:flex; flex-direction:column; gap:10px; }
-  .fh-sec { border:1px solid var(--sapList_BorderColor,#e0e0e0); border-radius:6px; padding:8px 10px; }
-  .fh-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12.5px; }
-  .fh-idx { font-weight:600; color:var(--sapTitleColor); }
-  .fh-biz { color:var(--sapContent_LabelColor); font-size:12px; }
-  .fh-item { padding:4px 0; border-top:1px dashed var(--sapList_BorderColor,#ececec); }
-  .fh-item:first-of-type { border-top:none; }
-  .fh-line { display:flex; align-items:center; gap:8px; font-size:12px; }
-  .fh-user { font-weight:600; color:var(--sapTitleColor); }
-  .fh-time { margin-left:auto; color:var(--sapContent_LabelColor); font-size:11.5px; }
-  .fh-comment { margin-top:3px; font-size:12px; color:var(--sapTextColor); white-space:pre-wrap; }
+  /* M7 审批历史：顶部最新流程状态卡 + 逐轮垂直时间线（节点圆点 + ↓ 连线）。
+     面板窄：节点名/用户/时间/意见逐行竖排，意见 pre-wrap 软换行。 */
+  .fh { display:flex; flex-direction:column; }
+  .fh-state { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:7px 10px; border-radius:6px; font-size:13px; font-weight:600; }
+  .fh-state .st-dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  .fh-state-success { color:var(--sapSuccessColor,#107e3e); background:var(--sapSuccessBG,#effaf4); }
+  .fh-state-success .st-dot { background:var(--sapSuccessColor,#107e3e); }
+  .fh-state-warning { color:var(--sapWarningColor,#e9730c); background:var(--sapWarningBG,#fef7f0); }
+  .fh-state-warning .st-dot { background:var(--sapWarningColor,#e9730c); }
+  .fh-state-neutral { color:var(--sapContent_LabelColor,#6a6d70); background:var(--sapNeutralBG,#f4f4f4); }
+  .fh-state-neutral .st-dot { background:var(--sapContent_LabelColor,#6a6d70); }
+  .fh-state-biz { font-weight:400; font-size:11.5px; color:var(--sapContent_LabelColor); word-break:break-all; }
+  .fh-round { margin:10px 0 2px; font-size:12.5px; font-weight:600; color:var(--sapTitleColor); }
+  .fh-round .sub { margin-left:6px; font-weight:400; font-size:11.5px; color:var(--sapContent_LabelColor); }
+  .fh-timeline { margin-top:4px; }
+  .fh-node { display:flex; gap:8px; }
+  .fh-rail { display:flex; flex-direction:column; align-items:center; flex:none; width:12px; }
+  .fh-dot { width:10px; height:10px; border-radius:50%; margin-top:4px; flex:none; }
+  .fh-link { width:2px; flex:1 1 auto; min-height:12px; margin-top:2px; border-radius:1px; background:var(--sapList_VerticalBorderColor,#d8d8d8); }
+  .fh-node:last-child .fh-link { display:none; }
+  .fh-dot-submit { background:var(--sapInformationColor,#0a6ed1); }
+  .fh-dot-approve { background:var(--sapSuccessColor,#107e3e); }
+  .fh-dot-reject { background:var(--sapNegativeColor,#bb0000); }
+  .fh-dot-pending { width:8px; height:8px; background:transparent; border:2px dashed var(--sapContent_LabelColor,#8a8d90); }
+  .fh-body { flex:1 1 auto; min-width:0; padding-bottom:10px; }
+  .fh-node-hd { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; font-weight:600; color:var(--sapTitleColor); }
+  .fh-user { margin-top:2px; font-size:12px; font-weight:600; color:var(--sapTitleColor); word-break:break-all; }
+  .fh-time { display:block; margin-top:2px; color:var(--sapContent_LabelColor); font-size:11.5px; }
+  .fh-comment { margin-top:3px; font-size:12px; color:var(--sapTextColor); white-space:pre-wrap; word-break:break-word; }
+  .fh .muted { color:var(--sapContent_LabelColor); font-size:12px; }
+  .fh-empty { padding:4px 0 6px; }
   .fh .muted { color:var(--sapContent_LabelColor); font-size:12px; }
   `
 }
@@ -361,8 +380,10 @@ function reviewPanelHtml(apCard) {
   return apCard('操作', reviewActionsHtml())
 }
 
-// 流程审批历史（M7）：分段时间线 = 每个流程实例一段（倒序），段内为意见留痕
-// （办理人 / decision / 意见 / 时间）。operator 为空显示「—」（内嵌模式/兜底前）。
+// 流程审批历史（M7）：顶部=最新实例的流程状态卡；下方=逐轮垂直时间线（节点圆点 + ↓ 连线）。
+// 节点步骤名按 nodeBpmnId 映射（apply=单据提交、review=审批，未识别节点显示原 id），
+// decision（同意/驳回）仅作节点标题旁的辅助徽章；用户/时间/意见逐行竖排（右侧面板窄）。
+// instances 倒序（最新在前）；进行中实例在时间线末尾补「等待办理」占位节点。
 function flowHistoryHtml() {
   const insts = (state.flowHistory && state.flowHistory.instances) || []
   if (!insts.length) {
@@ -370,25 +391,47 @@ function flowHistoryHtml() {
       <cmx-empty-state icon="process" title="暂无审批记录" description="提交后此处展示流程进度与审批历史"></cmx-empty-state></div>`
   }
   const FLOW_STATE = { ACTIVE: ['进行中', 'warning'], COMPLETED: ['已审结', 'success'], TERMINATED: ['已终止', 'neutral'] }
+  const NODE_LABEL = { apply: '单据提交', review: '审批' }
   const DECISION = { approve: '同意', reject: '驳回' }
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  // createdAt 为 UTC ISO 串（如 2026-08-18T06:47:58.141116+00:00），须转浏览器本地时区
+  // （UTC+8）显示；微秒位超 ES 规范的 3 位毫秒，截断后再交给 Date 解析，非法串原样兜底。
+  const fmtCmtTime = (t) => {
+    if (!t) return ''
+    const d = new Date(String(t).replace(/(\.\d{3})\d+/, '$1'))
+    if (Number.isNaN(d.getTime())) return String(t)
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  }
+  const latest = insts[0]
+  const [lsName, lsTone] = FLOW_STATE[latest.state] || [latest.state || '—', 'neutral']
+  const stateCard = `<div class="fh-state fh-state-${lsTone}"><span class="st-dot"></span><span>${esc(lsName)}</span>
+    <span class="fh-state-biz">${esc(latest.businessKey || latest.instanceId || '')}</span></div>`
+  const pendingNode = `<div class="fh-node"><div class="fh-rail"><span class="fh-dot fh-dot-pending"></span></div>
+      <div class="fh-body"><div class="fh-node-hd muted">等待办理中…</div></div></div>`
   const secs = insts.map((inst, i) => {
-    const [stName, tone] = FLOW_STATE[inst.state] || [inst.state || '—', 'neutral']
-    const items = (inst.comments || []).map((c) => {
-      const d = DECISION[c.decision] || (c.decision || '')
-      return `<div class="fh-item">
-        <div class="fh-line"><span class="fh-user">${esc(c.userId || '—')}</span>${d ? `<cmx-status-tag tone="${c.decision === 'reject' ? 'danger' : 'success'}" variant="subtle" dot size="sm">${esc(d)}</cmx-status-tag>` : ''}<span class="fh-time">${esc((c.createdAt || '').replace('T', ' ').slice(0, 19))}</span></div>
-        ${c.comment ? `<div class="fh-comment">${esc(c.comment)}</div>` : ''}
+    const [stName] = FLOW_STATE[inst.state] || [inst.state || '—', 'neutral']
+    // 多轮（驳回重提）才显示轮次头；单轮时状态已在顶部卡，不重复
+    const round = insts.length > 1 ? `<div class="fh-round">第 ${insts.length - i} 轮<span class="sub">${esc(stName)}</span></div>` : ''
+    const nodes = (inst.comments || []).map((c) => {
+      const d = DECISION[c.decision] || ''
+      const dotCls = c.decision === 'approve' ? 'fh-dot-approve' : (c.decision === 'reject' ? 'fh-dot-reject' : 'fh-dot-submit')
+      return `<div class="fh-node">
+        <div class="fh-rail"><span class="fh-dot ${dotCls}"></span><span class="fh-link"></span></div>
+        <div class="fh-body">
+          <div class="fh-node-hd">${esc(NODE_LABEL[c.nodeBpmnId] || c.nodeBpmnId || '办理')}${d ? `<cmx-status-tag tone="${c.decision === 'reject' ? 'danger' : 'success'}" variant="subtle" dot size="sm">${esc(d)}</cmx-status-tag>` : ''}</div>
+          <div class="fh-user">${esc(c.userId || '—')}</div>
+          <div class="fh-time">${esc(fmtCmtTime(c.createdAt))}</div>
+          ${c.comment ? `<div class="fh-comment">${esc(c.comment)}</div>` : ''}
+        </div>
       </div>`
     }).join('')
-    return `<div class="fh-sec">
-      <div class="fh-head"><span class="fh-idx">#${insts.length - i}</span>
-        <cmx-status-tag tone="${tone}" variant="subtle" dot size="sm">${esc(stName)}</cmx-status-tag>
-        <span class="fh-biz">${esc(inst.businessKey || inst.instanceId || '')}</span></div>
-      ${items || '<div class="fh-item muted">暂无办理记录</div>'}
-    </div>`
+    let tail = ''
+    if (!nodes) tail = inst.state === 'ACTIVE' ? pendingNode : '<div class="fh-empty muted">暂无办理记录</div>'
+    else if (inst.state === 'ACTIVE') tail = pendingNode
+    return `${round}<div class="fh-timeline">${nodes}${tail}</div>`
   }).join('')
-  return `<div class="ap-card"><div class="ap-title">审批历史</div><div class="fh">${secs}</div></div>`
+  return `<div class="ap-card"><div class="ap-title">审批历史</div><div class="fh">${stateCard}${secs}</div></div>`
 }
 
 // ── 元数据加载 ──────────────────────────────────────────────────────────────
