@@ -94,6 +94,9 @@ function captionOf(col) {
   const cap = col && col.caption
   return (cap && (cap.zh_CN || cap)) || (col && col.name) || (col && col.id) || ''
 }
+// 列标识归一：dct/meta 原始列只有 name（无 id），转换列模型才有 id——统一 id||name，
+// 否则 pickCols 匹配/过滤、取值 rec[col] 全部失配（列被清空 → 页面无数据）。
+function cid(col) { return (col && (col.id || col.name)) || '' }
 // enum 值→label 映射；非 enum 列原样返回。
 function displayVal(col, val) {
   if (val == null || val === '') return null
@@ -109,11 +112,11 @@ function pickCols(st, meta, extraHide) {
   const all = (meta && meta.columns) || []
   let cols
   if (Array.isArray(st.columns) && st.columns.length) {
-    cols = st.columns.map((id) => all.find((c) => c.id === id)).filter(Boolean)
+    cols = st.columns.map((id) => all.find((c) => cid(c) === id)).filter(Boolean)
   } else {
-    cols = all.filter((c) => !PLATFORM_COLS.has(c.id) && c.visible !== false)
+    cols = all.filter((c) => !PLATFORM_COLS.has(cid(c)) && c.visible !== false)
   }
-  if (extraHide) cols = cols.filter((c) => c.id !== extraHide)
+  if (extraHide) cols = cols.filter((c) => cid(c) !== extraHide)
   return cols
 }
 
@@ -125,12 +128,12 @@ function viewHtml(st) {
   const headCols = pickCols(st, st.dictMeta)
   const kv = (l, v) => `<cmx-desc-item label="${esc(l)}">${v == null || v === '' ? '—' : esc(v)}</cmx-desc-item>`
   const headHtml = `<div class="card"><div class="card-title">${st.icon ? `<ui5-icon name="${esc(st.icon)}" mode="Decorative"></ui5-icon>` : ''}${esc(st.title || '')}·${esc(rec[labelField] || '')}</div>
-    <cmx-desc-list columns="3" border>${headCols.map((c) => kv(captionOf(c), displayVal(c, rec[c.id]))).join('')}</cmx-desc-list></div>`
+    <cmx-desc-list columns="3" border>${headCols.map((c) => kv(captionOf(c), displayVal(c, rec[cid(c)]))).join('')}</cmx-desc-list></div>`
   const subsHtml = (st.subs || []).map((sub) => {
     const cols = sub.cols
     const rows = sub.rows || []
     const body = rows.length
-      ? rows.map((r) => `<tr>${cols.map((c) => { const v = displayVal(c, r[c.id]); return `<td${v == null ? ' class="muted"' : ''}>${v == null ? '—' : esc(v)}</td>` }).join('')}</tr>`).join('')
+      ? rows.map((r) => `<tr>${cols.map((c) => { const v = displayVal(c, r[cid(c)]); return `<td${v == null ? ' class="muted"' : ''}>${v == null ? '—' : esc(v)}</td>` }).join('')}</tr>`).join('')
       : `<tr><td colspan="${cols.length || 1}" class="muted">暂无数据</td></tr>`
     return `<div class="card"><div class="card-title">${esc(sub.title)}（${rows.length}）</div>
       <table class="tbl"><thead><tr>${cols.map((c) => `<th>${esc(captionOf(c))}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`
