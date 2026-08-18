@@ -20,6 +20,10 @@
 mod activation;
 /// M2 CR 变更请求 handler（审批流转 / 列表 / 详情）。
 mod cr;
+/// M7 流程平台对接 handler（webhook 回调 + 回写状态机 + 懒同步 + 撤回 + 流程查询）。
+pub mod flow_cb;
+/// M7.1 审批动作业务封装 handler（同意/驳回/退回 + 详情页按钮数据源）。
+pub mod review;
 /// 实时查重 + 关键信息查重 handler。
 mod dedup;
 /// MDM 治理端点 handler（审计 / 事件 / 订阅 / 发布）。

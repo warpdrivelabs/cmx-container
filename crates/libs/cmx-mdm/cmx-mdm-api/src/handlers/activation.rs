@@ -128,10 +128,11 @@ pub struct ActivationDeleteBody {
     pub activation_code: String,
 }
 
-/// 手动触发激活。
+/// 手动触发激活（**运维兜底端点**，默认关闭）。
 ///
 /// `POST /api/mdm/change-requests/activate` —— 审批型 CR 兜底入口 / 内部 CR 直接调激活器。
-/// body `{ crId }`，返回激活后的主数据记录 id：
+/// M7 起受 `[mdm.flow].manual_override_enabled` 开关保护（默认 403）——webhook 丢失且
+/// 懒同步失效时的终极兜底。body `{ crId }`，返回激活后的主数据记录 id：
 ///
 /// ```json
 /// { "crId": 123 }
@@ -151,6 +152,7 @@ pub async fn mdm_cr_activate(
     headers: HeaderMap,
     Json(body): Json<ActivateBody>,
 ) -> Result<Json<ApiResp<Value>>> {
+    super::flow_cb::manual_override_guard()?;
     let mm = get_default_pg_db_manager();
     let db_id = resolve_db_id_from_headers(&headers).await;
     let operated_by = actor_id_i64(&svr_ctx);

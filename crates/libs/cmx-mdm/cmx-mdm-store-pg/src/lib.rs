@@ -63,3 +63,7 @@ pub use match_config_store::{
 };
 // set_cr_status 供 api 层改 CR 状态(submit/reject,自动提交);激活器内部直接用 md_accessor
 pub use md_accessor::set_cr_status as set_cr_status_pub;
+// M7 抢占式状态迁移（流程回写三方并发收敛原语）
+pub use md_accessor::try_set_cr_status as try_set_cr_status_pub;
+// M7 懒同步自愈窗口判定（update_time 时效）
+pub use md_accessor::cr_updated_before as cr_updated_before_pub;

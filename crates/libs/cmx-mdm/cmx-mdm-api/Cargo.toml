@@ -27,6 +27,16 @@ cmx-dct-store-pg = { workspace = true }
 cmx-api-types = { workspace = true }
 # OpenAPI 文档生成（handler #[utoipa::path] + Query 结构 IntoParams + MdmApiDoc）
 utoipa = { workspace = true }
+# M7 流程对接：HTTP 客户端（回环调本进程 /api/flow/*，双部署模式透明）
+reqwest = { workspace = true }
+# M7 流程对接：读 [mdm.flow] 配置段 + [service_auth].outgoing_api_key
+cmx-utils = { workspace = true }
+# M7 流程对接：current_original_token（回环转发用户 JWT 作委托令牌）
+cmx-traits = { workspace = true }
+# M7 流程对接：webhook 回调 HMAC-SHA256 验签
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
 # Web 框架（handler 提取器 + Router）
 axum = { workspace = true }

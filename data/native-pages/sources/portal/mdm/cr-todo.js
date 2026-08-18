@@ -36,12 +36,19 @@ let rootEl = null
 const STATUS_META = {
   draft: { name: '草稿', tone: 'neutral' },
   approving: { name: '审批中', tone: 'warning' },
+  activating: { name: '激活中', tone: 'info' },
   approved: { name: '已通过', tone: 'info' },
   activated: { name: '已激活', tone: 'success' },
   rejected: { name: '已驳回', tone: 'danger' },
   aborted: { name: '已作废', tone: 'neutral' },
 }
-const state = { dbId: '', filter: 'all', list: [], domain: '', application: '', page: 1, pageSize: 20, total: 0, counts: { draft: 0, approving: 0, rejected: 0, done: 0 } }
+// 流程实例状态 → 徽标文案（flow-status 返回的 state 字段映射）
+const FLOW_STATE_META = {
+  ACTIVE: { name: '审批中', tone: 'warning' },
+  COMPLETED: { name: '已审结', tone: 'success' },
+  TERMINATED: { name: '已终止', tone: 'neutral' },
+}
+const state = { dbId: '', filter: 'all', list: [], domain: '', application: '', page: 1, pageSize: 20, total: 0, flowMap: {}, counts: { draft: 0, approving: 0, rejected: 0, done: 0 } }
 
 function styleCss() {
   return `
@@ -98,7 +105,7 @@ function kpiHtml() {
   const c = counts()
   const card = (label, value, tone, key, clickable = true) =>
     `<cmx-kpi-card variant="card" label="${label}" value="${value}" tone="${tone}" data-k="${key}" ${clickable ? 'clickable' : ''}></cmx-kpi-card>`
-  return `<div class="kpi-row">${card('草稿', c.draft, 'neutral', 'draft')}${card('待审批', c.approving, 'warning', 'approving')}${card('已驳回', c.rejected, 'danger', 'rejected')}${card('已处理', c.done, 'success', 'done', false)}</div>`
+  return `<div class="kpi-row">${card('草稿', c.draft, 'neutral', 'draft')}${card('审批中(流程)', c.approving, 'warning', 'approving')}${card('已驳回', c.rejected, 'danger', 'rejected')}${card('已处理', c.done, 'success', 'done', false)}</div>`
 }
 
 // 列表已由服务端按 docStatus 过滤，前端直接展示当前页
@@ -133,7 +140,8 @@ function fmtTime(t) { if (!t) return ''; const s = String(t); return s.length > 
 function viewHtml() {
   return `<div class="pg">
     <div class="pg-head"><div class="pg-title">单据列表</div>
-      <div class="pg-sub">提交 / 审批 / 驳回 / 修改重提 / 作废，审批通过自动激活落字典</div></div>
+      <div class="pg-sub">提交 / 撤回 / 驳回重提 / 作废；审批在流程待办中心办理（mdm_approver），通过自动激活落字典
+        <ui5-button design="Transparent" icon="activity-items" id="ctOpenFlowTodo" style="margin-left:8px">打开流程待办</ui5-button></div></div>
     ${kpiHtml()}
     <div class="list-card">
       <div class="card-title">申请列表（共 ${state.total} 条）</div>
@@ -175,16 +183,17 @@ function buildListGrid() {
       new C.CmxColumn({ id: 'remark', caption: '业务事由', dataType: 'VARCHAR', width: '150px' }),
       new C.CmxColumn({ id: 'doc_type', caption: '类型', dataType: 'VARCHAR', width: '120px' }),
       new C.CmxColumn({ id: 'status_name', caption: '状态', dataType: 'VARCHAR', width: '80px' }),
+      new C.CmxColumn({ id: 'flow_name', caption: '流程', dataType: 'VARCHAR', width: '90px' }),
       new C.CmxColumn({ id: 'create_time', caption: '创建时间', dataType: 'VARCHAR', width: '150px', display: {
         mode: 'text', format: 'datetime:YYYY-MM-DD HH:mm:ss', align: 'center',
       } }),
       new C.CmxColumn({ id: '_action', caption: '操作', dataType: 'VARCHAR', width: '200px', frozen: 'right', edit: { mode: 'readonly' },
         display: { mode: 'actions', actions: [
+          // M7：审批动作上收流程待办中心（mdm_approver 候选池），本页仅保留业务视角操作。
           { text: '详情', actionRef: 'view', icon: 'detail-view' },
           { text: '提交',   actionRef: 'submit',  visible: is('draft') },
           { text: '作废',   actionRef: 'abort',   variant: 'negative', visible: is('draft') },
-          { text: '通过',   actionRef: 'approve', variant: 'emphasized', visible: is('approving') },
-          { text: '驳回',   actionRef: 'reject',  variant: 'negative', visible: is('approving') },
+          { text: '撤回',   actionRef: 'withdraw', variant: 'negative', visible: is('approving') },
           { text: '修改重提', actionRef: 'resubmit',  visible: is('rejected') },
         ] } }),
     ])
@@ -200,7 +209,11 @@ function buildListGrid() {
     if (r.id == null) return
     doAction(d.actionRef, String(r.id))
   })
-  const rows = state.list.map((r) => ({ ...r, status_name: (STATUS_META[r.doc_status] || {}).name || r.doc_status }))
+  const rows = state.list.map((r) => {
+    const fs = (state.flowMap || {})[r.id]
+    const fm = fs && fs.state ? (FLOW_STATE_META[fs.state] || { name: fs.state, tone: 'neutral' }) : null
+    return { ...r, status_name: (STATUS_META[r.doc_status] || {}).name || r.doc_status, flow_name: fm ? fm.name : '' }
+  })
   const fill = () => {
     if (C.CmxDataSet) { const ds = new C.CmxDataSet({}); ds.setRows(rows); grid.setDataSet(ds) }
     else grid.setDataSet?.(rows)
@@ -214,20 +227,16 @@ async function doAction(act, id) {
   const crId = Number(id); const M = cmx()
   try {
     if (act === 'submit') {
-      const ok = await M.cmxConfirm?.({ title: '提交审批', message: `确认提交 CR-${crId}？提交后进入审批流程。`, danger: false })
+      const ok = await M.cmxConfirm?.({ title: '提交审批', message: `确认提交 CR-${crId}？提交后进入流程审批（mdm_approver 审批）。`, danger: false })
       if (ok === false) return
       await apiPost('/api/mdm/change-requests/submit', { crId }, state.dbId); M.cmxInfo?.(`CR-${crId} 已提交`)
     }
-    else if (act === 'approve') {
-      const ok = await M.cmxConfirm?.({ title: '审批通过', message: `确认通过 CR-${crId}？通过后将自动激活落主数据。`, danger: false })
+    else if (act === 'withdraw') {
+      // 撤回（发起人专属，后端校验）：终止当前审批实例 + CR 回草稿，修改后重提发新实例。
+      const ok = await M.cmxConfirm?.({ title: '撤回申请', message: `确认撤回 CR-${crId}？当前审批将终止，单据回到草稿可修改后重新提交。`, danger: true })
       if (ok === false) return
-      const d = await apiPost('/api/mdm/change-requests/approve', { crId }, state.dbId)
-      M.cmxInfo?.(`CR-${crId} 已激活，主数据 id=${d.recordId}`)
-    } else if (act === 'reject') {
-      const ok = await M.cmxConfirm?.({ title: '驳回', message: `确认驳回 CR-${crId}？主数据不受影响。`, danger: true })
-      if (ok === false) return
-      await apiPost('/api/mdm/change-requests/reject', { crId, reason: '待办台驳回' }, state.dbId)
-      M.cmxInfo?.(`CR-${crId} 已驳回`)
+      await apiPost('/api/mdm/change-requests/withdraw', { crId }, state.dbId)
+      M.cmxInfo?.(`CR-${crId} 已撤回，回到草稿`)
     } else if (act === 'resubmit') {
       // 修改重提：驳回后在「原单据」上直接编辑重新提交——后端 submit 支持 rejected→approving，
       // 无需 clone 新 CR。打开原单据 view 页并 autoEdit 直接进编辑态；cr-form 按 rejected 状态显示编辑/提交。
@@ -274,11 +283,41 @@ async function load() {
   const d = (await apiGet(`/api/mdm/change-requests?${new URLSearchParams(params)}`, state.dbId)) || {}
   state.list = d.list || []
   state.total = Number(d.total) || 0
+  await loadFlowState()
+}
+
+// 流程徽标 + 懒同步自愈：approving/activating 单批量查实例状态；服务端顺带核对
+// 「实例已终态而 CR 未回写」（webhook 丢失兜底）与「无实例超时」（submit 崩溃残留回退 draft）。
+async function loadFlowState() {
+  const ids = state.list.filter((r) => r.doc_status === 'approving' || r.doc_status === 'activating').map((r) => r.id)
+  if (!ids.length) { state.flowMap = {}; return }
+  try {
+    const d = (await apiGet(`/api/mdm/change-requests/flow-status?crIds=${ids.join(',')}`, state.dbId)) || {}
+    const map = {}
+    for (const it of d.items || []) map[it.crId] = it
+    state.flowMap = map
+    // 懒同步可能已回写状态（activated/rejected/draft）——刷新列表数据以反映最新 doc_status。
+    const changed = state.list.some((r) => {
+      const st = (map[r.id] || {}).state
+      return (r.doc_status === 'approving' || r.doc_status === 'activating')
+        && (st === 'COMPLETED' || st === 'TERMINATED')
+    })
+    if (changed) {
+      const params = { page: state.page, pageSize: state.pageSize }
+      if (state.filter !== 'all') params.docStatus = state.filter
+      const d2 = (await apiGet(`/api/mdm/change-requests?${new URLSearchParams(params)}`, state.dbId)) || {}
+      state.list = d2.list || []; state.total = Number(d2.total) || 0
+    }
+  } catch (e) { state.flowMap = state.flowMap || {}; /* 徽标缺失不阻断列表 */ }
 }
 
 function bind(root) {
   rootEl = root
   const reload = async () => { await load(); refresh() }
+  // 打开流程待办中心（portal.flow.todo-center 经门户反代取页，审批人在该页办理 MDM 任务）
+  root.querySelector('#ctOpenFlowTodo')?.addEventListener('click', () => {
+    openTab(currentHost, '流程待办中心', 'portal.flow.todo-center', { domain: state.domain, application: state.application }, { single: true })
+  })
   root.querySelectorAll('cmx-kpi-card[clickable]').forEach((k) => k.addEventListener('cmx-kpi-click', () => {
     state.filter = k.dataset.k || 'all'; state.page = 1; reload()
   }))

@@ -399,6 +399,8 @@ ed25519-dalek = { version = "2.2", features = ["std"] }
 urlencoding = "2"
 # SHA256 哈希
 sha2 = "0.10"
+# HMAC-SHA256（MDM 流程 webhook 回调验签）
+hmac = "0.12"
 # 十六进制编码
 hex = "0.4"
 # SHA1 哈希
