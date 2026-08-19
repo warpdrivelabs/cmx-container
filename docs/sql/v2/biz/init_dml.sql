@@ -683,6 +683,11 @@ VALUES (9000000000000015, 'MDM_GYS', '供应商主数据编码（SUP+日期+流�
         '[{"type":"const","value":"SUP"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
         '', TRUE)
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, org_scope, condition, segments, joiner, pattern, enable_gap,
+                           use_sequence, valid_from, valid_to, priority, is_active, create_time, update_time, archived,
+                           create_by, update_by, domain_code, application_code, module_code)
+VALUES (53303780052992, 'MDM_BILL', '主数据单据(类型+日期+流水)', 'auto', '', '', '[{"type": "ref", "field": "doc_type", "fallback": "DOC"}, {"type": "date", "format": "YYYYMMDD"}, {"step": 1, "type": "serial", "start": 1, "width": 6, "reset_by": "daily"}]', '', '', false, false, null, null, 0, true, '2026-08-12 08:40:43.284631 +00:00', '2026-08-12 11:02:10.265666 +00:00', 0, null, null, 'fi', 'cmxfico', 'gl')
+    ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
 -- ─────────────────────────────────────────────
 
