@@ -6,6 +6,7 @@
 //! - [`dedup`]：实时查重 + 关键信息查重（V3.2 步骤条预校验）。
 //! - [`merge`]：M3 合并请求（确认 / 详情 / 驳回 / 还原）。
 //! - [`governance`]：MDM 治理端点（审计 / 事件 / 订阅 / 发布）。
+//! - [`distribution`]：M5 分发治理端点（投递流水 / 统计 / pull 游标 / 全量快照）。
 //! - [`match_config`]：查重规则配置。
 //! - [`scan`]：M3.5 全库扫描查重（扫描 / 列表 / 详情 / 忽略）。
 //! - [`workbench`]：M4 管家工作台聚合（summary 计数）。
@@ -28,6 +29,8 @@ pub mod review;
 mod dedup;
 /// MDM 治理端点 handler（审计 / 事件 / 订阅 / 发布）。
 mod governance;
+/// M5 分发治理端点 handler（投递流水 / 统计 / 重发 / 跳过 / pull 游标 / 全量快照）。
+pub mod distribution;
 /// 查重规则配置 handler。
 mod match_config;
 /// M3 合并请求 handler（确认 / 详情 / 驳回 / 还原）。
@@ -130,3 +133,4 @@ pub use match_config::*;
 pub use merge::*;
 pub use scan::*;
 pub use workbench::*;
+pub use distribution::*;

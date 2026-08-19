@@ -41,8 +41,9 @@ fuel_limit = 0
 # 是否启用迁移（可选，默认 false）
 # 启用后会执行待执行的数据库迁移
 enabled = false
-dir = "/app/docs/sql/migrations"
-lock_timeout = 60
+dir = "/app/docs/sql/v2"
+# 等待其他节点完成迁移的轮询超时（秒）；超时后按台账决定跳过或接管
+lock_wait_timeout = 120
 # 校验文件内容是否被修改，默认值true
 validate_checksum = false
 

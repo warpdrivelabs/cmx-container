@@ -35,6 +35,9 @@ pub use query::{dict_search, dict_search_zmc};
 pub use resolve::dict_meta;
 pub use write::{dict_delete, dict_save, dict_upsert};
 
+// 分级字典层级列补偿重算（外部直写路径，如 MDM 激活器 upsert 后调用）
+pub use hierarchy::recompute_dict_hierarchy;
+
 // —— 层级服务适配（保留，协调器挂载点）——
 pub use hier_service::DctHierService;
 

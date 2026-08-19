@@ -123,7 +123,7 @@ pub async fn mdm_activations_delete(
 /// 删除激活映射请求体。
 #[derive(serde::Deserialize)]
 pub struct ActivationDeleteBody {
-    /// 待删除的激活编码（cmx_mdm_activation 唯一键）。
+    /// 待删除的激活编码（mdm_activation 唯一键）。
     #[serde(alias = "activationCode")]
     pub activation_code: String,
 }

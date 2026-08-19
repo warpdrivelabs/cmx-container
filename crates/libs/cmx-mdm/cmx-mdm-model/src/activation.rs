@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-/// 激活映射配置(对应 cmx_mdm_activation 一行,由 activation_store 反序列化)。
+/// 激活映射配置(对应 mdm_activation 一行,由 activation_store 反序列化)。
 ///
 /// 顶层字段对齐 DB 列名(snake_case);target_table 是目标物理表名(配置器选字典时一并落库)。
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -310,7 +310,7 @@ mod tests {
     use serde_json::json;
 
     fn sample_cfg() -> ActivationConfig {
-        // 模拟 cmx_mdm_activation 一行(经 find_by_doc_type 反序列化)
+        // 模拟 mdm_activation 一行(经 find_by_doc_type 反序列化)
         serde_json::from_value(json!({
             "activation_code": "supplier_apply",
             "source_doc_type": "mdm_supplier_apply",

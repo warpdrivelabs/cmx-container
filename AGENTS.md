@@ -190,10 +190,13 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 
 ### 5.2 SQL 文件维护
 
-涉及 SQL 变更（新建表、新增/修改/删除字段、新增索引等）时，**必须**使用 `sql-guide` 技能同步维护：
+涉及 SQL 变更（新建表、新增/修改/删除字段、新增索引等）时，**必须**使用 `sql-guide` 技能同步维护（v2 双库结构，详见 `docs/sql/v2/README.md`）：
 
-- `docs/sql/migrations/` 目录下创建增量迁移文件（`YYYYMMDD_XXX.up.sql` + `.down.sql`）
-- `docs/sql/init/init_ddl.sql` 同步更新为最新完整状态
+- **新建表必须先询问用户归属**：主库（`docs/sql/v2/platform/`）还是业务库（`docs/sql/v2/biz/`），得到明确答复后再写 SQL；下述前缀规则仅是用户未明示时的默认参考与事后校验
+- 前缀默认规则：`cmx_` 前缀 → platform（主库），**两组例外前缀 → biz（业务库）**——`cmx_flow_*` 流程运行态（与流程引擎 `FLOW_DB_ID`=业务库一致）、`cmx_code_*` 编码引擎（运行时 code API 经 `resolve_db_id` 回退业务库）；其余前缀（`md_*`/`mdm_*`/`cf_*`/`cr_*` 等）→ 业务库；跨库变更拆两个文件
+- 对应库 `migrations/` 下创建增量迁移文件（`YYYYMMDD_NNN.up.sql` + `.down.sql`）
+- 对应库 `init_ddl.sql` / `init_dml.sql` 同步更新为最新完整状态（无损幂等风格，init_ddl 禁 ALTER）
+- `docs/sql/init | migrations | seed/` 为历史归档，**只读不改**（引擎不再读取）
 
 ### 5.3 配置文档维护
 
@@ -217,12 +220,17 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 <日期>_<3位序号>_<描述>.down.sql
 ```
 
-- 序号 001 起递增；新日期重置；**禁止**跳跃
+- 序号 001 起递增；新日期重置；**禁止**跳跃；version（日期_序号）在各自库内唯一
 - INSERT 迁移数据**必须**用 `ON CONFLICT DO NOTHING` / `ON CONFLICT DO UPDATE`
+- DDL 一律 `IF NOT EXISTS`；up 文件**禁止** `DROP TABLE`（破坏性，废弃表走归档说明）
 
 ### 5.6 init_ddl.sql 维护原则
 
-`docs/sql/init/init_ddl.sql` 始终保持**最新完整状态**（不需 ALTER 语句）；修改表结构时同步把变更合并到最新定义。
+`docs/sql/v2/{platform,biz}/init_ddl.sql` 始终保持**最新完整状态 + 无损幂等 +
+表定义即终态**（`CREATE TABLE/INDEX IF NOT EXISTS`，禁 DROP TABLE，**禁任何 ALTER**——
+字段变更直接改表定义并按 §5.5 同步新增迁移）；每表区块布局为
+「CREATE TABLE → COMMENT（紧跟建表）→ 索引」。存量库升级走基线迁移
+（基线内含结构对齐 ALTER 区，由迁移链增量积累，init_ddl 不含）。
 
 ---
 

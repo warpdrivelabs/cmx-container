@@ -7,7 +7,7 @@
 //! 本模块还提供：
 //! - [`resolve_dict_meta`]：按 dict_code 调 DCT `dict_meta` 拿 DictMeta（头表名 + 列清单），
 //!   供 [`super::merge`] 的 detail/undo 取头表名、详情取列清单（替代硬编码 load_columns）。
-//! - [`line_tables`]：明细表清单（merge/undo 的明细 reparent 用，从 cmx_mdm_activation.line_mappings 按 target_dict 聚合）。
+//! - [`line_tables`]：明细表清单（merge/undo 的明细 reparent 用，从 mdm_activation.line_mappings 按 target_dict 聚合）。
 
 use axum::Json;
 use axum::extract::State;
@@ -40,7 +40,7 @@ pub(crate) async fn resolve_dict_meta(dict_code: &str) -> Result<DictMeta> {
 
 /// dict → 明细表清单（含去重键，merge/undo 的明细 reparent + 去重用）。
 ///
-/// 流程：从 `cmx_mdm_activation.line_mappings` 按 `target_dict` 聚合明细表
+/// 流程：从 `mdm_activation.line_mappings` 按 `target_dict` 聚合明细表
 /// `(table, parent_field, target_dict)`；再对每个 `target_dict` 调 [`resolve_dict_meta`] 读
 /// DCT `uniqueKeys`，去掉外键列（`parent_field`）后剩余字段即该表的去重业务键。
 /// 未注册字典或无 uniqueKeys 的表 `dedup_keys` 为空（合并不去重，全量 reparent）。

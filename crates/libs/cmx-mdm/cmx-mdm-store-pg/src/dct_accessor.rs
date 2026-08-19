@@ -200,6 +200,36 @@ pub async fn get_version(
     Ok(row.get_by_name_as::<i64>(ds.schema.as_ref(), "published_version"))
 }
 
+/// 读头表单行的 BIGINT 列值（激活器 update 分支树形补偿重算取旧 parent_id 用：
+/// 节点移父后旧父可能变回叶子，is_leaf 修正需要旧父进重算集合）。
+/// 列名与表名均走 `validate_ident` 白名单校验。
+pub async fn select_bigint_col(
+    mm: &DatabaseManager,
+    db_id: &str,
+    txn_id: Option<&str>,
+    table: &str,
+    col: &str,
+    record_id: i64,
+) -> Result<Option<i64>, cmx_api_types::Error> {
+    validate_ident(table)?;
+    validate_ident(col)?;
+    let sql = format!("SELECT {col} FROM {table} WHERE id = $1");
+    let ds = mm
+        .query_sql_with_datavalues(
+            db_id,
+            txn_id,
+            &sql,
+            vec![DataValue::Int(record_id)],
+            "mdm_select_bigint_col",
+        )
+        .await
+        .map_err(|e| api_err_db(&format!("查 {table}.{col} 失败: {e}")))?;
+    let Some(row) = ds.rows.first() else {
+        return Ok(None);
+    };
+    Ok(row.get_by_name_as::<i64>(ds.schema.as_ref(), col))
+}
+
 /// 改 lifecycle_status（merge→merged / unmerge→published / freeze 等，M3）。
 ///
 /// **双保险**（审查重要-5）：① CAS `expected→next` 防双 merge / 双 unmerge；
@@ -448,4 +478,44 @@ pub(crate) fn validate_ident(name: &str) -> Result<(), cmx_api_types::Error> {
 #[allow(dead_code)]
 fn typed_null(marker: SqlTypeMarker) -> DataValue {
     DataValue::NullTyped(marker)
+}
+
+/// 事务内单行回读（SELECT * → JSON；激活器发事件前取全量快照用）。
+///
+/// # Arguments
+///
+/// * `mm` - 数据库管理器。
+/// * `db_id` - 数据源 id。
+/// * `txn_id` - 事务 id（事务内可见本事务未提交的写入）。
+/// * `table` - 目标表名。
+/// * `id` - 记录 id。
+///
+/// # Returns
+///
+/// 行 JSON（列名 → 值）；记录不存在返回 None。
+///
+/// # Errors
+///
+/// SQL 失败时返回错误。
+pub async fn select_row_json(
+    mm: &cmx_database_pg::DatabaseManager,
+    db_id: &str,
+    txn_id: &str,
+    table: &str,
+    id: i64,
+) -> Result<Option<serde_json::Value>, cmx_api_types::Error> {
+    use cmx_core::dv;
+    use cmx_core::model::cell::DataValue;
+    let sql = format!("SELECT * FROM {table} WHERE id = $1");
+    let ds = mm
+        .query_sql_with_datavalues(
+            db_id,
+            Some(txn_id),
+            &sql,
+            dv![DataValue::Int(id)],
+            "mdm_select_row_json",
+        )
+        .await
+        .map_err(|e| crate::error::api_err_db(&format!("回读 {table}#{id} 失败: {e}")))?;
+    Ok(ds.rows.first().map(|r| r.to_json_value(ds.schema.as_ref())))
 }

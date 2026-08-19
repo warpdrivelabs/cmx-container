@@ -2942,8 +2942,8 @@ CREATE INDEX IF NOT EXISTS idx_cmx_flow_def_version_key   ON cmx_flow_definition
 -- ================================================================
 
 -- 1. 激活映射配置（UI 配置器维护，激活器读取执行）
-DROP TABLE IF EXISTS cmx_mdm_activation;
-CREATE TABLE cmx_mdm_activation (
+DROP TABLE IF EXISTS mdm_activation;
+CREATE TABLE mdm_activation (
     id              VARCHAR(64)  NOT NULL,
     activation_code VARCHAR(64)  NOT NULL,
     source_doc_type VARCHAR(64)  NOT NULL,
@@ -2963,24 +2963,24 @@ CREATE TABLE cmx_mdm_activation (
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-COMMENT ON TABLE  cmx_mdm_activation IS 'MDM 激活映射配置（单据→主数据），UI 配置器维护，激活器读取执行';
-COMMENT ON COLUMN cmx_mdm_activation.id              IS '主键（snowflake，应用层生成）';
-COMMENT ON COLUMN cmx_mdm_activation.activation_code IS '映射码（如 supplier_apply）';
-COMMENT ON COLUMN cmx_mdm_activation.source_doc_type IS '来源单据类型（如 mdm_supplier_apply）';
-COMMENT ON COLUMN cmx_mdm_activation.cr_type         IS '变更类型 create/update/merge/block/flag_delete';
-COMMENT ON COLUMN cmx_mdm_activation.target_dict     IS '目标头字典码（如 supplier）';
-COMMENT ON COLUMN cmx_mdm_activation.target_table    IS '目标头物理表名（如 cm_supplier，配置器选字典时从 dct/meta tableName 一并写入，激活器直接用）';
-COMMENT ON COLUMN cmx_mdm_activation.header_mapping  IS '头映射 {单据字段:主数据列}';
-COMMENT ON COLUMN cmx_mdm_activation.line_mappings   IS '明细映射 [{lineType,targetDict,targetTable,parentIdField,fields}]';
-COMMENT ON COLUMN cmx_mdm_activation.code_rule_code  IS '【已废弃】字典 code 铸号规则；字典 code 现改走 dictMeta.codeRule，本列保留不删（避免迁移风险），激活器不再读取';
-COMMENT ON COLUMN cmx_mdm_activation.subject_name_field IS '主体名字段来源（payload 内字段名，前端按此填 subject_name）';
-COMMENT ON COLUMN cmx_mdm_activation.subject_code_field IS '【已废弃】主体编码字段来源；从未接线（激活器不读），字典 code 走 dictMeta.codeRule 铸号，本列保留不删（避免迁移风险）';
-COMMENT ON COLUMN cmx_mdm_activation.header_groups  IS '头映射分组(UI 展示用,[{groupCode,groupName,fields:[源字段名]}]);激活器不读,header_mapping 落库仍扁平';
-COMMENT ON COLUMN cmx_mdm_activation.doc_code_rules IS '单据字段铸号规则覆盖 {单据字段:ruleCode};单据保存铸号时覆盖单据元数据 codeRule 同名字段(激活配置优先);激活器不读,由 cr-form 读取经 saveDocData→saver 覆盖铸号';
-COMMENT ON COLUMN cmx_mdm_activation.key_fields IS '关键信息字段 [{field,weight,kind,dedup}];field=目标字典列名,数组序=簇键优先级;cr-form 据此渲染步骤①关键信息表单,dedup=true 的字段构造 /mdm/check-key 多字段加权查重,dedup=false 仅展示采集不查重;空则无步骤①(直接完整表单,不查重)';
-COMMENT ON COLUMN cmx_mdm_activation.is_active       IS '是否启用';
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_mdm_activation_code     ON cmx_mdm_activation (activation_code);
-CREATE        INDEX IF NOT EXISTS idx_cmx_mdm_activation_doctype ON cmx_mdm_activation (source_doc_type, cr_type);
+COMMENT ON TABLE  mdm_activation IS 'MDM 激活映射配置（单据→主数据），UI 配置器维护，激活器读取执行';
+COMMENT ON COLUMN mdm_activation.id              IS '主键（snowflake，应用层生成）';
+COMMENT ON COLUMN mdm_activation.activation_code IS '映射码（如 supplier_apply）';
+COMMENT ON COLUMN mdm_activation.source_doc_type IS '来源单据类型（如 mdm_supplier_apply）';
+COMMENT ON COLUMN mdm_activation.cr_type         IS '变更类型 create/update/merge/block/flag_delete';
+COMMENT ON COLUMN mdm_activation.target_dict     IS '目标头字典码（如 supplier）';
+COMMENT ON COLUMN mdm_activation.target_table    IS '目标头物理表名（如 cm_supplier，配置器选字典时从 dct/meta tableName 一并写入，激活器直接用）';
+COMMENT ON COLUMN mdm_activation.header_mapping  IS '头映射 {单据字段:主数据列}';
+COMMENT ON COLUMN mdm_activation.line_mappings   IS '明细映射 [{lineType,targetDict,targetTable,parentIdField,fields}]';
+COMMENT ON COLUMN mdm_activation.code_rule_code  IS '【已废弃】字典 code 铸号规则；字典 code 现改走 dictMeta.codeRule，本列保留不删（避免迁移风险），激活器不再读取';
+COMMENT ON COLUMN mdm_activation.subject_name_field IS '主体名字段来源（payload 内字段名，前端按此填 subject_name）';
+COMMENT ON COLUMN mdm_activation.subject_code_field IS '【已废弃】主体编码字段来源；从未接线（激活器不读），字典 code 走 dictMeta.codeRule 铸号，本列保留不删（避免迁移风险）';
+COMMENT ON COLUMN mdm_activation.header_groups  IS '头映射分组(UI 展示用,[{groupCode,groupName,fields:[源字段名]}]);激活器不读,header_mapping 落库仍扁平';
+COMMENT ON COLUMN mdm_activation.doc_code_rules IS '单据字段铸号规则覆盖 {单据字段:ruleCode};单据保存铸号时覆盖单据元数据 codeRule 同名字段(激活配置优先);激活器不读,由 cr-form 读取经 saveDocData→saver 覆盖铸号';
+COMMENT ON COLUMN mdm_activation.key_fields IS '关键信息字段 [{field,weight,kind,dedup}];field=目标字典列名,数组序=簇键优先级;cr-form 据此渲染步骤①关键信息表单,dedup=true 的字段构造 /mdm/check-key 多字段加权查重,dedup=false 仅展示采集不查重;空则无步骤①(直接完整表单,不查重)';
+COMMENT ON COLUMN mdm_activation.is_active       IS '是否启用';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_mdm_activation_code     ON mdm_activation (activation_code);
+CREATE        INDEX IF NOT EXISTS idx_mdm_activation_doctype ON mdm_activation (source_doc_type, cr_type);
 
 -- 2. 主数据版本留痕（激活器写入）
 DROP TABLE IF EXISTS md_audit;
@@ -3122,19 +3122,41 @@ CREATE INDEX IF NOT EXISTS idx_md_match_scan_hash        ON md_match_scan (dict_
 -- 8. 分发订阅
 DROP TABLE IF EXISTS md_subscription;
 CREATE TABLE md_subscription (
-    id          BIGINT       NOT NULL,
-    target_sys  VARCHAR(64)  NOT NULL,
-    dict_code   VARCHAR(64)  NOT NULL,
-    filter      JSONB,
-    field_map   JSONB,
-    channel     VARCHAR(16)  NOT NULL,
-    active      BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    id             BIGINT       NOT NULL,
+    target_sys     VARCHAR(64)  NOT NULL,
+    dict_code      VARCHAR(64)  NOT NULL,
+    filter         JSONB,
+    field_map      JSONB,
+    channel        VARCHAR(16)  NOT NULL,
+    active         BOOLEAN      NOT NULL DEFAULT TRUE,
+    name           VARCHAR(128),
+    description    VARCHAR(512),
+    channel_config JSONB        NOT NULL DEFAULT '{}',
+    event_types    JSONB        NOT NULL DEFAULT '[]',
+    retry_max      INT          NOT NULL DEFAULT 8,
+    timeout_ms     INT          NOT NULL DEFAULT 10000,
+    batch_size     INT          NOT NULL DEFAULT 50,
+    created_by     VARCHAR(64),
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
 COMMENT ON TABLE  md_subscription IS '分发订阅配置';
-COMMENT ON COLUMN md_subscription.id      IS '主键（应用层生成）';
-COMMENT ON COLUMN md_subscription.channel IS '通道 event/rest/batch';
+COMMENT ON COLUMN md_subscription.id             IS '主键（应用层生成）';
+COMMENT ON COLUMN md_subscription.target_sys     IS '目标系统标识（uk：同系统同字典同通道唯一）';
+COMMENT ON COLUMN md_subscription.filter         IS '行级过滤条件 {conditions:[{field,op,value}],logic:"and"}';
+COMMENT ON COLUMN md_subscription.field_map      IS '列级转换 {include:[],rename:{},mask:[]}（value_map 预留）';
+COMMENT ON COLUMN md_subscription.channel        IS '通道 webhook/kafka/rocketmq/rest_pull';
+COMMENT ON COLUMN md_subscription.name           IS '订阅名称（展示）';
+COMMENT ON COLUMN md_subscription.description    IS '订阅描述';
+COMMENT ON COLUMN md_subscription.channel_config IS '通道配置：webhook {url,secret,headers{}}；rest_pull {consumerId}；kafka {brokers,topic,partition_key}（骨架）';
+COMMENT ON COLUMN md_subscription.event_types    IS '订阅事件类型 JSON 数组；[] = 全部(created/updated/merged)';
+COMMENT ON COLUMN md_subscription.retry_max      IS '最大尝试次数（含首发）';
+COMMENT ON COLUMN md_subscription.timeout_ms     IS '单次投递超时（毫秒）';
+COMMENT ON COLUMN md_subscription.batch_size     IS '单轮该订阅最大投递数';
+COMMENT ON COLUMN md_subscription.created_by     IS '创建人用户 id';
+COMMENT ON COLUMN md_subscription.updated_at     IS '最近更新时间';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_subscription ON md_subscription (target_sys, dict_code, channel);
 
 -- 9. 分发事件日志（激活器激活成功时写入；主键 VARCHAR(64) snowflake，seq 为有序拉取列非主键）
 DROP TABLE IF EXISTS md_event_log;
@@ -3149,11 +3171,83 @@ CREATE TABLE md_event_log (
     PRIMARY KEY (id)
 );
 COMMENT ON TABLE  md_event_log IS '分发事件日志（delta，消费者按 seq 拉取）';
-COMMENT ON COLUMN md_event_log.id         IS '主键（snowflake，应用层生成，对齐全库主键惯例）';
-COMMENT ON COLUMN md_event_log.seq        IS '有序拉取序列（DB 自增，非主键，供消费者 delta 排序）';
-COMMENT ON COLUMN md_event_log.event_type IS 'created/updated/merged';
+COMMENT ON TABLE  md_event_log.id         IS '主键（snowflake，应用层生成，对齐全库主键惯例）';
+COMMENT ON TABLE  md_event_log.seq        IS '有序拉取序列（DB 自增，非主键，供消费者 delta 排序）';
+COMMENT ON TABLE  md_event_log.event_type IS 'created/updated/merged';
 CREATE UNIQUE INDEX IF NOT EXISTS uk_md_event_log_seq   ON md_event_log (seq);
 CREATE        INDEX IF NOT EXISTS idx_md_event_log_dict ON md_event_log (dict_code, seq);
+
+-- 9a. 分发投递实例（事件×订阅：队列状态机 + 投递流水，M5 分发引擎载体）
+DROP TABLE IF EXISTS md_dispatch_log;
+CREATE TABLE md_dispatch_log (
+    id               BIGINT       NOT NULL,
+    subscription_id  BIGINT       NOT NULL,
+    event_id         VARCHAR(64)  NOT NULL,
+    event_seq        BIGINT       NOT NULL,
+    dict_code        VARCHAR(64)  NOT NULL,
+    record_id        BIGINT       NOT NULL,
+    status           VARCHAR(16)  NOT NULL,
+    attempts         INT          NOT NULL DEFAULT 0,
+    next_retry_at    TIMESTAMPTZ,
+    last_error       TEXT,
+    http_status      INT,
+    response_snippet VARCHAR(512),
+    delivered_at     TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_dispatch_log IS '分发投递实例（事件×订阅）：队列状态机 + 投递流水';
+COMMENT ON COLUMN md_dispatch_log.id IS '主键（应用层 snowflake，对齐 md_ 治理表惯例）';
+COMMENT ON COLUMN md_dispatch_log.subscription_id IS '订阅 id → md_subscription.id';
+COMMENT ON COLUMN md_dispatch_log.event_id IS '事件 id → md_event_log.id（幂等键之一）';
+COMMENT ON COLUMN md_dispatch_log.event_seq IS '事件序号 → md_event_log.seq（排序/诊断冗余）';
+COMMENT ON COLUMN md_dispatch_log.dict_code IS '字典代码（冗余，过滤用）';
+COMMENT ON COLUMN md_dispatch_log.record_id IS '主数据记录 id';
+COMMENT ON COLUMN md_dispatch_log.status IS 'pending待投/running投递中/delivered成功/failed待重试/dead死信/skipped人工跳过';
+COMMENT ON COLUMN md_dispatch_log.attempts IS '已尝试次数';
+COMMENT ON COLUMN md_dispatch_log.next_retry_at IS 'failed 的下次可抢占时间（指数退避）；NULL=非 failed';
+COMMENT ON COLUMN md_dispatch_log.last_error IS '最近一次错误信息';
+COMMENT ON COLUMN md_dispatch_log.http_status IS 'webhook 响应码';
+COMMENT ON COLUMN md_dispatch_log.response_snippet IS '响应体摘要（截断 512）';
+COMMENT ON COLUMN md_dispatch_log.delivered_at IS '投递成功时间';
+COMMENT ON COLUMN md_dispatch_log.created_at IS '创建时间';
+COMMENT ON COLUMN md_dispatch_log.updated_at IS '最近状态变更时间';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_dispatch_sub_event ON md_dispatch_log (subscription_id, event_id);
+CREATE INDEX IF NOT EXISTS idx_md_dispatch_due   ON md_dispatch_log (status, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_md_dispatch_sub   ON md_dispatch_log (subscription_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_md_dispatch_event ON md_dispatch_log (event_id);
+
+-- 9b. 分发引擎扇出水位（全局单行 fanout）
+DROP TABLE IF EXISTS md_dist_watermark;
+CREATE TABLE md_dist_watermark (
+    key        VARCHAR(32) NOT NULL,
+    last_seq   BIGINT      NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (key)
+);
+COMMENT ON TABLE  md_dist_watermark IS '分发引擎扇出水位（全局单行 fanout）';
+COMMENT ON COLUMN md_dist_watermark.key IS '水位键（当前仅 fanout）';
+COMMENT ON COLUMN md_dist_watermark.last_seq IS '已扇出处理的 md_event_log 最大 seq（无论是否命中订阅）';
+COMMENT ON COLUMN md_dist_watermark.updated_at IS '最近推进时间';
+
+-- 9c. pull 消费者游标登记（监控/对账用；消费端仍应自持 seq）
+DROP TABLE IF EXISTS md_consumer_offset;
+CREATE TABLE md_consumer_offset (
+    id          BIGINT      NOT NULL,
+    consumer_id VARCHAR(64) NOT NULL,
+    dict_code   VARCHAR(64) NOT NULL,
+    acked_seq   BIGINT      NOT NULL DEFAULT 0,
+    acked_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_consumer_offset IS 'pull 消费者游标登记（监控/对账用；消费端仍应自持 seq）';
+COMMENT ON COLUMN md_consumer_offset.id IS '主键（应用层 snowflake）';
+COMMENT ON COLUMN md_consumer_offset.consumer_id IS '下游消费者标识（建议 = target_sys）';
+COMMENT ON COLUMN md_consumer_offset.dict_code IS '字典代码';
+COMMENT ON COLUMN md_consumer_offset.acked_seq IS '已确认消费到的 seq';
+COMMENT ON COLUMN md_consumer_offset.acked_at IS '最近确认时间';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_consumer_offset ON md_consumer_offset (consumer_id, dict_code);
 
 -- =====================================================
 -- cmx-code 编码引擎（两张表合并迁移）

@@ -93,13 +93,10 @@ impl HierService for DctHierService {
         _layer_path: &str,
         parent_ids: &[String],
     ) -> Result<ZmcDataSet<Self::Row>, String> {
-        // 形状 B 下钻：build_search_sql 支持 parent_id 过滤（raw.parent_id）。
+        // 形状 B 下钻：build_search_sql 支持 parentId 过滤（raw.parentId）。
         let q = self.dict_query(schema)?;
         let view = resolve_dict(&q, false).await.map_err(|e| e.to_string())?;
-        let mut raw = json!({});
-        if let Some(first) = parent_ids.first() {
-            raw["parent_id"] = json!(first);
-        }
+        let raw = expand_raw(parent_ids);
         let (sql, _c, params) = cmx_dct_model::build_search_sql(&view, &raw);
         let mm = get_default_pg_db_manager();
         mm.query_sql_zmc_with_datavalues(&self.db_id, &sql, params, &view.dict_code)
@@ -155,7 +152,36 @@ fn load_query_to_raw(q: &LoadQuery) -> Value {
     Value::Object(raw)
 }
 
+/// 构造 expand（懒下钻）喂 `build_search_sql` 的 raw JSON。
+///
+/// 键名必须是驼峰 `parentId`（`build_search_sql` 读 `raw.get("parentId")`）——
+/// 此前误写成下划线 `parent_id`，过滤被静默忽略导致下钻返回全表。
+/// 只取首个父 id：自分级下钻按单父展开；多 id 批量待接线时再扩展为 `IN (...)`。
+fn expand_raw(parent_ids: &[String]) -> Value {
+    let mut raw = serde_json::Map::new();
+    if let Some(first) = parent_ids.first() {
+        raw.insert("parentId".into(), json!(first));
+    }
+    Value::Object(raw)
+}
+
 // 保留对 query 模块的引用（避免 unused：expand/load 走 build_search_sql，query::search_zmc 是
 // handler 侧编码入口，本适配不经它，但保持 use 以示同源）。
 #[allow(unused_imports)]
 use query as _dct_query;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 锁键名：expand 的 raw 必须带驼峰 parentId，否则 build_search_sql 静默忽略过滤。
+    #[test]
+    fn expand_raw_uses_camel_case_parent_id_key() {
+        let raw = expand_raw(&["42".into()]);
+        assert_eq!(raw.get("parentId").unwrap().as_str(), Some("42"));
+
+        // 无父 id → 整键省略（不过滤）
+        let raw = expand_raw(&[]);
+        assert!(raw.get("parentId").is_none());
+    }
+}

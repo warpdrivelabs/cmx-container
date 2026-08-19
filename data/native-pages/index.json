@@ -200,7 +200,7 @@
     {
       "id": "portal.mdm.activation-mapper",
       "name": "MDM 激活映射配置器",
-      "details": "配置 CR 单据字段→主数据字段的激活映射，存入 cmx_mdm_activation 供激活器读取执行。支持头映射（两列 select 对照）+ 明细映射（按 lineType 分组）。",
+      "details": "配置 CR 单据字段→主数据字段的激活映射，存入 mdm_activation 供激活器读取执行。支持头映射（两列 select 对照）+ 明细映射（按 lineType 分组）。",
       "sourceType": "js",
       "relPath": "portal/mdm/activation-mapper.js"
     },
@@ -252,6 +252,20 @@
       "details": "验证 MDM 后端端点可用性（health/activations/change-requests/merge-requests）+ 主数据治理概览 KPI。",
       "sourceType": "js",
       "relPath": "portal/mdm/mdm-health.js"
+    },
+    {
+      "id": "portal.mdm.subscription-manager",
+      "name": "MDM 分发订阅管理",
+      "details": "分发订阅配置：过滤列表（目标系统/字典/通道/状态）+ 编辑弹框（基本信息/事件与过滤行编辑/通道配置 webhook·rest_pull/字段映射）+ 测试/启停/删除/手动补发，走 /api/mdm/subscriptions 系列端点。",
+      "sourceType": "js",
+      "relPath": "portal/mdm/subscription-manager.js"
+    },
+    {
+      "id": "portal.mdm.dispatch-monitor",
+      "name": "MDM 分发监控",
+      "details": "分发监控：KPI 六卡（今日投递/成功率/平均耗时/积压/死信/扇出滞后，30s 轮询）+ 三 Tab（投递流水查询与详情 JSON / 事件日志与 pull 消费游标 / 死信批量重发跳过）+ 手动补发，走 /api/mdm/dispatches 与 /api/mdm/events 端点。",
+      "sourceType": "js",
+      "relPath": "portal/mdm/dispatch-monitor.js"
     }
   ]
 }

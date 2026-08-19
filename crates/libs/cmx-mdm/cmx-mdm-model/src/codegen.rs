@@ -8,7 +8,7 @@ pub trait CodeGenerator: Send + Sync {
     /// 为新建主数据生成 code。
     ///
     /// - `dict_code`:目标字典码(如 supplier),用于前缀/规则定位
-    /// - `rule_code`:`cmx_mdm_activation.codeRuleCode`(M8 时传给 cmx-code)
+    /// - `rule_code`:`mdm_activation.codeRuleCode`(M8 时传给 cmx-code)
     fn generate(&self, dict_code: &str, rule_code: Option<&str>) -> String;
 }
 

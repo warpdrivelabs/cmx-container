@@ -1,0 +1,30 @@
+[
+  {
+    "code": "direct",
+    "name": "直营客户",
+    "sort_no": 10,
+    "status": 1,
+    "create_time": "2026-08-19 00:00:00"
+  },
+  {
+    "code": "channel",
+    "name": "渠道客户",
+    "sort_no": 20,
+    "status": 1,
+    "create_time": "2026-08-19 00:00:00"
+  },
+  {
+    "code": "agent",
+    "name": "代理客户",
+    "sort_no": 30,
+    "status": 1,
+    "create_time": "2026-08-19 00:00:00"
+  },
+  {
+    "code": "inner",
+    "name": "内部单位",
+    "sort_no": 40,
+    "status": 1,
+    "create_time": "2026-08-19 00:00:00"
+  }
+]

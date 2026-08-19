@@ -13,7 +13,7 @@ pub mod types;
 
 pub mod crud;
 pub mod error;
-pub mod migration;
+// pub mod migration;
 pub mod zmcdataset;
 
 pub use error::{pg_detail, Error, Result};
@@ -40,7 +40,7 @@ pub use types::{CompareOp, OrderDirection, QueryBuilder, TypedResult, TypedRow};
 
 pub use host_functions::DatabaseHostFunctions;
 
-pub use migration::{
-    MigrationError, MigrationLoader, MigrationRecord, MigrationResult, MigrationRunner,
-    MigrationStatus as DbMigrationStatus, MigrationSummary, PendingMigration,
-};
+// pub use migration::{
+//     MigrationError, MigrationLoader, MigrationRecord, MigrationResult, MigrationRunner,
+//     MigrationStatus as DbMigrationStatus, MigrationSummary, PendingMigration,
+// };

@@ -38,11 +38,30 @@ hmac = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 
+# M5 分发：DataValue 参数构造（snapshot 端点手写 SQL）
+cmx-core = { workspace = true }
+# M5 分发：通道注册表（并发只读注册表）
+dashmap = { workspace = true }
+# M5 分发：DistributionChannel trait 的 async 方法（与 model 层同一版本）
+async-trait = { workspace = true }
+# M5 分发：订阅 secret 随机生成（后端兜底）
+rand = { workspace = true }
+# M5 分发：死信/连续失败门户通知（cmx-portal 不反向依赖 cmx-mdm-*，无环）
+cmx-portal = { workspace = true }
+# M5 分发：dispatcher 常驻循环（interval + Notify 唤醒 + spawn 并发投递）
+tokio = { workspace = true }
 # Web 框架（handler 提取器 + Router）
 axum = { workspace = true }
+
 # 请求 DTO 反序列化
 serde = { workspace = true }
 # JSON 载荷
 serde_json = { workspace = true }
 # 日志追踪
 tracing = { workspace = true }
+
+[features]
+default = []
+# M5.3 MQ 通道开关（启用后引入 rdkafka / rocketmq 客户端并编译骨架实现）
+channel-kafka = []
+channel-rocketmq = []

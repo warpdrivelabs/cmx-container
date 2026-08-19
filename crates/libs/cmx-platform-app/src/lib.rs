@@ -182,6 +182,12 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     // 异步任务中心（M3 分布式态）：PG 持久化 + 终态告警 + claim/heartbeat/reaper 三循环。
     init_job_center().await;
 
+    // M5 主数据分发引擎：注册通道（webhook）+ 按配置拉起 Dispatcher 循环
+    // （[mdm.distribution].enabled=false 时仅注册通道不 spawn，端点仍可用）。
+    if let Err(e) = cmx_mdm_api::distribution::start_distribution() {
+        tracing::error!(target: "cmx_mdm::distribution", error = %e, "分发引擎启动失败");
+    }
+
     // ── 路由 + 监听 + 服务 ──
     let routes_all = build_router(app_state, web_config);
 

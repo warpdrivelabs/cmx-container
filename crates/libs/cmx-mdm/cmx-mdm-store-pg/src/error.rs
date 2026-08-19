@@ -12,6 +12,18 @@ use serde_json::Value;
 /// 把 Value 对象里某 String 字段 parse 回 JSON（JSONB 列在 DB 返回 text，需还原）。
 ///
 /// 供 activation_store / match_config_store / doc_accessor 共用（消除 3 份复刻）。
+/// 批量还原 JSONB 列（DB 返回 text，统一 parse 回对象；无效/非字符串保持原值）。
+///
+/// # Arguments
+///
+/// * `v` - 目标 JSON 行（就地修改）。
+/// * `fields` - 待还原的 JSONB 列名列表。
+pub(crate) fn parse_jsonb_fields(v: &mut Value, fields: &[&str]) {
+    for f in fields {
+        parse_jsonb_field(v, f);
+    }
+}
+
 pub(crate) fn parse_jsonb_field(v: &mut Value, field: &str) {
     if let Some(obj) = v.as_object()
         && let Some(s) = obj.get(field).and_then(|x| x.as_str())

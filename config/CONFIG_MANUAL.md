@@ -525,8 +525,8 @@ is_critical = true
 
 - **类型**: String
 - **必需**: 是
-- **说明**: 迁移文件目录路径
-- **示例**: `"docs/sql/migrations"` 或 `/app/docs/sql/migrations`
+- **说明**: 迁移文件根目录路径（内含 `platform/migrations` 与 `biz/migrations` 两个目标库子目录）
+- **示例**: `"docs/sql/v2"` 或 `/app/docs/sql/v2`
 
 #### `validate_checksum`
 
@@ -534,14 +534,14 @@ is_critical = true
 - **必需**: 否
 - **默认值**: `true`
 - **说明**: 是否校验文件内容是否被修改
-- **用途**: 启用后会校验迁移文件的 MD5 校验和，防止手动修改导致的不一致
+- **用途**: 启用后会校验迁移文件的 SHA256 校验和，防止手动修改导致的不一致
 
-#### `lock_timeout`
+#### `lock_wait_timeout`
 
 - **类型**: Integer (秒)
 - **必需**: 否
-- **默认值**: `60`
-- **说明**: 分布式锁超时时间，多节点部署时用于防止并发执行迁移
+- **默认值**: `120`
+- **说明**: 抢不到迁移锁时等待其他节点完成的轮询超时。等待结束后按迁移台账决定去向：无待执行迁移则跳过本轮继续启动；仍有待执行（其他节点未完成或失败释放锁）则重新抢锁接管，最多 3 轮，超过后放弃并继续启动（失败项由下次启动重试）
 
 ---
 
@@ -1822,3 +1822,22 @@ CONFIG_FILE=/path/to/config.toml ./cmx-server
 
 - TOML 配置示例详见 [config_template.toml](config_template.toml)
 - 环境变量参考详见 [.env.template](.env.template) 和 [ENV_MANUAL.md](ENV_MANUAL.md)
+
+
+## [mdm.distribution] — MDM 主数据分发引擎（M5）
+
+主数据变更事件（激活/合并写入 md_event_log）向订阅方投递的引擎参数。Dispatcher 循环按
+`scan_interval_ms` 周期扇出新事件并投递；订阅与投递流水经 `/api/mdm/subscriptions*` 与
+`/api/mdm/dispatches/*` 端点管理。
+
+| 键 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| enabled | bool | true | 引擎总开关；false 时不启动循环，端点仍可用 |
+| scan_interval_ms | int | 2000 | 扇出/投递扫描周期（毫秒） |
+| fanout_batch | int | 500 | 单轮扇出最大事件数 |
+| deliver_batch | int | 100 | 单轮抢占投递上限 |
+| deliver_concurrency | int | 8 | 跨订阅并发上限（订阅内恒串行保序） |
+| backoff_base_ms | int | 5000 | 重试退避基数（第 n 次失败等待 base×2^(n-1)） |
+| backoff_max_ms | int | 1800000 | 重试退避上限（30 分钟） |
+| running_reclaim_minutes | int | 10 | running 残留回收阈值（分钟） |
+| allow_private_address | bool | true | webhook 目标允许私网/回环地址；外网部署置 false 启用 SSRF 防护 |

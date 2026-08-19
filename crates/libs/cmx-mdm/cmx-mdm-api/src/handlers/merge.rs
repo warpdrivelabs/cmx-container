@@ -238,7 +238,7 @@ pub async fn mdm_merge_requests_create(
         }
     }
     // 头表名由 body.targetTable 传入（或 match_config 回填）；
-    // line_tables（明细表 reparent）从 cmx_mdm_activation.line_mappings 按 target_dict 聚合。
+    // line_tables（明细表 reparent）从 mdm_activation.line_mappings 按 target_dict 聚合。
     let head_table = body.target_table.clone();
     if head_table.is_empty() {
         return Err(store::api_err(

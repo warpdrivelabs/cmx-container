@@ -24,3 +24,5 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 # 日志（match_algo 块超上限护栏 warn）
 tracing = { workspace = true }
+# M5 分发通道抽象（DistributionChannel trait 异步方法）
+async-trait = { workspace = true }

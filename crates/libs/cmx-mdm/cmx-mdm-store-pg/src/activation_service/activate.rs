@@ -4,7 +4,9 @@
 //! 全程在一个 DB 事务内，任一步失败 guard drop 自动回滚，无中间态。
 
 use cmx_database_pg::DatabaseManager;
-use cmx_dct_store_pg::{DctQuery, Txn, UpsertOutcome, dict_meta, dict_upsert};
+use cmx_dct_store_pg::{
+    DctQuery, Txn, UpsertOutcome, dict_meta, dict_upsert, recompute_dict_hierarchy,
+};
 use cmx_mdm_model::activation::{plan_create, plan_lines, plan_update};
 use cmx_mdm_model::codegen::CodeGenerator;
 use serde_json::{json, Value};
@@ -116,6 +118,10 @@ async fn activate_inner(
             ))
         })?;
 
+    // 目标字典元数据（create 铸号 + 分级字典补偿重算共用；查询失败按无规则/非分级兜底，
+    // 与原行为一致——铸号失败回退占位码）
+    let dct_meta_doc = dict_meta(&DctQuery::by_code(&cfg.target_dict)).await.ok();
+
     // 3. 头处理（create / update）
     let (record_id, new_version) = match cr_type {
         "create" => {
@@ -125,10 +131,7 @@ async fn activate_inner(
             // 字典 code 铸号改走字典自身 dictMeta.codeRule（与 dct 直存路径统一），
             // 不再用激活映射的 code_rule_code（已废弃）。铸号用独立连接（txn_id=None——
             // CodeEngine 跨 async trait 边界，主事务 holder 不可用）。
-            let dct_code_rule = dict_meta(&DctQuery::by_code(&cfg.target_dict))
-                .await
-                .ok()
-                .and_then(|m| m.code_rule);
+            let dct_code_rule = dct_meta_doc.as_ref().and_then(|m| m.code_rule.clone());
             if let Some(real_code) = mint_dict_code(
                 dct_code_rule.as_ref(),
                 &cfg.target_table,
@@ -143,6 +146,12 @@ async fn activate_inner(
             // 直接用此 id 落库。这样激活器持 id 供后续（明细 upper_id / 审计 record_id）。
             let id = cmx_utils::next_pk_id();
             plan.header_row.insert("id".into(), Value::Number(id.into()));
+            // 分级字典补偿重算用的父节点值——须在 dict_upsert（move header_row）前取出。
+            let hier_parent_val = dct_meta_doc
+                .as_ref()
+                .filter(|m| m.self_hierarchy)
+                .and_then(|m| m.parent_field.as_deref())
+                .and_then(|pf| plan.header_row.get(pf).cloned());
             // dict_upsert 一步到位（内部 resolve_dict 拿 DictView 做列校验 + backfill），
             // 纳入激活器主事务（Txn::External）。
             match dict_upsert(
@@ -165,6 +174,22 @@ async fn activate_inner(
                     )));
                 }
             }
+            // 分级字典补偿重算：dict_upsert 绕过 save_apply 的层级维护，backfill 只能给出
+            // 根级兜底值（level_no=1 / full_path=code），子节点的真实层级/物化路径按父子
+            // 拓扑重算（树形主数据如会计科目/组织/部门/分类的 CR 激活链路）。
+            if dct_meta_doc.as_ref().is_some_and(|m| m.self_hierarchy) {
+                let mut touched = vec![id];
+                if let Some(pv) = hier_parent_val.as_ref().and_then(value_as_i64) {
+                    touched.push(pv);
+                }
+                recompute_dict_hierarchy(
+                    &DctQuery::by_code(&cfg.target_dict),
+                    &touched,
+                    db_id,
+                    txn_id,
+                )
+                .await?;
+            }
             (id, 1_i64)
         }
         "update" => {
@@ -182,6 +207,33 @@ async fn activate_inner(
                 .cloned()
                 .unwrap_or(Value::Null);
             let plan = plan_update(&cfg, &cr_head, &field_deltas, current_v);
+            // 树形补偿重算准备：delta 含 parent 列时收集 行自身+新父+旧父
+            // （旧父在移出后可能变回叶子，is_leaf 修正需要旧父进重算集合）。
+            let hier_pf = dct_meta_doc
+                .as_ref()
+                .filter(|m| m.self_hierarchy)
+                .and_then(|m| m.parent_field.clone());
+            let mut hier_touched: Option<Vec<i64>> = None;
+            if let Some(pf) = hier_pf.as_deref()
+                && let Some(new_p) = plan.header_row.get(pf).and_then(value_as_i64)
+            {
+                let old_p = dct_accessor::select_bigint_col(
+                    mm,
+                    db_id,
+                    Some(txn_id),
+                    &cfg.target_table,
+                    pf,
+                    target_id,
+                )
+                .await?;
+                let mut touched = vec![target_id, new_p];
+                if let Some(op) = old_p
+                    && op != new_p
+                {
+                    touched.push(op);
+                }
+                hier_touched = Some(touched);
+            }
             // CAS：WHERE id=? AND published_version=current_v；0 行=版本冲突
             let n = dct_accessor::update_header(
                 mm,
@@ -197,6 +249,16 @@ async fn activate_inner(
                 return Err(api_err(&format!(
                     "乐观锁冲突:记录 {target_id} 版本已变(期望 v{current_v}),CR {cr_id} 需重审"
                 )));
+            }
+            // 分级字典 parent 变更后的层级/物化路径/叶标记重算（同事务，失败随主事务回滚）
+            if let Some(touched) = hier_touched {
+                recompute_dict_hierarchy(
+                    &DctQuery::by_code(&cfg.target_dict),
+                    &touched,
+                    db_id,
+                    txn_id,
+                )
+                .await?;
             }
             (target_id, current_v + 1)
         }
@@ -267,12 +329,18 @@ async fn activate_inner(
     )
     .await?;
 
-    // 6. 发事件
+    // 6. 发事件（fat event：payload 携带全量快照，下游零回查——方案 §5.5）
+    let snapshot = dct_accessor::select_row_json(
+        mm, db_id, txn_id, &cfg.target_table, record_id,
+    )
+    .await?
+    .unwrap_or(serde_json::Value::Null);
     let payload = serde_json::json!({
         "cr_id": cr_id,
         "record_id": record_id,
         "version": new_version,
-        "cr_type": cr_type
+        "cr_type": cr_type,
+        "snapshot": snapshot
     });
     md_accessor::write_event(
         mm,
@@ -325,4 +393,11 @@ async fn mint_dict_code(
             None
         }
     }
+}
+
+/// payload 列值转 i64（BIGINT 引用列在 CR payload 里可能是数字，也可能是字符串数字——
+/// 前端 dict-select 提交形态两种都存在；其余类型返回 None，跳过该引用的层级重算）。
+fn value_as_i64(v: &Value) -> Option<i64> {
+    v.as_i64()
+        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
 }

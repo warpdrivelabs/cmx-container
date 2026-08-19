@@ -15,8 +15,36 @@ use super::record::{
 };
 use crate::manager::DatabaseManager;
 
-/// 迁移锁的 Redis 键名
+/// 迁移锁的 Redis 键名默认值
 const MIGRATION_LOCK_KEY: &str = "cmx:database:migration";
+
+/// 等待其他节点释放锁后的最大接管轮数
+///
+/// 其他节点执行失败释放锁时，本节点重新抢锁接管重试；超过此轮数仍未完成则
+/// 放弃并继续启动（失败项由下次启动重试），避免对方持续失败时启动无限阻塞
+const MAX_TAKEOVER_ROUNDS: usize = 3;
+
+/// 等待锁释放/超时后的接管决策
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TakeoverDecision {
+    /// 台账中已无待执行迁移（其他节点已完成），本节点跳过迁移
+    SkipCompleted,
+    /// 仍有待执行迁移（其他节点未完成或失败释放锁），本节点重新抢锁接管
+    Takeover,
+    /// 仍有待执行迁移但已达接管轮数上限，放弃并继续启动
+    GiveUp,
+}
+
+/// 依据台账状态与当前轮数决定等待后的去向
+fn decide_takeover(has_pending: bool, round: usize, max_rounds: usize) -> TakeoverDecision {
+    if !has_pending {
+        TakeoverDecision::SkipCompleted
+    } else if round < max_rounds {
+        TakeoverDecision::Takeover
+    } else {
+        TakeoverDecision::GiveUp
+    }
+}
 
 /// 迁移运行器
 ///
@@ -33,14 +61,16 @@ pub struct MigrationRunner {
     migration_dir: PathBuf,
     /// 是否启用迁移
     enabled: bool,
-    /// 锁超时时间（秒）
-    lock_timeout: u64,
     /// 获取锁失败后的等待超时（秒）
     lock_wait_timeout: u64,
     /// 等待锁时的轮询间隔（秒）
     lock_poll_interval: u64,
     /// 是否校验迁移文件校验和
     validate_checksum: bool,
+    /// 迁移锁的 Redis 键名
+    ///
+    /// 多目标库（主库/业务库）各自持有一轮迁移时，须用不同键名避免互相阻塞
+    lock_key: String,
 }
 
 impl MigrationRunner {
@@ -57,10 +87,10 @@ impl MigrationRunner {
             lock_manager: None,
             migration_dir,
             enabled: false,
-            lock_timeout: 60,
             lock_wait_timeout: 120,
             lock_poll_interval: 3,
             validate_checksum: true,
+            lock_key: MIGRATION_LOCK_KEY.to_string(),
         }
     }
 
@@ -73,12 +103,16 @@ impl MigrationRunner {
         self
     }
 
-    /// 设置锁超时时间
+    /// 设置迁移锁的 Redis 键名
     ///
     /// # 参数
-    /// * `timeout` - 锁超时时间（秒）
-    pub fn with_lock_timeout(mut self, timeout: u64) -> Self {
-        self.lock_timeout = timeout;
+    /// * `key` - 锁键名，默认 `cmx:database:migration`
+    ///
+    /// 同一进程对多个目标库（主库/业务库）各跑一轮迁移时，
+    /// 须为每轮设置不同键名（如 `cmx:database:migration:platform` / `:biz`），
+    /// 否则两轮会因同键互相阻塞
+    pub fn with_lock_key(mut self, key: impl Into<String>) -> Self {
+        self.lock_key = key.into();
         self
     }
 
@@ -128,7 +162,7 @@ impl MigrationRunner {
     /// 流程：
     /// 1. 检查是否启用迁移
     /// 2. 确保迁移表存在
-    /// 3. 尝试获取分布式锁
+    /// 3. 获取分布式锁（抢不到时等待其他节点，其完成后按台账决定跳过或接管重试）
     /// 4. 加载迁移文件
     /// 5. 查询已执行迁移
     /// 6. 校验和验证
@@ -149,29 +183,51 @@ impl MigrationRunner {
         // 1. 确保迁移表存在
         self.ensure_migration_table().await?;
 
-        // 2. 尝试获取分布式锁
-        let _lock_guard = match self.try_acquire_migration_lock().await {
-            Ok(Some(guard)) => Some(guard),
-            Ok(None) => {
-                // 锁获取失败，进入等待模式
-                let waited = self.wait_for_migration_lock().await;
-                if waited {
-                    info!("其他节点已完成数据库迁移，本节点继续启动");
-                } else {
-                    warn!(
-                        "等待迁移锁超时（{}秒），继续启动（迁移可能仍在进行中）",
-                        self.lock_wait_timeout
-                    );
+        // 2. 获取分布式锁（含失败接管：其他节点执行失败释放锁后，若仍有待执行
+        //    迁移则由本节点重新抢锁接管，最多 MAX_TAKEOVER_ROUNDS 轮）
+        let mut round = 0usize;
+        let _lock_guard = loop {
+            round += 1;
+            match self.try_acquire_migration_lock().await {
+                Ok(Some(guard)) => break Some(guard),
+                Ok(None) => {
+                    // 锁被其他节点持有：等待其释放（或超时），再按台账决定去向
+                    self.wait_for_migration_lock().await;
+                    let has_pending = self.has_pending_migrations().await?;
+                    match decide_takeover(has_pending, round, MAX_TAKEOVER_ROUNDS) {
+                        TakeoverDecision::SkipCompleted => {
+                            info!("其他节点已完成数据库迁移，本节点继续启动");
+                            return Ok(MigrationSummary {
+                                executed_count: 0,
+                                skipped_count: 0,
+                                failed: Vec::new(),
+                            });
+                        }
+                        TakeoverDecision::Takeover => {
+                            info!(
+                                round,
+                                "其他节点释放锁后仍有待执行迁移（未完成或执行失败），本节点尝试接管"
+                            );
+                            continue;
+                        }
+                        TakeoverDecision::GiveUp => {
+                            warn!(
+                                rounds = MAX_TAKEOVER_ROUNDS,
+                                wait_timeout_secs = self.lock_wait_timeout,
+                                "等待迁移锁超时且仍有待执行迁移，放弃接管继续启动（下次启动将重试失败项）"
+                            );
+                            return Ok(MigrationSummary {
+                                executed_count: 0,
+                                skipped_count: 0,
+                                failed: Vec::new(),
+                            });
+                        }
+                    }
                 }
-                return Ok(MigrationSummary {
-                    executed_count: 0,
-                    skipped_count: 0,
-                    failed: Vec::new(),
-                });
-            }
-            Err(e) => {
-                warn!("获取迁移锁失败: {:?}，继续执行（单机模式）", e);
-                None
+                Err(e) => {
+                    warn!("获取迁移锁失败: {:?}，继续执行（单机模式）", e);
+                    break None;
+                }
             }
         };
 
@@ -350,7 +406,7 @@ impl MigrationRunner {
             }
         };
 
-        match lock_manager.try_lock(MIGRATION_LOCK_KEY).await {
+        match lock_manager.try_lock(&self.lock_key).await {
             Ok(Some(guard)) => {
                 info!("成功获取数据库迁移分布式锁");
                 Ok(Some(guard))
@@ -368,12 +424,12 @@ impl MigrationRunner {
 
     /// 等待迁移锁释放（轮询模式）
     ///
-    /// 轮询检查锁是否释放，最多等待 lock_wait_timeout 秒。
-    /// 等到锁释放后返回 true（不再执行迁移），超时返回 false。
-    async fn wait_for_migration_lock(&self) -> bool {
+    /// 轮询检查锁是否释放，最多等待 lock_wait_timeout 秒；超时或释放后返回，
+    /// 由调用方按迁移台账决定跳过还是接管（锁释放不等于对方执行成功）
+    async fn wait_for_migration_lock(&self) {
         let lock_manager = match &self.lock_manager {
             Some(lm) => lm,
-            None => return true,
+            None => return,
         };
 
         let timeout = Duration::from_secs(self.lock_wait_timeout);
@@ -388,10 +444,10 @@ impl MigrationRunner {
         while start.elapsed() < timeout {
             sleep(poll_interval).await;
 
-            match lock_manager.is_locked(MIGRATION_LOCK_KEY).await {
+            match lock_manager.is_locked(&self.lock_key).await {
                 Ok(false) => {
-                    info!("其他节点已完成数据库迁移，锁已释放");
-                    return true;
+                    info!("其他节点已释放迁移锁");
+                    return;
                 }
                 Ok(true) => {
                     debug!(
@@ -405,7 +461,30 @@ impl MigrationRunner {
             }
         }
 
-        false
+        warn!("等待迁移锁超时（{}秒）", self.lock_wait_timeout);
+    }
+
+    /// 查询是否仍存在待执行迁移
+    ///
+    /// 对比迁移文件与台账：存在未被标记 success 的版本（未执行或 failed）即视为有待执行。
+    /// 迁移目录不存在/为空时返回 false（无可执行内容）
+    async fn has_pending_migrations(&self) -> MigrationResult<bool> {
+        let loader = MigrationLoader::new(self.migration_dir.clone());
+        let all_migrations = loader.load_migrations()?;
+        if all_migrations.is_empty() {
+            return Ok(false);
+        }
+
+        let executed = self.get_executed_migrations().await?;
+        let successful_versions: std::collections::HashSet<String> = executed
+            .iter()
+            .filter(|r| r.status == MigrationStatus::Success)
+            .map(|r| r.version.clone())
+            .collect();
+
+        Ok(all_migrations
+            .iter()
+            .any(|m| !successful_versions.contains(&m.version)))
     }
 
     /// 查询已执行的迁移记录
@@ -703,10 +782,12 @@ impl MigrationRunner {
     }
 }
 
-/// 按分号分割 SQL 语句（感知单引号字符串边界）
+/// 按分号分割 SQL 语句（感知单引号字符串、美元引用、行注释边界）
 ///
-/// 遍历 SQL 文本，跟踪单引号状态，只在单引号外的分号处分割语句。
-/// 支持单引号内转义（连续两个单引号 '' 表示一个单引号字面量）。
+/// 遍历 SQL 文本，跟踪引号状态，只在字符串/美元引用/注释外的分号处分割语句。
+/// 支持单引号内转义（连续两个单引号 '' 表示一个单引号字面量）、
+/// 美元引用（`$tag$...$tag$`，tag 可为空，如 JSONB 字面量 `$def${...}$def$`）、
+/// `--` 行注释。
 ///
 /// # 参数
 /// * `sql` - 完整的 SQL 文本
@@ -729,6 +810,22 @@ fn split_sql_statements(sql: &str) -> Vec<&str> {
                             iter.next();
                         } else {
                             break;
+                        }
+                    }
+                }
+            }
+            '$' => {
+                // 美元引用（$tag$...$tag$，tag 可为空）：跳过引用体内所有分号
+                let rest = &sql[byte_pos..];
+                if let Some(delim_len) = dollar_quote_delim_len(rest) {
+                    let delim = &rest[..delim_len];
+                    if let Some(rel_end) = rest[delim_len..].find(delim) {
+                        let skip_end = byte_pos + delim_len + rel_end + delim.len();
+                        while let Some(&(p, _)) = iter.peek() {
+                            if p >= skip_end {
+                                break;
+                            }
+                            iter.next();
                         }
                     }
                 }
@@ -758,4 +855,125 @@ fn split_sql_statements(sql: &str) -> Vec<&str> {
     }
 
     statements
+}
+
+/// 判定美元引用定界符长度：`$tag$`（tag 仅字母数字/下划线，可为空，如 `$$`、`$def$`）
+///
+/// 不构成定界符（如占位符 `$1`、孤立 `$`）时返回 `None`
+fn dollar_quote_delim_len(rest: &str) -> Option<usize> {
+    let bytes = rest.as_bytes();
+    if bytes.first() != Some(&b'$') {
+        return None;
+    }
+    let mut i = 1;
+    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b'$' {
+        Some(i + 1)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 按分号切分_普通语句() {
+        let sql = "CREATE TABLE a (id INT);\nINSERT INTO a VALUES (1);\n";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 2);
+        assert!(stmts[0].contains("CREATE TABLE"));
+        assert!(stmts[1].contains("INSERT INTO"));
+    }
+
+    #[test]
+    fn 单引号字符串内的分号不切分() {
+        let sql = "INSERT INTO t VALUES ('a;b;c'); SELECT 1;";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 2);
+        assert!(stmts[0].contains("'a;b;c'"));
+    }
+
+    #[test]
+    fn 单引号转义不提前结束字符串() {
+        // 'it''s;ok' 整体是一个字符串字面量
+        let sql = "INSERT INTO t VALUES ('it''s;ok');";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 1);
+    }
+
+    #[test]
+    fn 美元引用内的分号不切分() {
+        let sql = "INSERT INTO cmx_menu (definition) SELECT 'x', $def${\"a\":1;\"b\":2}$def$::jsonb WHERE NOT EXISTS (SELECT 1);";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 1);
+        assert!(stmts[0].contains("$def$"));
+    }
+
+    #[test]
+    fn 空标签美元引用内的分号不切分() {
+        let sql = "SELECT $$a;b$$; SELECT 2;";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 2);
+        assert!(stmts[0].contains("$$a;b$$"));
+    }
+
+    #[test]
+    fn 行注释内的分号不切分() {
+        let sql = "SELECT 1; -- 注释;含分号\nSELECT 2;";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 2);
+    }
+
+    #[test]
+    fn 美元引用后接续语句正常切分() {
+        let sql = "INSERT INTO t VALUES ($tag$xy;$tag$); UPDATE t SET a=1;";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 2);
+        assert!(stmts[1].trim_start().starts_with("UPDATE"));
+    }
+
+    #[test]
+    fn 占位符样式的孤立美元符不误判() {
+        // $1 后无 $，不是美元引用，按普通字符处理
+        let sql = "SELECT a $ b; SELECT 1;";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 2);
+    }
+
+    #[test]
+    fn 接管决策_无待执行则跳过() {
+        assert_eq!(
+            decide_takeover(false, 1, MAX_TAKEOVER_ROUNDS),
+            TakeoverDecision::SkipCompleted
+        );
+        // 达到轮数上限后无待执行同样跳过（优先级最高）
+        assert_eq!(
+            decide_takeover(false, MAX_TAKEOVER_ROUNDS, MAX_TAKEOVER_ROUNDS),
+            TakeoverDecision::SkipCompleted
+        );
+    }
+
+    #[test]
+    fn 接管决策_有待执行且未达上限则接管() {
+        for round in 1..MAX_TAKEOVER_ROUNDS {
+            assert_eq!(
+                decide_takeover(true, round, MAX_TAKEOVER_ROUNDS),
+                TakeoverDecision::Takeover
+            );
+        }
+    }
+
+    #[test]
+    fn 接管决策_达到上限则放弃() {
+        assert_eq!(
+            decide_takeover(true, MAX_TAKEOVER_ROUNDS, MAX_TAKEOVER_ROUNDS),
+            TakeoverDecision::GiveUp
+        );
+        assert_eq!(decide_takeover(true, MAX_TAKEOVER_ROUNDS + 1, MAX_TAKEOVER_ROUNDS),
+            TakeoverDecision::GiveUp);
+    }
 }
