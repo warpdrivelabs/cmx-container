@@ -367,7 +367,7 @@ function openPublishDialog(st, preset) {
     },
   })
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;'
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:10px;font-size:13px;'   // padding 由 .dlg-content 默认提供
   wrap.innerHTML = `
     <div class="hint">按订阅/字典 + 事件 seq 范围重建待投递实例（上限 5000 行）。不勾 force 时已送达的不重发。</div>
     <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:12px;color:var(--sapContent_LabelColor);">订阅 id</label>
@@ -450,11 +450,11 @@ function openEditDialog(host, st, sub) {
     dialogWidth: '760px', dialogHeight: '82vh',
     showConfirm: false, showCancel: false,   // 底部按钮自绘（取消/保存并测试/保存）
   })
-  // 注意：不能用 position:absolute 锚定位——setContent 的宿主 #dlg-body 没有 position:relative，
-  // absolute 会锚到整个 .dlg-box（连标题栏一起盖住，滚动条顶到标题栏）。dlg-body 本身是
-  // flex 行容器（只占标题栏与底栏之间），wrap 作 flex 子项填满即可。
+  // 布局契约：#dlg-body 已 position:relative（absolute 只能锚内容区，盖不到标题栏）；
+  // setContent 自动包 .dlg-content 标准容器。本弹框用非对称 padding + 内部 sm-scroll 滚动，
+  // 故 padding:false 关默认 padding，wrap 自带 padding 并写 flex:1;min-height:0 填满契约。
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:6px 18px 14px;display:flex;flex-direction:column;'
+  wrap.style.cssText = 'flex:1;min-height:0;padding:6px 18px 14px;display:flex;flex-direction:column;'
   wrap.innerHTML = `<style>
     .sm-dlg { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; font-size:13px; }
     .sm-scroll { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:10px;
@@ -521,7 +521,7 @@ function openEditDialog(host, st, sub) {
       <ui5-button design="Emphasized" id="smSave">保存</ui5-button>
     </div>
   </div>`
-  dlg.setContent(wrap)
+  dlg.setContent(wrap, { padding: false })   // 非对称 padding（6px 18px 14px）自管，关默认
   document.body.appendChild(dlg)
 
   // —— 字典下拉（cmx-combo-box list 模式，选项 = 激活映射 target_dict 去重）——

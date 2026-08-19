@@ -424,7 +424,7 @@ async function openDetail(st, id) {
   })
   const wrap = document.createElement('div')
   // 同 openTextDialog：flex 链自适应高度，避免写死 max-height 被外壳裁底
-  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:12px 14px;display:flex;flex-direction:column;gap:8px;'
+  wrap.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;'   // padding 由 .dlg-content 默认提供；flex:1 填满契约（pre 内部滚动）
   const head = row && row.sub_name
     ? `<div style="font-size:13px;color:var(--sapContent_LabelColor);flex-shrink:0;">订阅 ${esc(String(row.subscription_id ?? ''))} · ${esc(row.sub_name || '')}${row.target_sys ? ` · ${esc(row.target_sys)}` : ''}${row.event_type ? ` · ${esc(row.event_type)}` : ''}</div>`
     : ''
@@ -456,7 +456,7 @@ function openTextDialog(title, text, headHtml) {
   const wrap = document.createElement('div')
   // pre 不写死 max-height：写死会在大屏下超出 dlg-body 可视高被 overflow:hidden 裁底，
   // 改用 flex 链（wrap 列布局 + pre flex:1/min-height:0）自适应填满，滚动可见完整。
-  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:12px 14px;display:flex;flex-direction:column;gap:8px;'
+  wrap.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;'   // padding 由 .dlg-content 默认提供；flex:1 填满契约（pre 内部滚动）
   wrap.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
       <div style="flex:1;min-width:0;font-size:13px;color:var(--sapContent_LabelColor);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${headHtml || ''}</div>
@@ -513,7 +513,7 @@ function openPublishDialog(st) {
     },
   })
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;'
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:10px;font-size:13px;'   // padding 由 .dlg-content 默认提供
   wrap.innerHTML = `
     <div class="hint">按订阅/字典 + 事件 seq 范围重建待投递实例（上限 5000 行）。不勾 force 时已送达的不重发。</div>
     <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:12px;color:var(--sapContent_LabelColor);">订阅 id</label>
