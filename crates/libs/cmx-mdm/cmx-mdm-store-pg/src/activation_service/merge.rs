@@ -276,12 +276,17 @@ async fn merge_inner(
     )
     .await?;
 
-    // ⑨ 事件（payload 带追溯，审查重要-1/建议-9）
+    // ⑨ 事件（fat event：合并后 master 快照 + 追溯，审查重要-1/建议-9 + 方案 §5.5）
+    let snapshot = crate::dct_accessor::select_row_json(mm, db_id, txn_id, head_table, master_id)
+        .await?
+        .unwrap_or(Value::Null);
     let payload = json!({
         "match_group_id": match_group_id,
         "master_id": master_id,
         "victim_ids": victim_ids,
+        "version": current_v + 1,
         "survivorship": all_log.iter().map(|l| json!({"field": l.field, "from": l.from})).collect::<Vec<_>>(),
+        "snapshot": snapshot
     });
     md_accessor::write_event(mm, db_id, txn_id, dict_code, master_id, "merged", payload).await?;
 

@@ -1822,3 +1822,22 @@ CONFIG_FILE=/path/to/config.toml ./cmx-server
 
 - TOML 配置示例详见 [config_template.toml](config_template.toml)
 - 环境变量参考详见 [.env.template](.env.template) 和 [ENV_MANUAL.md](ENV_MANUAL.md)
+
+
+## [mdm.distribution] — MDM 主数据分发引擎（M5）
+
+主数据变更事件（激活/合并写入 md_event_log）向订阅方投递的引擎参数。Dispatcher 循环按
+`scan_interval_ms` 周期扇出新事件并投递；订阅与投递流水经 `/api/mdm/subscriptions*` 与
+`/api/mdm/dispatches/*` 端点管理。
+
+| 键 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| enabled | bool | true | 引擎总开关；false 时不启动循环，端点仍可用 |
+| scan_interval_ms | int | 2000 | 扇出/投递扫描周期（毫秒） |
+| fanout_batch | int | 500 | 单轮扇出最大事件数 |
+| deliver_batch | int | 100 | 单轮抢占投递上限 |
+| deliver_concurrency | int | 8 | 跨订阅并发上限（订阅内恒串行保序） |
+| backoff_base_ms | int | 5000 | 重试退避基数（第 n 次失败等待 base×2^(n-1)） |
+| backoff_max_ms | int | 1800000 | 重试退避上限（30 分钟） |
+| running_reclaim_minutes | int | 10 | running 残留回收阈值（分钟） |
+| allow_private_address | bool | true | webhook 目标允许私网/回环地址；外网部署置 false 启用 SSRF 防护 |

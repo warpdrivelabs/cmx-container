@@ -14,6 +14,8 @@ pub mod activation;
 pub mod codegen;
 /// 匹配算法纯逻辑（分块 / 加权比较 / 双阈值裁决 / 候选筛选）。
 pub mod match_algo;
+/// M5 分发订阅契约层（`EventEnvelope` / `DeliveryResult` / `DistributionChannel` trait）。
+pub mod distribution;
 /// 字段级存活策略纯逻辑（`SurvivorRule` / `survive` / `SurvivorLogEntry`）。
 pub mod survivorship;
 

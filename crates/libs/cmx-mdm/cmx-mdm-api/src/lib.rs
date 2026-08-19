@@ -14,6 +14,9 @@ pub mod handlers;
 /// M7 流程平台客户端（回环调本进程 `/api/flow/*`，双部署模式透明）。
 pub mod flow_client;
 
+/// M5 分发订阅引擎（通道注册表 + Webhook 通道 + Dispatcher 常驻循环）。
+pub mod distribution;
+
 /// OpenApi 切片（MdmApiDoc），由 platform-app `merged_openapi()` 合并进主文档。
 pub mod openapi;
 
@@ -75,7 +78,20 @@ impl ModuleRoutes for MdmModule {
                 "/mdm/subscriptions",
                 get(mdm::mdm_subscriptions_list).post(mdm::mdm_subscriptions_save),
             )
+            .route("/mdm/subscriptions/delete", post(mdm::mdm_subscriptions_delete))
+            .route("/mdm/subscriptions/set-active", post(mdm::mdm_subscriptions_set_active))
+            .route("/mdm/subscriptions/test", post(mdm::mdm_subscriptions_test))
+            .route("/mdm/subscriptions/channels", get(mdm::mdm_subscriptions_channels))
             .route("/mdm/publish", post(mdm::mdm_publish))
+            // M5 · 分发治理：投递流水 / 统计 / 重发 / 跳过 + pull 游标 + 全量快照
+            .route("/mdm/dispatches/query", post(mdm::mdm_dispatches_query))
+            .route("/mdm/dispatches/detail", get(mdm::mdm_dispatches_detail))
+            .route("/mdm/dispatches/retry", post(mdm::mdm_dispatches_retry))
+            .route("/mdm/dispatches/skip", post(mdm::mdm_dispatches_skip))
+            .route("/mdm/dispatches/stats", get(mdm::mdm_dispatches_stats))
+            .route("/mdm/events/ack", post(mdm::mdm_events_ack))
+            .route("/mdm/events/offsets", get(mdm::mdm_events_offsets))
+            .route("/mdm/records/snapshot", post(mdm::mdm_records_snapshot))
             // M4 · 管家工作台：详情（红线 diff）/ 驳回
             .route("/mdm/merge-requests/detail", get(mdm::mdm_merge_request_detail))
             .route("/mdm/merge-requests/reject", post(mdm::mdm_merge_request_reject))

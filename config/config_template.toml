@@ -685,3 +685,27 @@ web_html_dist = ""
 ## moka L1 缓存最大条目数（默认值 4096，可选）。索引文件数十个 + 热点源文件，超出由 moka LRU 淘汰。
 ## 改后需重启生效。
 # page_cache_max_entries = 4096
+
+# ============================================================
+# MDM 主数据分发引擎（M5）—— 扇出/投递/重试策略与 SSRF 开关
+# ============================================================
+[mdm.distribution]
+# 分发引擎总开关（默认 true，可选）。false：不启动 Dispatcher 循环，订阅管理/监控端点仍可用。
+enabled = true
+# Dispatcher 扫描周期（默认 2000，单位毫秒，可选）。事件扇出与投递抢占的 tick 间隔。
+scan_interval_ms = 2000
+# 单轮扇出最大事件数（默认 500，可选）。watermark 窗口内一次处理的事件上限。
+fanout_batch = 500
+# 单轮投递最大 dispatch 数（默认 100，可选）。SKIP LOCKED 抢占的批量上限。
+deliver_batch = 100
+# 跨订阅并发投递上限（默认 8，可选）。同订阅内保持串行（严格顺序保证）。
+deliver_concurrency = 8
+# 重试退避基数（默认 5000，单位毫秒，可选）。第 n 次失败后等待 base*2^(n-1)。
+backoff_base_ms = 5000
+# 重试退避上限（默认 1800000 = 30 分钟，单位毫秒，可选）。
+backoff_max_ms = 1800000
+# running 残留回收阈值（默认 10，单位分钟，可选）。节点崩溃残留投递行的回收窗口。
+running_reclaim_minutes = 10
+# webhook 目标是否允许私网/回环地址（默认 true，可选）。MDM 下游多为内网系统故默认放行；
+# 对外网开放部署时置 false 启用 SSRF 防护（拒 127/8、10/8、172.16/12、192.168/16、169.254/16）。
+allow_private_address = true

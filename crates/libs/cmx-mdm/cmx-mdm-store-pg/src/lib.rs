@@ -38,12 +38,15 @@ mod scan_store;
 mod md_accessor;
 /// cm_* 写入的 SQL 构造与列值转换工具（dct_accessor 内部用）。
 mod sql_builder;
+/// M5 分发引擎存储（投递实例队列 / 扇出水位 / pull 游标）。
+mod dispatch_store;
 
 pub use activation_store::{find_by_doc_type, line_tables_for_dict, list, upsert, delete_by_code, LineTableInfo};
 pub use cr_service::{abort_cr, check_status, check_status_in, get_cr_detail, list_cr};
 pub use error::{api_err, api_err_db};
 // cm_* 按名称模糊查 id（合并历史名称搜索 D-05 用，复用 dct_accessor 列判断）
 pub use dct_accessor::find_ids_by_name_like;
+pub use dct_accessor::select_row_json;
 // 激活器主流程对 api 层暴露（M1 activate + M3 merge/unmerge）
 pub use activation_service::{activate, merge, unmerge, MergeStats};
 // M3 匹配/合并 store 对 api 层暴露
@@ -51,6 +54,13 @@ pub use match_store::{
     count_merge_by_status, get_match_group, insert_match_group, list_audit, list_events,
     list_match_groups, list_subscriptions, load_by_ids, load_published, load_suspects,
     transition_match_group, update_match_group, upsert_subscription,
+    delete_subscription, set_subscription_active, get_subscription,
+};
+// M5 分发引擎存储对 api 层暴露
+pub use dispatch_store::{
+    claim_dispatches, dispatch_stats, fanout_tick, get_dispatch, list_consumer_offsets,
+    list_dispatches, load_events_by_ids, load_subscriptions_by_ids, mark_dispatch,
+    publish_rebuild, reclaim_running, retry_dispatches, skip_dispatches, upsert_consumer_offset,
 };
 // M3.5 查重发现项 store（全库扫描 / 评审队列，cluster_hash 去重）
 pub use scan_store::{
