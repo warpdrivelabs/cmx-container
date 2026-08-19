@@ -1,7 +1,11 @@
 /**
  * MDM 单据列表台（native-page · 企业级重设计）——通用页，按菜单 props 参数化：
- *   docType  过滤单据类型（= 激活映射 source_doc_type，如 gys）；缺省=全类型
+ *   docType  过滤单据类型（= 激活映射 source_doc_type，如 gys）；缺省=聚合模式
  *   title    页面标题（缺省「单据列表」）
+ *
+ * 聚合模式（不传 docType，菜单「变更申请单」节点）：全类型一张列表，表格多一列「类型」，
+ * 筛选栏多一个类型下拉——选项动态来自 GET /api/mdm/activations（source_doc_type → 目标
+ * 字典中文名，字典目录与 activation-mapper loadDictCatalog 同源），新域接入零改动自动出现。
  *
  * 布局：页头 → 列表面板（cmx-filter-bar + 企业表格 + 行内操作）→ 详情整页（cr-form）。
  * 纯发起人视角：提交 / 撤回 / 驳回重提 / 作废；审批办理在流程待办中心，本页不承载。
@@ -44,7 +48,12 @@ const STATUS_META = {
   rejected: { name: '已驳回', tone: 'danger' },
   aborted: { name: '已作废', tone: 'neutral' },
 }
-const state = { dbId: '', docType: '', title: '单据列表', filter: 'all', keyword: '', list: [], domain: '', application: '', page: 1, pageSize: 20, total: 0 }
+const state = { dbId: '', docType: '', title: '单据列表', filter: 'all', keyword: '', list: [], domain: '', application: '', page: 1, pageSize: 20, total: 0,
+  aggregate: false, typeFilter: '', typeMap: {}, typeOptions: [] }
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
 
 function styleCss() {
   return `
@@ -121,6 +130,10 @@ function viewHtml() {
           <ui5-option value="activated" ${state.filter === 'activated' ? 'selected' : ''}>已激活</ui5-option>
           <ui5-option value="aborted" ${state.filter === 'aborted' ? 'selected' : ''}>已作废</ui5-option>
         </ui5-select>
+        ${state.aggregate ? `<ui5-select id="ctType">
+          <ui5-option value="" ${state.typeFilter === '' ? 'selected' : ''}>全部类型</ui5-option>
+          ${state.typeOptions.map((t) => `<ui5-option value="${esc(t)}" ${state.typeFilter === t ? 'selected' : ''}>${esc(state.typeMap[t] || t)}（${esc(t)}）</ui5-option>`).join('')}
+        </ui5-select>` : ''}
         <ui5-button slot="actions" design="Transparent" icon="refresh" id="ctReload">刷新</ui5-button>
       </cmx-filter-bar>
       <div class="tbl-wrap"><cmx-revo-grid id="ctGrid"></cmx-revo-grid></div>
@@ -151,6 +164,8 @@ function buildListGrid() {
       new C.CmxColumn({ id: 'id', caption: 'ID', dataType: 'VARCHAR', width: '110px' }),
       new C.CmxColumn({ id: 'doc_no', caption: '单据号', dataType: 'VARCHAR', width: '150px' }),
       new C.CmxColumn({ id: 'subject_name', caption: '数据名称', dataType: 'VARCHAR', width: '150px' }),
+      // 聚合模式（未挂 docType 的「变更申请单」节点）补「类型」列，区分不同主数据域的申请单。
+      ...(state.aggregate ? [new C.CmxColumn({ id: 'doc_type_name', caption: '类型', dataType: 'VARCHAR', width: '120px' })] : []),
       new C.CmxColumn({ id: 'remark', caption: '业务事由', dataType: 'VARCHAR', width: '150px' }),
       new C.CmxColumn({ id: 'status_name', caption: '状态', dataType: 'VARCHAR', width: '80px' }),
       new C.CmxColumn({ id: 'create_time', caption: '创建时间', dataType: 'VARCHAR', width: '150px', display: {
@@ -188,7 +203,11 @@ function applyData(first = false) {
   if (t) t.textContent = `申请列表（共 ${state.total} 条）`
   const pager = rootEl && rootEl.querySelector('#ctPager')
   if (pager) { pager.total = state.total; pager.page = state.page; pager.pageSize = state.pageSize }
-  const rows = state.list.map((r) => ({ ...r, status_name: (STATUS_META[r.doc_status] || {}).name || r.doc_status }))
+  const rows = state.list.map((r) => ({
+    ...r,
+    status_name: (STATUS_META[r.doc_status] || {}).name || r.doc_status,
+    ...(state.aggregate ? { doc_type_name: state.typeMap[r.doc_type] || r.doc_type || '' } : {}),
+  }))
   const grid = listGrid
   if (!grid) return
   const fill = () => {
@@ -258,17 +277,50 @@ function openTab(host, caption, nativePage, context, opts = {}) {
 async function load() {
   const params = { page: state.page, pageSize: state.pageSize }
   if (state.filter !== 'all') params.docStatus = state.filter
+  // 类型过滤：菜单静态 docType 优先；聚合模式下用页内类型下拉的选择值。
   if (state.docType) params.docType = state.docType
+  else if (state.typeFilter) params.docType = state.typeFilter
   if (state.keyword) params.keyword = state.keyword
   const d = (await apiGet(`/api/mdm/change-requests?${new URLSearchParams(params)}`, state.dbId)) || {}
   state.list = d.list || []
   state.total = Number(d.total) || 0
 }
 
+// 类型目录（聚合模式）：激活映射 source_doc_type → 目标字典中文名（如 gys → 供应商）。
+// 字典目录从同模块 DCT 定义文件取（与 activation-mapper loadDictCatalog 同源）；任一步失败
+// 则降级显示原始类型码——聚合列表仍可用，只是下拉/列缺中文名。
+async function loadTypeOptions() {
+  state.typeMap = {}; state.typeOptions = []
+  const acts = (await apiGet('/api/mdm/activations', state.dbId)) || []
+  const dictName = {}
+  try {
+    const listData = await apiGet(`/api/definitions/list?domain=${encodeURIComponent(state.domain)}`, state.dbId)
+    const dctItem = ((listData && listData.items) || []).find((it) => it.kind === 'DCT' && (!it.module || it.module === 'mdm'))
+    if (dctItem) {
+      const q = new URLSearchParams({ domain: state.domain, application: state.application, module: 'mdm', file: dctItem.file })
+      const cfg = await apiGet(`/api/definitions/config?${q}`, state.dbId)
+      ;(((cfg && cfg.dictionaryTables) || [])).forEach((t) => {
+        const dm = t.dictMeta || {}
+        if (dm.dictCode) dictName[dm.dictCode] = dm.dictName || dm.dictCode
+      })
+    }
+  } catch (e) { console.warn('[cr-todo] dict catalog fail', e) }
+  const seen = new Set()
+  for (const a of acts) {
+    const dt = a && (a.source_doc_type || a.sourceDocType)
+    if (!dt || seen.has(dt)) continue
+    seen.add(dt)
+    const td = (a && (a.target_dict || a.targetDict)) || ''
+    state.typeMap[dt] = dictName[td] || td || dt
+  }
+  state.typeOptions = [...seen].sort((a, b) => String(state.typeMap[a] || a).localeCompare(String(state.typeMap[b] || b), 'zh-Hans-CN'))
+}
+
 function bind(root) {
   rootEl = root
   const reload = async () => { await load(); applyData() }
   root.querySelector('#ctStatus')?.addEventListener('change', (e) => { state.filter = e.target.value || 'all'; state.page = 1; reload() })
+  root.querySelector('#ctType')?.addEventListener('change', (e) => { state.typeFilter = e.target.value || ''; state.page = 1; reload() })
   // 搜索（单据号/主体名模糊）：cmx-filter-search 回车/按钮触发，reset 清空。
   // 页面局部更新（不整页重绘），输入框文字/焦点/表格滚动天然保留。
   const fb = root.querySelector('#ctFilter')
@@ -277,8 +329,9 @@ function bind(root) {
       state.keyword = ((e.detail || {}).text || '').trim(); state.page = 1; reload()
     })
     fb.addEventListener('cmx-filter-reset', () => {
-      state.keyword = ''; state.filter = 'all'; state.page = 1
+      state.keyword = ''; state.filter = 'all'; state.typeFilter = ''; state.page = 1
       const st = root.querySelector('#ctStatus'); if (st) st.value = 'all'
+      const tt = root.querySelector('#ctType'); if (tt) tt.value = ''
       reload()
     })
   }
@@ -317,8 +370,12 @@ export default {
       state.dbId = props.dbId || props.db_id || ''
       state.docType = props.docType || props.doc_type || ''
       state.title = props.title || '单据列表'
+      state.aggregate = !state.docType
+      state.typeFilter = ''
       state.domain = get('domain') || props.domain || ''
       state.application = get('application') || props.application || ''
+      // 聚合模式先取类型目录（渲染筛选下拉/类型列用）；失败降级显示原始类型码，不阻断列表。
+      if (state.aggregate) { try { await loadTypeOptions() } catch (e) { console.warn('[cr-todo] type options fail', e) } }
       try { await load() } catch (e) { console.error('[cr-todo] init fail', e) }
       if (host) whenRendered(host, '.pg', (r) => bind(r))
       return `<style>${styleCss()}</style>${viewHtml()}`
