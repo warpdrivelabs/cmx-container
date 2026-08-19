@@ -55,3 +55,4 @@ __pycache__/
 /.superpowers/
 .playwright-cli
 .mimosa/
+/data/notification-center/
