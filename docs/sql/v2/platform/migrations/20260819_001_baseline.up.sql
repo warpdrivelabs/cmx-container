@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS cmx_domain
     PRIMARY KEY (id)
 );
 
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_domain ADD COLUMN IF NOT EXISTS icon  VARCHAR(100);
+ALTER TABLE cmx_domain ADD COLUMN IF NOT EXISTS title VARCHAR(200);
+COMMENT ON COLUMN cmx_domain.icon  IS '域图标名（UI5 图标标识）';
+COMMENT ON COLUMN cmx_domain.title IS '域英文标题/副标题';
 
 COMMENT ON TABLE cmx_domain IS '域表';
 COMMENT ON COLUMN cmx_domain.id IS 'ID';
@@ -85,6 +90,12 @@ CREATE TABLE IF NOT EXISTS cmx_application
     update_name VARCHAR(100),
     PRIMARY KEY (id)
 );
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_application ADD COLUMN IF NOT EXISTS icon  VARCHAR(100);
+ALTER TABLE cmx_application ADD COLUMN IF NOT EXISTS title VARCHAR(200);
+COMMENT ON COLUMN cmx_application.icon  IS '应用图标名（UI5 图标标识）';
+COMMENT ON COLUMN cmx_application.title IS '应用英文标题/副标题';
 
 COMMENT ON TABLE cmx_application IS '应用表';
 COMMENT ON COLUMN cmx_application.id IS 'ID';
@@ -138,6 +149,20 @@ CREATE TABLE IF NOT EXISTS cmx_module
     update_name      VARCHAR(100),
     PRIMARY KEY (id)
 );
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS icon          VARCHAR(100);
+ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS title         VARCHAR(200);
+ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS resource_root VARCHAR(255);
+ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS manifest_path VARCHAR(500);
+ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS theme         VARCHAR(100);
+ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS theme_color   VARCHAR(50);
+COMMENT ON COLUMN cmx_module.icon          IS '模块图标名（UI5 图标标识）';
+COMMENT ON COLUMN cmx_module.title         IS '模块英文标题/副标题';
+COMMENT ON COLUMN cmx_module.resource_root IS '模块资源目录相对路径（相对 data/ 根），格式 domain/application/module';
+COMMENT ON COLUMN cmx_module.manifest_path IS '模块清单文件相对路径，格式 modules/<d>/<a>/<m>/module.json';
+COMMENT ON COLUMN cmx_module.theme         IS '模块主题名';
+COMMENT ON COLUMN cmx_module.theme_color   IS '模块主题色（十六进制或色名）';
 
 COMMENT ON TABLE cmx_module IS '模块表';
 COMMENT ON COLUMN cmx_module.id IS 'ID';
@@ -202,7 +227,17 @@ CREATE TABLE IF NOT EXISTS cmx_sys_datasource
     PRIMARY KEY (id)
 );
 
-
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS domain_code VARCHAR(64);
+ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS application_code VARCHAR(64);
+ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS module_code VARCHAR(64);
+ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS source_type VARCHAR(20);
+ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS db_name VARCHAR(128);
+COMMENT ON COLUMN cmx_sys_datasource.domain_code IS '所属域编码';
+COMMENT ON COLUMN cmx_sys_datasource.application_code IS '所属应用编码';
+COMMENT ON COLUMN cmx_sys_datasource.module_code IS '所属模块编码';
+COMMENT ON COLUMN cmx_sys_datasource.source_type IS '数据源类型：default-默认库，biz-业务库，other-其他';
+COMMENT ON COLUMN cmx_sys_datasource.db_name IS '数据源名称（便于识别的显示名称）';
 DROP INDEX IF EXISTS uk_cmx_datasource_db_id;
 
 COMMENT ON TABLE cmx_sys_datasource IS 'cmx数据源管理';
@@ -280,6 +315,11 @@ CREATE TABLE IF NOT EXISTS cmx_plugin
     PRIMARY KEY (id)
 );
 
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_plugin ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default', ADD COLUMN IF NOT EXISTS storage_key VARCHAR (500), ADD COLUMN IF NOT EXISTS storage_checksum VARCHAR (128);
+COMMENT ON COLUMN cmx_plugin.app_id IS '应用隔离标识，用于多租户或多应用场景下的插件隔离';
+COMMENT ON COLUMN cmx_plugin.storage_key IS '存储键，标识插件包在存储系统中的唯一键';
+COMMENT ON COLUMN cmx_plugin.storage_checksum IS '存储校验和，用于验证插件包完整性';
 
 COMMENT ON TABLE cmx_plugin IS '插件注册主表：存储所有已安装插件的核心信息基线版本';
 COMMENT ON COLUMN cmx_plugin.id IS '主键ID';
@@ -352,7 +392,9 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_versions
     PRIMARY KEY (id)
 );
 
-
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_plugin_versions ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
+COMMENT ON COLUMN cmx_plugin_versions.app_id IS '应用隔离标识，用于多租户或多应用场景下的版本隔离';
 
 COMMENT ON TABLE cmx_plugin_versions IS '插件版本历史表：记录插件的版本历史';
 COMMENT ON COLUMN cmx_plugin_versions.id IS '主键ID';
@@ -466,7 +508,9 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_audit_log
     update_name      VARCHAR(100)
 );
 
-
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_plugin_audit_log ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
+COMMENT ON COLUMN cmx_plugin_audit_log.app_id IS '应用隔离标识，用于多租户或多应用场景下的审计日志隔离';
 
 COMMENT ON TABLE cmx_plugin_audit_log IS '审计日志表：记录插件操作日志';
 COMMENT ON COLUMN cmx_plugin_audit_log.id IS '主键ID';
@@ -669,6 +713,10 @@ CREATE TABLE IF NOT EXISTS cmx_meta_table_define
     PRIMARY KEY (id)
 );
 
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_meta_table_define ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default', ADD COLUMN IF NOT EXISTS ddl_status VARCHAR (20) NOT NULL DEFAULT 'pending';
+COMMENT ON COLUMN cmx_meta_table_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据隔离';
+COMMENT ON COLUMN cmx_meta_table_define.ddl_status IS 'DDL执行状态: pending(待执行), executing(执行中), completed(已完成), failed(执行失败)';
 
 COMMENT ON TABLE cmx_meta_table_define IS '表定义元数据';
 COMMENT ON COLUMN cmx_meta_table_define.id IS '主键';
@@ -718,6 +766,9 @@ CREATE TABLE IF NOT EXISTS cmx_meta_table_define_version
     PRIMARY KEY (id)
 );
 
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_meta_table_define_version ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
+COMMENT ON COLUMN cmx_meta_table_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据版本隔离';
 
 COMMENT ON TABLE cmx_meta_table_define_version IS '表元数据版本表';
 COMMENT ON COLUMN cmx_meta_table_define_version.id IS '主键';
@@ -767,6 +818,9 @@ CREATE TABLE IF NOT EXISTS cmx_service_define
     PRIMARY KEY (id)
 );
 
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_service_define ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
+COMMENT ON COLUMN cmx_service_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务隔离';
 
 COMMENT ON TABLE cmx_service_define IS '服务定义表';
 COMMENT ON COLUMN cmx_service_define.id IS '主键';
@@ -814,7 +868,11 @@ CREATE TABLE IF NOT EXISTS cmx_service_define_version
     PRIMARY KEY (id)
 );
 
-
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+ALTER TABLE cmx_service_define_version ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
+COMMENT ON COLUMN cmx_service_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务版本隔离';
+ALTER TABLE cmx_service_define_version ADD COLUMN IF NOT EXISTS api_doc TEXT;
+COMMENT ON COLUMN cmx_service_define_version.api_doc IS '服务接口文档JSON，由api_doc_generator自动生成';;
 
 COMMENT ON TABLE cmx_service_define_version IS '服务定义版本表';
 COMMENT ON COLUMN cmx_service_define_version.id IS '主键';
@@ -2536,113 +2594,6 @@ COMMENT ON TABLE cmx_user_position IS '用户-岗位关联表（一人可多岗�
 CREATE INDEX IF NOT EXISTS idx_cmx_user_position_user ON cmx_user_position (user_id);
 CREATE INDEX IF NOT EXISTS idx_cmx_user_position_pos  ON cmx_user_position (position_id);
 
--- =====================================================
--- cmx-code 编码引擎（两张表合并迁移）
--- 1. cmx_code_rule  —— 编码规则库（纯算法：段序列，不带 target，可被多处复用）
--- 2. cmx_code_gap   —— 编码断号表（连号域空缺号回收，只存空缺 ≠ 已分配）
--- 规则按域/应用/模块（DAM）隔离，既有规则无 DAM 默认空串，兼容存量
--- =====================================================
-
--- ─────────────────────────────────────────────────────
--- 1. 编码规则库
--- ─────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS cmx_code_rule (
-    id              BIGINT                  NOT NULL,
-    rule_code       VARCHAR(64)             NOT NULL,
-    rule_name       VARCHAR(128)            NOT NULL,
-    mode            VARCHAR(16)             NOT NULL DEFAULT 'auto',
-    org_scope       VARCHAR(64),
-    condition       TEXT,
-    segments        JSONB                   NOT NULL DEFAULT '[]',
-    joiner          VARCHAR(4)              NOT NULL DEFAULT '',
-    pattern         TEXT,
-    enable_gap      BOOLEAN                 NOT NULL DEFAULT FALSE,
-    use_sequence    BOOLEAN                 NOT NULL DEFAULT FALSE,
-    valid_from      DATE,
-    valid_to        DATE,
-    priority        INT4                    NOT NULL DEFAULT 100,
-    is_active       BOOLEAN                 NOT NULL DEFAULT TRUE,
-    -- DAM 维度（域/应用/模块隔离，空串=兼容存量/全局可见）
-    domain_code     VARCHAR(32)             NOT NULL DEFAULT '',
-    application_code VARCHAR(32)            NOT NULL DEFAULT '',
-    module_code     VARCHAR(32)             NOT NULL DEFAULT '',
-    create_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    archived        INT4                    NOT NULL DEFAULT 0,
-    create_by       VARCHAR(100),
-    update_by       VARCHAR(100),
-    PRIMARY KEY (id)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_code_rule_rule_code ON cmx_code_rule (rule_code) WHERE archived = 0;
-CREATE INDEX IF NOT EXISTS ix_cmx_code_rule_active ON cmx_code_rule (is_active, priority);
-CREATE INDEX IF NOT EXISTS ix_cmx_code_rule_archived ON cmx_code_rule (archived);
--- DAM + archived 复合索引：按模块过滤规则列表的主查询路径
-CREATE INDEX IF NOT EXISTS ix_cmx_code_rule_dam ON cmx_code_rule (domain_code, application_code, module_code, archived);
-
-COMMENT ON TABLE cmx_code_rule IS '编码规则库（纯算法，不带 target，可被多处复用）';
-COMMENT ON COLUMN cmx_code_rule.id IS '主键ID（pk52）';
-COMMENT ON COLUMN cmx_code_rule.rule_code IS '规则码（人类可读，全局唯一，如 supplier_hq）';
-COMMENT ON COLUMN cmx_code_rule.rule_name IS '规则名称（展示用）';
-COMMENT ON COLUMN cmx_code_rule.mode IS '模式：auto（引擎生成）| manual（用户手敲，引擎只校验）';
-COMMENT ON COLUMN cmx_code_rule.org_scope IS '受控组织（可选，逗号分隔多组织，组织命中才生效）';
-COMMENT ON COLUMN cmx_code_rule.condition IS '适用条件（JSON 算子 {"eq":[...]} 或字符串 field==value，可选）';
-COMMENT ON COLUMN cmx_code_rule.segments IS '段序列 JSON（auto 必填）';
-COMMENT ON COLUMN cmx_code_rule.joiner IS '段间连接符（默认空串）';
-COMMENT ON COLUMN cmx_code_rule.pattern IS '校验正则（可选，manual 兜底 + auto 结果校验）';
-COMMENT ON COLUMN cmx_code_rule.enable_gap IS '是否启用断号补偿（连号域才开，默认关）';
-COMMENT ON COLUMN cmx_code_rule.use_sequence IS '是否使用 PG SEQUENCE 兜底（极端高并发可选，默认关）';
-COMMENT ON COLUMN cmx_code_rule.valid_from IS '规则版本化·生效起始日期';
-COMMENT ON COLUMN cmx_code_rule.valid_to IS '规则版本化·生效结束日期';
-COMMENT ON COLUMN cmx_code_rule.priority IS '多规则选优（取大，默认 100）';
-COMMENT ON COLUMN cmx_code_rule.is_active IS '是否启用';
-COMMENT ON COLUMN cmx_code_rule.domain_code IS '所属域编码（如 fi），空串=兼容存量/全局可见';
-COMMENT ON COLUMN cmx_code_rule.application_code IS '所属应用编码（如 cmxfico）';
-COMMENT ON COLUMN cmx_code_rule.module_code IS '所属模块编码（如 gl）';
-
--- ─────────────────────────────────────────────────────
--- 2. 编码断号表
--- ─────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS cmx_code_gap (
-    id              BIGINT                  NOT NULL,
-    prefix          VARCHAR(128)            NOT NULL,
-    serial_val      BIGINT                  NOT NULL,
-    width           INT4                    NOT NULL,
-    create_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (id)
-);
-
--- 按前缀查断号（take_gap 取最小断号）
-CREATE INDEX IF NOT EXISTS ix_cmx_code_gap_prefix ON cmx_code_gap (prefix, serial_val);
-
-COMMENT ON TABLE cmx_code_gap IS '编码断号表（只存空缺，≠已分配；连号域 enable_gap=true 才启用）';
-COMMENT ON COLUMN cmx_code_gap.id IS '主键ID（pk52）';
-COMMENT ON COLUMN cmx_code_gap.prefix IS '断号所属前缀（如 FV20260804）';
-COMMENT ON COLUMN cmx_code_gap.serial_val IS '断号流水值（如 8）';
-COMMENT ON COLUMN cmx_code_gap.width IS '流水宽度（补零用）';
-
--- ─────────────────────────────────────────────────────
--- 3. 编码发号序列表
--- ─────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS cmx_code_seq (
-    id              BIGINT                  NOT NULL,
-    rule_code       VARCHAR(64)             NOT NULL,
-    prefix          VARCHAR(128)            NOT NULL,
-    current_val     BIGINT                  NOT NULL DEFAULT 0,
-    width           INT4                    NOT NULL DEFAULT 4,
-    update_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (id)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_code_seq_prefix ON cmx_code_seq (rule_code, prefix);
-
-COMMENT ON TABLE cmx_code_seq IS '编码发号序列表（集群安全发号源，use_sequence=true 才启用）';
-COMMENT ON COLUMN cmx_code_seq.id IS '主键ID（pk52）';
-COMMENT ON COLUMN cmx_code_seq.rule_code IS '关联 cmx_code_rule.rule_code';
-COMMENT ON COLUMN cmx_code_seq.prefix IS '发号分组键（含 reset_key，如 FV20260804）';
-COMMENT ON COLUMN cmx_code_seq.current_val IS '已发到的最大流水值（0=首启未探测）';
-COMMENT ON COLUMN cmx_code_seq.width IS '流水宽度（补零用，记录首次发号时的宽度）';
-
 -- ============================================================
 -- 补丁段：旧 init_ddl 快照未收录的终态索引（对象覆盖核对发现）
 -- ============================================================
@@ -3003,120 +2954,3 @@ SELECT '7485938639050227714', 'fi-gl-job-center', '任务中心', 'process', NUL
 FROM cmx_menu p WHERE p.code = 'gl' AND p.archived = 0 LIMIT 1
 ON CONFLICT (code) WHERE archived = 0 DO NOTHING;
 
-
--- ============================================================
--- 4. 编码规则（cmx_code_rule）
--- 来源：迁移 20260818_001 段1（MDM 多域 14 条）
---       + 迁移 20260813_002（MDM_BILL 单据号保底，排段尾防与 14 条顺排 id 混淆）
--- 幂等：ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING
--- ============================================================
-
--- 1. 编码规则 cmx_code_rule（id 9000000000000002~0015 顺排，MDM_BILL=…0001 已占）
---    字典 code 铸号：激活器读 dictMeta.codeRule.ruleCode。漏配不报错，code 退化为占位码——故必须 seed。
--- ─────────────────────────────────────────────
-
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000002, 'MDM_KH', '客户主数据编码（CUS+日期+流水）', 'auto',
-        '[{"type":"const","value":"CUS"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
--- 物料主数据编码：MAT + YYYYMMDD + 4位日流水 → MAT202608180001
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000003, 'MDM_WL', '物料主数据编码（MAT+日期+流水）', 'auto',
-        '[{"type":"const","value":"MAT"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
--- 会计科目编码：ref 段取行字段 acct_no（用户在 CR 填的科目号，如 1001 / 100101）→ code = 科目号。
--- 说明：激活器 create 分支会先用占位码覆盖 header_row.code，仅当 dictMeta.codeRule 铸号成功才能再覆盖，
---       故科目号走 ref 段「借铸号通道」写入 code 列——code 与 acct_no 恒等，无需改 Rust 代码。
---       acct_no 为空时铸出空串（NOT NULL 允许），科目号在 CR 表单为必填，正常不会发生。
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000004, 'MDM_KJ', '会计科目编码（取科目号 acct_no 原值）', 'auto',
-        '[{"type":"ref","field":"acct_no"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-
-
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000005, 'MDM_BZ', '币种编码（取 ISO 币种码）', 'auto',
-        '[{"type":"ref","field":"currency_code"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000006, 'MDM_JLDW', '计量单位编码（取单位编码）', 'auto',
-        '[{"type":"ref","field":"uom_code"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000007, 'MDM_WLDL', '物料分类编码（取分类编码）', 'auto',
-        '[{"type":"ref","field":"class_code"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000008, 'MDM_CBZX', '成本中心编码（取中心编码）', 'auto',
-        '[{"type":"ref","field":"cost_center_code"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000009, 'MDM_LRZX', '利润中心编码（取中心编码）', 'auto',
-        '[{"type":"ref","field":"profit_center_code"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000010, 'MDM_GS', '公司编码（取公司编码）', 'auto',
-        '[{"type":"ref","field":"company_code"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000011, 'MDM_ZZ', '组织编码（取组织编码）', 'auto',
-        '[{"type":"ref","field":"org_code"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000012, 'MDM_BM', '部门编码（取部门编码）', 'auto',
-        '[{"type":"ref","field":"dept_code"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000013, 'MDM_GW', '岗位编码（取岗位编码）', 'auto',
-        '[{"type":"ref","field":"position_code"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000014, 'MDM_YG', '员工编码（取工号）', 'auto',
-        '[{"type":"ref","field":"emp_no"}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-
-
-
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000015, 'MDM_GYS', '供应商主数据编码（SUP+日期+流水）', 'auto',
-        '[{"type":"const","value":"SUP"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
--- ─────────────────────────────────────────────
-
-
--- MDM 变更申请单据号保底规则（20260813_002）
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
-VALUES (9000000000000001, 'MDM_BILL', 'MDM 变更申请单据号（CR+日期+流水）', 'auto',
-        '[{"type":"const","value":"CR"},{"type":"dateSerial","format":"YYYYMMDD","width":6,"start":1}]'::jsonb,
-        '', TRUE)
-ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;

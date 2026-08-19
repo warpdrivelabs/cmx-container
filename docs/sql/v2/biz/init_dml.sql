@@ -2,9 +2,9 @@
 -- CMX 业务库内置数据（DML）— docs/sql/v2/biz/init_dml.sql
 --
 -- 目标库：业务数据源（source_type = "biz"）
--- 内容：MDM 治理种子（激活映射 + 查重规则 + 分发水位）
+-- 内容：MDM 治理种子（激活映射 + 编码规则 + 查重规则 + 分发水位）
 -- 风格：无损幂等，全部 ON CONFLICT / NOT EXISTS 防重，可重复执行
--- 来源：迁移 20260818_001 段2/段3 + 20260812_001（supplier 默认查重）
+-- 来源：迁移 20260818_001（激活映射/编码规则/查重）+ 20260812_001 + 20260813_002
 -- ============================================================
 
 -- ============================================================
@@ -16,23 +16,6 @@
 
 -- 2. 激活映射：10 个新域（create + update 各一条；update 的 key_fields 留空——步骤①查重仅新建场景）
 -- ─────────────────────────────────────────────
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table, header_mapping, line_mappings, code_rule_code, is_active, created_at, updated_at, subject_name_field, subject_code_field, header_groups, doc_code_rules, key_fields) VALUES ('7493510957821898752', 'gys__create', 'gys', 'create', 'supplier', 'cm_supplier', '{"name": "name", "phone": "phone", "doc_no": null, "remark": null, "tax_no": "tax_no", "doc_date": null, "doc_status": null, "short_name": "short_name", "credit_code": "credit_code"}', '[{"fields": {"bank_name": "bank_name", "account_no": "account_no"}, "lineType": "bank", "fieldOrder": ["bank_name", "account_no"], "targetDict": "supplier_bank", "targetTable": "cm_bank_account", "parentIdField": "supplier_id"}]', null, true, '2026-08-13 03:37:15.057220 +00:00', '2026-08-14 06:41:58.195971 +00:00', 'name', null, '[{"fields": ["doc_no", "doc_date", "doc_status", "remark"], "groupCode": "group_1786438365329", "groupName": "申请信息"}, {"fields": ["name", "phone", "tax_no", "short_name", "credit_code"], "groupCode": "group_1786437905284", "groupName": "基础信息"}]', '{}', '[{"kind": "EditDistance", "dedup": true, "field": "name", "weight": 100}, {"kind": "EditDistance", "dedup": false, "field": "short_name", "weight": 100}, {"kind": "EditDistance", "dedup": true, "field": "credit_code", "weight": 100}]') ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table, header_mapping, line_mappings, code_rule_code, is_active, created_at, updated_at, subject_name_field, subject_code_field, header_groups, doc_code_rules, key_fields) VALUES ('7493626821673246720', 'gys__update', 'gys', 'update', 'supplier', 'cm_supplier', '{"name": "name", "phone": "phone", "doc_no": null, "remark": null, "tax_no": "tax_no", "doc_date": null, "doc_status": null, "short_name": "short_name", "credit_code": "credit_code"}', '[{"fields": {"bank_name": "bank_name", "account_no": "account_no"}, "lineType": "bank", "fieldOrder": ["bank_name", "account_no"], "targetDict": "supplier_bank", "targetTable": "cm_bank_account", "parentIdField": "supplier_id"}]', 'MDM_GYS', true, '2026-08-13 11:17:39.164085 +00:00', '2026-08-13 11:17:39.164085 +00:00', 'name', null, '[{"fields": ["doc_no", "doc_date", "doc_status", "remark"], "groupCode": "group_1786438365329", "groupName": "申请信息"}, {"fields": ["name", "phone", "tax_no", "short_name", "credit_code"], "groupCode": "group_1786437905284", "groupName": "基础信息"}]', '{}', '[]') ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
-
 
 -- currency · 新建
 
@@ -54,7 +37,6 @@ ON CONFLICT (activation_code) DO UPDATE SET
     subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
     doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
     is_active = EXCLUDED.is_active, updated_at = now();
-
 
 -- currency · 变更
 
@@ -596,7 +578,124 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 
 -- ============================================================
--- 2. 查重规则（md_match_config）
+-- 2. 编码规则（cmx_code_rule）
+-- 来源：迁移 20260818_001 段1（MDM 多域 14 条）
+--       + 迁移 20260813_002（MDM_BILL 单据号保底，排段尾防与 14 条顺排 id 混淆）
+-- 幂等：ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING
+-- ============================================================
+
+-- 1. 编码规则 cmx_code_rule（id 9000000000000002~0015 顺排，MDM_BILL=…0001 已占）
+--    字典 code 铸号：激活器读 dictMeta.codeRule.ruleCode。漏配不报错，code 退化为占位码——故必须 seed。
+-- ─────────────────────────────────────────────
+
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000002, 'MDM_KH', '客户主数据编码（CUS+日期+流水）', 'auto',
+        '[{"type":"const","value":"CUS"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+-- 物料主数据编码：MAT + YYYYMMDD + 4位日流水 → MAT202608180001
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000003, 'MDM_WL', '物料主数据编码（MAT+日期+流水）', 'auto',
+        '[{"type":"const","value":"MAT"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+-- 会计科目编码：ref 段取行字段 acct_no（用户在 CR 填的科目号，如 1001 / 100101）→ code = 科目号。
+-- 说明：激活器 create 分支会先用占位码覆盖 header_row.code，仅当 dictMeta.codeRule 铸号成功才能再覆盖，
+--       故科目号走 ref 段「借铸号通道」写入 code 列——code 与 acct_no 恒等，无需改 Rust 代码。
+--       acct_no 为空时铸出空串（NOT NULL 允许），科目号在 CR 表单为必填，正常不会发生。
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000004, 'MDM_KJ', '会计科目编码（取科目号 acct_no 原值）', 'auto',
+        '[{"type":"ref","field":"acct_no"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+
+
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000005, 'MDM_BZ', '币种编码（取 ISO 币种码）', 'auto',
+        '[{"type":"ref","field":"currency_code"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000006, 'MDM_JLDW', '计量单位编码（取单位编码）', 'auto',
+        '[{"type":"ref","field":"uom_code"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000007, 'MDM_WLDL', '物料分类编码（取分类编码）', 'auto',
+        '[{"type":"ref","field":"class_code"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000008, 'MDM_CBZX', '成本中心编码（取中心编码）', 'auto',
+        '[{"type":"ref","field":"cost_center_code"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000009, 'MDM_LRZX', '利润中心编码（取中心编码）', 'auto',
+        '[{"type":"ref","field":"profit_center_code"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000010, 'MDM_GS', '公司编码（取公司编码）', 'auto',
+        '[{"type":"ref","field":"company_code"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000011, 'MDM_ZZ', '组织编码（取组织编码）', 'auto',
+        '[{"type":"ref","field":"org_code"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000012, 'MDM_BM', '部门编码（取部门编码）', 'auto',
+        '[{"type":"ref","field":"dept_code"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000013, 'MDM_GW', '岗位编码（取岗位编码）', 'auto',
+        '[{"type":"ref","field":"position_code"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000014, 'MDM_YG', '员工编码（取工号）', 'auto',
+        '[{"type":"ref","field":"emp_no"}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+
+
+
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000015, 'MDM_GYS', '供应商主数据编码（SUP+日期+流水）', 'auto',
+        '[{"type":"const","value":"SUP"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+-- ─────────────────────────────────────────────
+
+
+-- MDM 变更申请单据号保底规则（20260813_002）
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+VALUES (9000000000000001, 'MDM_BILL', 'MDM 变更申请单据号（CR+日期+流水）', 'auto',
+        '[{"type":"const","value":"CR"},{"type":"dateSerial","format":"YYYYMMDD","width":6,"start":1}]'::jsonb,
+        '', TRUE)
+ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
+
+-- ============================================================
+-- 3. 查重规则（md_match_config）
 -- ============================================================
 
 -- Seed: supplier 默认查重规则（id 固定值 1，应用层 next_pk_id 不会冲突）
@@ -738,7 +837,7 @@ WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'employee' AND
 
 
 -- ============================================================
--- 3. 分发水位（md_dist_watermark）
+-- 4. 分发水位（md_dist_watermark）
 -- ============================================================
 
 INSERT INTO md_dist_watermark (key, last_seq) VALUES ('fanout', 0) ON CONFLICT (key) DO NOTHING;

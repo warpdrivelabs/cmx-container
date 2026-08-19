@@ -2,9 +2,11 @@
 -- CMX 业务库全量 DDL — docs/sql/v2/biz/init_ddl.sql
 --
 -- 目标库：业务数据源（source_type = "biz"）
--- 归属规则：非 cmx_ 业务表 + cmx_flow_* 流程运行态表建业务库：
+-- 归属规则：非 cmx_ 业务表 + 两组 cmx_ 例外前缀建业务库：
 --   · md_*  11 张 —— MDM 治理表
---   · mdm_activation —— MDM 激活映射（原 cmx_mdm_activation，已归业务库侧）
+--   · mdm_activation —— MDM 激活映射（原 cmx_mdm_activation，归业务库侧）
+--   · cmx_code_* 3 张 —— 编码引擎（rule/gap/seq；运行时 code API 经
+--     resolve_db_id 回退业务库）
 --   · cmx_flow_* 15 张 —— 流程运行态（与流程引擎 FLOW_DB_ID=业务库一致；
 --     IAM 侧 cmx_org/cmx_position/cmx_user_position 留主库，见 ../platform/）
 -- 风格：表定义即终态（无 ALTER）；无损幂等；每表区块：CREATE TABLE → COMMENT → 索引
@@ -594,6 +596,113 @@ COMMENT ON COLUMN md_consumer_offset.dict_code IS '字典代码';
 COMMENT ON COLUMN md_consumer_offset.acked_seq IS '已确认消费到的 seq';
 COMMENT ON COLUMN md_consumer_offset.acked_at IS '最近确认时间';
 CREATE UNIQUE INDEX IF NOT EXISTS uk_md_consumer_offset ON md_consumer_offset (consumer_id, dict_code);
+
+-- =====================================================
+-- cmx-code 编码引擎（两张表合并迁移）
+-- 1. cmx_code_rule  —— 编码规则库（纯算法：段序列，不带 target，可被多处复用）
+-- 2. cmx_code_gap   —— 编码断号表（连号域空缺号回收，只存空缺 ≠ 已分配）
+-- 规则按域/应用/模块（DAM）隔离，既有规则无 DAM 默认空串，兼容存量
+-- =====================================================
+
+-- ─────────────────────────────────────────────────────
+-- 1. 编码规则库
+-- ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cmx_code_rule (
+    id              BIGINT                  NOT NULL,
+    rule_code       VARCHAR(64)             NOT NULL,
+    rule_name       VARCHAR(128)            NOT NULL,
+    mode            VARCHAR(16)             NOT NULL DEFAULT 'auto',
+    org_scope       VARCHAR(64),
+    condition       TEXT,
+    segments        JSONB                   NOT NULL DEFAULT '[]',
+    joiner          VARCHAR(4)              NOT NULL DEFAULT '',
+    pattern         TEXT,
+    enable_gap      BOOLEAN                 NOT NULL DEFAULT FALSE,
+    use_sequence    BOOLEAN                 NOT NULL DEFAULT FALSE,
+    valid_from      DATE,
+    valid_to        DATE,
+    priority        INT4                    NOT NULL DEFAULT 100,
+    is_active       BOOLEAN                 NOT NULL DEFAULT TRUE,
+    -- DAM 维度（域/应用/模块隔离，空串=兼容存量/全局可见）
+    domain_code     VARCHAR(32)             NOT NULL DEFAULT '',
+    application_code VARCHAR(32)            NOT NULL DEFAULT '',
+    module_code     VARCHAR(32)             NOT NULL DEFAULT '',
+    create_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived        INT4                    NOT NULL DEFAULT 0,
+    create_by       VARCHAR(100),
+    update_by       VARCHAR(100),
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_code_rule_rule_code ON cmx_code_rule (rule_code) WHERE archived = 0;
+CREATE INDEX IF NOT EXISTS ix_cmx_code_rule_active ON cmx_code_rule (is_active, priority);
+CREATE INDEX IF NOT EXISTS ix_cmx_code_rule_archived ON cmx_code_rule (archived);
+-- DAM + archived 复合索引：按模块过滤规则列表的主查询路径
+CREATE INDEX IF NOT EXISTS ix_cmx_code_rule_dam ON cmx_code_rule (domain_code, application_code, module_code, archived);
+
+COMMENT ON TABLE cmx_code_rule IS '编码规则库（纯算法，不带 target，可被多处复用）';
+COMMENT ON COLUMN cmx_code_rule.id IS '主键ID（pk52）';
+COMMENT ON COLUMN cmx_code_rule.rule_code IS '规则码（人类可读，全局唯一，如 supplier_hq）';
+COMMENT ON COLUMN cmx_code_rule.rule_name IS '规则名称（展示用）';
+COMMENT ON COLUMN cmx_code_rule.mode IS '模式：auto（引擎生成）| manual（用户手敲，引擎只校验）';
+COMMENT ON COLUMN cmx_code_rule.org_scope IS '受控组织（可选，逗号分隔多组织，组织命中才生效）';
+COMMENT ON COLUMN cmx_code_rule.condition IS '适用条件（JSON 算子 {"eq":[...]} 或字符串 field==value，可选）';
+COMMENT ON COLUMN cmx_code_rule.segments IS '段序列 JSON（auto 必填）';
+COMMENT ON COLUMN cmx_code_rule.joiner IS '段间连接符（默认空串）';
+COMMENT ON COLUMN cmx_code_rule.pattern IS '校验正则（可选，manual 兜底 + auto 结果校验）';
+COMMENT ON COLUMN cmx_code_rule.enable_gap IS '是否启用断号补偿（连号域才开，默认关）';
+COMMENT ON COLUMN cmx_code_rule.use_sequence IS '是否使用 PG SEQUENCE 兜底（极端高并发可选，默认关）';
+COMMENT ON COLUMN cmx_code_rule.valid_from IS '规则版本化·生效起始日期';
+COMMENT ON COLUMN cmx_code_rule.valid_to IS '规则版本化·生效结束日期';
+COMMENT ON COLUMN cmx_code_rule.priority IS '多规则选优（取大，默认 100）';
+COMMENT ON COLUMN cmx_code_rule.is_active IS '是否启用';
+COMMENT ON COLUMN cmx_code_rule.domain_code IS '所属域编码（如 fi），空串=兼容存量/全局可见';
+COMMENT ON COLUMN cmx_code_rule.application_code IS '所属应用编码（如 cmxfico）';
+COMMENT ON COLUMN cmx_code_rule.module_code IS '所属模块编码（如 gl）';
+
+-- ─────────────────────────────────────────────────────
+-- 2. 编码断号表
+-- ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cmx_code_gap (
+    id              BIGINT                  NOT NULL,
+    prefix          VARCHAR(128)            NOT NULL,
+    serial_val      BIGINT                  NOT NULL,
+    width           INT4                    NOT NULL,
+    create_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id)
+);
+
+-- 按前缀查断号（take_gap 取最小断号）
+CREATE INDEX IF NOT EXISTS ix_cmx_code_gap_prefix ON cmx_code_gap (prefix, serial_val);
+
+COMMENT ON TABLE cmx_code_gap IS '编码断号表（只存空缺，≠已分配；连号域 enable_gap=true 才启用）';
+COMMENT ON COLUMN cmx_code_gap.id IS '主键ID（pk52）';
+COMMENT ON COLUMN cmx_code_gap.prefix IS '断号所属前缀（如 FV20260804）';
+COMMENT ON COLUMN cmx_code_gap.serial_val IS '断号流水值（如 8）';
+COMMENT ON COLUMN cmx_code_gap.width IS '流水宽度（补零用）';
+
+-- ─────────────────────────────────────────────────────
+-- 3. 编码发号序列表
+-- ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cmx_code_seq (
+    id              BIGINT                  NOT NULL,
+    rule_code       VARCHAR(64)             NOT NULL,
+    prefix          VARCHAR(128)            NOT NULL,
+    current_val     BIGINT                  NOT NULL DEFAULT 0,
+    width           INT4                    NOT NULL DEFAULT 4,
+    update_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_code_seq_prefix ON cmx_code_seq (rule_code, prefix);
+
+COMMENT ON TABLE cmx_code_seq IS '编码发号序列表（集群安全发号源，use_sequence=true 才启用）';
+COMMENT ON COLUMN cmx_code_seq.id IS '主键ID（pk52）';
+COMMENT ON COLUMN cmx_code_seq.rule_code IS '关联 cmx_code_rule.rule_code';
+COMMENT ON COLUMN cmx_code_seq.prefix IS '发号分组键（含 reset_key，如 FV20260804）';
+COMMENT ON COLUMN cmx_code_seq.current_val IS '已发到的最大流水值（0=首启未探测）';
+COMMENT ON COLUMN cmx_code_seq.width IS '流水宽度（补零用，记录首次发号时的宽度）';
 
 -- ============================================================
 -- 补丁段：旧 init_ddl 快照未收录的终态表（对象覆盖核对发现）
