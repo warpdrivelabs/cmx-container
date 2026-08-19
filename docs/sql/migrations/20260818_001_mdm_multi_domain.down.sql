@@ -5,7 +5,7 @@
 -- =============================================
 
 -- 激活映射（按 activation_code 定位，幂等）
-DELETE FROM cmx_mdm_activation
+DELETE FROM mdm_activation
 WHERE activation_code IN ('kh__create', 'kh__update', 'wl__create', 'wl__update', 'kj__create', 'kj__update',
                           'bz__create', 'bz__update', 'jldw__create', 'jldw__update', 'wldl__create', 'wldl__update',
                           'cbzx__create', 'cbzx__update', 'lrzx__create', 'lrzx__update', 'gs__create', 'gs__update',

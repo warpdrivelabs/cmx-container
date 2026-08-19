@@ -1,7 +1,7 @@
 -- =============================================
 -- 迁移说明：MDM M6 多域扩展全量种子（四域 16 表接入：客户/物料/会计科目/币种/计量单位/
 --           物料分类/成本中心/利润中心/公司/组织/部门/岗位/员工 + 客户三明细）
--- 影响表：cmx_code_rule(INSERT 14), cmx_mdm_activation(UPSERT 26), md_match_config(INSERT 13)
+-- 影响表：cmx_code_rule(INSERT 14), mdm_activation(UPSERT 26), md_match_config(INSERT 13)
 -- 操作类型：INSERT / UPSERT（幂等，可重复执行）
 -- 回滚方式：20260818_001_mdm_multi_domain.down.sql
 --
@@ -140,7 +140,7 @@ ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
 -- currency · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_bz_create', 'bz__create', 'bz', 'create', 'currency', 'cm_currency',
@@ -161,7 +161,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- currency · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_bz_update', 'bz__update', 'bz', 'update', 'currency', 'cm_currency',
@@ -182,7 +182,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- uom · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_jldw_create', 'jldw__create', 'jldw', 'create', 'uom', 'cm_uom',
@@ -203,7 +203,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- uom · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_jldw_update', 'jldw__update', 'jldw', 'update', 'uom', 'cm_uom',
@@ -224,7 +224,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- material_class · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_wldl_create', 'wldl__create', 'wldl', 'create', 'material_class', 'cm_material_class',
@@ -245,7 +245,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- material_class · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_wldl_update', 'wldl__update', 'wldl', 'update', 'material_class', 'cm_material_class',
@@ -266,7 +266,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- cost_center · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_cbzx_create', 'cbzx__create', 'cbzx', 'create', 'cost_center', 'cm_cost_center',
@@ -287,7 +287,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- cost_center · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_cbzx_update', 'cbzx__update', 'cbzx', 'update', 'cost_center', 'cm_cost_center',
@@ -308,7 +308,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- profit_center · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_lrzx_create', 'lrzx__create', 'lrzx', 'create', 'profit_center', 'cm_profit_center',
@@ -329,7 +329,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- profit_center · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_lrzx_update', 'lrzx__update', 'lrzx', 'update', 'profit_center', 'cm_profit_center',
@@ -350,7 +350,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- company · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_gs_create', 'gs__create', 'gs', 'create', 'company', 'cm_company',
@@ -371,7 +371,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- company · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_gs_update', 'gs__update', 'gs', 'update', 'company', 'cm_company',
@@ -392,7 +392,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- organization · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_zz_create', 'zz__create', 'zz', 'create', 'organization', 'cm_organization',
@@ -413,7 +413,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- organization · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_zz_update', 'zz__update', 'zz', 'update', 'organization', 'cm_organization',
@@ -434,7 +434,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- department · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_bm_create', 'bm__create', 'bm', 'create', 'department', 'cm_department',
@@ -455,7 +455,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- department · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_bm_update', 'bm__update', 'bm', 'update', 'department', 'cm_department',
@@ -476,7 +476,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- position · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_gw_create', 'gw__create', 'gw', 'create', 'position', 'cm_position',
@@ -497,7 +497,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- position · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_gw_update', 'gw__update', 'gw', 'update', 'position', 'cm_position',
@@ -518,7 +518,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- employee · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_yg_create', 'yg__create', 'yg', 'create', 'employee', 'cm_employee',
@@ -539,7 +539,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- employee · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_yg_update', 'yg__update', 'yg', 'update', 'employee', 'cm_employee',
@@ -565,7 +565,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- customer · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_kh_create', 'kh__create', 'kh', 'create', 'customer', 'cm_customer',
@@ -586,7 +586,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- customer · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_kh_update', 'kh__update', 'kh', 'update', 'customer', 'cm_customer',
@@ -607,7 +607,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- material · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_wl_create', 'wl__create', 'wl', 'create', 'material', 'cm_material',
@@ -628,7 +628,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- material · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_wl_update', 'wl__update', 'wl', 'update', 'material', 'cm_material',
@@ -649,7 +649,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- gl_account · 新建
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_kj_create', 'kj__create', 'kj', 'create', 'gl_account', 'cm_gl_account',
@@ -670,7 +670,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- gl_account · 变更
 
-INSERT INTO cmx_mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_kj_update', 'kj__update', 'kj', 'update', 'gl_account', 'cm_gl_account',

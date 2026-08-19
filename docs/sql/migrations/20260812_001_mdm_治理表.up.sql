@@ -1,6 +1,6 @@
 -- =============================================
 -- 迁移说明：MDM 治理表建表（整合原 20260804_001/20260805_001/20260811_001/20260812_001/20260812_002 五个迁移为一份完整建表脚本）
--- 影响表：cmx_mdm_activation, md_audit, md_xref, md_value_map, md_match_config, md_merge_record, md_match_scan, md_subscription, md_event_log
+-- 影响表：mdm_activation, md_audit, md_xref, md_value_map, md_match_config, md_merge_record, md_match_scan, md_subscription, md_event_log
 -- 操作类型：CREATE TABLE / CREATE INDEX / INSERT (seed)
 -- 回滚方式：20260812_001_mdm_治理表.down.sql
 -- =============================================
@@ -13,7 +13,7 @@
 -- ─────────────────────────────────────────────────────
 -- 1. 激活映射配置（UI 配置器维护，激活器读取执行）—— cmx_ 平台表，主键 VARCHAR(64) snowflake
 -- ─────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS cmx_mdm_activation (
+CREATE TABLE IF NOT EXISTS mdm_activation (
     id              VARCHAR(64)  NOT NULL,
     activation_code VARCHAR(64)  NOT NULL,
     source_doc_type VARCHAR(64)  NOT NULL,
@@ -34,28 +34,28 @@ CREATE TABLE IF NOT EXISTS cmx_mdm_activation (
 -- 幂等演进：CREATE TABLE IF NOT EXISTS 对「表已存在但为旧版结构」的库会整条跳过，
 -- 导致新增列缺失、后续 COMMENT/索引引用报「column does not exist」。故显式补列，
 -- 全新库上是 no-op（列已由 CREATE 建好），旧库上把缺列补齐，两种情况都幂等。
-ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS subject_name_field VARCHAR(64);
-ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS subject_code_field VARCHAR(64);
-ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS header_groups   JSONB       NOT NULL DEFAULT '[]'::jsonb;
-ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS is_active       BOOLEAN     NOT NULL DEFAULT TRUE;
-ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS created_at      TIMESTAMPTZ NOT NULL DEFAULT now();
-ALTER TABLE cmx_mdm_activation ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ NOT NULL DEFAULT now();
-COMMENT ON TABLE  cmx_mdm_activation IS 'MDM 激活映射配置（单据→主数据），UI 配置器维护，激活器读取执行';
-COMMENT ON COLUMN cmx_mdm_activation.id              IS '主键（snowflake，应用层生成）';
-COMMENT ON COLUMN cmx_mdm_activation.activation_code IS '映射码（如 supplier_apply）';
-COMMENT ON COLUMN cmx_mdm_activation.source_doc_type IS '来源单据类型（如 mdm_supplier_apply）';
-COMMENT ON COLUMN cmx_mdm_activation.cr_type         IS '变更类型 create/update/merge/block/flag_delete';
-COMMENT ON COLUMN cmx_mdm_activation.target_dict     IS '目标头字典码（如 supplier）';
-COMMENT ON COLUMN cmx_mdm_activation.target_table    IS '目标头物理表名（如 cm_supplier，配置器选字典时从 dct/meta tableName 一并写入，激活器直接用）';
-COMMENT ON COLUMN cmx_mdm_activation.header_mapping  IS '头映射 {单据字段:主数据列}';
-COMMENT ON COLUMN cmx_mdm_activation.line_mappings   IS '明细映射 [{lineType,targetDict,targetTable,parentIdField,fields}]';
-COMMENT ON COLUMN cmx_mdm_activation.code_rule_code  IS 'code 由哪个编码规则生成（新建时接 cmx-code）';
-COMMENT ON COLUMN cmx_mdm_activation.subject_name_field IS '主体名字段来源（payload 内字段名，前端按此填 subject_name）';
-COMMENT ON COLUMN cmx_mdm_activation.subject_code_field IS '主体编码字段来源（为空则由 codeRule 铸号）';
-COMMENT ON COLUMN cmx_mdm_activation.header_groups   IS '头映射分组(UI 展示用,[{groupCode,groupName,fields:[源字段名]}]);激活器不读,header_mapping 落库仍扁平';
-COMMENT ON COLUMN cmx_mdm_activation.is_active       IS '是否启用';
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_mdm_activation_code     ON cmx_mdm_activation (activation_code);
-CREATE        INDEX IF NOT EXISTS idx_cmx_mdm_activation_doctype ON cmx_mdm_activation (source_doc_type, cr_type);
+ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS subject_name_field VARCHAR(64);
+ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS subject_code_field VARCHAR(64);
+ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS header_groups   JSONB       NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS is_active       BOOLEAN     NOT NULL DEFAULT TRUE;
+ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS created_at      TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ NOT NULL DEFAULT now();
+COMMENT ON TABLE  mdm_activation IS 'MDM 激活映射配置（单据→主数据），UI 配置器维护，激活器读取执行';
+COMMENT ON COLUMN mdm_activation.id              IS '主键（snowflake，应用层生成）';
+COMMENT ON COLUMN mdm_activation.activation_code IS '映射码（如 supplier_apply）';
+COMMENT ON COLUMN mdm_activation.source_doc_type IS '来源单据类型（如 mdm_supplier_apply）';
+COMMENT ON COLUMN mdm_activation.cr_type         IS '变更类型 create/update/merge/block/flag_delete';
+COMMENT ON COLUMN mdm_activation.target_dict     IS '目标头字典码（如 supplier）';
+COMMENT ON COLUMN mdm_activation.target_table    IS '目标头物理表名（如 cm_supplier，配置器选字典时从 dct/meta tableName 一并写入，激活器直接用）';
+COMMENT ON COLUMN mdm_activation.header_mapping  IS '头映射 {单据字段:主数据列}';
+COMMENT ON COLUMN mdm_activation.line_mappings   IS '明细映射 [{lineType,targetDict,targetTable,parentIdField,fields}]';
+COMMENT ON COLUMN mdm_activation.code_rule_code  IS 'code 由哪个编码规则生成（新建时接 cmx-code）';
+COMMENT ON COLUMN mdm_activation.subject_name_field IS '主体名字段来源（payload 内字段名，前端按此填 subject_name）';
+COMMENT ON COLUMN mdm_activation.subject_code_field IS '主体编码字段来源（为空则由 codeRule 铸号）';
+COMMENT ON COLUMN mdm_activation.header_groups   IS '头映射分组(UI 展示用,[{groupCode,groupName,fields:[源字段名]}]);激活器不读,header_mapping 落库仍扁平';
+COMMENT ON COLUMN mdm_activation.is_active       IS '是否启用';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_mdm_activation_code     ON mdm_activation (activation_code);
+CREATE        INDEX IF NOT EXISTS idx_mdm_activation_doctype ON mdm_activation (source_doc_type, cr_type);
 
 -- ─────────────────────────────────────────────────────
 -- 2. 主数据版本留痕（激活器写入）—— md_ 治理表，主键 BIGINT
