@@ -367,7 +367,7 @@ function openPublishDialog(st, preset) {
     },
   })
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;'
+  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;'
   wrap.innerHTML = `
     <div class="hint">按订阅/字典 + 事件 seq 范围重建待投递实例（上限 5000 行）。不勾 force 时已送达的不重发。</div>
     <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:12px;color:var(--sapContent_LabelColor);">订阅 id</label>
@@ -450,10 +450,13 @@ function openEditDialog(host, st, sub) {
     dialogWidth: '760px', dialogHeight: '82vh',
     showConfirm: false, showCancel: false,   // 底部按钮自绘（取消/保存并测试/保存）
   })
+  // 注意：不能用 position:absolute 锚定位——setContent 的宿主 #dlg-body 没有 position:relative，
+  // absolute 会锚到整个 .dlg-box（连标题栏一起盖住，滚动条顶到标题栏）。dlg-body 本身是
+  // flex 行容器（只占标题栏与底栏之间），wrap 作 flex 子项填满即可。
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'position:absolute;inset:0;box-sizing:border-box;padding:6px 18px 14px;display:flex;flex-direction:column;'
+  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:6px 18px 14px;display:flex;flex-direction:column;'
   wrap.innerHTML = `<style>
-    .sm-dlg { display:flex; flex-direction:column; height:100%; min-height:0; font-size:13px; }
+    .sm-dlg { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; font-size:13px; }
     .sm-scroll { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:10px;
       padding:2px 6px 8px 0; }
     .sm-dlg label { font-size:12px; color:var(--sapContent_LabelColor); }

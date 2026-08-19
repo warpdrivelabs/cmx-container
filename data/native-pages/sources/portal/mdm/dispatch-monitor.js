@@ -7,8 +7,10 @@
  *    （详情 = cmx-floating-dialog 内 <pre> 展示 /mdm/dispatches/detail 全量 JSON）。
  *    注：投递行无 event_type 列（md_dispatch_log 无此列，详情接口 join 事件表才有），
  *    故流水表以 event_seq 替代设计稿中的 event_type 列。
- *  - Tab2 事件日志：GET /mdm/events 分页表 + 下方 pull 消费者游标表（/mdm/events/offsets）。
- *  - Tab3 死信处理：查 dispatches {status:"dead"} + 行 checkbox / 全选 → [批量重发][批量跳过]。
+ *  - Tab2 事件日志：GET /mdm/events 分页表（cmx-pager）+ 下方 pull 消费者游标表（/mdm/events/offsets）；
+ *    payload 列截断展示，点击弹框查看格式化 JSON 并可复制（悬浮 title 看不全且无法复制）。
+ *  - Tab3 死信处理：查 dispatches {status:"dead"} + 行 checkbox / 全选 → [批量重发][批量跳过]
+ *    （cmx-pager 分页；最近错误列点击弹框查看完整错误并可复制）。
  *  - 页头「手动补发」：小对话框 subscriptionId/dictCode/fromSeq/toSeq/force → POST /mdm/publish。
  *
  * 轮询：stats 30s、当前 Tab 数据 60s（单例 interval + hosts Set + host.isConnected 清理，防多 tab 泄漏）；
@@ -161,8 +163,8 @@ function styleCss() {
   .tbl td { padding:8px 10px; border-bottom:1px solid var(--sapList_BorderColor); vertical-align:middle; }
   .tbl tbody tr:hover td { background:var(--sapList_Hover_Background,#f5f5f5); }
   .muted { color:var(--sapContent_LabelColor); }
-  .pager-line { display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
-  .pager-line .info { font-size:12px; color:var(--sapContent_LabelColor); }
+  .cell-view { cursor:pointer; color:var(--sapBrandColor,#0070f2); }
+  .cell-view:hover { text-decoration:underline; }
   .scroll-y { flex:1; min-height:0; overflow:auto; }
   cmx-toolbar { display:block; }
   .dead-tools { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
@@ -222,11 +224,7 @@ function viewHtml(st) {
             <table class="tbl"><thead><tr><th>seq</th><th>字典</th><th>事件类型</th><th>记录 id</th><th>发生时间</th><th>payload</th></tr></thead>
               <tbody id="dmEventBody"></tbody></table>
           </div>
-          <div class="pager-line"><span class="info" id="dmEPageInfo"></span>
-            <div style="display:flex;gap:6px;">
-              <ui5-button design="Transparent" icon="nav-left" id="dmEPrev">上一页</ui5-button>
-              <ui5-button design="Transparent" icon="nav-right" id="dmENext">下一页</ui5-button>
-            </div></div>
+          <cmx-pager id="dmEPager" page-size="20" page-sizes="10,20,50,100"></cmx-pager>
           <div style="margin-top:10px;"><div style="font-size:13px;font-weight:600;color:var(--sapTitleColor);margin-bottom:4px;">pull 消费者游标</div>
             <div class="scroll-y" style="max-height:180px;">
               <table class="tbl"><thead><tr><th>消费者</th><th>字典</th><th>已确认 seq</th><th>滞后</th><th>确认时间</th></tr></thead>
@@ -244,11 +242,7 @@ function viewHtml(st) {
             <table class="tbl"><thead><tr><th></th><th>id</th><th>订阅</th><th>字典</th><th>记录 id</th><th>事件 seq</th><th>尝试</th><th>最近错误</th><th>创建时间</th></tr></thead>
               <tbody id="dmDeadBody"></tbody></table>
           </div>
-          <div class="pager-line"><span class="info" id="dmDeadPageInfo"></span>
-            <div style="display:flex;gap:6px;">
-              <ui5-button design="Transparent" icon="nav-left" id="dmDeadPrev">上一页</ui5-button>
-              <ui5-button design="Transparent" icon="nav-right" id="dmDeadNext">下一页</ui5-button>
-            </div></div>
+          <cmx-pager id="dmDeadPager" page-size="20" page-sizes="10,20,50,100"></cmx-pager>
         </div>
       </cmx-view-tabs>
     </div></div>`
@@ -343,15 +337,20 @@ function applyEvents(host, st) {
   const body = root.querySelector('#dmEventBody')
   if (body) {
     body.innerHTML = st.eRows.length
-      ? st.eRows.map((e) => `<tr><td>${esc(String(e.seq ?? ''))}</td><td>${esc(e.dict_code || '')}</td>
+      ? st.eRows.map((e, i) => {
+          const pv = e.payload == null ? '' : (typeof e.payload === 'string' ? e.payload : JSON.stringify(e.payload))
+          return `<tr><td>${esc(String(e.seq ?? ''))}</td><td>${esc(e.dict_code || '')}</td>
           <td>${esc(e.event_type || '')}</td><td class="muted">${esc(String(e.record_id ?? ''))}</td>
           <td class="muted">${esc(fmtTime(e.emitted_at))}</td>
-          <td class="muted" title="${esc(trunc(typeof e.payload === 'string' ? e.payload : JSON.stringify(e.payload ?? ''), 300))}">${esc(trunc(typeof e.payload === 'string' ? e.payload : JSON.stringify(e.payload ?? ''), 60))}</td></tr>`).join('')
+          ${pv
+            ? `<td class="cell-view" data-payload-idx="${i}" title="点击查看完整 payload">${esc(trunc(pv, 60))}</td>`
+            : '<td class="muted">-</td>'}</tr>`
+        }).join('')
       : '<tr><td colspan="6" class="muted" style="text-align:center;padding:24px;">暂无事件</td></tr>'
   }
   const info = root.querySelector('#dmETotal'); if (info) info.textContent = `共 ${st.eTotal} 条`
-  const pi = root.querySelector('#dmEPageInfo')
-  if (pi) pi.textContent = `第 ${st.ePage} / ${Math.max(1, Math.ceil(st.eTotal / st.ePageSize))} 页`
+  const pager = root.querySelector('#dmEPager')
+  if (pager) { pager.total = st.eTotal; pager.page = st.ePage; pager.pageSize = st.ePageSize }
   const ob = root.querySelector('#dmOffsetBody')
   if (ob) {
     ob.innerHTML = st.offsets.length
@@ -368,12 +367,14 @@ function applyDead(host, st) {
   const body = root.querySelector('#dmDeadBody')
   if (body) {
     body.innerHTML = st.deadRows.length
-      ? st.deadRows.map((r) => `<tr data-dead="${esc(String(r.id))}">
+      ? st.deadRows.map((r, i) => `<tr data-dead="${esc(String(r.id))}">
           <td><ui5-checkbox class="dead-chk" data-id="${esc(String(r.id))}" ${st.deadSel.has(String(r.id)) ? 'checked' : ''}></ui5-checkbox></td>
           <td class="muted">${esc(String(r.id))}</td><td>${esc(String(r.subscription_id ?? ''))}</td>
           <td>${esc(r.dict_code || '')}</td><td class="muted">${esc(String(r.record_id ?? ''))}</td>
           <td>${esc(String(r.event_seq ?? ''))}</td><td>${esc(String(r.attempts ?? ''))}</td>
-          <td class="muted" title="${esc(trunc(r.last_error, 300))}">${esc(trunc(r.last_error, 60))}</td>
+          ${r.last_error
+            ? `<td class="cell-view" data-err-idx="${i}" title="点击查看完整错误">${esc(trunc(r.last_error, 60))}</td>`
+            : '<td class="muted">-</td>'}
           <td class="muted">${esc(fmtTime(r.created_at))}</td></tr>`).join('')
       : '<tr><td colspan="9" class="muted" style="text-align:center;padding:24px;">暂无死信 🎉</td></tr>'
     body.querySelectorAll('.dead-chk').forEach((ck) => ck.addEventListener('change', () => {
@@ -389,8 +390,8 @@ function applyDead(host, st) {
   }
   const info = root.querySelector('#dmDeadInfo')
   if (info) info.textContent = `死信共 ${st.deadTotal} 条，已勾选 ${st.deadSel.size} 条`
-  const pi = root.querySelector('#dmDeadPageInfo')
-  if (pi) pi.textContent = `第 ${st.deadPage} / ${Math.max(1, Math.ceil(st.deadTotal / st.deadPageSize))} 页`
+  const pager = root.querySelector('#dmDeadPager')
+  if (pager) { pager.total = st.deadTotal; pager.page = st.deadPage; pager.pageSize = st.deadPageSize }
 }
 function updateDeadTools(root, st) {
   const has = st.deadSel.size > 0
@@ -422,16 +423,64 @@ async function openDetail(st, id) {
     showConfirm: false, cancelText: '关闭', dialogWidth: '680px', dialogHeight: '78vh',
   })
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'padding:12px 14px;'
+  // 同 openTextDialog：flex 链自适应高度，避免写死 max-height 被外壳裁底
+  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:12px 14px;display:flex;flex-direction:column;gap:8px;'
   const head = row && row.sub_name
-    ? `<div style="font-size:13px;color:var(--sapContent_LabelColor);margin-bottom:8px;">订阅 ${esc(String(row.subscription_id ?? ''))} · ${esc(row.sub_name || '')}${row.target_sys ? ` · ${esc(row.target_sys)}` : ''}${row.event_type ? ` · ${esc(row.event_type)}` : ''}</div>`
+    ? `<div style="font-size:13px;color:var(--sapContent_LabelColor);flex-shrink:0;">订阅 ${esc(String(row.subscription_id ?? ''))} · ${esc(row.sub_name || '')}${row.target_sys ? ` · ${esc(row.target_sys)}` : ''}${row.event_type ? ` · ${esc(row.event_type)}` : ''}</div>`
     : ''
-  wrap.innerHTML = `${head}<pre style="margin:0;padding:12px;border-radius:6px;background:var(--sapList_HeaderBackground,#f5f6f7);color:var(--sapTextColor);font:12px/1.55 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;overflow:auto;max-height:62vh;">${esc(JSON.stringify(row ?? {}, null, 2))}</pre>`
+  wrap.innerHTML = `${head}<pre style="margin:0;padding:12px;border-radius:6px;background:var(--sapList_HeaderBackground,#f5f6f7);color:var(--sapTextColor);font:12px/1.55 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;overflow:auto;flex:1 1 auto;min-height:0;">${esc(JSON.stringify(row ?? {}, null, 2))}</pre>`
   dlg.setContent(wrap)
   document.body.appendChild(dlg)
   dlg.openModal().then(() => dlg.remove())
 }
 
+// ── 长文本探视弹框（事件 payload / 死信最近错误等）────────────────────────
+// payload / last_error 列只截断展示，悬浮 title 看不全且无法复制——点击单元格
+// 打开本弹框：payload 自动格式化为缩进 JSON，右上「复制」一键拷贝全文。
+function prettyJson(v) {
+  if (v == null) return ''
+  if (typeof v !== 'string') {
+    try { return JSON.stringify(v, null, 2) } catch { return String(v) }
+  }
+  try { return JSON.stringify(JSON.parse(v), null, 2) } catch { return v }
+}
+
+function openTextDialog(title, text, headHtml) {
+  const M = cmx()
+  if (!customElements.get('cmx-floating-dialog')) { M.cmxError?.('弹框组件未就绪'); return }
+  const dlg = document.createElement('cmx-floating-dialog')
+  dlg.configure({
+    title, icon: 'detail-view',
+    showConfirm: false, cancelText: '关闭', dialogWidth: '640px', dialogHeight: '72vh',
+  })
+  const wrap = document.createElement('div')
+  // pre 不写死 max-height：写死会在大屏下超出 dlg-body 可视高被 overflow:hidden 裁底，
+  // 改用 flex 链（wrap 列布局 + pre flex:1/min-height:0）自适应填满，滚动可见完整。
+  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:12px 14px;display:flex;flex-direction:column;gap:8px;'
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+      <div style="flex:1;min-width:0;font-size:13px;color:var(--sapContent_LabelColor);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${headHtml || ''}</div>
+      <ui5-button icon="copy" design="Transparent" id="otCopy">复制</ui5-button>
+    </div>
+    <pre style="margin:0;padding:12px;border-radius:6px;background:var(--sapList_HeaderBackground,#f5f6f7);color:var(--sapTextColor);font:12px/1.55 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;overflow:auto;flex:1 1 auto;min-height:0;">${esc(text)}</pre>`
+  wrap.querySelector('#otCopy')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      showToast('已复制到剪贴板')
+    } catch {
+      // clipboard API 不可用时的兜底（隐藏 textarea + execCommand）
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;'
+      document.body.appendChild(ta); ta.select()
+      try { document.execCommand('copy'); showToast('已复制到剪贴板') } catch { M.cmxError?.('复制失败，请手动选中文本复制') }
+      ta.remove()
+    }
+  })
+  dlg.setContent(wrap)
+  document.body.appendChild(dlg)
+  dlg.openModal().then(() => dlg.remove())
+}
 // ── 手动补发对话框（POST /mdm/publish）───────────────────────────────────
 function openPublishDialog(st) {
   const M = cmx()
@@ -464,7 +513,7 @@ function openPublishDialog(st) {
     },
   })
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;'
+  wrap.style.cssText = 'flex:1 1 auto;min-width:0;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;'
   wrap.innerHTML = `
     <div class="hint">按订阅/字典 + 事件 seq 范围重建待投递实例（上限 5000 行）。不勾 force 时已送达的不重发。</div>
     <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:12px;color:var(--sapContent_LabelColor);">订阅 id</label>
@@ -612,9 +661,26 @@ function bind(host, st, root) {
   }
   root.querySelector('#dmESearch')?.addEventListener('click', eSearch)
   root.querySelector('#dmEDict')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') eSearch() })
-  root.querySelector('#dmEPrev')?.addEventListener('click', () => { if (st.ePage > 1) { st.ePage--; loadEvents(st).then(() => applyEvents(host, st)).catch(() => {}) } })
-  root.querySelector('#dmENext')?.addEventListener('click', () => {
-    if (st.ePage < Math.ceil(st.eTotal / st.ePageSize)) { st.ePage++; loadEvents(st).then(() => applyEvents(host, st)).catch(() => {}) }
+  const ePager = root.querySelector('#dmEPager')
+  if (ePager) {
+    ePager.addEventListener('page-change', (e) => {
+      const d = e.detail || {}
+      if (d.pageSize && d.pageSize !== st.ePageSize) { st.ePageSize = d.pageSize; st.ePage = 1 }
+      else st.ePage = d.page || 1
+      loadEvents(st).then(() => applyEvents(host, st)).catch(() => {})
+    })
+  }
+  // payload 单元格点击 → 弹框查看完整 JSON（委托绑 tbody，innerHTML 重建不影响）
+  root.querySelector('#dmEventBody')?.addEventListener('click', (e) => {
+    const td = e.target && e.target.closest ? e.target.closest('td[data-payload-idx]') : null
+    if (!td) return
+    const row = st.eRows[Number(td.dataset.payloadIdx)]
+    if (!row) return
+    openTextDialog(
+      `事件 payload · seq ${esc(String(row.seq ?? ''))}`,
+      prettyJson(row.payload),
+      `字典 ${esc(row.dict_code || '')} · ${esc(row.event_type || '')} · 记录 ${esc(String(row.record_id ?? ''))} · ${esc(fmtTime(row.emitted_at))}`,
+    )
   })
 
   // Tab3 死信处理
@@ -626,9 +692,26 @@ function bind(host, st, root) {
   })
   root.querySelector('#dmDeadRetry')?.addEventListener('click', () => deadBatch(host, st, 'retry'))
   root.querySelector('#dmDeadSkip')?.addEventListener('click', () => deadBatch(host, st, 'skip'))
-  root.querySelector('#dmDeadPrev')?.addEventListener('click', () => { if (st.deadPage > 1) { st.deadPage--; loadDead(st).then(() => applyDead(host, st)).catch(() => {}) } })
-  root.querySelector('#dmDeadNext')?.addEventListener('click', () => {
-    if (st.deadPage < Math.ceil(st.deadTotal / st.deadPageSize)) { st.deadPage++; loadDead(st).then(() => applyDead(host, st)).catch(() => {}) }
+  const deadPager = root.querySelector('#dmDeadPager')
+  if (deadPager) {
+    deadPager.addEventListener('page-change', (e) => {
+      const d = e.detail || {}
+      if (d.pageSize && d.pageSize !== st.deadPageSize) { st.deadPageSize = d.pageSize; st.deadPage = 1 }
+      else st.deadPage = d.page || 1
+      loadDead(st).then(() => applyDead(host, st)).catch(() => {})
+    })
+  }
+  // 最近错误单元格点击 → 弹框查看完整错误
+  root.querySelector('#dmDeadBody')?.addEventListener('click', (e) => {
+    const td = e.target && e.target.closest ? e.target.closest('td[data-err-idx]') : null
+    if (!td) return
+    const row = st.deadRows[Number(td.dataset.errIdx)]
+    if (!row) return
+    openTextDialog(
+      `死信错误 · 投递 #${esc(String(row.id ?? ''))}`,
+      String(row.last_error ?? ''),
+      `订阅 ${esc(String(row.subscription_id ?? ''))} · ${esc(row.dict_code || '')} · 记录 ${esc(String(row.record_id ?? ''))} · 事件 seq ${esc(String(row.event_seq ?? ''))} · 已尝试 ${esc(String(row.attempts ?? ''))} 次`,
+    )
   })
 
   buildDispatchGrid(host, st)
