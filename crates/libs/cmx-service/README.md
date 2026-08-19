@@ -1,10 +1,15 @@
 # cmx-service
 
-> 企业级通用服务层，作为插件编排的执行引擎，协调 PluginQuery 和 RuntimeInvoker 完成请求处理。
+> 企业级通用服务层，作为插件编排的执行引擎，协调 PluginQuery 和 RuntimeInvoker  完成请求处理。
+
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
 
 ## 项目简介
 
 cmx-service 是 cmx-container 项目的服务编排层，负责服务编排执行、事务管理、服务注册与查询等核心功能。
+
+编排执行按 `service_key` 从服务查询加载编排定义（Flow JSON），从 start 节点沿边遍历执行，直到 end 节点或出错。对外暴露方式：HTTP 皮肤 `crates/libs/cmx-apis/cmx-common-api` 直接使用 `Orchestrator` 执行编排；gRPC 皮肤 `crates/libs/cmx-rpcs/cmx-orchestrator-rpc` 通过依赖注入组合编排能力（不直接依赖本 crate）。
 
 ## 快速开始
 
@@ -12,21 +17,27 @@ cmx-service 是 cmx-container 项目的服务编排层，负责服务编排执�
 
 ```toml
 [dependencies]
-cmx-service = "0.1.0"
+cmx-service = "0.1.12"
 ```
 
 ### 核心示例
 
 ```rust
-use cmx_service::{Orchestrator, ServiceRegistry};
-use cmx_core::model::service::ServiceOrchestration;
+use cmx_service::{Orchestrator, ExecuteOptions};
+use cmx_core::SVRContext;
+use std::sync::Arc;
 
 let orchestrator = Orchestrator::new(
-    runtime_invoker,
-    plugin_query,
-    service_storage,
+    runtime_invoker,           // Arc<dyn RuntimeInvoker>
+    plugin_query,              // Arc<dyn PluginQuery>
+    service_query,             // Arc<dyn ServiceQuery>
+    "primary".to_string(),     // 默认数据库 ID
 );
-let result = orchestrator.execute(&orchestration, input).await?;
+
+let result = orchestrator
+    .execute_service("order-service", svr_context, ExecuteOptions::new(false))
+    .await?;
+// result: OrchestrationResult { success, output, steps, total_elapsed_us, error, ... }
 ```
 
 ## 核心功能与特性
@@ -35,38 +46,44 @@ let result = orchestrator.execute(&orchestration, input).await?;
 |------|------|
 | Orchestrator | 编排执行器，支持服务编排 JSON、事务框、多分支节点 |
 | ServiceRegistry | 服务注册中心，提供服务信息的内存缓存 |
-| ServiceRepository | 服务仓储层，提供服务定义的数据库访问 |
-| ServiceQueryImpl | ServiceQuery trait 实现（缓存优先） |
+| ServiceRepository | 服务仓储层，提供服务定义的数据库访问（cmx_service_define 表） |
+| ServiceQueryImpl | ServiceQuery trait 实现（注册表缓存优先，回落数据库） |
 | ServiceStorageImpl | ServiceStorage trait 实现 |
-| ServiceLifecycleListener | 生命周期监听器，自动同步服务缓存 |
+| ServiceInvokerImpl | ServiceInvoker trait 实现（供 WASM 插件等经全局单例回调编排） |
+| ServiceLifecycleListener | 生命周期监听器，订阅插件生命周期事件并同步服务缓存 |
+
+`handler.rs` / `service.rs` / `request.rs` 为预留模块（未在 lib.rs 挂载），供后续单次调用场景启用。
 
 ## 服务编排特性
 
 - **线性流程执行**: start -> func -> func -> end
-- **事务框支持**: 多个函数在同一个数据库事务中执行
-- **多分支路由**: switch 节点根据返回值选择执行路径
+- **事务框支持**: 多个函数在同一个数据库事务中执行（子节点通过 `parent` 字段指向事务框节点）
+- **多分支路由**: switch 节点根据返回值选择执行路径（分支选项经 `options` 与边端口路由）
 - **SVRContext 上下文传递**: 初始入参、请求头、各步骤输出在函数间传递
-- **调试模式**: 支持在指定节点处暂停执行
+- **调试模式**: 执行到指定节点时暂停，返回插件详情与 code-server URL（配合 cmx-debug）
 
 ## 模块结构
 
 ```
 cmx-service
 ├── src/
-│   ├── lib.rs              # 库入口
-│   ├── error.rs            # 错误类型定义
-│   ├── orchestrator/       # 编排执行器
-│   │   ├── executor.rs
-│   │   ├── flow_navigator.rs
-│   │   ├── mod.rs
-│   │   ├── node_handler.rs
-│   │   ├── transaction_manager.rs
-│   │   └── types.rs
-│   ├── registry.rs         # 服务注册中心
-│   ├── repository.rs       # 服务仓储层
-│   ├── service_query_impl.rs  # 服务查询实现
-│   ├── service_storage_impl.rs # 服务存储实现
-│   └── lifecycle_listener.rs   # 生命周期监听器
+│   ├── lib.rs                  # 库入口 + 全局单例（GlobalServiceQuery/Storage/Registry）
+│   ├── error.rs                # 错误类型定义
+│   ├── orchestrator/           # 编排执行器
+│   │   ├── executor.rs         # Orchestrator 核心（execute_service）
+│   │   ├── flow_navigator.rs   # 流程图遍历
+│   │   ├── node_handler.rs     # 节点执行
+│   │   ├── transaction_manager.rs # 事务框管理
+│   │   ├── debug_prepare.rs    # 调试暂停准备
+│   │   ├── old.rs             # 历史实现（未在 mod.rs 挂载，不参与编译）
+│   │   └── types.rs            # 执行选项/结果类型
+│   ├── registry.rs             # 服务注册中心
+│   ├── repository.rs           # 服务仓储层
+│   ├── service_invoker_impl.rs # ServiceInvoker 实现
+│   ├── service_query_impl.rs   # ServiceQuery 实现
+│   ├── service_storage_impl.rs # ServiceStorage 实现
+│   ├── lifecycle_listener.rs   # 生命周期监听器
+│   └── sample-flow.json        # 编排 JSON 完整示例
 └── Cargo.toml
 ```
 
@@ -77,498 +94,381 @@ cmx-service
 #### 1.1 创建编排执行器
 
 ```rust
-use cmx_service::{Orchestrator, OrchestratorConfig};
-use cmx_traits::{RuntimeInvoker, PluginQuery, ServiceStorage};
+use cmx_service::Orchestrator;
+use cmx_traits::{runtime::RuntimeInvoker, plugin::PluginQuery, service::ServiceQuery};
 use std::sync::Arc;
 
-async fn create_orchestrator(
+fn create_orchestrator(
     runtime: Arc<dyn RuntimeInvoker>,
     plugin_query: Arc<dyn PluginQuery>,
-    service_storage: Arc<dyn ServiceStorage>,
+    service_query: Arc<dyn ServiceQuery>,
 ) -> Orchestrator {
-    let config = OrchestratorConfig::default();
-
     Orchestrator::new(
         runtime,
         plugin_query,
-        service_storage,
-        config,
+        service_query,
+        "primary".to_string(), // 默认数据库 ID（事务框未指定 databaseId 时使用）
     )
+    // 可选：Builder 方式覆盖默认库
+    // .with_db_id("orders-db")
 }
 ```
 
 #### 1.2 执行服务编排
 
+执行入口是 `execute_service(service_key, svr_context, options)`：按 service_key 先取 `ServiceDefinition` 校验存在，再取编排定义执行。
+
 ```rust
-use cmx_core::model::service::ServiceOrchestration;
+use cmx_service::{Orchestrator, ExecuteOptions};
+use cmx_core::SVRContext;
+use chrono::Utc;
 use serde_json::json;
+use std::collections::HashMap;
 
 async fn execute_service(
     orchestrator: &Orchestrator,
-    orchestration: &ServiceOrchestration,
-    input: serde_json::Value,
-) -> Result<serde_json::Value, ServiceError> {
+    service_key: &str,
+) -> Result<(), cmx_service::ServiceError> {
+    let mut headers = HashMap::new();
+    headers.insert("Content-Type".to_string(), "application/json".to_string());
+    let svr_context = SVRContext::new(
+        json!({"user_id": 123, "action": "create_order"}),
+        headers,
+        Utc::now(),
+        "req-001".to_string(),
+    );
+
+    // include_steps=false：成功时仅返回最终结果（生产推荐）；
+    // 执行失败时无论设置如何都会返回 steps 便于排错
     let result = orchestrator
-        .execute(orchestration, input)
+        .execute_service(service_key, svr_context, ExecuteOptions::new(false))
         .await?;
 
-    Ok(result)
+    println!("success: {}", result.success);
+    println!("output: {:?}", result.output);
+    println!("total: {}us", result.total_elapsed_us);
+    Ok(())
 }
-
-// 示例编排执行
-let orchestration = load_orchestration_from_json()?;
-let result = orchestrator.execute(&orchestration, json!({
-    "user_id": 123,
-    "action": "create_order"
-})).await?;
 ```
+
+`OrchestrationResult` 字段：`success` / `output`（最终输出，失败时 None）/ `steps: Vec<ExecutionStep>` / `total_elapsed_us` / `error: Option<OrchestrationError>` / `debug_triggered` / `debug_prepare_result`。
 
 #### 1.3 调试模式执行
 
+`ExecuteOptions::with_debug(debug, debug_node_id, debug_params)`：当 `debug=true` 且指定 `debug_node_id` 时，编排器执行到目标节点会暂停，返回 `DebugPrepareResult`（code-server URL、插件详情、节点信息等，供前端发起调试会话，配合 cmx-debug 使用）。
+
 ```rust
-use cmx_service::{Orchestrator, DebugContext};
+use cmx_service::ExecuteOptions;
 
-async fn debug_execute(
-    orchestrator: &Orchestrator,
-    orchestration: &ServiceOrchestration,
-    input: serde_json::Value,
-) -> Result<serde_json::Value, ServiceError> {
-    let debug_ctx = DebugContext {
-        break_at_nodes: vec!["step_2".to_string(), "step_4".to_string()],
-        capture_state: true,
-        verbose: true,
-    };
+let options = ExecuteOptions::new(true) // 返回步骤数据
+    .with_debug(true, Some("validate_input".to_string()), None);
 
-    let result = orchestrator
-        .execute_with_debug(orchestration, input, debug_ctx)
-        .await?;
-
-    Ok(result)
+let result = orchestrator.execute_service("order-service", svr_context, options).await?;
+if result.debug_triggered == Some(true) {
+    let prep = result.debug_prepare_result.unwrap();
+    println!("code-server: {}", prep.code_server_url);
+    println!("plugin: {} v{}", prep.plugin_id, prep.plugin_version);
 }
 ```
 
 ### 二、服务编排 JSON 结构
 
+编排定义来自服务设计器（Flow JSON），顶层为 `{ name, code, description, flow: { nodes, edges } }`，完整示例见 `src/sample-flow.json`。节点类型为 `skylake-*` 系列，节点字段使用 `type`（Rust 侧为 `node_type`）、`data.nodeMeta`（camelCase）等 serde 重命名。
+
 #### 2.1 线性流程
 
 ```json
 {
-  "id": "service_001",
   "name": "用户注册服务",
-  "version": "1.0.0",
-  "nodes": [
-    {
-      "id": "start",
-      "type": "start",
-      "next": "validate_input"
-    },
-    {
-      "id": "validate_input",
-      "type": "func",
-      "plugin": "validator-plugin",
-      "function": "validate",
-      "next": "create_user"
-    },
-    {
-      "id": "create_user",
-      "type": "func",
-      "plugin": "user-plugin",
-      "function": "create",
-      "next": "send_welcome"
-    },
-    {
-      "id": "send_welcome",
-      "type": "func",
-      "plugin": "notification-plugin",
-      "function": "send_email",
-      "next": "end"
-    },
-    {
-      "id": "end",
-      "type": "end"
-    }
-  ]
-}
-```
-
-#### 2.2 多分支流程
-
-```json
-{
-  "id": "order_processing",
-  "name": "订单处理服务",
-  "nodes": [
-    {"id": "start", "type": "start", "next": "check_stock"},
-    {
-      "id": "check_stock",
-      "type": "func",
-      "plugin": "inventory-plugin",
-      "function": "check_stock",
-      "next": "route_by_stock"
-    },
-    {
-      "id": "route_by_stock",
-      "type": "switch",
-      "expression": "result.stock_status",
-      "cases": {
-        "available": "process_order",
-        "insufficient": "notify_customer",
-        "out_of_stock": "cancel_order"
+  "code": "user-register",
+  "flow": {
+    "nodes": [
+      { "id": "start", "type": "skylake-start", "meta": {} },
+      {
+        "id": "create_user",
+        "type": "skylake-func",
+        "meta": {},
+        "data": {
+          "name": "创建用户",
+          "nodeMeta": {
+            "pluginId": "user-plugin",
+            "pluginName": "用户插件",
+            "pluginVersion": "1.0.0",
+            "functionName": "create",
+            "databaseId": null
+          },
+          "inputs": [], "outputs": []
+        }
       },
-      "default": "notify_customer"
-    },
-    {
-      "id": "process_order",
-      "type": "func",
-      "plugin": "order-plugin",
-      "function": "process",
-      "next": "end"
-    },
-    {
-      "id": "notify_customer",
-      "type": "func",
-      "plugin": "notification-plugin",
-      "function": "notify",
-      "next": "end"
-    },
-    {
-      "id": "cancel_order",
-      "type": "func",
-      "plugin": "order-plugin",
-      "function": "cancel",
-      "next": "end"
-    },
-    {"id": "end", "type": "end"}
-  ]
+      { "id": "end", "type": "skylake-end", "meta": {} }
+    ],
+    "edges": [
+      { "sourceNodeID": "start", "sourcePortID": "out", "targetNodeID": "create_user", "targetPortID": "in" },
+      { "sourceNodeID": "create_user", "sourcePortID": "out", "targetNodeID": "end", "targetPortID": "in" }
+    ]
+  }
 }
 ```
 
-#### 2.3 事务流程
+#### 2.2 多分支流程（skylake-switch）
+
+switch 节点在 `data.options` 中声明分支出口（端口名），边的 `sourcePortID` 对应命中的分支：
 
 ```json
 {
-  "id": "transfer_service",
-  "name": "转账服务",
-  "nodes": [
-    {"id": "start", "type": "start", "next": "begin_tx"},
-    {
-      "id": "begin_tx",
-      "type": "transaction",
-      "transaction_id": "tx_001",
-      "steps": [
-        {"id": "deduct_source", "type": "func", "plugin": "account-plugin", "function": "deduct"},
-        {"id": "add_target", "type": "func", "plugin": "account-plugin", "function": "deposit"},
-        {"id": "record_log", "type": "func", "plugin": "log-plugin", "function": "record"}
-      ],
-      "on_commit": "send_notification",
-      "on_rollback": "compensate",
-      "next": "end"
+  "id": "route_check",
+  "type": "skylake-switch",
+  "meta": {},
+  "data": {
+    "name": "路由判断",
+    "nodeMeta": {
+      "pluginId": "bbgl", "pluginName": "路由插件", "pluginVersion": "1.0.0",
+      "functionName": "route_check", "databaseId": null
     },
-    {"id": "send_notification", "type": "func", "plugin": "notification-plugin", "function": "notify", "next": "end"},
-    {"id": "compensate", "type": "func", "plugin": "account-plugin", "function": "compensate", "next": "end"},
-    {"id": "end", "type": "end"}
-  ]
+    "options": ["1", "2", "3"],
+    "inputs": [], "outputs": []
+  }
+}
+```
+
+```json
+{ "sourceNodeID": "route_check", "sourcePortID": "1", "targetNodeID": "branch_1_func", "targetPortID": "in" }
+```
+
+#### 2.3 事务流程（skylake-transaction）
+
+事务框是一个节点（`type: "skylake-transaction"`，`nodeMeta.databaseId` 指定事务库），框内函数节点通过 `parent` 字段指向事务框节点 ID；执行时共享同一 `txn_id`，任一节点失败整体回滚。
+
+```json
+{
+  "id": "transaction_box",
+  "type": "skylake-transaction",
+  "meta": {},
+  "data": {
+    "name": "事务处理框",
+    "nodeMeta": {
+      "pluginId": "", "pluginName": "", "pluginVersion": "",
+      "functionName": "", "databaseId": "primary"
+    },
+    "inputs": [], "outputs": []
+  }
 }
 ```
 
 ### 三、服务注册中心 (ServiceRegistry)
 
-#### 3.1 注册服务
-
-```rust
-use cmx_service::{ServiceRegistry, ServiceInfo};
-use cmx_core::model::service::ServiceOrchestration;
-
-async fn register_service(
-    registry: &ServiceRegistry,
-    orchestration: ServiceOrchestration,
-) -> Result<(), ServiceError> {
-    let info = ServiceInfo {
-        id: orchestration.id.clone(),
-        name: orchestration.name.clone(),
-        version: orchestration.version.clone(),
-        plugin_id: extract_plugin_id(&orchestration)?,
-        functions: extract_functions(&orchestration),
-        status: "active".to_string(),
-    };
-
-    registry.register(info).await?;
-    Ok(())
-}
-```
-
-#### 3.2 查询服务
+`ServiceRegistry` 是纯内存缓存（service_key -> ServiceDefinition，附 orchestration JSON 缓存与插件索引）。
 
 ```rust
 use cmx_service::ServiceRegistry;
+use std::collections::HashMap;
 
-async fn find_service(
-    registry: &ServiceRegistry,
-    service_id: &str,
-) -> Result<Option<ServiceInfo>, ServiceError> {
-    registry.find_by_id(service_id).await
-}
+// 注册（同时缓存编排 JSON）
+registry.register(service_definition, Some(orchestration_json)).await;
 
-async fn list_by_plugin(
-    registry: &ServiceRegistry,
-    plugin_id: &str,
-) -> Result<Vec<ServiceInfo>, ServiceError> {
-    registry.find_by_plugin(plugin_id).await
-}
+// 注销（service_key + plugin_id 双重定位）
+registry.unregister("order-service", "order-plugin").await;
 
-async fn list_all_services(
-    registry: &ServiceRegistry,
-) -> Result<Vec<ServiceInfo>, ServiceError> {
-    registry.list_all().await
-}
-```
+// 查询
+let def = registry.get("order-service").await;               // Option<ServiceDefinition>
+let list = registry.get_by_plugin("order-plugin").await;      // Vec<ServiceDefinition>
+let flow = registry.get_orchestration("order-service").await; // Option<serde_json::Value>
+let keys = registry.get_all_keys().await;                     // Vec<String>
 
-#### 3.3 注销服务
+// 批量重建（先清空再装载，用于应用启动时预热）
+registry.load_all(services, orchestrations_map).await;
 
-```rust
-async fn unregister_service(
-    registry: &ServiceRegistry,
-    service_id: &str,
-) -> Result<(), ServiceError> {
-    registry.unregister(service_id).await
-}
+// 按插件同步（插件安装/升级后刷新其服务）
+registry.sync_plugin_services(plugin_id, services, orchestrations).await;
 ```
 
 ### 四、服务仓储层 (ServiceRepository)
 
-#### 4.1 保存服务定义
+`ServiceRepository` 直接经 cmx-database 执行 SQL，读写 `cmx_service_define` 表：
 
 ```rust
-use cmx_service::{ServiceRepository, ServiceDefinition};
-
-async fn save_service(
-    repo: &ServiceRepository,
-    definition: ServiceDefinition,
-) -> Result<(), ServiceError> {
-    repo.save(&definition).await
-}
-
-async fn update_service(
-    repo: &ServiceRepository,
-    definition: ServiceDefinition,
-) -> Result<(), ServiceError> {
-    repo.update(&definition).await
-}
-```
-
-#### 4.2 删除服务定义
-
-```rust
-async fn delete_service(
-    repo: &ServiceRepository,
-    service_id: &str,
-) -> Result<(), ServiceError> {
-    repo.delete(service_id).await
-}
-```
-
-#### 4.3 查询服务定义
-
-```rust
-async fn get_service(
-    repo: &ServiceRepository,
-    service_id: &str,
-) -> Result<Option<ServiceDefinition>, ServiceError> {
-    repo.find_by_id(service_id).await
-}
-
-async fn list_services(
-    repo: &ServiceRepository,
-    page: u64,
-    page_size: u64,
-) -> Result<(Vec<ServiceDefinition>, i64), ServiceError> {
-    repo.list(page, page_size).await
-}
-```
-
-### 五、全局单例管理
-
-#### 5.1 设置全局服务查询器
-
-```rust
-use cmx_service::{GlobalServiceQuery, ServiceQueryImpl};
+use cmx_service::ServiceRepository;
 use std::sync::Arc;
 
-async fn init_service_query(
-    repository: Arc<dyn ServiceRepository>,
-    cache: Arc<dyn Cache>,
-) -> Result<(), ServiceError> {
-    let query = ServiceQueryImpl::new(repository, cache);
-    GlobalServiceQuery::set(Arc::new(query)).await?;
-    Ok(())
-}
+let repo = ServiceRepository::new(
+    Arc::new(database_manager), // cmx_database::DatabaseManager
+    "primary".to_string(),      // 默认数据库 ID
+);
+// .with_db_id("orders-db") 可覆盖
+
+// 保存（或在外层事务中保存：save_service_with_txn）
+repo.save_service(&definition).await?;
+
+// 查询（带 app_id 隔离）
+let def = repo.get_service("order-service", "app-001").await?;
+let all = repo.list_services("app-001").await?;
+let by_plugin = repo.get_services_by_plugin("order-plugin").await?;
+let (items, total) = repo.page_services(&filter, 1, 20).await?; // ServicePageFilter
+
+// 删除与版本留档
+repo.delete_service("order-service", "app-001").await?;
+repo.delete_services_by_plugin("order-plugin").await?;
+repo.save_service_version(params).await?;
+let versions = repo.get_service_versions("order-service", "app-001").await?;
+let config = repo.get_service_config("order-service", "app-001").await?;
 ```
 
-#### 5.2 获取全局服务查询器
+### 五、trait 实现与全局单例
+
+三个 trait 实现：
+
+- `ServiceQueryImpl::new(repository, registry, app_id)` — 实现 `ServiceQuery`（注册表缓存优先，回落数据库）
+- `ServiceStorageImpl::new(repository)` — 实现 `ServiceStorage`（保存/删除/版本）
+- `ServiceInvokerImpl::new(runtime, plugin_query, service_query, default_db_id)` — 实现 `ServiceInvoker`（供 WASM 插件回调编排服务）
+
+全局单例（`set` 为同步方法，重复设置返回 Err；`get` 返回静态引用，未初始化时 panic）：
 
 ```rust
-use cmx_service::GlobalServiceQuery;
+use cmx_service::{
+    GlobalServiceQuery, GlobalServiceRegistry, GlobalServiceStorage,
+    ServiceQueryImpl, ServiceStorageImpl,
+};
+use std::sync::Arc;
 
-async fn use_service_query() -> Result<(), ServiceError> {
-    let query = GlobalServiceQuery::get()
-        .ok_or_else(|| ServiceError::NotFound("Service query not initialized".to_string()))?;
-
-    let service = query.get_service("service_001").await?;
+fn init_globals(
+    query_impl: ServiceQueryImpl,
+    storage_impl: ServiceStorageImpl,
+    registry: Arc<ServiceRegistry>,
+) -> Result<(), String> {
+    GlobalServiceQuery::set(Arc::new(query_impl))?;
+    GlobalServiceStorage::set(Arc::new(storage_impl))?;
+    GlobalServiceRegistry::set(registry)?;
     Ok(())
+}
+
+fn use_globals() {
+    let query = GlobalServiceQuery::get();      // &'static Arc<dyn ServiceQuery>
+    let storage = GlobalServiceStorage::get();  // &'static Arc<dyn ServiceStorage>
+    let registry = GlobalServiceRegistry::get();
+    assert!(GlobalServiceQuery::is_initialized());
 }
 ```
 
-#### 5.3 设置全局服务存储
+### 六、生命周期监听 (ServiceLifecycleListener)
 
-```rust
-use cmx_service::{GlobalServiceStorage, ServiceStorageImpl};
-
-async fn init_service_storage(
-    repository: Arc<dyn ServiceRepository>,
-) -> Result<(), ServiceError> {
-    let storage = ServiceStorageImpl::new(repository);
-    GlobalServiceStorage::set(Arc::new(storage)).await?;
-    Ok(())
-}
-```
-
-### 六、生命周期监听
-
-#### 6.1 实现生命周期监听器
+`ServiceLifecycleListener` 是具体结构体（非 trait），订阅全局事件总线的插件安装/升级/卸载事件，自动同步服务注册缓存与数据库：
 
 ```rust
 use cmx_service::ServiceLifecycleListener;
-use async_trait::async_trait;
+use std::sync::Arc;
 
-struct PluginLifecycleHandler {
-    registry: Arc<ServiceRegistry>,
-}
-
-#[async_trait]
-impl ServiceLifecycleListener for PluginLifecycleHandler {
-    async fn on_plugin_activated(&self, plugin_id: &str) {
-        tracing::info!("Plugin activated: {}", plugin_id);
-        // 刷新相关服务缓存
-        self.registry.refresh_by_plugin(plugin_id).await;
-    }
-
-    async fn on_plugin_deactivated(&self, plugin_id: &str) {
-        tracing::info!("Plugin deactivated: {}", plugin_id);
-        // 标记相关服务为不可用
-        self.registry.mark_unavailable_by_plugin(plugin_id).await;
-    }
-
-    async fn on_plugin_upgraded(&self, plugin_id: &str, new_version: &str) {
-        tracing::info!("Plugin upgraded: {} -> {}", plugin_id, new_version);
-        // 刷新服务缓存
-        self.registry.refresh_by_plugin(plugin_id).await;
-    }
+#[tokio::main]
+async fn main() {
+    let listener = ServiceLifecycleListener::new(
+        Arc::new(query_impl),        // ServiceQuery
+        Arc::new(repository),        // ServiceRepository
+        Arc::new(service_registry),  // ServiceRegistry
+        "app-001".to_string(),       // 过滤非本应用事件
+    );
+    listener.register().await; // 订阅 plugin.installed / upgraded / uninstalled / downgraded / reinstalled / loaded / unloaded
 }
 ```
 
 ### 七、错误处理
 
-#### 7.1 错误类型
+`ServiceError` 覆盖编排执行、数据库访问与插件调用的错误场景：
 
 ```rust
 use cmx_service::ServiceError;
 
-match result {
-    Ok(value) => println!("Result: {:?}", value),
-    Err(e) => {
-        match e {
-            ServiceError::NotFound(msg) => {
-                eprintln!("Service not found: {}", msg);
-            }
-            ServiceError::PluginNotFound(plugin_id) => {
-                eprintln!("Plugin not found: {}", plugin_id);
-            }
-            ServiceError::FunctionNotFound(func_name) => {
-                eprintln!("Function not found: {}", func_name);
-            }
-            ServiceError::TransactionFailed(msg) => {
-                eprintln!("Transaction failed: {}", msg);
-            }
-            ServiceError::InvalidOrchestration(msg) => {
-                eprintln!("Invalid orchestration: {}", msg);
-            }
-            ServiceError::ExecutionFailed(msg) => {
-                eprintln!("Execution failed: {}", msg);
-            }
-        }
+match err {
+    ServiceError::PluginNotFound(id) | ServiceError::PluginNotActive(id) => {
+        eprintln!("Plugin unavailable: {}", id);
+    }
+    ServiceError::WasmNotLoaded(id) => {
+        eprintln!("WASM module not loaded: {}", id);
+    }
+    ServiceError::InvokeFailed(msg) => {
+        eprintln!("WASM invocation failed: {}", msg);
+    }
+    ServiceError::OrchestrationFailed { step_id, message } => {
+        eprintln!("Step {} failed: {}", step_id, message);
+    }
+    ServiceError::NodeExecutionFailed { node_id, node_name, node_type, detail } => {
+        eprintln!("Node {}({}) [{}] failed: {}", node_name, node_id, node_type, detail);
+    }
+    ServiceError::TransactionRolledBack { txn_id, reason } => {
+        eprintln!("Transaction {} rolled back: {}", txn_id, reason);
+    }
+    ServiceError::InputParseError(msg)
+    | ServiceError::OutputSerializeError(msg)
+    | ServiceError::DatabaseError(msg)
+    | ServiceError::InternalError(msg) => {
+        eprintln!("Service error: {}", msg);
+    }
+    ServiceError::TraitError(e) => {
+        eprintln!("Underlying trait error: {}", e);
     }
 }
-```
-
-#### 7.2 重试机制
-
-```rust
-use cmx_service::{Orchestrator, RetryConfig};
-
-let config = OrchestratorConfig::builder()
-    .retry_config(RetryConfig {
-        max_attempts: 3,
-        initial_delay_ms: 100,
-        max_delay_ms: 5000,
-        backoff_multiplier: 2.0,
-    })
-    .build();
-
-let orchestrator = Orchestrator::new(runtime, plugin_query, storage, config);
 ```
 
 ### 八、完整示例
 
 ```rust
 use cmx_service::{
-    Orchestrator, ServiceRegistry, ServiceRepository,
-    GlobalServiceQuery, GlobalServiceStorage, GlobalServiceRegistry,
-    OrchestratorConfig,
+    ExecuteOptions, GlobalServiceQuery, GlobalServiceRegistry, GlobalServiceStorage,
+    Orchestrator, ServiceQueryImpl, ServiceRegistry, ServiceRepository,
+    ServiceStorageImpl, ServiceLifecycleListener,
 };
-use cmx_core::model::service::ServiceOrchestration;
-use cmx_traits::{RuntimeInvoker, PluginQuery, ServiceStorage};
+use cmx_core::SVRContext;
+use chrono::Utc;
+use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. 初始化各组件
-    let runtime: Arc<dyn RuntimeInvoker> = create_runtime()?;
-    let plugin_query: Arc<dyn PluginQuery> = create_plugin_query()?;
-    let service_storage: Arc<dyn ServiceStorage> = create_service_storage()?;
-    let service_repo = create_repository()?;
+    // 1. 初始化各组件（runtime/plugin_query 来自 cmx-runtime / cmx-plugin 装配层）
+    let runtime: Arc<dyn cmx_traits::runtime::RuntimeInvoker> = create_runtime()?;
+    let plugin_query: Arc<dyn cmx_traits::plugin::PluginQuery> = create_plugin_query()?;
+    let repository = Arc::new(ServiceRepository::new(db_manager, "primary".to_string()));
+    let registry = Arc::new(ServiceRegistry::new());
 
     // 2. 初始化全局单例
-    GlobalServiceStorage::set(service_storage.clone()).await?;
-    GlobalServiceRegistry::set(Arc::new(ServiceRegistry::new())).await?;
+    let query_impl = ServiceQueryImpl::new(repository.clone(), registry.clone(), "app-001".to_string());
+    GlobalServiceQuery::set(Arc::new(query_impl)).map_err(|e| format!("{}", e))?;
+    GlobalServiceStorage::set(Arc::new(ServiceStorageImpl::new(repository.clone())))
+        .map_err(|e| format!("{}", e))?;
+    GlobalServiceRegistry::set(registry.clone()).map_err(|e| format!("{}", e))?;
 
-    let query_impl = ServiceQueryImpl::new(
-        service_repo.clone(),
-        create_cache()?,
-    );
-    GlobalServiceQuery::set(Arc::new(query_impl)).await?;
+    // 3. 订阅插件生命周期事件，自动同步服务缓存
+    ServiceLifecycleListener::new(
+        GlobalServiceQuery::get().clone(),
+        repository.clone(),
+        registry.clone(),
+        "app-001".to_string(),
+    )
+    .register()
+    .await;
 
-    // 3. 创建编排执行器
-    let config = OrchestratorConfig::default();
+    // 4. 创建编排执行器并执行
     let orchestrator = Orchestrator::new(
         runtime,
         plugin_query,
-        service_storage,
-        config,
+        GlobalServiceQuery::get().clone(),
+        "primary".to_string(),
     );
 
-    // 4. 加载并执行编排
-    let orchestration: ServiceOrchestration = load_orchestration("order_processing.json")?;
+    let svr_context = SVRContext::new(
+        json!({"order_id": "ORD-12345", "user_id": 1001}),
+        HashMap::new(),
+        Utc::now(),
+        "req-001".to_string(),
+    );
 
-    let result = orchestrator.execute(&orchestration, serde_json::json!({
-        "order_id": "ORD-12345",
-        "user_id": 1001,
-        "items": [
-            {"product_id": "PROD-001", "quantity": 2},
-            {"product_id": "PROD-002", "quantity": 1}
-        ]
-    })).await?;
+    let result = orchestrator
+        .execute_service("order_processing", svr_context, ExecuteOptions::new(true))
+        .await?;
 
-    println!("Execution result: {:?}", result);
+    println!("success: {}, elapsed: {}us", result.success, result.total_elapsed_us);
+    for step in &result.steps {
+        println!("  [{}] {} -> {:?}", step.node_type, step.node_name, step.status);
+    }
 
     Ok(())
 }

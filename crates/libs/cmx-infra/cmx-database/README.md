@@ -2,60 +2,96 @@
 
 > 数据库操作模块，支持 WebAssembly 调用 host 实现数据库操作。
 
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
+[![Authors](https://img.shields.io/badge/authors-skylake%40pansoft.com-lightgrey.svg)]()
+
 ## 项目简介
 
-cmx-database 是 cmx-container 项目的数据库操作层，提供数据库连接池管理、事务处理、CRUD 操作和 SQL 执行等功能。
+cmx-database 是 cmx-container 项目的数据库操作层（sqlx 链路），提供多数据源连接池管理、
+事务注册表（守卫式 / 闭包式 / 编程式三种事务形态）、通用 CRUD（DbBmc + GenericCrudService）、
+SQL 迁移引擎、长事务监控以及零拷贝列式结果集（zmc）等能力。
+
+> 另有 `cmx-database-pg`（tokio-postgres + deadpool 并行实现）与本 crate 的 sqlx 链路并存，
+> 两者共享 `cmx-rowsource` 的中立行来源抽象；本 crate 对外统一重导出
+> `ZmcRowSource` / `ZmcColType`，保证上层以同一抽象消费两种驱动链路的结果。
 
 ## 快速开始
 
 ### 安装
 
+内部 crate，通过 workspace 依赖引入：
+
 ```toml
 [dependencies]
-cmx-database = "0.1.0"
+cmx-database = { workspace = true }
 ```
 
 ### 核心示例
 
 ```rust
-use cmx_database::{DatabaseManager, DatabaseManagerConfig};
+use cmx_database::{DatabaseManager, DatabaseManagerConfig, config::DbConfig};
 
-let config = DatabaseManagerConfig::default();
-let manager = DatabaseManager::new(config).await?;
-let pool = manager.get_pool();
+// 1. 创建管理器（同步构造，无 IO）
+let manager = DatabaseManager::new(DatabaseManagerConfig::default());
+
+// 2. 注册数据源（default = true 的数据源成为默认库）
+manager.register_data_source(DbConfig {
+    db_type: cmx_database::DbType::Postgres,
+    db_url: "postgresql://user:pass@localhost:5432/cmx".to_string(),
+    db_id: "default".to_string(),
+    default: true,
+    ..Default::default()
+}).await?;
+
+// 3. 查询（返回 cmx_core 的 DataSet）
+let ds = manager
+    .query_sql("default", None, "SELECT id, name FROM users", "users_ds")
+    .await?;
 ```
+
+应用内通常直接使用全局单例：`cmx_database::get_default_db_manager()` 返回
+`&'static Arc<DatabaseManager>`（懒初始化，配置默认值）。
 
 ## 核心功能与特性
 
 | 功能 | 说明 |
 |------|------|
-| 连接池管理 | 基于 SQLx 的异步连接池 |
-| 事务处理 | 支持事务开启、提交、回滚 |
-| CRUD 操作 | 通用增删改查封装 |
-| SQL 执行 | 灵活 SQL 执行接口 |
-| 类型安全 | 参数绑定和结果转换 |
+| 多数据源管理 | `register_data_source` 动态注册多个库（`db_id` 寻址），支持 default / biz（业务库）/ other 三类 `source_type` |
+| 连接池 | 基于 sqlx 的异步连接池（Postgres / MySql / Sqlite），`PoolConfig` 可调 max/min/超时/生命周期 |
+| 事务处理 | 全局事务注册表 + 引用计数；`TransactionGuard` RAII 守卫、`with_transaction_by_id` 闭包、`Dbx` 编程式三种形态 |
+| CRUD | `DbBmc` trait 元信息 + `GenericCrudService` 通用增删改查（modql 过滤器、加密字段、archived 软删过滤） |
+| SQL 执行 | `execute_sql` / `query_sql` 系列自由函数与 manager 方法，支持 Json / DataValues / SqlxValues / Typed 四类参数 |
+| 轻量 SQL 构建 | `types` 模块 `QueryBuilder` / `ConditionExpr` / `TypedRow` 条件组合与类型化取值 |
+| 零拷贝结果集 | `zmc` 模块（`ZmcDataSet` / `SqlxPgRowSource`），查询直出列式编码，`query_sql_zmc` 入口 |
+| SQL 迁移 | `MigrationRunner`：版本化迁移文件、checksum 校验、分布式锁防并发、支持回滚 |
+| 监控 | `get_active_transactions` / `check_long_running_transactions` 长事务检测，`start_monitoring` 后台巡检（30s 健康检查 + 60s 事务超时） |
+| Wasm host | `DatabaseHostFunctions` 供插件（WebAssembly）经 host 调用数据库能力 |
 
 ## 模块结构
 
 ```
 cmx-database
 ├── src/
-│   ├── lib.rs              # 库入口
-│   ├── config.rs           # 数据库配置
-│   ├── connection.rs       # 连接池封装
-│   ├── crud.rs             # CRUD 操作
-│   ├── error.rs            # 错误类型
-│   ├── executor.rs         # SQL 执行器
-│   ├── manager.rs          # 数据库管理器
-│   ├── monitoring.rs       # 监控功能
-│   ├── transaction.rs      # 事务处理
-│   └── types.rs            # 类型定义
+│   ├── lib.rs              # 库入口与公共 API re-export
+│   ├── config/             # DbConfig / PoolConfig / DbType（TOML [database] 配置加载）
+│   ├── connection/         # DbPool 连接池封装（Postgres/MySql/Sqlite 枚举）
+│   ├── crud/               # DbBmc trait + GenericCrudService + CustomQueryService + count 优化
+│   ├── error.rs            # Error 错误类型（thiserror + serde）
+│   ├── executor/           # ParamValue / ResultConverter（参数绑定与结果转换）
+│   ├── host_functions.rs   # DatabaseHostFunctions（Wasm host 函数）
+│   ├── manager/            # DatabaseManager（多数据源统一入口 + 全局单例）
+│   ├── migration/          # MigrationRunner / MigrationLoader / MigrationRecord
+│   ├── monitoring/         # start_monitoring 后台监控
+│   ├── transaction/        # 事务注册表：api/core/metadata/registry/txcontext + TransactionManager trait
+│   ├── types/              # QueryBuilder / TypedRow / TypedResult / CompareOp / OrderDirection
+│   └── zmc.rs              # 零拷贝列式结果集（SqlxPgRowSource / ZmcDataSet / ZmcSchema）
 └── Cargo.toml
 ```
 
 ## 使用指南
 
-### 一、数据库管理器初始化
+### 一、管理器初始化与多数据源
 
 #### 1.1 基础配置
 
@@ -64,647 +100,424 @@ use cmx_database::{DatabaseManager, DatabaseManagerConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = DatabaseManagerConfig::default();
-    let manager = DatabaseManager::new(config).await?;
+    // DatabaseManagerConfig 仅含默认池参数与健康检查间隔/超时
+    let manager = DatabaseManager::new(DatabaseManagerConfig::default());
 
-    // 获取连接池
-    let pool = manager.get_pool();
-
+    // 生命周期收尾：清理已完成事务注册表项
+    manager.shutdown().await?;
     Ok(())
 }
 ```
 
-#### 1.2 自定义配置
+#### 1.2 注册数据源与连接池参数
+
+连接池参数在 `DbConfig.pool_config`（`PoolConfig`）中按数据源配置：
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| `max_connections` | 10 | 最大连接数（test 构建下为 1） |
+| `min_connections` | 2 | 最小空闲连接数 |
+| `connect_timeout` | 30 | 连接超时（秒） |
+| `acquire_timeout` | 30 | 取连接超时（秒），池耗尽时超出即报错而非无限等待 |
+| `idle_timeout` | 600 | 空闲超时（秒） |
+| `max_lifetime` | 1800 | 最大生命周期（秒） |
 
 ```rust
-use cmx_database::{DatabaseManager, DatabaseManagerConfig};
+use cmx_database::config::{DbConfig, PoolConfig, DbType};
 
-let config = DatabaseManagerConfig::builder()
-    .with_url("postgresql://user:pass@localhost:5432/cmx")
-    .with_max_connections(20)
-    .with_min_connections(5)
-    .with_connect_timeout(30)
-    .with_idle_timeout(600)
-    .with_max_lifetime(3600)
-    .build();
-
-let manager = DatabaseManager::new(config).await?;
-```
-
-### 二、执行查询
-
-#### 2.1 查询单行
-
-```rust
-use cmx_database::{DatabaseManager, DatabaseManagerConfig, Row};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-    let pool = manager.get_pool();
-
-    // 查询单行
-    let row: Option<Row> = sqlx::query_as!(
-        Row,
-        "SELECT id, name, email FROM users WHERE id = $1",
-        1_i64
-    )
-    .fetch_optional(pool)
-    .await?;
-
-    if let Some(row) = row {
-        let id: i64 = row.get("id");
-        let name: String = row.get("name");
-        let email: String = row.get("email");
-        println!("User: {} - {} ({})", id, name, email);
-    }
-
-    Ok(())
-}
-```
-
-#### 2.2 查询多行
-
-```rust
-use cmx_database::{DatabaseManager, DatabaseManagerConfig, Row};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-    let pool = manager.get_pool();
-
-    // 查询多行
-    let rows: Vec<Row> = sqlx::query_as!(
-        Row,
-        "SELECT id, name, email FROM users WHERE status = $1",
-        "active"
-    )
-    .fetch_all(pool)
-    .await?;
-
-    for row in rows {
-        println!("User: {} - {}",
-            row.get::<i64, _>("id"),
-            row.get::<String, _>("name")
-        );
-    }
-
-    Ok(())
-}
-```
-
-#### 2.3 参数化查询
-
-```rust
-use sqlx::{types::Uuid, Type};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-    let pool = manager.get_pool();
-
-    // 使用 ? 占位符（PostgreSQL 风格）
-    let name: String = sqlx::query_scalar!(
-        "SELECT name FROM users WHERE id = $1 AND status = $2",
-        1_i64,
-        "active"
-    )
-    .fetch_one(pool)
-    .await?;
-
-    // 使用命名参数
-    let user = sqlx::query_as!(
-        User,
-        r#"SELECT id, name, email FROM users
-           WHERE name LIKE $1 AND created_at > $2"#,
-        "%john%",
-        chrono::Utc::now() - chrono::Duration::days(30)
-    )
-    .fetch_one(pool)
-    .await?;
-
-    Ok(())
-}
-```
-
-### 三、CRUD 操作
-
-#### 3.1 插入数据
-
-```rust
-use cmx_database::DatabaseManager;
-
-#[derive(Debug, serde::Serialize)]
-struct NewUser {
-    name: String,
-    email: String,
-    age: i32,
-}
-
-async fn create_user(
-    manager: &DatabaseManager,
-    user: NewUser,
-) -> Result<i64, DbError> {
-    let pool = manager.get_pool();
-
-    // 插入并返回 ID
-    let user_id: i64 = sqlx::query_scalar!(
-        r#"INSERT INTO users (name, email, age, created_at)
-           VALUES ($1, $2, $3, NOW())
-           RETURNING id"#,
-        user.name,
-        user.email,
-        user.age
-    )
-    .fetch_one(pool)
-    .await?;
-
-    Ok(user_id)
-}
-
-// 使用
-let new_user = NewUser {
-    name: "张三".to_string(),
-    email: "zhangsan@example.com".to_string(),
-    age: 30,
+let db = DbConfig {
+    db_type: DbType::Postgres,
+    db_url: "postgresql://user:pass@localhost:5432/cmx".to_string(),
+    db_id: "main".to_string(),
+    db_name: None,                 // 显示名，可选（未配置时按规则推导）
+    db_schema: Some("public".to_string()),
+    default: true,
+    pool_config: PoolConfig { max_connections: 20, ..Default::default() },
+    domain_code: None,             // 归属域/应用/模块编码（可选）
+    application_code: None,
+    module_code: None,
+    source_type: Some("biz".to_string()), // default-默认库 / biz-业务库 / other-其他
+    health_check_interval: 60,
+    health_check_timeout: 5,
 };
-let user_id = create_user(manager, new_user).await?;
+
+manager.register_data_source(db).await?;
+manager.unregister_data_source("old").await?;   // 默认数据源不可删除
 ```
 
-#### 3.2 更新数据
+也可从应用配置直接加载：`DbConfig::from_config(&cmx_utils::Config)` /
+`DbConfig::list_from_config(...)`（读取 `[[databases]]` 数组节）；
+`manager.list_data_sources()` 列出已注册 db_id，`manager.health_check(db_id)`
+做一次连通性检查。
 
-```rust
-use cmx_database::DatabaseManager;
+#### 1.2.1 配置文件方式（[[databases]]）
 
-async fn update_user_email(
-    manager: &DatabaseManager,
-    user_id: i64,
-    new_email: String,
-) -> Result<u64, DbError> {
-    let pool = manager.get_pool();
+应用 TOML 配置（`dev.toml` 等）中以 `[[databases]]` 数组声明多个数据源，
+启动时遍历注册：
 
-    // 更新并返回影响的行数
-    let rows_affected = sqlx::query!(
-        "UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2",
-        new_email,
-        user_id
-    )
-    .execute(pool)
-    .await?
-    .rows_affected();
+```toml
+[[databases]]
+# 数据源唯一标识符（必需）
+db_id = "primary"
+db_name = "主控数据库"
+# 数据库类型：postgres | mysql | sqlite（必需）
+db_type = "postgres"
+# 数据库连接 URL（必需）
+db_url = "postgres://user:pass@localhost:5432/cmx"
+# 是否为默认数据库（可选，默认 false）
+default = true
+# 数据源类型（可选，default=true 时为 default，否则为 other）
+# 取值：default-默认库，biz-业务库，other-其他
+# source_type = "default"
 
-    Ok(rows_affected)
-}
+[[databases]]
+db_id = "fico-db"
+db_name = "总账数据库"
+db_type = "postgres"
+db_url = "postgres://user:pass@localhost:5432/cmx_fico"
+default = false
+source_type = "biz"        # 业务库：get_biz_db_id() 命中此库
 
-// 使用
-let updated = update_user_email(manager, 1, "new_email@example.com").await?;
-println!("Updated {} rows", updated);
+# 可选连接池微调（节选，未列字段见 PoolConfig 表）
+# [databases.pool_config]
+# max_connections = 20
 ```
 
-#### 3.3 删除数据
+#### 1.3 业务库寻址
 
 ```rust
-use cmx_database::DatabaseManager;
-
-async fn delete_user(
-    manager: &DatabaseManager,
-    user_id: i64,
-) -> Result<u64, DbError> {
-    let pool = manager.get_pool();
-
-    let rows_affected = sqlx::query!(
-        "DELETE FROM users WHERE id = $1",
-        user_id
-    )
-    .execute(pool)
-    .await?
-    .rows_affected();
-
-    Ok(rows_affected)
-}
+// 第一个 source_type = "biz" 的 db_id；没有则回退默认库
+let biz_db = manager.get_biz_db_id().await;
+// 不回退版本：未配置业务库时返回 None
+// （迁移引擎据此决定是否对业务库执行迁移，避免把业务库建到主库）
+let biz_db_opt = manager.get_biz_db_id_opt().await;
 ```
 
-### 四、事务处理
+### 二、执行与查询 SQL
 
-#### 4.1 基础事务
-
-```rust
-use cmx_database::{DatabaseManager, Transaction};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-    let pool = manager.get_pool();
-
-    // 开始事务
-    let mut tx = pool.begin().await?;
-
-    // 执行多个操作
-    sqlx::query!("INSERT INTO orders (user_id, total) VALUES ($1, $2)", 1_i64, 100.0)
-        .execute(&mut *tx)
-        .await?;
-
-    sqlx::query!("UPDATE users SET order_count = order_count + 1 WHERE id = $1", 1_i64)
-        .execute(&mut *tx)
-        .await?;
-
-    // 提交事务
-    tx.commit().await?;
-
-    Ok(())
-}
-```
-
-#### 4.2 事务回滚
+#### 2.1 无参数 SQL（manager 方法或自由函数）
 
 ```rust
-use cmx_database::DatabaseManager;
-
-async fn transfer_funds(
-    manager: &DatabaseManager,
-    from_id: i64,
-    to_id: i64,
-    amount: f64,
-) -> Result<(), DbError> {
-    let pool = manager.get_pool();
-    let mut tx = pool.begin().await?;
-
-    // 扣除源账户
-    let from_balance: f64 = sqlx::query_scalar!(
-        "SELECT balance FROM accounts WHERE id = $1 FOR UPDATE",
-        from_id
-    )
-    .fetch_one(&mut *tx)
+// 返回 DataSet（cmx_core::model::data::dataset::DataSet）
+let ds = manager
+    .query_sql("main", None, "SELECT id, name FROM users", "users_ds")
     .await?;
 
-    if from_balance < amount {
-        // 余额不足，回滚
-        tx.rollback().await?;
-        return Err(DbError::InsufficientBalance);
-    }
-
-    // 更新源账户
-    sqlx::query!(
-        "UPDATE accounts SET balance = balance - $1 WHERE id = $2",
-        amount,
-        from_id
-    )
-    .execute(&mut *tx)
+// 影响行数；txn_id 传 Some 时在对应事务内执行
+let affected: u64 = manager
+    .execute_sql("main", None, "UPDATE users SET status = 'active'")
     .await?;
 
-    // 更新目标账户
-    sqlx::query!(
-        "UPDATE accounts SET balance = balance + $1 WHERE id = $2",
-        amount,
-        to_id
-    )
-    .execute(&mut *tx)
-    .await?;
+// 等价的模块级自由函数（lib.rs 重导出）
+let ds = cmx_database::query_sql("main", None, "SELECT 1", "probe").await?;
+```
 
-    // 提交
-    tx.commit().await?;
+#### 2.2 参数化查询（SqlParams 四形态）
 
-    Ok(())
+```rust
+use cmx_database::{query_sql_with_params, execute_sql_with_params, transaction::SqlParams};
+
+// 1) JSON 数组参数（Wasm/HTTP 场景，内部自动转换为 DataValue）
+let params = SqlParams::Json(serde_json::json!([1_i64, "active"]));
+let ds = query_sql_with_params(
+    "main", None,
+    "SELECT id, name FROM users WHERE id = $1 AND status = $2",
+    params, "users_ds",
+).await?;
+
+// 2) SqlParams::DataValues(Vec<DataValue>)：cmx-core 单元格类型，直接绑定
+// 3) SqlParams::SqlxValues(SqlxValues)：sea-query 构建的 SQL 配套
+// 4) SqlParams::Typed(Vec<SqlParam>)：强类型参数，带 NULL 类型支持
+```
+
+> `query_sql_with_json` / `execute_sql_with_json` 自 0.1.10 起废弃，
+> 请改用 `*_with_params(SqlParams::Json(..))` 或 typed / datavalues 变体。
+
+#### 2.3 类型化查询与轻量 SQL 构建（types 模块）
+
+- `TypedRow`：按列下标取值（`get_string` / `get_i64` / `get_f64` / `get_bool`），
+  `manager.query_sql_typed(...)` 返回 `TypedResult`；
+- `QueryBuilder` + `ConditionExpr` / `CompareOp` / `LogicalOp` / `JoinClause` /
+  `OrderDirection`：在拼 SQL 字符串之外提供轻量的条件组合与占位符编号管理
+  （`to_sql_string(start_index)` / `param_count()`）。
+
+### 三、事务处理
+
+事务由全局注册表管理（`txn_id` 寻址，`TransactionMetadata` 含状态与创建时间），
+基于引用计数：`commit_txn_by_id` / `rollback_txn_by_id` 在引用归零时才真正提交/回滚。
+
+#### 3.1 TransactionGuard（RAII 守卫，推荐）
+
+```rust
+use cmx_database::TransactionOptions;
+// 注意：guard 入口经 transaction 模块访问（lib.rs 顶层未重导出）
+use cmx_database::transaction::begin_transaction_guard_by_db_id;
+
+let guard = begin_transaction_guard_by_db_id(
+    "main",
+    TransactionOptions { propagation: cmx_database::Propagation::Required },
+).await?;
+
+cmx_database::execute_sql("main", Some(guard.txn_id()),
+    "INSERT INTO logs(msg) VALUES ('a')").await?;
+cmx_database::execute_sql("main", Some(guard.txn_id()),
+    "UPDATE counters SET n = n + 1").await?;
+
+// 显式提交；未调用 commit 而析构时自动发送回滚命令
+guard.commit().await?;
+// guard.rollback().await?;  // 或显式回滚
+```
+
+#### 3.2 闭包式
+
+```rust
+use cmx_database::with_transaction_by_id;
+
+// 以事务 ID 为上下文执行闭包（闭包内拿到 &mut DbTransaction）
+let count = with_transaction_by_id(&txn_id, |txn| {
+    Box::pin(async move {
+        let ds = txn.query("SELECT count(*) FROM users", "cnt").await?;
+        Ok(ds)
+    })
+}).await?;
+
+// TransactionGuard 也提供等价的 guard.with_transaction(...) 方法
+```
+
+#### 3.3 编程式 Dbx
+
+```rust
+use cmx_database::Propagation;
+
+let dbx = manager.get_dbx("main").await?;
+let txn_id = dbx.begin_txn("main", Propagation::Required).await?;
+// ... execute_sql / query_sql 传 Some(&txn_id) ...
+cmx_database::commit_txn_by_id(&txn_id).await?;      // 或 rollback_txn_by_id
+```
+
+`Dbx::with_transaction()` 可将普通连接切换为事务模式；`Dbx::db()` 返回底层
+`&DbPool` 供直接使用 sqlx 能力；`dbx.is_txn_timeout(duration)` 判定事务超时。
+
+### 四、通用 CRUD（DbBmc + GenericCrudService）
+
+为实体的 Bmc（模型控制器）实现 `DbBmc` trait 声明表元信息：
+
+```rust
+use cmx_database::crud::DbBmc;
+
+pub struct UserBmc;
+
+impl DbBmc for UserBmc {
+    const TABLE: &'static str = "cmx_user";
+    const PK_COLUMN: &'static str = "id";     // 默认 "code"
+    // has_timestamps() 默认 true：自动维护时间戳列
+    // has_owner_id()  默认 false：创建时自动填充 owner_id
+    // encrypted_fields() 声明需加密存储的字段，如 &["db_url", "password"]
+    // archived 过滤开启后 get/list 自动追加 archived = 0 软删过滤
 }
 ```
 
-#### 4.3 自动回滚的事务封装
+随后零实现地获得通用 CRUD（`GenericCrudService<MC, F>`，`F` 为 modql 过滤器类型）：
 
 ```rust
-use cmx_database::{DatabaseManager, DatabaseTransaction};
+use cmx_database::crud::GenericCrudService;
+use serde_json::json;
 
-async fn atomic_operation(
-    manager: &DatabaseManager,
-) -> Result<(), DbError> {
-    let mut tx = manager.begin_transaction().await?;
+// create / update 的 data 实现 serde::Serialize；均返回 DataSet
+GenericCrudService::<UserBmc>::create(&manager, "main", None, &new_user).await?;
+GenericCrudService::<UserBmc>::create_many(&manager, "main", None, &users).await?;
+GenericCrudService::<UserBmc>::update(&manager, "main", Some(&txn_id), &user).await?;
 
-    // 执行操作
-    sqlx::query!("INSERT INTO logs (message) VALUES ($1)", "operation start")
-        .execute(&mut *tx)
-        .await?;
+// get 按（复合）主键取单条：id 为 serde_json::Value
+let ds = GenericCrudService::<UserBmc>::get(&manager, "main", None, json!("42")).await?;
 
-    // 如果这里发生错误，事务会自动回滚
-    // tx.drop() 或 tx.rollback() 会被调用
+// delete 按 id 列表
+GenericCrudService::<UserBmc>::delete(&manager, "main", None, vec![json!("42")]).await?;
 
-    tx.commit().await?;
-    Ok(())
-}
+// list / page / count 支持泛型过滤器 F: Into<FilterGroups>（modql FilterNodes）
+let list = GenericCrudService::<UserBmc, F>::list(
+    &manager, "main", None, Some(filters), None,   // ListOptions 可选
+).await?;
+let page = GenericCrudService::<UserBmc, F>::page(
+    &manager, "main", None, Some(filters), page_no, page_size,
+).await?;
+let total = GenericCrudService::<UserBmc, F>::count(&manager, "main", None, Some(filters)).await?;
 ```
 
-### 五、长事务处理
+查询构建依赖 sea-query + modql（`with-sea-query` feature）：
 
-#### 5.1 检测长事务
+- `count_optimizer`（`CountOptimizerConfig` / `generate_count_sql`）负责大表 COUNT 优化；
+- `CustomQueryService::page_custom` 支持自定义 SQL 分页；
+- `crud::utils` 提供实体 ↔ sea-query 值转换等工具。
+
+### 五、SQL 迁移（migration）
 
 ```rust
-use cmx_database::{DatabaseManager, TransactionManager};
+use std::{path::PathBuf, sync::Arc};
+use cmx_database::migration::MigrationRunner;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-    let tx_manager = TransactionManager::new(manager.get_pool());
+let runner = MigrationRunner::new(
+    manager.clone(),                    // Arc<DatabaseManager>
+    "default".to_string(),              // 迁移记录所在库
+    PathBuf::from("./migrations"),
+)
+.with_lock_manager(Arc::new(lock_manager))   // 可选：cmx-buffer 分布式锁防多实例并发迁移
+.with_lock_key("cmx_migration_lock")         // 锁 key / 等待超时 / 轮询间隔均可调
+.with_validate_checksum(true)                // checksum 变更检测
+.with_enabled(true);
 
-    // 获取所有进行中的事务
-    let long_transactions = tx_manager.get_long_running_transactions(60).await?;
-
-    for tx_info in long_transactions {
-        println!("Long running transaction: {:?}", tx_info);
-    }
-
-    Ok(())
-}
+let summary = runner.run_pending_migrations().await?;   // MigrationSummary
+runner.rollback_migration("20260801_120000").await?;    // 按版本回滚
 ```
 
-#### 5.2 强制终止长事务
+`MigrationLoader::load_migrations()` 扫描迁移目录并按文件名解析版本与描述、计算
+checksum；执行记录持久化为 `MigrationRecord`（状态机 `MigrationStatus`，支持
+Baseline / Pending / Applied / Failed 等状态与 `PendingMigration` / `MigrationSummary`
+结果结构）。配合 `get_biz_db_id_opt()` 可将业务库迁移与主库迁移分开执行。
+
+### 六、长事务监控
 
 ```rust
-use cmx_database::{DatabaseManager, TransactionManager};
+use cmx_database::{get_active_transactions, check_long_running_transactions};
+use std::time::Duration;
 
-async fn kill_long_transaction(
-    manager: &DatabaseManager,
-    tx_id: i64,
-) -> Result<(), DbError> {
-    let tx_manager = TransactionManager::new(manager.get_pool());
-
-    tx_manager.kill_transaction(tx_id).await?;
-
-    Ok(())
+// 全部进行中的事务元信息（txn_id / db_id / create_time / status）
+for meta in get_active_transactions().await {
+    tracing::info!(txn_id = %meta.txn_id, ?meta.status, "active txn");
 }
+
+// 超过 60s 仍活跃的事务
+let long = check_long_running_transactions(Duration::from_secs(60)).await;
+
+// 收尾：清理已完成事务的注册表项
+cmx_database::cleanup_completed_transactions().await;
+
+// 后台巡检：每 30s 数据源健康检查 + 每 60s 事务超时检查
+cmx_database::start_monitoring().await;
 ```
 
-### 六、连接池监控
+### 七、零拷贝结果集（zmc）
 
-#### 6.1 获取连接池状态
+`zmc` 模块在 sqlx Postgres 链路上实现驱动无关的零拷贝行来源：
+`SqlxPgRowSource`（包装 `sqlx::postgres::PgRow`，impl `ZmcRowSource`，按
+`type_info().name()` 分派到中立列类型）→ `ZmcDataSet` / `ZmcSchema` / `ZmcChildGroup`。
 
 ```rust
-use cmx_database::DatabaseManager;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-
-    // 获取连接池统计
-    let stats = manager.get_pool_stats().await?;
-
-    println!("Total connections: {}", stats.total_connections);
-    println!("Idle connections: {}", stats.idle_connections);
-    println!("Waiting requests: {}", stats.waiting_requests);
-
-    Ok(())
-}
+// 入口：manager 方法（另有 query_sql_zmc_with_datavalues）
+let zmc = manager.query_sql_zmc("main", None, sql, "big_ds").await?;
 ```
 
-#### 6.2 监控活跃连接
+中立抽象 `ZmcRowSource` / `ZmcColType` 定义于 `cmx-rowsource` 并由本 crate 统一重导出，
+供大结果集流式传输（如单据 `tokio-zmc-stream` 端点）使用；`cmx-database-pg` 的
+tokio-postgres 链路实现同一抽象。
+
+### 八、Wasm host 函数
+
+`DatabaseHostFunctions::new(Arc<DatabaseManager>)` 实现 cmx 插件体系的 host 函数接口
+（`namespace()` / `functions()` / `call(name, input) -> output`，字节进字节出），
+注册 `db_query` / `db_execute` 两个函数（namespace `"cmx:database"`，MsgPack 编解码）；
+WebAssembly 插件经 cmx-plugin-sdk 声明导入后在沙箱内调用，SQL 与参数以序列化字节流传递。
+
+## 公共 API 速览（lib.rs 重导出）
+
+| API | 来源 | 说明 |
+|-----|------|------|
+| `DatabaseManager` / `DatabaseManagerConfig` / `TransactionContext` / `TransactionOptions` / `get_default_db_manager` | manager | 管理器与全局单例 |
+| `DbConfig` / `DbType` / `PoolConfig` | config | 数据源与连接池配置 |
+| `DbPool` | connection | 连接池枚举（Postgres/MySql/Sqlite） |
+| `DataSet` | cmx-core（重导出） | 查询结果的通用数据集 |
+| `execute_sql` / `execute_sql_with_params` / `query_sql` / `query_sql_with_params` | transaction::api | SQL 执行/查询自由函数 |
+| `commit_txn_by_id` / `rollback_txn_by_id` / `with_transaction_by_id` / `get_dbx_by_db_id` / `get_txn_holder_by_id` / `get_txn_metadata` | transaction::api | 事务生命周期（lib.rs 顶层重导出） |
+| `begin_transaction_guard_by_db_id` / `TransactionGuard` / `register_txn` | transaction::api | 事务入口（经 `cmx_database::transaction::` 模块访问，顶层未重导出） |
+| `get_active_transactions` / `cleanup_completed_transactions` / `check_long_running_transactions` | transaction::metadata | 事务注册表观测 |
+| `Dbx` / `Propagation` / `SqlParams` / `TransactionMetadata` / `TransactionStatus` | transaction | 事务核心类型 |
+| `CompareOp` / `OrderDirection` / `QueryBuilder` / `TypedResult` / `TypedRow` | types | 轻量 SQL 构建与类型化行 |
+| `ParamValue` / `ResultConverter` | executor | 参数绑定与结果转换 |
+| `start_monitoring` | monitoring | 后台健康检查/超时巡检 |
+| `DatabaseHostFunctions` | host_functions | Wasm host 函数 |
+| `MigrationError` / `MigrationLoader` / `MigrationRecord` / `MigrationResult` / `MigrationRunner` / `DbMigrationStatus` / `MigrationSummary` / `PendingMigration` | migration | 迁移引擎 |
+| `SqlxPgRowSource` / `ZmcChildGroup` / `ZmcDataSet` / `ZmcSchema` | zmc | 零拷贝列式结果集 |
+| `ZmcRowSource` / `ZmcColType` | cmx-rowsource（重导出） | 驱动中立行来源抽象 |
+| `Error` / `Result` | error | 错误类型 |
+
+### 九、错误处理
 
 ```rust
-use cmx_database::DatabaseManager;
-
-async fn monitor_connections(manager: &DatabaseManager) {
-    let pool = manager.get_pool();
-
-    loop {
-        let stats = pool.stat().await;
-        println!("[{}] Total: {}, Idle: {}, Acquired: {}",
-            chrono::Utc::now().format("%H:%M:%S"),
-            stats.total_connections(),
-            stats.idle_connections(),
-            stats.acquired_connections()
-        );
-        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-    }
-}
-```
-
-### 七、错误处理
-
-#### 7.1 错误类型
-
-```rust
-use cmx_database::DbError;
+use cmx_database::Error;   // 注意：错误类型名为 Error（thiserror），非 DbError
 
 match result {
-    Ok(value) => println!("Success: {:?}", value),
+    Ok(_) => {}
+    Err(Error::DbNotFound(id)) => { /* 数据源未注册 */ }
+    Err(Error::NoTxn) => { /* 事务 ID 不存在或已清理 */ }
+    Err(Error::NoDb) => { /* 数据库不存在 */ }
+    Err(Error::PoolExhausted) => { /* 连接池耗尽（acquire 超时） */ }
+    Err(Error::ConnectionTimeout) => { /* 连接超时 */ }
+    Err(Error::InvalidParams(msg)) => { /* 参数类型/数量与占位符不匹配 */ }
+    Err(Error::DefaultDbSourceCantDelete(id)) => { /* 默认数据源禁止删除 */ }
+    Err(Error::Sqlx(e)) => { /* 底层 sqlx 错误（透传，DisplayFromStr 序列化） */ }
     Err(e) => {
-        match e {
-            DbError::NotFound(msg) => {
-                eprintln!("Record not found: {}", msg);
-            }
-            DbError::DuplicateKey(msg) => {
-                eprintln!("Duplicate key: {}", msg);
-            }
-            DbError::ConstraintViolation(msg) => {
-                eprintln!("Constraint violation: {}", msg);
-            }
-            DbError::ConnectionFailed(msg) => {
-                eprintln!("Connection failed: {}", msg);
-            }
-            DbError::QueryFailed(msg) => {
-                eprintln!("Query failed: {}", msg);
-            }
-            DbError::TransactionAborted => {
-                eprintln!("Transaction was aborted");
-            }
-            DbError::InsufficientBalance => {
-                eprintln!("Insufficient balance");
-            }
-        }
+        // TxnCantCommitNoOpenTxn / CannotBeginTxnWithTxnFalse / CannotCommitTxnWithTxnFalse
+        // NoTxn / TransactionRequired / TransactionNotAllowed / UnsupportedDbType
+        // CantCreateModelManagerProvider 等
     }
 }
 ```
 
-#### 7.2 重试机制
+## 在 cmx 体系中的位置
 
-```rust
-use cmx_database::{DatabaseManager, RetryConfig};
+- **本 crate = sqlx 链路**：Postgres / MySql / Sqlite 三驱动，连接池由 sqlx 提供；
+  通用 CRUD（DbBmc / GenericCrudService）、迁移引擎、Wasm host 函数都在本链路上。
+- **cmx-database-pg = tokio-postgres + deadpool 并行链路**：仅 Postgres，性能优先，
+  与本 crate 并存演进；两者共享 `cmx-rowsource` 的 `ZmcRowSource` / `ZmcColType`
+  中立抽象，上层结果消费代码无需感知驱动差异。
+- **数据源注册由应用侧完成**：应用（portal / 平台启动流程）从 `[[databases]]`
+  配置读入并遍历 `register_data_source`，本 crate 不直接读配置文件启动。
+- 跨 workspace 复用：cmx-portalservice 直接以 path 依赖引用本 crate（0.1.12）；
+  cmx-flowengine 的数据库链路以 `cmx-database-pg` 为主（直接 path 依赖为
+  cmx-database-pg / cmx-service-base 等）；cmx-container 内则经 cmx-service-base
+  的 `db-sqlx` / `storage` 等 feature 拉入本 crate。
 
-async fn execute_with_retry(
-    manager: &DatabaseManager,
-    operation: impl Fn(&DatabaseManager) -> _,
-) -> Result<(), DbError> {
-    let config = DatabaseManagerConfig::builder()
-        .with_retry_config(RetryConfig {
-            max_attempts: 3,
-            initial_delay_ms: 100,
-            max_delay_ms: 5000,
-            backoff_multiplier: 2.0,
-        })
-        .build();
+## 常见问题（FAQ）
 
-    operation(manager).await
-}
-```
+### Q: query_sql 返回的 DataSet 是什么？
 
-### 八、完整示例
+**A**: `DataSet` 定义在 `cmx-core`（`cmx_core::model::data::dataset::DataSet`），
+由本 crate 重导出。它是 cmx 平台通用的查询结果集（含 schema 与行数据），
+跨 Wasm / HTTP / RPC 边界序列化传输均以此为载体；`dataset_id` 参数用于
+构建返回 DataSet 的 schema 标识。
 
-```rust
-use cmx_database::{DatabaseManager, DatabaseManagerConfig, DbError};
-use serde::{Deserialize, Serialize};
+### Q: 事务为什么用注册表 + txn_id，而不是直接持有 sqlx Transaction？
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-    pub status: String,
-}
+**A**: 事务句柄存在全局注册表（`txn_id` 寻址 + 引用计数），使跨函数/跨模块/
+跨 Wasm 调用边界都能以字符串 ID 参与同一事务；`commit_txn_by_id` /
+`rollback_txn_by_id` 在引用归零时才真正提交/回滚，配合 `TransactionGuard`
+的 RAII Drop 自动回滚，兼顾灵活与安全。
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct CreateUserRequest {
-    pub name: String,
-    pub email: String,
-}
+### Q: 什么场景用 zmc（query_sql_zmc）而不是 query_sql？
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdateUserRequest {
-    pub email: Option<String>,
-    pub status: Option<String>,
-}
+**A**: 大结果集流式传输场景（如单据 tokio-zmc-stream 端点）。`query_sql`
+以 DataSet 装载全部数据；`query_sql_zmc` 通过 `SqlxPgRowSource` 零拷贝包装
+sqlx 行，直出列式编码的 `ZmcDataSet`，避免整表物化，目前仅支持 Postgres 链路。
 
-pub struct UserRepository {
-    manager: DatabaseManager,
-}
+### Q: 加密字段（encrypted_fields）如何生效？
 
-impl UserRepository {
-    pub fn new(manager: DatabaseManager) -> Self {
-        Self { manager }
-    }
+**A**: `DbBmc::encrypted_fields()` 声明的字段在 `GenericCrudService` 写入时
+经 `CryptoService::encrypt()` 加密、读出（get/list/page）时
+`decrypt_dataset_fields()` 解密，用于数据源密码等敏感列；
+未声明的表零开销。
 
-    pub async fn create(&self, req: CreateUserRequest) -> Result<User, DbError> {
-        let pool = self.manager.get_pool();
+## 附录：在连接串中指定 PostgreSQL Schema
 
-        let user_id: i64 = sqlx::query_scalar!(
-            r#"INSERT INTO users (name, email, status, created_at)
-               VALUES ($1, $2, 'active', NOW())
-               RETURNING id"#,
-            req.name,
-            req.email
-        )
-        .fetch_one(pool)
-        .await?;
-
-        self.find_by_id(user_id).await
-    }
-
-    pub async fn find_by_id(&self, id: i64) -> Result<Option<User>, DbError> {
-        let pool = self.manager.get_pool();
-
-        let user = sqlx::query_as!(
-            User,
-            "SELECT id, name, email, status FROM users WHERE id = $1",
-            id
-        )
-        .fetch_optional(pool)
-        .await?;
-
-        Ok(user)
-    }
-
-    pub async fn update(&self, id: i64, req: UpdateUserRequest) -> Result<Option<User>, DbError> {
-        let pool = self.manager.get_pool();
-
-        // 构建动态更新查询
-        if let Some(email) = &req.email {
-            sqlx::query!("UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2", email, id)
-                .execute(pool)
-                .await?;
-        }
-
-        if let Some(status) = &req.status {
-            sqlx::query!("UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2", status, id)
-                .execute(pool)
-                .await?;
-        }
-
-        self.find_by_id(id).await
-    }
-
-    pub async fn delete(&self, id: i64) -> Result<bool, DbError> {
-        let pool = self.manager.get_pool();
-
-        let rows_affected = sqlx::query!("DELETE FROM users WHERE id = $1", id)
-            .execute(pool)
-            .await?
-            .rows_affected();
-
-        Ok(rows_affected > 0)
-    }
-
-    pub async fn list_active(&self) -> Result<Vec<User>, DbError> {
-        let pool = self.manager.get_pool();
-
-        let users = sqlx::query_as!(
-            User,
-            "SELECT id, name, email, status FROM users WHERE status = 'active'"
-        )
-        .fetch_all(pool)
-        .await?;
-
-        Ok(users)
-    }
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = DatabaseManagerConfig::default();
-    let manager = DatabaseManager::new(config).await?;
-
-    let repo = UserRepository::new(manager);
-
-    // 创建用户
-    let user = repo.create(CreateUserRequest {
-        name: "张三".to_string(),
-        email: "zhangsan@example.com".to_string(),
-    }).await?;
-
-    println!("Created user: {:?}", user);
-
-    // 查询用户
-    let found = repo.find_by_id(user.id).await?;
-    println!("Found user: {:?}", found);
-
-    // 更新用户
-    let updated = repo.update(user.id, UpdateUserRequest {
-        email: Some("new_email@example.com".to_string()),
-        status: None,
-    }).await?;
-    println!("Updated user: {:?}", updated);
-
-    // 删除用户
-    let deleted = repo.delete(user.id).await?;
-    println!("Deleted: {}", deleted);
-
-    Ok(())
-}
-```
-`sqlx` **支持**通过连接字符串指定 PostgreSQL 的默认 Schema，但**不能直接使用 `currentSchema` 这个参数名**。
-
-`sqlx` 底层使用的是 PostgreSQL 官方的 `libpq` 驱动协议。在 `libpq` 的标准中，指定搜索路径（Schema）的参数是 `options`，而不是 `currentSchema`（`currentSchema` 通常是 JDBC 或其他特定驱动使用的参数）。
-
-在 `sqlx` 中，你需要使用以下格式来指定 Schema：
+sqlx 底层使用 libpq 协议，指定搜索路径的参数是 `options` 而非 `currentSchema`
+（后者是 JDBC 惯用参数）：
 
 ```text
-postgres://dbuser_dba:9lWsRQY4i4VToPpkHcCRFzki@192.168.1.14:5432/cmx?options=-c%20search_path%3Dmyschema
+postgresql://user:pass@host:5432/cmx?options=-c%20search_path%3Dmyschema
 ```
 
-### 💡 参数拆解说明
-由于 URL 中不能直接包含空格和等号，需要进行 URL 编码：
-* `options=`：`libpq` 用于传递 PostgreSQL 后端启动参数的标准选项。
-* `-c`：表示设置一个配置参数。
-* `search_path=myschema`：PostgreSQL 中用于指定 Schema 搜索路径的真实配置。
-* **URL 编码转换**：`-c search_path=myschema` 经过编码后，空格变成了 `%20`，等号变成了 `%3D`，最终拼接为 `-c%20search_path%3Dmyschema`。
+- `options=`：libpq 传递 PostgreSQL 后端启动参数的标准选项；
+- `-c`：表示设置一个配置参数，`search_path=myschema` 是真实配置项；
+- URL 编码：空格 → `%20`，等号 → `%3D`，拼接为 `-c%20search_path%3Dmyschema`。
 
-### 🔧 另一种推荐做法
-如果你不想把连接字符串写得这么复杂，也可以在建立 `sqlx` 连接池后，通过执行一条 SQL 语句来动态设置当前会话的 Schema：
-
-```rust
-use sqlx::PgPool;
-
-async fn set_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
-    // 在获取连接后，先执行设置 search_path 的命令
-    sqlx::query("SET search_path TO myschema")
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-```
-
-**总结：** 如果你必须写在 `.env` 或连接字符串里，请使用 `?options=-c%20search_path%3D你的模式名`；如果在代码里灵活控制，使用 `SET search_path` 语句会更加直观。
+也可以在建立连接池后执行 `SET search_path TO myschema`，或使用 `DbConfig.db_schema`
+字段（pg 库默认 `public`）由本 crate 统一处理。

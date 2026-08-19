@@ -2,7 +2,7 @@
 
 > 企业级统一认证基础设施模块，提供 JWT 双令牌、Refresh Token Rotation、Argon2id 密码哈希、OAuth2 授权码 + PKCE、会话管理、API Key 两层缓存、密钥轮换等完整认证能力。
 
-[![Version](https://img.shields.io/badge/version-0.1.9-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
 [![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
 [![Authors](https://img.shields.io/badge/authors-skylake%40pansoft.com-lightgrey.svg)]()
 
@@ -11,7 +11,8 @@
 为上层业务（HTTP 中间件、RPC 鉴权、SSO 网关）提供统一的认证 API。
 
 > **架构说明**：`cmx-auth` 不直接依赖 `cmx-iam`，通过 `UserAuthQuery` trait 解耦用户数据查询，
-> 由 `cmx-biz` 在运行期注入实现，保证认证模块可独立测试与复用。
+> 实现由 `cmx-iam` 提供（`user_auth_query_impl.rs`），由 `cmx-platform-app` 在启动期注入，
+> 保证认证模块可独立测试与复用。
 
 ---
 
@@ -43,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 加载认证配置（可从 TOML 反序列化）
     let config = AuthConfig::default();
 
-    // 3. 注入用户数据查询实现（由 cmx-biz 提供）
+    // 3. 注入用户数据查询实现（cmx-iam 提供，cmx-platform-app 启动期注入）
     let user_query: Arc<dyn cmx_traits::auth::UserAuthQuery> = /* ... */;
 
     // 4. 构建 AuthService
@@ -109,7 +110,15 @@ JWT 算法（RS256 / HS256）、OAuth2 Provider、API Key 等均通过运行期�
 cmx-auth
 ├── src
 │   ├── lib.rs                  # 模块导出与公共 API re-export
-│   ├── auth_service_impl.rs    # AuthService trait 实现（整合所有子模块）
+│   ├── auth_service_impl/      # AuthService trait 实现（整合所有子模块）
+│   │   ├── mod.rs              #   AuthServiceImpl 定义与 trait 方法分发
+│   │   ├── login.rs            #   密码登录 / 锁定 / 时序防护
+│   │   ├── token.rs            #   Token 校验 / 刷新 / 撤销
+│   │   ├── apikey.rs           #   API Key 验证 / 静态导入 / 清理任务
+│   │   ├── password.rs         #   密码修改 / 历史校验
+│   │   ├── oauth2.rs           #   OAuth2 回调 / 绑定解绑
+│   │   ├── user_info.rs        #   用户信息查询
+│   │   └── storage_query.rs    #   AuthStorageQuery 持久化实现（cmx_auth_* 表）
 │   ├── config.rs               # AuthConfig 及子配置（JWT/Token/Argon2/Session/Cache/OAuth2）
 │   ├── error.rs                # AuthInfraError 错误类型（保留完整错误链）
 │   ├── metrics.rs              # Prometheus 指标定义与注册
@@ -210,7 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 初始化缓存管理器（Redis 连接池）
     let cache = CacheManager::new(/* redis url */).await?;
 
-    // 3. 注入用户数据查询实现（由 cmx-biz 提供）
+    // 3. 注入用户数据查询实现（cmx-iam 提供，cmx-platform-app 启动期注入）
     let user_query: Arc<dyn cmx_traits::auth::UserAuthQuery> = /* ... */;
 
     // 4. 构建 AuthService（内部自动创建 JwtManager / TokenManager / SessionManager 等）
@@ -279,8 +288,9 @@ use cmx_traits::auth::AuthService;
 auth_service.ensure_super_admin().await?;
 auth_service.import_static_api_keys().await?;
 
-// 启动后台清理任务（清理过期会话）
-auth_service.start_cleanup_task().await;
+// 启动后台清理任务（同步方法，返回 JoinHandle 供调用方管理生命周期，
+// 内部循环清理过期会话）
+let _cleanup_handle = auth_service.start_cleanup_task();
 ```
 
 ---
@@ -394,11 +404,16 @@ match auth_service.validate_token(&token).await {
 #### 4.1 刷新 Access Token
 
 使用 Refresh Token 换取新的 Token 对，旧 Refresh Token 立即失效（Rotation）。
+推荐使用 trait 专用方法 `refresh_token()`；`authenticate(Credentials::RefreshToken)`
+作为等价入口内部分发到同一实现。
 
 ```rust
 use cmx_traits::auth::{AuthService, Credentials};
 
-// 用 Refresh Token 刷新
+// 方式一（推荐）：trait 专用刷新方法
+let new_token_pair = auth_service.refresh_token(&old_refresh_token).await?;
+
+// 方式二：authenticate 凭证分发（内部委托 refresh_token，等价）
 let new_token_pair = auth_service
     .authenticate(
         Credentials::RefreshToken {
@@ -723,8 +738,9 @@ pub type Result<T> = core::result::Result<T, AuthInfraError>;
 ### Q1: `cmx-auth` 与 `cmx-iam` 的关系是什么？
 
 **A**: `cmx-auth` 是认证基础设施层，**不直接依赖** `cmx-iam`。两者通过 `UserAuthQuery`
-trait 解耦：`cmx-auth` 定义 trait（查询用户、角色、权限、更新密码等），由 `cmx-biz` 在
-运行期注入实现（可能委托给 `cmx-iam`）。这种设计使认证模块可独立测试与复用。
+trait 解耦：`cmx-auth` 定义 trait（查询用户、角色、权限、更新密码等），实现由
+`cmx-iam` 提供（`user_auth_query_impl.rs`），由 `cmx-platform-app` 启动期注入。
+这种设计使认证模块可独立测试与复用。
 
 ### Q2: 为什么 `validate_api_key` 不创建会话，而 `authenticate(ApiKey)` 会？
 

@@ -2,13 +2,16 @@
 
 > CMX 工具库，提供常用的工具函数和配置管理功能。
 
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
+
 ## 快速开始
 
 ### 安装
 
 ```toml
 [dependencies]
-cmx-utils = "0.1.0"
+cmx-utils = "0.1.12"
 ```
 
 ### 核心示例
@@ -19,7 +22,7 @@ use cmx_utils::config::{Config, ConfigManager};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     cmx_utils::ConfigManager::initialize(|| {
         cmx_utils::Config::builder()
-            .add_toml_file("config/default.toml", 10)?
+            .add_toml_file("config/default.toml")?
             .add_env()
             .build()
     })?;
@@ -33,12 +36,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | 功能 | 说明 |
 |------|------|
-| 配置管理 | 支持从 TOML/JSON/YAML 文件、环境变量、命令行参数等多种来源加载配置 |
+| 配置管理 | 支持从 TOML 文件、.env 文件、环境变量、命令行参数等多种来源加载配置 |
 | 加密解密 | 基于 AES-256-GCM 实现的对称加密功能 |
-| ID 生成 | 提供 UUID 和雪花算法 ID 生成功能 |
+| ID 生成 | 提供 UUID、雪花算法和 Pk52 主键生成功能 |
 | ZIP 压缩/解压 | 支持文件和目录的压缩与解压操作 |
 | Base64 编码 | URL 安全的 Base64 编码与解码功能 |
 | 时间处理 | 便捷的时间格式化和解析工具 |
+| JSON 工具 | JSON 值规整与字段集读取辅助函数 |
+| 同步辅助 | RwLock 读写锁的便捷封装 |
 
 ## 模块结构
 
@@ -61,8 +66,11 @@ cmx-utils
 │   │   └── service.rs
 │   ├── id/             # ID 生成模块
 │   │   ├── mod.rs
+│   │   ├── pk52.rs
 │   │   ├── snowflake.rs
 │   │   └── uuid_gen.rs
+│   ├── json.rs         # JSON 工具函数
+│   ├── sync_utils.rs   # RwLock 便捷封装
 │   ├── time.rs         # 时间处理
 │   └── zip/            # ZIP 压缩/解压模块
 │       ├── mod.rs
@@ -76,7 +84,7 @@ cmx-utils
 
 ### 配置管理模块 (`config`)
 
-支持多种配置来源，优先级由低到高依次为：TOML 文件、.env 文件、环境变量、命令行参数。
+支持多种配置来源，按添加顺序合并（后添加的覆盖先添加的）；`DefaultConfigLoader` 按标准顺序加载：TOML 文件 → `.env` 文件 → 环境变量 → 命令行参数。另提供 `DeployMode`（单体/微服务部署模式）与 `ConfigManager` 全局单例。
 
 ### 加密解密模块 (`crypto`)
 
@@ -84,7 +92,7 @@ cmx-utils
 
 ### ID 生成模块 (`id`)
 
-支持 UUID 和雪花算法两种 ID 生成方式。
+支持 UUID、雪花算法和 Pk52（52 位主键）三种 ID 生成方式，并提供 `snowflake_id()` / `next_pk_id()` 等快捷函数。
 
 ### ZIP 模块 (`zip`)
 
@@ -103,11 +111,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化全局配置管理器
     ConfigManager::initialize(|| {
         Config::builder()
-            // 添加 TOML 配置文件（优先级最低）
-            .add_toml_file("config/default.toml", 10)?
-            // 添加环境变量（中等优先级）
+            // 添加 TOML 配置文件（最先添加，优先级最低）
+            .add_toml_file("config/default.toml")?
+            // 添加环境变量
             .add_env()
-            // 添加命令行参数（最高优先级）
+            // 添加命令行参数（最后添加，优先级最高）
             .add_command_line(std::env::args().skip(1))
             .build()
     })?;
@@ -115,30 +123,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 读取配置值
     let host = ConfigManager::global().get_string("database.host")?;
     let port = ConfigManager::global().get_int("database.port")?;
-    let timeout = ConfigManager::global().get_duration("database.timeout")?;
+    let debug = ConfigManager::global().get_bool("app.debug")?;
 
     Ok(())
 }
 ```
 
-#### 1.2 添加 JSON 配置文件
+#### 1.2 从环境变量指定 TOML 配置文件
 
 ```rust
 use cmx_utils::config::Config;
 
 let config = Config::builder()
-    .add_json_file("config/app.json", 10)?
+    .add_toml_file("config/default.toml")?
+    // 从环境变量 APP_CONFIG 指定的路径追加加载 TOML（未设置时跳过）
+    .add_toml_file_from_env("APP_CONFIG")
     .add_env()
     .build()?;
 ```
 
-#### 1.3 添加 YAML 配置文件
+同系列还有 `add_toml_file_from_env_required`（环境变量未设置时报错）与 `add_toml_file_from_env_or`（未设置时使用默认路径）。
+
+#### 1.3 加载 .env 文件
 
 ```rust
 use cmx_utils::config::Config;
 
 let config = Config::builder()
-    .add_yaml_file("config/settings.yaml", 10)?
+    .add_toml_file("config/default.toml")?
+    // .env 文件中的键值对合并进配置
+    .add_env_file("config/.env")
+    .add_env()
     .build()?;
 ```
 
@@ -161,17 +176,20 @@ struct AppConfig {
     debug: bool,
 }
 
-let app_config = ConfigManager::global().get::<AppConfig>("app")?;
+let app_config = ConfigManager::global().get_as::<AppConfig>("app")?;
 println!("Database host: {}", app_config.database.host);
 ```
 
 #### 1.5 配置来源优先级
 
+配置来源按添加顺序合并，后添加的覆盖先添加的。`DefaultConfigLoader` 的标准加载顺序为：
+
 ```
-1. TOML/JSON/YAML 配置文件（最低优先级）
-2. .env 文件（通过 dotenvy 加载到环境变量）
-3. 系统环境变量
-4. 命令行参数（最高优先级）
+1. TOML 配置文件（config/default.toml，最低优先级）
+2. 环境变量 CONFIG_FILE 指定的 TOML 文件
+3. .env 文件
+4. 系统环境变量
+5. 命令行参数（最高优先级）
 ```
 
 ### 二、加密解密模块 (`crypto`)
@@ -222,16 +240,16 @@ pub struct ChaCha20PolyCipher {
 impl Cipher for ChaCha20PolyCipher {
     fn meta(&self) -> CipherMeta {
         CipherMeta {
-            name: "ChaCha20-Poly1305".to_string(),
-            prefix: "CHACHA(".to_string(),
+            name: "ChaCha20-Poly1305",
+            prefix: "CHACHA(",
         }
     }
 
-    fn encrypt(&self, plaintext: &str) -> Result<String, Error> {
+    fn encrypt(&self, plaintext: &str) -> Result<String> {
         // 实现加密逻辑
     }
 
-    fn decrypt(&self, ciphertext: &str) -> Result<String, Error> {
+    fn decrypt(&self, ciphertext: &str) -> Result<String> {
         // 实现解密逻辑
     }
 }
@@ -276,16 +294,32 @@ println!("Generated ID: {}", id_str);
 ```rust
 use cmx_utils::id::UuidGenerator;
 
-let generator = UuidGenerator::new();
-
-// 生成 v4 UUID
-let uuid_v4 = generator.generate_v4();
+// 生成 v4 UUID（Uuid 类型）
+let uuid_v4 = UuidGenerator::new_v4();
 println!("UUID v4: {}", uuid_v4);
 
-// 生成带前缀的 UUID
-let prefixed_uuid = generator.generate_with_prefix("user_");
-println!("Prefixed UUID: {}", prefixed_uuid);
+// 生成标准字符串格式（带连字符）
+let uuid_str = UuidGenerator::new_v4_str();
+
+// 生成紧凑格式（无连字符）与 Base64 格式
+let uuid_compact = UuidGenerator::new_v4_compact();
+let uuid_base64 = UuidGenerator::new_v4_base64();
 ```
+
+#### 3.4 Pk52 主键生成器
+
+```rust
+use cmx_utils::id::Pk52Generator;
+
+// 52 位主键生成器（可从 ID 反解节点号与秒级时间戳）
+let generator = Pk52Generator::new(1024);
+let id = generator.next_id();
+
+let node = Pk52Generator::extract_node(id);
+let secs = Pk52Generator::extract_epoch_secs(id);
+```
+
+也可使用快捷函数 `cmx_utils::id::next_pk_id()` 直接生成。
 
 ### 四、ZIP 压缩/解压模块 (`zip`)
 
@@ -352,7 +386,6 @@ use cmx_utils::b64::{b64u_encode, b64u_decode, b64u_decode_to_string};
 let original = "Hello, World! 你好世界！";
 let encoded = b64u_encode(original);
 println!("Encoded: {}", encoded);
-// 输出: SGVsbG8sIFdvcmxkISDiIU1lZ2F6adB1
 
 // 解码为字节数组
 let decoded_bytes = b64u_decode(&encoded)?;
@@ -435,7 +468,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. 初始化配置
     ConfigManager::initialize(|| {
         Config::builder()
-            .add_toml_file("config/default.toml", 10)?
+            .add_toml_file("config/default.toml")?
             .add_env()
             .build()
     })?;
@@ -446,7 +479,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. 生成唯一 ID
     let record_id = snowflake_id_str();
-    let trace_id = UuidGenerator::new().generate_v4().to_string();
+    let trace_id = UuidGenerator::new_v4_str();
 
     // 4. 加密敏感数据并编码
     let sensitive_data = "user_password_123";

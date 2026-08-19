@@ -2,9 +2,12 @@
 
 > 基于 Extism 的 WASM 运行时引擎，负责 WASM 模块的加载、实例化和调用。
 
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
+
 ## 项目简介
 
-本 crate 实现 cmx-traits::RuntimeInvoker trait，提供 WASM 模块的加载、实例化和调用功能。依赖 cmx-traits（trait 定义）、cmx-utils（ConfigManager 配置读取）和 extism（WASM 运行时）。
+本 crate 实现 cmx-traits::RuntimeInvoker trait，提供 WASM 模块的加载、实例化和调用功能。依赖 cmx-traits（trait 定义）、cmx-utils（ConfigManager 配置读取）和 extism（WASM 运行时），被 cmx-service 通过 `RuntimeInvoker` trait 对象使用。
 
 ## 快速开始
 
@@ -12,26 +15,31 @@
 
 ```toml
 [dependencies]
-cmx-runtime = "0.1.0"
+cmx-runtime = "0.1.12"
 ```
 
 ### 核心示例
 
 ```rust
-use cmx_runtime::{ExtismEngine, ExtismEngineConfig, GlobalExtismEngine};
-use cmx_traits::InvokeContext;
+use cmx_runtime::{ExtismEngine, ExtismEngineConfig, GlobalExtismEngine, LoggingHostFunctions};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = ExtismEngineConfig::default();
-    let engine = ExtismEngine::new(config)?;
+    // 1. 创建引擎（构建时自动从 ConfigManager 覆盖默认参数）
+    let mut engine = ExtismEngine::new(ExtismEngineConfig::default())?;
 
-    let wasm_bytes = std::fs::read("plugin.wasm")?;
-    let result = engine
-        .invoke(&wasm_bytes, "my_function", b"input data", &InvokeContext::default())
-        .await?;
+    // 2. 注册宿主函数提供者（示例：内置日志函数）
+    engine.register_provider(Arc::new(LoggingHostFunctions::new()))?;
 
-    println!("Result: {:?}", result);
+    // 3. 初始化全局单例
+    GlobalExtismEngine::initialize(Arc::new(engine))?;
+
+    // 4. 按插件 ID 调用已加载模块的导出函数
+    let invoker = GlobalExtismEngine::get_as_invoker();
+    invoker.load_module("my-plugin", "plugins/my-plugin/main.wasm".as_ref()).await?;
+    let result = invoker.invoke("my-plugin", "my_function", b"input data").await?;
+    println!("elapsed: {}us", result.elapsed_us);
     Ok(())
 }
 ```
@@ -40,10 +48,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | 功能 | 说明 |
 |------|------|
-| WASM 运行时 | 基于 Extism 的 WASM 模块加载和执行 |
-| 宿主函数桥接 | HostFunctionContext + Extism 回调机制 |
+| WASM 运行时 | 基于 Extism 的 WASM 模块加载和执行，每插件一个实例池（Pool） |
+| 并发模型 | `invoke` 经 `tokio::spawn_blocking` 在阻塞线程池执行，不占用异步 worker |
+| 宿主函数桥接 | 通过 `register_provider(Arc<dyn HostFunctionProvider>)` 注册，MsgPack 编解码 |
 | 全局单例 | GlobalExtismEngine 提供全局运行时访问 |
-| 引擎配置 | ExtismEngineConfig 支持缓存/Fuel 初始化 |
+| 引擎配置 | ExtismEngineConfig 支持 ConfigManager（dev.toml 等）运行时参数覆盖 |
 | 运行时指标 | EngineMetrics 提供无锁原子计数器 |
 
 ## 模块结构
@@ -51,14 +60,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 cmx-runtime
 ├── src/
-│   ├── lib.rs                  # 库入口
-│   ├── config.rs               # 引擎配置
-│   ├── engine.rs               # 核心引擎
-│   ├── error.rs                # 错误类型
-│   ├── global.rs               # 全局单例
-│   ├── host_function.rs        # 宿主函数桥接
-│   ├── lifecycle_listener.rs    # 生命周期监听器
-│   └── metrics.rs              # 运行时指标
+│   ├── lib.rs                   # 库入口
+│   ├── config.rs                # 引擎配置（ExtismEngineConfig + ConfigManager 覆盖）
+│   ├── engine.rs                # 核心引擎（ExtismEngine + RuntimeInvoker 实现）
+│   ├── error.rs                 # 错误类型（ExtismError）
+│   ├── global.rs                # 全局单例（GlobalExtismEngine）
+│   ├── host_function.rs         # 宿主函数桥接（HostFunctionProvider → Extism Function）
+│   ├── lifecycle_listener.rs    # 生命周期监听器（RuntimeLifecycleListener）
+│   ├── logging_host_functions.rs # 内置日志宿主函数（LoggingHostFunctions）
+│   └── metrics.rs               # 运行时指标（EngineMetrics）
 └── Cargo.toml
 ```
 
@@ -66,50 +76,101 @@ cmx-runtime
 
 ### `engine`
 
-ExtismEngine 是核心引擎，实现了 RuntimeInvoker trait。
+ExtismEngine 是核心引擎，实现了 RuntimeInvoker trait。每个插件 ID 对应一个独立的 Extism 实例池（`Pool`），调用时通过 `Pool::with_plugin()` 自动管理实例的获取与归还。
 
 ### `config`
 
-ExtismEngineConfig 用于配置引擎行为，包括缓存大小、Fuel 限制等。
+ExtismEngineConfig 用于配置引擎行为（WASI、内存上限、超时、实例池大小、Fuel 限制），所有参数均可在构建时被 ConfigManager 覆盖。
 
 ### `host_function`
 
-HostFunctionContext 提供宿主函数桥接功能。
+将 cmx-traits 的 `HostFunctionProvider`（namespace / functions / call）包装为 Extism 宿主函数注册进引擎，桥接层对外不暴露公开类型。
+
+## 内部机制
+
+### 高并发架构
+
+```text
+ExtismEngine
+  ├── plugin_pools: RwLock<HashMap<String, Pool>>
+  │     └── Pool（每个 plugin_id 一个）
+  │           ├── 工厂函数（PluginBuilder 快速创建实例）
+  │           └── 内置 Condvar 等待机制
+  ├── cached_functions: RwLock<Vec<extism::Function>>
+  │     └── register_provider 预编译的宿主函数，在 load_module 时
+  │        经 PluginBuilder::with_functions() 注入每个插件实例
+  └── metrics: Arc<EngineMetrics>
+```
+
+### 并发模型：spawn_blocking
+
+```text
+tokio worker
+  → spawn_blocking {  （任务迁移到阻塞线程池，worker 被释放）
+      pool.with_plugin { plugin.call() }
+    }
+  → .await JoinHandle（获取结果）
+```
+
+同步阻塞的 `plugin.call()` 不占用异步 worker 线程，实例的获取与归还由 Extism Pool 自动管理。
+
+### 多层防护机制
+
+1. **调用深度限制** — 防止无限递归（默认最大 8 层，由 cmx-traits InvokeContext 实现）
+2. **循环检测** — 检测同插件同函数的递归调用（A→B→A 或 A→A）
+3. **Extism 原生超时** — 单次 plugin.call() 超时自动中断（Manifest::with_timeout）
+4. **Fuel 限制** — 限制 Wasm 指令执行数，防止死循环和恶意代码消耗 CPU
+
+### ExtismEngine 公开方法
+
+| 方法 | 说明 |
+|------|------|
+| `new(config)` | 创建引擎（内部调 load_runtime_config 覆盖默认参数） |
+| `register_provider(provider)` | 注册宿主函数提供者 |
+| `cached_function_count()` | 已缓存的宿主函数数量 |
+| `get_metrics()` | 获取运行时指标（Arc<EngineMetrics>） |
+| `get_pool_count(plugin_id)` | 查询指定插件的实例池大小 |
+
+另有 RuntimeInvoker trait 方法（load_module / unload_module / is_loaded / invoke / invoke_with_options）。
 
 ## 使用指南
 
 ### 一、引擎初始化与配置
+
+引擎构建时会从 ConfigManager 读取运行时参数覆盖默认值；若 ConfigManager 尚未初始化或配置值无效（如 memory_max <= 0），则保留代码默认值并输出 tracing 警告。
 
 #### 1.1 基础初始化
 
 ```rust
 use cmx_runtime::{ExtismEngine, ExtismEngineConfig};
 
-let config = ExtismEngineConfig::default();
+let engine = ExtismEngine::new(ExtismEngineConfig::default())?;
+```
+
+#### 1.2 配置项与运行时覆盖
+
+```rust
+use cmx_runtime::ExtismEngineConfig;
+use std::time::Duration;
+
+let config = ExtismEngineConfig {
+    enable_wasi: true,                       // 启用 WASI（默认 true）
+    memory_max: 4096,                        // 内存上限（页，每页 64KB，默认 4096 = 256MB）
+    timeout: Duration::from_secs(30),        // 单次调用超时（默认 30s）
+    pool_max_instances: 8,                    // 每插件实例池上限（默认取 CPU 核心数）
+    fuel_limit: Some(10_000_000),            // WASM 指令步数限制（None 不限制）
+};
+
 let engine = ExtismEngine::new(config)?;
 ```
 
-#### 1.2 自定义配置
+`ExtismEngine::new` 构建时会调用 `load_runtime_config`，从 ConfigManager 读取以下键覆盖上述默认值（未初始化 ConfigManager 或值无效时保持默认）：
 
-```rust
-use cmx_runtime::{ExtismEngine, ExtismEngineConfig, CacheConfig, FuelConfig};
-
-let config = ExtismEngineConfig::builder()
-    // 配置 WASM 模块缓存
-    .with_cache_config(CacheConfig {
-        max_size: 100,           // 最大缓存模块数
-        ttl_seconds: 3600,       // 缓存 TTL（秒）
-    })
-    // 配置 Fuel 限制（防止无限循环）
-    .with_fuel_config(FuelConfig {
-        initial_fuel: 10000000, // 初始 fuel 值
-        max_fuel: 100000000,    // 最大 fuel 值
-    })
-    // 配置日志级别
-    .with_log_level("debug")
-    .build();
-
-let engine = ExtismEngine::new(config)?;
+```
+runtime.memory_max          # 内存上限（页数）
+runtime.timeout             # 超时（秒）
+runtime.pool_max_instances  # 实例池上限
+runtime.fuel_limit          # Fuel 限制（Wasm 指令数；0 表示不限制）
 ```
 
 ### 二、全局单例管理
@@ -117,16 +178,14 @@ let engine = ExtismEngine::new(config)?;
 #### 2.1 初始化全局运行时
 
 ```rust
-use cmx_runtime::GlobalExtismEngine;
+use cmx_runtime::{ExtismEngine, ExtismEngineConfig, GlobalExtismEngine};
+use std::sync::Arc;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化全局运行时
-    GlobalExtismEngine::initialize(ExtismEngineConfig::default())?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let engine = ExtismEngine::new(ExtismEngineConfig::default())?;
+    GlobalExtismEngine::initialize(Arc::new(engine))?; // 同步方法，只允许初始化一次
 
-    // 验证初始化成功
     assert!(GlobalExtismEngine::is_initialized());
-
     Ok(())
 }
 ```
@@ -135,268 +194,141 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use cmx_runtime::GlobalExtismEngine;
-use cmx_traits::{RuntimeInvoker, InvokeContext};
+use cmx_traits::runtime::InvokeOptions;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 方式一：获取 Arc<dyn RuntimeInvoker>
-    let invoker = GlobalExtismEngine::get().await;
-    let result = invoker
-        .invoke(wasm_bytes, "my_function", input, &InvokeContext::default())
-        .await?;
-
-    // 方式二：直接作为 trait 对象使用
+    // 方式一：获取 Arc<dyn RuntimeInvoker>（用于依赖注入）
     let invoker = GlobalExtismEngine::get_as_invoker();
     let result = invoker
-        .invoke(wasm_bytes, "my_function", input, &InvokeContext::default())
+        .invoke_with_options("my-plugin", "my_function", b"input", &InvokeOptions::new())
         .await?;
 
-    Ok(())
-}
-```
-
-#### 2.3 全局引擎替换
-
-```rust
-use cmx_runtime::{GlobalExtismEngine, ExtismEngine, ExtismEngineConfig};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 替换全局运行时
-    let new_engine = ExtismEngine::new(ExtismEngineConfig::default())?;
-    GlobalExtismEngine::set(new_engine).await?;
+    // 方式二：获取引擎本体（用于注册宿主函数、读取指标等）
+    let engine = GlobalExtismEngine::get().engine();
+    let pool_size = engine.get_pool_count("my-plugin"); // Option<usize>
 
     Ok(())
 }
 ```
+
+全局单例不支持替换（无 `set`），如需重建引擎应重启进程或重建 `ExtismEngine` 实例自持使用。
 
 ### 三、WASM 函数调用
 
-#### 3.1 基础调用
+#### 3.1 基础调用（按插件 ID）
+
+调用入口与 cmx-traits 的 `RuntimeInvoker` 一致：先 `load_module` 按插件 ID 加载 WASM 文件（双重检查锁 + PoolBuilder），再 `invoke` 调用导出函数。输入字节通常为 `FunctionInput` 的序列化形式。
 
 ```rust
-use cmx_runtime::ExtismEngine;
-use cmx_traits::{InvokeContext, WasmInvokeResult, InvokeOutput};
+use cmx_traits::runtime::{RuntimeInvoker, WasmInvokeResult};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let engine = ExtismEngine::new(ExtismEngineConfig::default())?;
-    let wasm_bytes = std::fs::read("plugin.wasm")?;
+    let invoker = GlobalExtismEngine::get_as_invoker();
+    invoker.load_module("my-plugin", "published_plugins/my-plugin/main.wasm".as_ref()).await?;
 
-    let context = InvokeContext::default();
-    let result = engine
-        .invoke(&wasm_bytes, "my_function", b"input data", &context)
+    // WasmInvokeResult 是结构体：{ output: Vec<u8>, elapsed_us: u64, fuel_consumed: Option<u64> }
+    let WasmInvokeResult { output, elapsed_us, .. } = invoker
+        .invoke("my-plugin", "my_function", br#"{"input":"test"}"#)
         .await?;
 
-    match result {
-        WasmInvokeResult::Success(output) => {
-            println!("Function returned: {:?}", output);
-        }
-        WasmInvokeResult::Failure(code, msg) => {
-            eprintln!("Function failed: {} - {}", code, msg);
-        }
+    // 解析返回值（通常为 MsgPack/JSON 编码的 FunctionOutput）
+    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output) {
+        println!("Returned JSON: {:?}", json);
     }
-
+    println!("elapsed: {}us", elapsed_us);
     Ok(())
 }
 ```
 
-#### 3.2 使用 InvokeContext
+超时控制通过 `invoke_with_options` 的 `InvokeOptions::with_timeout` 传入（见 cmx-traits 文档）；超时与失败会计入指标（见第五节）。
+
+#### 3.2 模块生命周期
 
 ```rust
-use cmx_traits::invoke_context::InvokeContext;
+// 卸载模块（清空实例池）
+invoker.unload_module("my-plugin").await?;
 
-let mut context = InvokeContext::default();
-
-// 设置追踪 ID
-context.set_trace_id("request-12345");
-
-// 设置超时（毫秒）
-context.set_timeout(30000);
-
-// 设置调试模式
-context.set_debug(true);
-
-// 添加自定义数据
-context.set("user_id", "user-001");
-context.set("session_id", "sess-xyz");
-
-let result = engine
-    .invoke(&wasm_bytes, "process", input, &context)
-    .await?;
-```
-
-#### 3.3 解析 WASM 返回值
-
-```rust
-use cmx_traits::{InvokeOutput, WasmInvokeResult};
-
-match result {
-    WasmInvokeResult::Success(output) => {
-        // 获取返回的字节数组
-        let bytes = output.data();
-
-        // 解析为字符串
-        if let Ok(s) = std::str::from_utf8(bytes) {
-            println!("Returned string: {}", s);
-        }
-
-        // 解析为 JSON
-        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(bytes) {
-            println!("Returned JSON: {:?}", json);
-        }
-    }
-    WasmInvokeResult::Failure(code, msg) => {
-        eprintln!("Error {}: {}", code, msg);
-    }
-}
+// 查询加载状态
+let loaded = invoker.is_loaded("my-plugin");
 ```
 
 ### 四、宿主函数注册
 
-#### 4.1 注册宿主函数
+宿主函数以 `HostFunctionProvider`（cmx-traits）为单位注册，桥接层将其包装为 Extism Function 并在构建插件实例时注入；通信使用 MsgPack 编解码。
 
 ```rust
-use cmx_runtime::{ExtismEngine, ExtismEngineConfig, HostFunctionContext};
-use extism_pdk::*;
+use cmx_runtime::{ExtismEngine, LoggingHostFunctions};
+use std::sync::Arc;
 
-fn register_host_functions(ctx: &mut HostFunctionContext) {
-    // 注册 log_info 函数
-    ctx.register_fn("log_info", |msg: String| {
-        tracing::info!("[WASM] {}", msg);
-    });
+let mut engine = ExtismEngine::new(ExtismEngineConfig::default())?;
 
-    // 注册 log_error 函数
-    ctx.register_fn("log_error", |msg: String| {
-        tracing::error!("[WASM] {}", msg);
-    });
+// 注册内置的日志宿主函数（log_info / log_error / ...）
+engine.register_provider(Arc::new(LoggingHostFunctions::new()))?;
 
-    // 注册数据库查询函数
-    ctx.register_fn("db_query", |request: DbRequest| -> DbResponse {
-        // 处理数据库查询
-    });
+// 注册自定义提供者：实现 cmx_traits::runtime::HostFunctionProvider
+// （namespace 返回 "cmx:模块名"，functions 返回 HostFunctionDef 列表，
+//  call 接收 MsgPack 字节并返回 MsgPack 字节，详见 cmx-traits README）
+engine.register_provider(Arc::new(my_provider))?;
 
-    // 注册缓存操作函数
-    ctx.register_fn("cache_get", |key: String| -> Option<String> {
-        cache.get(&key)
-    });
-
-    ctx.register_fn("cache_set", |key: String, value: String, ttl: Option<i64>| {
-        cache.set(&key, &value, ttl);
-    });
-}
-```
-
-#### 4.2 在引擎中使用宿主函数
-
-```rust
-use cmx_runtime::{ExtismEngine, HostFunctionContext};
-
-let mut host_ctx = HostFunctionContext::new();
-register_host_functions(&mut host_ctx);
-
-let config = ExtismEngineConfig::builder()
-    .with_host_context(host_ctx)
-    .build();
-
-let engine = ExtismEngine::new(config)?;
+println!("host functions cached: {}", engine.cached_function_count());
 ```
 
 ### 五、运行时指标
 
-#### 5.1 获取运行时指标
+`EngineMetrics` 暴露 4 个公共原子字段（`AtomicU64`），由引擎在每次调用后自动记录（`record_success` / `record_failure` / `record_timeout`）：
 
 ```rust
-use cmx_runtime::{ExtismEngine, EngineMetrics};
+use cmx_runtime::GlobalExtismEngine;
+use std::sync::atomic::Ordering;
 
-let engine = ExtismEngine::new(ExtismEngineConfig::default())?;
-let metrics = engine.metrics();
+let metrics = GlobalExtismEngine::get().engine().get_metrics();
 
-// 获取各指标的当前值
-println!("Total invocations: {}", metrics.total_invocations());
-println!("Successful invocations: {}", metrics.successful_invocations());
-println!("Failed invocations: {}", metrics.failed_invocations());
-println!("Total execution time: {}ms", metrics.total_execution_time_ms());
-```
+let total = metrics.total_calls.load(Ordering::Relaxed);      // 总调用次数
+let failed = metrics.failed_calls.load(Ordering::Relaxed);    // 失败次数（不含超时）
+let timeouts = metrics.timeout_calls.load(Ordering::Relaxed); // 超时次数
+let elapsed = metrics.total_elapsed_us.load(Ordering::Relaxed); // 累计耗时（微秒）
 
-#### 5.2 重置指标
-
-```rust
-use cmx_runtime::EngineMetrics;
-
-let metrics = EngineMetrics::default();
-metrics.reset();
-
-assert_eq!(metrics.total_invocations(), 0);
+let avg_us = if total > 0 { elapsed / total } else { 0 };
+println!("avg latency: {}us", avg_us);
 ```
 
 ### 六、生命周期监听
 
-#### 6.1 实现生命周期监听器
+`RuntimeLifecycleListener` 订阅全局事件总线的插件升级/卸载/降级事件，自动清除对应插件的 WASM 实例池缓存（按 app_id 过滤事件）：
 
 ```rust
-use cmx_runtime::{
-    ExtismEngine, ExtismEngineConfig,
-    LifecycleEvent, LifecycleListener,
-};
+use cmx_runtime::RuntimeLifecycleListener;
+use std::sync::Arc;
 
-struct MyLifecycleListener;
-
-impl LifecycleListener for MyLifecycleListener {
-    fn on_module_loaded(&self, module_name: &str) {
-        tracing::info!("Module loaded: {}", module_name);
-    }
-
-    fn on_module_unloaded(&self, module_name: &str) {
-        tracing::info!("Module unloaded: {}", module_name);
-    }
-
-    fn on_invocation_started(&self, func_name: &str) {
-        tracing::debug!("Invocation started: {}", func_name);
-    }
-
-    fn on_invocation_finished(&self, func_name: &str, duration_ms: u64) {
-        tracing::debug!("Invocation finished: {} ({}ms)", func_name, duration_ms);
-    }
+#[tokio::main]
+async fn main() {
+    let invoker = GlobalExtismEngine::get_as_invoker();
+    let listener = RuntimeLifecycleListener::new(invoker, "app-001".to_string());
+    listener.register().await; // 订阅 plugin.upgraded / uninstalled / downgraded
 }
-
-let listener = Arc::new(MyLifecycleListener {});
-let config = ExtismEngineConfig::builder()
-    .with_lifecycle_listener(listener)
-    .build();
 ```
 
 ### 七、错误处理
 
-```rust
-use cmx_runtime::{ExtismEngine, ExtismEngineError};
+`ExtismError` 为引擎层错误，实现 `RuntimeInvoker` 时会转换为 `TraitError`（如 `WasmLoadFailed` / `WasmInvokeFailed`）抛给调用方：
 
-match engine.invoke(&wasm_bytes, func_name, input, &context).await {
-    Ok(WasmInvokeResult::Success(output)) => {
-        // 处理成功
+```rust
+use cmx_runtime::ExtismError;
+
+match err {
+    ExtismError::PluginLoadFailed(msg) => {
+        eprintln!("WASM 模块加载失败: {}", msg);
     }
-    Ok(WasmInvokeResult::Failure(code, msg)) => {
-        // 处理 WASM 函数返回的错误
-        eprintln!("WASM error {}: {}", code, msg);
+    ExtismError::PluginCallFailed(msg) => {
+        eprintln!("WASM 函数调用失败: {}", msg);
     }
-    Err(e) => {
-        match e.downcast_ref::<ExtismEngineError>() {
-            Some(ExtismEngineError::ModuleNotFound(name)) => {
-                eprintln!("WASM module not found: {}", name);
-            }
-            Some(ExtismEngineError::FunctionNotFound(name)) => {
-                eprintln!("Function not found: {}", name);
-            }
-            Some(ExtismEngineError::InvocationTimeout) => {
-                eprintln!("Invocation timed out");
-            }
-            Some(ExtismEngineError::OutOfFuel) => {
-                eprintln!("WASM execution ran out of fuel");
-            }
-            _ => {
-                eprintln!("Unknown error: {}", e);
-            }
-        }
+    ExtismError::ConfigError(msg) => {
+        eprintln!("引擎配置错误: {}", msg);
+    }
+    ExtismError::InternalError(msg) => {
+        eprintln!("内部错误: {}", msg);
     }
 }
 ```
@@ -404,52 +336,41 @@ match engine.invoke(&wasm_bytes, func_name, input, &context).await {
 ### 八、完整示例
 
 ```rust
-use cmx_runtime::{
-    ExtismEngine, ExtismEngineConfig, GlobalExtismEngine,
-    HostFunctionContext, CacheConfig,
-};
-use cmx_traits::{RuntimeInvoker, InvokeContext, WasmInvokeResult};
+use cmx_runtime::{ExtismEngine, ExtismEngineConfig, GlobalExtismEngine, LoggingHostFunctions};
+use cmx_traits::runtime::{InvokeOptions, RuntimeInvoker};
 use std::sync::Arc;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. 配置并初始化全局运行时
-    let mut host_ctx = HostFunctionContext::new();
+    // 1. 配置并创建引擎（ConfigManager 中的 runtime.* 键会覆盖默认值）
+    let mut engine = ExtismEngine::new(ExtismEngineConfig {
+        fuel_limit: Some(10_000_000),
+        ..Default::default()
+    })?;
 
-    // 注册宿主函数
-    host_ctx.register_fn("log_info", |msg: String| {
-        tracing::info!("[Plugin] {}", msg);
-    });
+    // 2. 注册宿主函数
+    engine.register_provider(Arc::new(LoggingHostFunctions::new()))?;
 
-    let config = ExtismEngineConfig::builder()
-        .with_cache_config(CacheConfig { max_size: 50, ttl_seconds: 1800 })
-        .with_host_context(host_ctx)
-        .build();
+    // 3. 初始化全局运行时
+    GlobalExtismEngine::initialize(Arc::new(engine))?;
 
-    GlobalExtismEngine::initialize(config).await?;
-
-    // 2. 加载并调用 WASM 插件
-    let wasm_bytes = std::fs::read("my_plugin.wasm")?;
-
-    let mut context = InvokeContext::default();
-    context.set_trace_id("trace-001");
-    context.set_timeout(5000);
-
+    // 4. 加载并调用 WASM 插件
     let invoker = GlobalExtismEngine::get_as_invoker();
+    invoker.load_module("my-plugin", "published_plugins/my-plugin/main.wasm".as_ref()).await?;
+
+    let options = InvokeOptions::new()
+        .with_timeout(Duration::from_secs(5))
+        .with_max_depth(16);
+
     let result = invoker
-        .invoke(&wasm_bytes, "process", b"{\"input\":\"test\"}", &context)
+        .invoke_with_options("my-plugin", "process", br#"{"input":"test"}"#, &options)
         .await?;
 
-    // 3. 处理结果
-    match result {
-        WasmInvokeResult::Success(output) => {
-            let response = serde_json::from_slice::<serde_json::Value>(output.data())?;
-            println!("Result: {:?}", response);
-        }
-        WasmInvokeResult::Failure(code, msg) => {
-            return Err(format!("Plugin error ({}): {}", code, msg).into());
-        }
-    }
+    // 5. 处理结果
+    let response = serde_json::from_slice::<serde_json::Value>(&result.output)?;
+    println!("Result: {:?} ({}us, fuel: {:?})",
+        response, result.elapsed_us, result.fuel_consumed);
 
     Ok(())
 }

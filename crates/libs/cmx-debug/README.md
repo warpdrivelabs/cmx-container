@@ -1,10 +1,15 @@
 # cmx-debug
 
-> 调试会话管理和 WASM 插件调用模块，为 cmx-container 提供运行时调试能力。
+> 调试会话管理和 WASM 插件直调模块，为 cmx-container 提供运行时调试能力。
+
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
 
 ## 项目简介
 
-本 crate 提供调试会话管理、WASM 插件函数调用、调试器附加检测等功能，支持在开发过程中对插件进行调试。
+本 crate 提供插件调试会话管理（内存会话表 + 后台清理线程）、LLDB/CodeLLDB 调试器附加检测、WASM 插件函数直调（设置 `EXTISM_DEBUG=1` 构建 Extism 插件），以及插件目录/清单/wasm/wit 文件定位辅助函数。
+
+被 cmx-service（编排调试暂停 `debug_prepare`）、cmx-common-api（调试 HTTP handler）、cmx-platform-app / cmx-service-base（装配）依赖。
 
 ## 快速开始
 
@@ -12,45 +17,48 @@
 
 ```toml
 [dependencies]
-cmx-debug = "0.1.0"
+cmx-debug = "0.1.12"
 ```
 
 ### 核心示例
 
 ```rust
-use cmx_debug::{start_debug_session, DebugSession, DebugRequest};
+use cmx_debug::{start_debug_session, WasmFunctionInfo};
 use serde_json::json;
 
+// 创建调试会话（返回 DebugResponse，含 code-server URL 与会话 ID）
 let response = start_debug_session(
-    "plugin_id".to_string(),
-    "my_plugin".to_string(),
-    "1.0.0".to_string(),
-    "my_function".to_string(),
-    "/path/to/plugin.wasm".to_string(),
-    "/path/to/source".to_string(),
-    vec![], // wasm_functions
-    json!({}),
-    json!({"input": "test"}),
+    "plugin_001".to_string(),          // plugin_id
+    "my_plugin".to_string(),           // plugin_name
+    "1.0.0".to_string(),               // plugin_version
+    "my_function".to_string(),         // function_name
+    "/plugins/my_plugin/1.0.0/plugin.wasm".to_string(), // wasm_path
+    "/workspace/my_plugin/src".to_string(),             // source_path
+    vec![WasmFunctionInfo { name: "my_function".to_string() }], // 可调用函数列表
+    json!({}),                         // previous_output（失败前上下文）
+    json!({"input": "test"}),          // initial_input（服务初始入参）
 );
+println!("session: {:?}", response.session_id);
 ```
 
 ## 核心功能与特性
 
 | 功能 | 说明 |
 |------|------|
-| 调试会话管理 | 创建、获取、删除调试会话 |
-| 调试器检测 | 检测 LLDB/CodeLLDB 是否附加到目标进程 |
-| WASM 函数调用 | 直接调用 WASM 插件函数 |
-| 会话自动清理 | 自动清理已失效的调试会话 |
-| 代码服务器集成 | 支持从配置获取 code_server_url |
+| 调试会话管理 | 进程内 `DEBUG_SESSIONS` 会话表（create / get / remove / clear） |
+| 会话自动清理 | `init()` 启动后台线程，每 500ms 调 `cleanup_dead_sessions()` 回收失效会话 |
+| 调试器检测 | `is_debugger_attached(pid)` 检测 lldb/codelldb 是否附加到目标进程 |
+| WASM 函数直调 | `call_plugin_function` 以 `EXTISM_DEBUG=1` 构建 Extism 插件并调用导出函数 |
+| code-server 集成 | 从 `CODE_SERVER_URL` 环境变量或插件配置服务获取 URL |
+| 插件定位辅助 | plugin.rs：按 ID/名称定位插件目录，解析 manifest.json，查找 wasm/wit 文件 |
 
 ## 模块结构
 
 ```
 cmx-debug
 ├── src/
-│   ├── lib.rs             # 库入口
-│   └── plugin.rs          # 插件相关调试功能
+│   ├── lib.rs        # 调试会话管理 / 调试器检测 / WASM 直调 / code-server URL
+│   └── plugin.rs     # 插件目录与清单定位辅助（CMX_PLUGINS_DIR）
 └── Cargo.toml
 ```
 
@@ -58,51 +66,48 @@ cmx-debug
 
 ### `DebugSession`
 
-调试会话信息，包含会话 ID、插件信息、函数名、WASM 路径等。
+调试会话记录：`id`（`debug_{plugin_name}_{毫秒时间戳}`）/ `plugin_id` / `plugin_name` / `plugin_version` / `function_name` / `wasm_path` / `source_path` / `cmx_pid`（当前进程 PID）/ `start_time`（Instant）/ `is_active` / `is_protected`（新建会话保护位，清理线程在调试器附加后解除）/ `previous_output` / `initial_input`。
 
 ### `DebugRequest`
 
-调试请求结构，包含函数名、参数、数据等。
+调试调用请求：`function` / `args: Vec<Value>` / `data: Value` / `is_self`（serde 重命名为 `self`）。
 
 ### `DebugResponse`
 
-调试响应结构，包含代码服务器 URL、可用函数列表等。
+调试会话创建响应（实现 `utoipa::ToSchema`）：`code` / `source_path` / `wasm_path` / `code_server_url: Option<String>` / `plugin` / `functions: Vec<WasmFunctionInfo>` / `cmx_pid` / `debug_function` / `message: Option<String>` / `session_id: Option<String>`。
+
+### 其他类型
+
+- `StartDebugRequest`：`function` / `args` / `data`（HTTP 层调试启动请求体）。
+- `WasmFunctionInfo`：`{ name }`（插件可调用函数描述）。
+- `InvokeResponse`：`{ code, result: Option<Value>, error: Option<String> }`（调用结果信封）。
 
 ## 使用指南
 
-### 一、初始化调试模块
+### 一、初始化与调试器检测
 
-#### 1.1 基础初始化
+#### 1.1 初始化调试模块
 
 ```rust
 use cmx_debug::init;
 
 fn main() {
-    // 初始化调试模块
-    // 启动后台清理线程
+    // 启动后台清理线程（幂等，重复调用不会启动第二个线程）
     init();
-    println!("Debug module initialized");
 }
 ```
 
-#### 1.2 带配置初始化
+#### 1.2 检测 LLDB/CodeLLDB 附加状态
 
 ```rust
-use cmx_debug::{init_with_config, DebugConfig};
+use cmx_debug::is_debugger_attached;
 
-fn main() {
-    let config = DebugConfig {
-        // 调试会话超时时间（秒）
-        session_timeout: 3600,
-        // 最大并发调试会话数
-        max_sessions: 10,
-        // 代码服务器 URL
-        code_server_url: Some("http://localhost:8081".to_string()),
-        // 启用详细日志
-        verbose: true,
-    };
+let target_pid = std::process::id();
 
-    init_with_config(config);
+// 检测流程：pgrep 找 lldb/codelldb 进程 → lsof / /proc/<pid>/fd 检查是否附加到 cmx-container
+// 注意：返回 bool；lldb 进程存在但无法确认附加关系时保守返回 true
+if is_debugger_attached(target_pid) {
+    println!("Debugger may be attached to process {}", target_pid);
 }
 ```
 
@@ -111,428 +116,150 @@ fn main() {
 #### 2.1 创建调试会话
 
 ```rust
-use cmx_debug::{start_debug_session, DebugSession, DebugRequest};
+use cmx_debug::{start_debug_session, start_debug_session_async, WasmFunctionInfo};
 use serde_json::json;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 创建调试会话
-    let session = start_debug_session(
-        "plugin_001".to_string(),           // plugin_id
-        "my_plugin".to_string(),            // plugin_name
-        "1.0.0".to_string(),                // version
-        "process_data".to_string(),         // function_name
-        "/plugins/my_plugin/1.0.0/plugin.wasm".to_string(),  // wasm_path
-        "/workspace/my_plugin/src".to_string(),  // source_path
-        vec!["log_info".to_string()],      // wasm_functions
-        serde_json::json!({}),             // context
-        serde_json::json!({"input": "test"}),  // input_data
-    )?;
+// 同步版本：code_server_url 取 CODE_SERVER_URL 环境变量（缺省有内置默认值）
+let resp = start_debug_session(
+    "plugin_001".to_string(),
+    "my_plugin".to_string(),
+    "1.0.0".to_string(),
+    "process_data".to_string(),
+    "/plugins/my_plugin/1.0.0/plugin.wasm".to_string(),
+    "/workspace/my_plugin/src".to_string(),
+    vec![WasmFunctionInfo { name: "process_data".to_string() }],
+    json!({}),                       // previous_output
+    json!({"input": "test"}),        // initial_input
+);
 
-    println!("Debug session created: {}", session.id);
-    println!("Code server URL: {}", session.code_server_url);
-
-    Ok(())
-}
+// 异步版本：先查 CODE_SERVER_URL，未设置时请求 http://localhost:{PLUGIN_PORT}/config 获取
+let resp = start_debug_session_async(/* 同上 9 参数 */).await;
 ```
 
-#### 2.2 获取调试会话
+#### 2.2 查询与删除会话
 
 ```rust
-use cmx_debug::{get_debug_session, get_all_debug_sessions};
+use cmx_debug::{get_session, get_active_session, remove_session, clear_all_sessions};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 获取单个会话
-    if let Some(session) = get_debug_session("session_id_001")? {
-        println!("Session: {:?}", session);
-    }
-
-    // 获取所有活动会话
-    let all_sessions = get_all_debug_sessions()?;
-    for session in all_sessions {
-        println!("Active session: {} - {}", session.id, session.function_name);
-    }
-
-    Ok(())
+// 按 ID 查询
+if let Some(session) = get_session("debug_my_plugin_1719000000000") {
+    println!("Session {} for function {}", session.id, session.function_name);
 }
+
+// 获取当前活动会话（任一 is_active 会话）
+let active = get_active_session();
+
+// 删除 / 清空
+let removed = remove_session("debug_my_plugin_1719000000000");
+clear_all_sessions();
 ```
 
-#### 2.3 删除调试会话
+#### 2.3 会话自动清理
+
+后台清理线程每 500ms 调用一次 `cleanup_dead_sessions()`：受保护（`is_protected=true`）的新会话在调试器附加后解除保护；未受保护且调试器已脱离的会话被回收。也可手动调用：
 
 ```rust
-use cmx_debug::delete_debug_session;
+use cmx_debug::cleanup_dead_sessions;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 删除单个会话
-    delete_debug_session("session_id_001")?;
-
-    // 批量删除所有会话
-    delete_all_debug_sessions()?;
-
-    Ok(())
-}
+cleanup_dead_sessions();
 ```
 
-### 三、调试器检测
-
-#### 3.1 检测 LLDB/CodeLLDB 附加状态
-
-```rust
-use cmx_debug::is_debugger_attached;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let target_pid = 12345;
-
-    // 检测是否有调试器附加到目标进程
-    if is_debugger_attached(target_pid)? {
-        println!("Debugger is attached to process {}", target_pid);
-    } else {
-        println!("No debugger attached to process {}", target_pid);
-    }
-
-    Ok(())
-}
-```
-
-#### 3.2 获取调试器信息
-
-```rust
-use cmx_debug::{get_debugger_info, DebuggerInfo};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pid = 12345;
-
-    if let Some(info) = get_debugger_info(pid)? {
-        match info debugger_type {
-            DebuggerType::LLDB => println!("LLDB attached"),
-            DebuggerType::CodeLLDB => println!("CodeLLDB attached"),
-            DebuggerType::GDB => println!("GDB attached"),
-            DebuggerType::Unknown => println!("Unknown debugger"),
-        }
-        println!("PID: {}", info.pid);
-        println!("Breakpoints: {:?}", info.breakpoints);
-    }
-
-    Ok(())
-}
-```
-
-### 四、WASM 函数调用
-
-#### 4.1 基础调用
+### 三、WASM 函数直调
 
 ```rust
 use cmx_debug::call_plugin_function;
 use serde_json::json;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_bytes = std::fs::read("plugin.wasm")?;
+let wasm_bytes = std::fs::read("/plugins/my_plugin/1.0.0/plugin.wasm")?;
 
-    let result = call_plugin_function(
-        &wasm_bytes,
-        "my_function",
-        &json!({"input": "test data"}),
-    )?;
+// 以 EXTISM_DEBUG=1 构建 Extism 插件（构建后立即移除该环境变量），JSON 输入输出
+let result = call_plugin_function(
+    &wasm_bytes,
+    "process_data",
+    &json!({"input": "test"}),
+)?;
 
-    println!("Function result: {:?}", result);
-
-    Ok(())
-}
+println!("Function result: {:?}", result);
+// 返回非 JSON 字符串时包装为 { "success": true, "data": { "result": <字符串> } }
 ```
 
-#### 4.2 带上下文的调用
+### 四、code-server URL 获取
 
 ```rust
-use cmx_debug::{call_plugin_function_with_context, CallContext};
+use cmx_debug::{get_code_server_url, get_code_server_url_async};
+
+// 同步：读 CODE_SERVER_URL 环境变量，未设置时返回内置默认地址
+let url = get_code_server_url();
+
+// 异步：CODE_SERVER_URL → http://localhost:{PLUGIN_PORT}/config 响应中的 code_server_url → 默认地址
+let url = get_code_server_url_async().await;
+```
+
+### 五、插件定位辅助（plugin.rs）
+
+```rust
+use cmx_debug::plugin::*;
+
+// 插件根目录：环境变量 CMX_PLUGINS_DIR，默认 ./published_plugins
+let dir = plugins_dir();
+
+// 遍历根目录按 manifest.json 中的 plugin.id 定位插件目录
+let plugin_dir = find_plugin_dir_by_id("plugin_001");
+
+// 按名称拼接目录（不验证存在性）
+let dir_by_name = find_plugin_dir_by_name("my_plugin");
+
+// 在插件目录内递归查找第一个 .wasm / .wit 文件
+let wasm = find_wasm_file(&dir_by_name);
+let wit = find_wit_file(&dir_by_name);
+
+// 清单读取：优先 manifest.json，回退 cmx-plugin.json
+let json = read_plugin_json(&dir_by_name);
+let (name, version) = get_plugin_info_from_json(&dir_by_name).unwrap();
+let (id, name, source_path) = get_plugin_info_from_manifest(&dir_by_name).unwrap();
+let source_dir = get_source_path_from_plugin_json(&dir_by_name);
+```
+
+### 六、完整调试流程（配合编排器）
+
+```rust
+use cmx_debug::{init, is_debugger_attached, call_plugin_function};
 use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_bytes = std::fs::read("plugin.wasm")?;
+    // 1. 启动会话清理线程
+    init();
 
-    let context = CallContext {
-        trace_id: Some("trace-001".to_string()),
-        timeout_ms: Some(5000),
-        debug_mode: true,
-        environment: serde_json::json!({
-            "LOG_LEVEL": "debug"
-        }),
-    };
+    // 2. 典型链路：cmx-service 编排执行带 debug 选项时，在 debug_prepare 阶段
+    //    调用 start_debug_session(_async) 创建会话并把 DebugResponse 返回给前端；
+    //    前端据 code_server_url 发起 code-server 会话、附加 LLDB 调试。
 
-    let result = call_plugin_function_with_context(
-        &wasm_bytes,
-        "process_data",
-        &json!({"input": "test"}),
-        &context,
-    )?;
-
+    // 3. 调试器就绪后直调插件函数验证
+    let wasm_bytes = std::fs::read("/plugins/my_plugin/1.0.0/plugin.wasm")?;
+    let result = call_plugin_function(&wasm_bytes, "process_data", &json!({"input": "test"}))?;
     println!("Result: {:?}", result);
 
     Ok(())
 }
 ```
 
-#### 4.3 调用并获取调试信息
+### 七、错误处理
 
-```rust
-use cmx_debug::{call_with_debug_info, DebugResult};
-use serde_json::json;
+本 crate 不定义专用错误枚举，公开函数统一返回 `anyhow::Result`（WASM 构建失败、JSON 序列化失败等由 anyhow 上下文携带）；`DebugResponse.code` / `message` 字段用于向调用方传递业务级状态。
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_bytes = std::fs::read("plugin.wasm")?;
+### 八、环境变量参考
 
-    let debug_result: DebugResult = call_with_debug_info(
-        &wasm_bytes,
-        "my_function",
-        &json!({"input": "test"}),
-    )?;
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `CODE_SERVER_URL` | 内置云端调试地址 | code-server 地址（同步与异步获取的第一个来源） |
+| `PLUGIN_PORT` | `9000` | 插件配置服务端口（异步获取 URL 时请求 `http://localhost:{PLUGIN_PORT}/config`） |
+| `CMX_PLUGINS_DIR` | `./published_plugins` | 插件发布根目录（plugin.rs 定位插件用） |
 
-    // 函数执行结果
-    println!("Result: {:?}", debug_result.output);
+## 依赖说明
 
-    // 调试信息
-    if let Some(debug_info) = debug_result.debug_info {
-        println!("Execution time: {}ms", debug_info.execution_time_ms);
-        println!("Memory usage: {} bytes", debug_info.memory_usage);
-        println!("Called functions: {:?}", debug_info.called_functions);
-    }
-
-    Ok(())
-}
-```
-
-### 五、断点管理
-
-#### 5.1 设置断点
-
-```rust
-use cmx_debug::{set_breakpoint, Breakpoint};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let breakpoint = Breakpoint {
-        function_name: "my_function".to_string(),
-        line_number: Some(42),
-        condition: Some("x > 10".to_string()),
-    };
-
-    let breakpoint_id = set_breakpoint(&breakpoint)?;
-    println!("Breakpoint set: {}", breakpoint_id);
-
-    Ok(())
-}
-```
-
-#### 5.2 列出断点
-
-```rust
-use cmx_debug::list_breakpoints;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let breakpoints = list_breakpoints()?;
-
-    for bp in breakpoints {
-        println!("{}: {}:{} - {:?}",
-            bp.id,
-            bp.function_name,
-            bp.line_number.unwrap_or(0),
-            bp.condition
-        );
-    }
-
-    Ok(())
-}
-```
-
-#### 5.3 删除断点
-
-```rust
-use cmx_debug::{delete_breakpoint, clear_all_breakpoints};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 删除单个断点
-    delete_breakpoint("bp_001")?;
-
-    // 清空所有断点
-    clear_all_breakpoints()?;
-
-    Ok(())
-}
-```
-
-### 六、调试上下文
-
-#### 6.1 创建调试上下文
-
-```rust
-use cmx_debug::{DebugContext, DebugVariables};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut context = DebugContext::new("my_function");
-
-    // 设置局部变量
-    context.set_variable("x", 10);
-    context.set_variable("name", "test");
-
-    // 设置 Watch 表达式
-    context.add_watch("x > 0");
-    context.add_watch("result.len() > 0");
-
-    Ok(())
-}
-```
-
-#### 6.2 获取变量值
-
-```rust
-use cmx_debug::{get_local_variable, get_all_variables};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let session_id = "session_001";
-
-    // 获取单个变量
-    if let Some(value) = get_local_variable(session_id, "x")? {
-        println!("x = {:?}", value);
-    }
-
-    // 获取所有变量
-    let variables = get_all_variables(session_id)?;
-    for (name, value) in variables {
-        println!("{} = {:?}", name, value);
-    }
-
-    Ok(())
-}
-```
-
-### 七、调试会话生命周期
-
-#### 7.1 完整调试流程
-
-```rust
-use cmx_debug::{
-    init, start_debug_session, is_debugger_attached,
-    set_breakpoint, call_plugin_function,
-    get_debug_session, delete_debug_session,
-};
-use serde_json::json;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. 初始化
-    init();
-
-    // 2. 检查目标进程是否有调试器附加
-    let pid = 12345;
-    if !is_debugger_attached(pid)? {
-        eprintln!("Please attach debugger to process {} first", pid);
-        return Ok(());
-    }
-
-    // 3. 创建调试会话
-    let session = start_debug_session(
-        "plugin_001".to_string(),
-        "my_plugin".to_string(),
-        "1.0.0".to_string(),
-        "my_function".to_string(),
-        "/path/to/plugin.wasm".to_string(),
-        "/path/to/source".to_string(),
-        vec![],
-        json!({}),
-        json!({"input": "test"}),
-    )?;
-
-    println!("Created session: {}", session.id);
-
-    // 4. 设置断点
-    let bp_id = set_breakpoint(&Breakpoint {
-        function_name: "my_function".to_string(),
-        line_number: Some(42),
-        condition: None,
-    })?;
-    println!("Set breakpoint: {}", bp_id);
-
-    // 5. 调用函数（会在断点处暂停）
-    let result = call_plugin_function(
-        &std::fs::read("plugin.wasm")?,
-        "my_function",
-        &json!({"input": "test"}),
-    )?;
-
-    // 6. 检查执行结果
-    println!("Function result: {:?}", result);
-
-    // 7. 删除会话
-    delete_debug_session(&session.id)?;
-
-    Ok(())
-}
-```
-
-### 八、错误处理
-
-```rust
-use cmx_debug::{DebugError, call_plugin_function};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_bytes = std::fs::read("plugin.wasm")?;
-
-    match call_plugin_function(&wasm_bytes, "nonexistent", &json!({})) {
-        Ok(result) => println!("Result: {:?}", result),
-        Err(e) => {
-            match e.downcast_ref::<DebugError>() {
-                Some(DebugError::SessionNotFound(id)) => {
-                    eprintln!("Debug session not found: {}", id);
-                }
-                Some(DebugError::DebuggerNotAttached) => {
-                    eprintln!("Debugger not attached to process");
-                }
-                Some(DebugError::FunctionNotFound(name)) => {
-                    eprintln!("Function not found in WASM: {}", name);
-                }
-                Some(DebugError::InvocationTimeout) => {
-                    eprintln!("Function invocation timed out");
-                }
-                Some(DebugError::WasmError(msg)) => {
-                    eprintln!("WASM execution error: {}", msg);
-                }
-                _ => {
-                    eprintln!("Unknown error: {}", e);
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-```
-
-### 九、配置参考
-
-#### DebugConfig 配置项
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `session_timeout` | u64 | 3600 | 调试会话超时时间（秒） |
-| `max_sessions` | usize | 10 | 最大并发调试会话数 |
-| `code_server_url` | Option<String> | None | 代码服务器 URL |
-| `verbose` | bool | false | 是否启用详细日志 |
-| `cleanup_interval` | u64 | 300 | 清理过期会话的间隔（秒） |
-
-#### 环境变量
-
-```bash
-# 调试模块日志级别
-CMX_DEBUG_LOG=debug
-
-# 代码服务器地址
-CMX_CODE_SERVER_URL=http://localhost:8081
-
-# 调试会话超时时间（秒）
-CMX_DEBUG_SESSION_TIMEOUT=3600
-```
+- `extism` — WASM 直调（`EXTISM_DEBUG=1` 构建以输出调试符号信息）
+- `reqwest` — 异步获取 code-server URL
+- `walkdir` — 插件目录递归查找 wasm / wit 文件
+- `utoipa` — DebugResponse / WasmFunctionInfo 的 OpenAPI schema
+- `lazy_static` + `std::sync::Mutex` — 进程内会话表

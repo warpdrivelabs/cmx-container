@@ -1,9 +1,9 @@
 # cmx-iam
 
-> cmx-iam — 用户权限角色管理（IAM）业务 crate，提供服务端 User/Role/Permission/RoleGroup/ExclusionRule 的 Entity/BMC/Filter 定义、Service 层业务逻辑、`UserAuthQuery` 与 `PermissionChecker` trait 实现，以及临时授权、互斥规则校验、熔断降级、审计日志等企业级能力。
+> cmx-iam — 用户权限角色管理（IAM）业务 crate，提供服务端 User/Role/Permission/RoleGroup/ExclusionRule 的 Entity/BMC/Filter 定义、Service 层业务逻辑、`UserAuthQuery` 与 `PermissionChecker` trait 实现，以及临时授权、互斥规则校验、熔断降级、审计日志等企业级能力；另有 API Key / OAuth2 客户端数据下沉（供 cmx-iam-api）与 `cmx:iam` WASM 宿主函数。
 
-[![Version](https://img.shields.io/badge/version-0.1.9-blue.svg)](https://crates.io)
-[![Edition](https://img.shields.io/badge/edition-2021-orange.svg)](https://www.rust-lang.org)
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)](https://crates.io)
+[![Edition](https://img.shields.io/badge/edition-2024-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-workspace-green.svg)]()
 
 本 crate 为服务端专用（WASM 不可达），基础数据模型（`User`/`Role`/`Permission`/`RoleGroup`）定义在 `cmx-core` 中，本 crate 通过 re-export 暴露。所有自定义错误使用 `thiserror`，日志使用 `tracing`，依赖通过 `workspace = true` 引用。
@@ -19,10 +19,10 @@
 ```toml
 [dependencies]
 # IAM 业务库（默认不含 OpenAPI 文档生成）
-cmx-iam = { path = "../libs/cmx-iam" }
+cmx-iam = { workspace = true }
 
 # 如需 OpenAPI Schema 自动生成（utoipa::ToSchema），启用 openapi feature
-# cmx-iam = { path = "../libs/cmx-iam", features = ["openapi"] }
+# cmx-iam = { workspace = true, features = ["openapi"] }
 ```
 
 ### 核心示例
@@ -32,8 +32,8 @@ cmx-iam = { path = "../libs/cmx-iam" }
 ```rust
 use std::sync::Arc;
 use cmx_iam::{
-    IamConfig, IamChecker,
-    RoleServiceImpl, UserServiceImpl, PermissionServiceImpl, RoleGroupServiceImpl,
+    IamConfig, IamChecker, RoleGroupServiceImpl,
+    user::UserServiceImpl, role::RoleServiceImpl, permission::PermissionServiceImpl,
     user::UserForCreate, role::RoleForCreate, permission::PermissionForCreate,
 };
 use cmx_core::SVRContext;
@@ -56,7 +56,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let checker = Arc::new(IamChecker::new(mm.clone(), config.clone()).await);
 
     // 4. 业务调用示例：创建角色 → 创建用户 → 分配角色
-    let svr_ctx = SVRContext::default();
+    // 注：SVRContext 无 Default，须以 (initial_input, headers, time_in, request_id) 显式构造
+    let svr_ctx = SVRContext::new(
+        serde_json::Value::Null,
+        std::collections::HashMap::new(),
+        chrono::Utc::now(),
+        format!("req-{}", uuid::Uuid::new_v4()),
+    );
     let role = role_svc.create_role(&svr_ctx, RoleForCreate {
         code: "viewer".into(),
         name: "只读访客".into(),
@@ -99,6 +105,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 认证查询 | `UserAuthQuery` trait 实现，供 `cmx-auth` 查询用户/角色/权限 |
 | 一致性校验 | 代码声明权限 vs DB 存在性比对，生成缺失权限的 INSERT DDL |
 | 定时清理 | 临时授权过期清理任务，按用户分组写审计 |
+| API Key 数据服务 | `cmx_auth_api_key` 表读写下沉（`api_key::store`），供 cmx-iam-api handler 调用 |
+| OAuth2 客户端数据服务 | `cmx_auth_client` 表读写下沉（`oauth_client::store`） |
+| WASM 宿主函数 | `IamHostFunctions`（`cmx:iam` 命名空间，MsgPack 编解码，返回脱敏用户信息） |
+| 权限 ZIP 导入 | `PermissionZipImporter` 实现，经 trait 对象注入 cmx-biz 的导入路由器 |
 
 ### 可选 Features
 
@@ -114,21 +124,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```text
 cmx-iam
 ├── src/
-│   ├── lib.rs                    # crate 入口，模块导出与 re-export
+│   ├── lib.rs                    # crate 入口，模块导出与 re-export（含 cmx-core 模型 re-export）
 │   ├── config.rs                 # IamConfig 配置定义（含 FailureMode）
 │   ├── error.rs                  # IamError 错误类型（thiserror）与转换
-│   ├── service_traits.rs         # UserService/RoleService/PermissionService/RoleGroupService trait
+│   ├── service_traits.rs         # 向后兼容 re-export 壳（trait 本体已拆至 traits/）
+│   ├── traits/                   # Service trait 定义（按子域拆分）
+│   │   ├── mod.rs                #   统一 re-export
+│   │   ├── user.rs               #   UserService trait + 用户专属审计响应结构
+│   │   ├── role.rs               #   RoleService trait + PermissionDiffResponse
+│   │   ├── role_group.rs         #   RoleGroupService trait
+│   │   ├── permission.rs         #   PermissionService trait + PermissionUsageStat
+│   │   └── audit.rs              #   跨模块审计摘要（RoleSummary / PermissionSummary）
 │   ├── iam_checker.rs            # IamChecker — PermissionChecker 实现（缓存+熔断）
 │   ├── circuit_breaker.rs        # 熔断器（closed/open 两态）
 │   ├── scheduler.rs              # 临时授权过期清理定时任务
 │   ├── audit_helper.rs           # AuditHelper trait — 审计日志写入辅助
 │   ├── user_auth_query_impl.rs   # UserAuthQueryImpl — UserAuthQuery trait 实现
+│   ├── host_functions.rs         # IamHostFunctions — cmx:iam 宿主函数（WASM，MsgPack）
+│   ├── api_key/                  # API Key 数据服务（cmx_auth_api_key 表读写下沉）
+│   │   ├── mod.rs                #   模块导出
+│   │   └── store.rs              #   insert/list/delete/set_status/query_key_prefix
+│   ├── oauth_client/             # OAuth2 客户端数据服务（cmx_auth_client 表读写下沉）
+│   │   ├── mod.rs                #   模块导出
+│   │   └── store.rs              #   insert/list/update/soft_delete
 │   ├── user/                     # 用户管理模块
 │   │   ├── mod.rs                # 模块导出
 │   │   ├── entity.rs             # UserForCreate/Update/Insert 等 DTO
 │   │   ├── filter.rs             # UserFilter（modql 过滤器）
 │   │   ├── bmc.rs                # UserBmc/UserRoleBmc 业务模型组件
-│   │   └── service.rs            # UserServiceImpl 服务实现
+│   │   └── service/              # UserServiceImpl（按职责拆分子模块）
+│   │       ├── mod.rs            #   结构体定义/构造器/Builder/trait 委托
+│   │       ├── crud.rs           #   创建/查询/更新/删除
+│   │       ├── query.rs          #   分页/列表、角色查询、临时授权查询
+│   │       ├── roles.rs          #   永久角色授权（全量替换）
+│   │       ├── temp_roles.rs     #   临时角色授权生命周期 + 有效权限聚合
+│   │       └── helpers.rs        #   DataSet 提取与默认过滤注入
 │   ├── role/                     # 角色管理模块
 │   │   ├── mod.rs                # 模块导出
 │   │   ├── entity.rs             # RoleForCreate/Update、AssignPermissionsRequest
@@ -140,7 +170,15 @@ cmx-iam
 │   │   ├── entity.rs             # PermissionForCreate/Update
 │   │   ├── filter.rs             # PermissionFilter
 │   │   ├── bmc.rs                # PermissionBmc
-│   │   ├── service.rs            # PermissionServiceImpl 服务实现
+│   │   ├── zip_importer.rs       # PermissionZipImporter trait 实现（桥接 cmx-biz）
+│   │   ├── service/              # PermissionServiceImpl（按职责拆分子模块）
+│   │   │   ├── mod.rs            #   结构体定义/构造器/Builder/trait 委托
+│   │   │   ├── crud.rs           #   权限 CRUD
+│   │   │   ├── query.rs          #   权限树/使用统计查询
+│   │   │   ├── import.rs         #   ZIP 导入/清理
+│   │   │   ├── txn.rs            #   事务包装
+│   │   │   ├── definition_importer.rs  # 本地定义导入器
+│   │   │   └── helpers.rs        #   辅助函数
 │   │   └── consistency_check.rs  # 代码声明权限 vs DB 一致性校验
 │   ├── role_group/               # 角色组管理模块
 │   │   ├── mod.rs                # 模块导出
@@ -151,6 +189,7 @@ cmx-iam
 │   └── rule/                     # 互斥规则模块（功能权限互斥 + 角色互斥）
 │       ├── mod.rs                # 模块导出
 │       ├── entity.rs             # ExclusionRule/Item、ValidateRule 请求响应
+│       ├── filter.rs             # 规则过滤器
 │       ├── bmc.rs                # ExclusionRuleBmc/ExclusionRuleItemBmc
 │       ├── service.rs            # ExclusionRuleService trait + Impl
 │       └── enforcer.rs           # RuleEnforcer trait + RuleEnforcerImpl
@@ -159,9 +198,9 @@ cmx-iam
 
 ### 主要模块说明
 
-#### `service_traits`
+#### `traits`（`service_traits` 兼容壳）
 
-定义四个核心 Service trait：`UserService`、`RoleService`、`PermissionService`、`RoleGroupService`，以及临时授权相关的 `UserRoleAssignment`、`TempAssignmentStatusFilter` 和审计查询响应结构（`EffectivePermissionsResponse`、`PermissionDiffResponse`、`PermissionUsageStat` 等）。所有 trait 方法为 `async`，返回 `Result<T, TraitError>`。
+四个核心 Service trait（`UserService`、`RoleService`、`PermissionService`、`RoleGroupService`）按子域拆分至 `traits/` 目录（user/role/role_group/permission/audit 子模块），以及临时授权相关的 `UserRoleAssignment`、`TempAssignmentStatusFilter` 和审计查询响应结构（`EffectivePermissionsResponse`、`PermissionDiffResponse`、`PermissionUsageStat`、`RoleSummary`/`PermissionSummary` 等）。所有 trait 方法为 `async`，返回 `Result<T, TraitError>`。`service_traits.rs` 保留为向后兼容的 re-export 入口。
 
 #### `iam_checker`
 
@@ -175,6 +214,18 @@ cmx-iam
 
 `UserAuthQueryImpl` 实现 `cmx_traits::auth::UserAuthQuery` trait，供 `cmx-auth` 在认证流程中查询用户/角色/权限。支持超管创建、OAuth2 自动注册（事务保证原子性）、密码哈希更新、最后登录信息更新。
 
+#### `api_key` / `oauth_client`
+
+认证附属数据下沉层：`api_key::store` 操作 `cmx_auth_api_key` 表（`insert_api_key` / `list_api_keys` / `delete_api_key` / `set_api_key_status` / `query_key_prefix_by_id`），`oauth_client::store` 操作 `cmx_auth_client` 表（`insert_client` / `list_clients` / `update_client` / `soft_delete_client`）。均为自由函数，供 HTTP 皮肤 crate `cmx-iam-api` 的 API Key / OAuth2 客户端管理 handler 调用。
+
+#### `host_functions`
+
+`IamHostFunctions` 实现 `cmx_traits::runtime::HostFunctionProvider`，向 WASM 运行时注册 `cmx:iam` 命名空间的 `iam_query` 宿主函数（单一入口按 `IamRequest` 变体分发，MsgPack 编解码），为插件提供用户详情（脱敏为 `WasmUserDetails`，编译期丢弃 `password_hash` 等敏感字段）、角色权限、权限校验能力。持有 `Arc<dyn PermissionChecker>`（含缓存+熔断）与 `Arc<dyn UserAuthQuery>`。
+
+#### `permission::zip_importer`
+
+`PermissionServiceImpl` 实现 `cmx_traits::resource::PermissionZipImporter` trait（`import_permissions_zip` / `cleanup_permissions_zip`），桥接为 trait 对象后注入 cmx-biz 的 `ResourceDataImporterImpl` 导入路由器，使 cmx-biz 无需直接依赖 cmx-iam（避免循环依赖）。
+
 ---
 
 ## 使用指南
@@ -185,7 +236,7 @@ cmx-iam
 
 ```rust
 use std::sync::Arc;
-use cmx_iam::{IamConfig, UserServiceImpl, user::UserForCreate};
+use cmx_iam::{IamConfig, user::{UserServiceImpl, UserForCreate}};
 use cmx_core::SVRContext;
 use cmx_database::DatabaseManager;
 use cmx_traits::auth::AuthService;
@@ -213,7 +264,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         status: Some(1), // 1 启用 / 0 禁用
     };
 
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
     let user = user_svc.create_user(&svr_ctx, create_req).await?;
     println!("创建成功: id={}, username={}", user.id, user.username);
 
@@ -224,11 +275,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #### 1.2 查询、更新、删除用户
 
 ```rust
-use cmx_iam::{UserServiceImpl, user::{UserForUpdate, UserFilter}};
+use cmx_iam::user::{UserServiceImpl, UserForUpdate, UserFilter};
 use cmx_core::SVRContext;
 
 async fn user_crud_demo(user_svc: &UserServiceImpl) -> Result<(), Box<dyn std::error::Error>> {
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
 
     // 按 username 查询单个用户
     let user = user_svc.get_user("bob").await?;
@@ -243,13 +294,18 @@ async fn user_crud_demo(user_svc: &UserServiceImpl) -> Result<(), Box<dyn std::e
     }).await?;
     println!("更新后状态: {}", updated.status);
 
-    // 分页查询用户（modql 过滤器）
-    let filter = UserFilter::default(); // 可填充 username/nickname/status 等条件
-    let (users, total) = user_svc.page_users(filter, 1, 20).await?;
+    // 分页查询用户（modql 过滤器 + ListOptions 分页）
+    let filters = Some(vec![UserFilter::default()]); // 可填充 username/nickname/status 等条件
+    let list_options = modql::filter::ListOptions {
+        limit: Some(20),
+        offset: Some(0),
+        order_bys: None,
+    };
+    let (users, total) = user_svc.page_users(filters, list_options).await?;
     println!("分页结果: 共 {} 条，当前页 {} 条", total, users.len());
 
     // 列表查询（不分页）
-    let all = user_svc.list_users(UserFilter::default()).await?;
+    let all = user_svc.list_users(None, None).await?;
     println!("列表查询: {} 条", all.len());
 
     // 批量删除用户
@@ -266,11 +322,11 @@ async fn user_crud_demo(user_svc: &UserServiceImpl) -> Result<(), Box<dyn std::e
 #### 2.1 角色 CRUD 与内置角色保护
 
 ```rust
-use cmx_iam::{RoleServiceImpl, role::{RoleForCreate, RoleForUpdate, RoleFilter}};
+use cmx_iam::role::{RoleServiceImpl, RoleForCreate, RoleForUpdate, RoleFilter};
 use cmx_core::SVRContext;
 
 async fn role_demo(role_svc: &RoleServiceImpl) -> Result<(), Box<dyn std::error::Error>> {
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
 
     // 创建角色（code 业务唯一，用于策略/权限绑定）
     let role = role_svc.create_role(&svr_ctx, RoleForCreate {
@@ -293,8 +349,11 @@ async fn role_demo(role_svc: &RoleServiceImpl) -> Result<(), Box<dyn std::error:
         ..Default::default()
     }).await?;
 
-    // 分页查询
-    let (roles, total) = role_svc.page_roles(RoleFilter::default(), 1, 50).await?;
+    // 分页查询（Option<Vec<RoleFilter>> + ListOptions）
+    let (roles, total) = role_svc.page_roles(
+        Some(vec![RoleFilter::default()]),
+        modql::filter::ListOptions { limit: Some(50), offset: Some(0), order_bys: None },
+    ).await?;
 
     // 删除角色（批量）。注意：builtin_role_codes 中的角色不可删除，会返回 CannotDeleteBuiltinRole
     role_svc.delete_role(&svr_ctx, &[role.id]).await?;
@@ -310,7 +369,7 @@ use cmx_iam::{RoleGroupServiceImpl, role_group::{RoleGroupForCreate, RoleGroupFo
 use cmx_core::SVRContext;
 
 async fn role_group_demo(group_svc: &RoleGroupServiceImpl) -> Result<(), Box<dyn std::error::Error>> {
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
 
     // 创建根角色组
     let root = group_svc.create_role_group(&svr_ctx, RoleGroupForCreate {
@@ -350,11 +409,11 @@ async fn role_group_demo(group_svc: &RoleGroupServiceImpl) -> Result<(), Box<dyn
 #### 3.1 权限 CRUD 与权限树
 
 ```rust
-use cmx_iam::{PermissionServiceImpl, permission::{PermissionForCreate, PermissionForUpdate}};
+use cmx_iam::permission::{PermissionServiceImpl, PermissionForCreate, PermissionForUpdate};
 use cmx_core::SVRContext;
 
 async fn permission_demo(perm_svc: &PermissionServiceImpl) -> Result<(), Box<dyn std::error::Error>> {
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
 
     // 创建权限（code 如 system:user:add，业务唯一，用于鉴权匹配）
     let perm = perm_svc.create_permission(&svr_ctx, PermissionForCreate {
@@ -412,11 +471,11 @@ async fn permission_demo(perm_svc: &PermissionServiceImpl) -> Result<(), Box<dyn
 #### 4.1 永久角色分配
 
 ```rust
-use cmx_iam::UserServiceImpl;
+use cmx_iam::user::UserServiceImpl;
 use cmx_core::SVRContext;
 
 async fn assign_roles_demo(user_svc: &UserServiceImpl) -> Result<(), Box<dyn std::error::Error>> {
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
 
     // assign_roles 为全量替换：传入的 role_ids 完全覆盖用户原有角色
     // 空数组表示清空所有角色
@@ -440,11 +499,11 @@ async fn assign_roles_demo(user_svc: &UserServiceImpl) -> Result<(), Box<dyn std
 
 ```rust
 use chrono::{Duration, Utc};
-use cmx_iam::{UserServiceImpl, TempAssignmentStatusFilter};
+use cmx_iam::{user::UserServiceImpl, TempAssignmentStatusFilter};
 use cmx_core::SVRContext;
 
 async fn temp_role_demo(user_svc: &UserServiceImpl) -> Result<(), Box<dyn std::error::Error>> {
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
 
     let now = Utc::now();
     let until = now + Duration::days(7); // 7 天有效期
@@ -503,11 +562,11 @@ async fn temp_role_demo(user_svc: &UserServiceImpl) -> Result<(), Box<dyn std::e
 ### 五、角色权限关联
 
 ```rust
-use cmx_iam::RoleServiceImpl;
+use cmx_iam::role::RoleServiceImpl;
 use cmx_core::SVRContext;
 
 async fn role_permission_demo(role_svc: &RoleServiceImpl) -> Result<(), Box<dyn std::error::Error>> {
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
 
     // assign_permissions 为全量替换：传入的 permission_ids 完全覆盖角色原有权限
     // 空数组表示清空所有权限
@@ -543,11 +602,11 @@ async fn role_permission_demo(role_svc: &RoleServiceImpl) -> Result<(), Box<dyn 
 `IamError` 使用 `thiserror` 定义，覆盖业务错误、数据库错误、规则违反等场景，并提供到 `cmx_api_types::Error` 和 `cmx_traits::error::TraitError` 的转换。
 
 ```rust
-use cmx_iam::{IamError, UserServiceImpl, user::UserForCreate};
+use cmx_iam::{IamError, user::{UserServiceImpl, UserForCreate}};
 use cmx_core::SVRContext;
 
 async fn error_handling_demo(user_svc: &UserServiceImpl) {
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
 
     // 尝试创建已存在的用户名
     let result = user_svc.create_user(&svr_ctx, UserForCreate {
@@ -761,7 +820,7 @@ async fn rule_demo(
     mm: Arc<DatabaseManager>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = IamConfig { enable_sod_check: true, ..Default::default() };
-    let svr_ctx = SVRContext::default();
+    let svr_ctx = SVRContext::new(serde_json::Value::Null, Default::default(), chrono::Utc::now(), "req-demo".into());
 
     // 1. 构造规则服务与校验引擎
     let rule_svc = ExclusionRuleServiceImpl::new(mm.clone(), config.clone()).await;
@@ -950,7 +1009,7 @@ async fn consistency_demo(
 
 ### Q8: 如何启用 OpenAPI 文档生成？
 
-**A**: 在 `Cargo.toml` 中启用 `openapi` feature：`cmx-iam = { features = ["openapi"] }`。启用后，所有 DTO 结构（如 `UserForCreate`、`RoleForCreate`、`UserRoleAssignment` 等）会派生 `utoipa::ToSchema`，可通过 `#[derive(ToSchema)]` 注册到 OpenAPI 文档。
+**A**: 在 `Cargo.toml` 中启用 `openapi` feature：`cmx-iam = { workspace = true, features = ["openapi"] }`（下游 `cmx-iam-api` 即以此方式启用）。启用后，所有 DTO 结构（如 `UserForCreate`、`RoleForCreate`、`UserRoleAssignment`、`CreateExclusionRuleRequest` 等）会派生 `utoipa::ToSchema`，供皮肤 crate 引用生成 OpenAPI 文档。
 
 ### Q9: 权限一致性校验会自动写 DB 吗？
 

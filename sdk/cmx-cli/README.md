@@ -295,7 +295,7 @@ cargo run -p cmx-cli -- plugin new my-plugin
 | `PATHS` | | | 要扫描的目录或文件路径（支持多个） |
 | `--output` | `-o` | stdout | 输出文件路径 |
 | `--pretty` | | | 美化 JSON 输出 |
-| `--expand-depth` | | `3` | 结构体展开深度 |
+| `--expand-depth` | | `5` | 结构体展开深度（与代码 `default_value = "5"` 一致） |
 | `--exclude` | | | 排除的文件模式 |
 | `--plugin-name` | | 从 Cargo.toml 读取 | 指定插件名称 |
 
@@ -338,4 +338,4 @@ sdk/cmx-cli/
 
 ## 许可证
 
-MIT License
+Apache-2.0（随仓库根 [LICENSE](../../LICENSE)，Cargo.toml 无独立 license 声明）。

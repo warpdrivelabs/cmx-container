@@ -2,8 +2,8 @@
 
 > 基于 volo-build 的 gRPC 代码生成与重导出 crate，从 Protobuf IDL 自动生成 Rust 类型和 gRPC 服务代码，供 cmx-rpc 及其他 crate 统一引用。
 
-[![Version](https://img.shields.io/badge/version-0.1.8-blue.svg)]
-[![License](https://img.shields.io/badge/license-MIT-green.svg)]
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)]
 
 ## 快速开始
 
