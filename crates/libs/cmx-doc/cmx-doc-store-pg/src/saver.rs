@@ -1304,7 +1304,7 @@ async fn mint_codes_for_changeset(
             .to_string();
 
         // 激活配置覆盖：若 overrides 含此 field，用其 ruleCode 替换（激活配置优先于单据元数据）。
-        // 场景：cmx_mdm_activation.doc_code_rules={doc_no:MDM_GYS} → cr-form 经 codeRuleOverrides
+        // 场景：mdm_activation.doc_code_rules={doc_no:MDM_GYS} → cr-form 经 codeRuleOverrides
         // 覆盖单据元数据 cv_mdm_apply.codeRule.ruleCode（MDM_BILL）→ 铸号用 MDM_GYS。
         let effective_rule: Value = match overrides.get(&field) {
             Some(rc) => {

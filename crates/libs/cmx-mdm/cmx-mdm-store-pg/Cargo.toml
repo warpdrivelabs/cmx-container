@@ -7,7 +7,7 @@ authors.workspace = true
 # 主数据（MDM）模块的 PostgreSQL 持久化/服务层。
 # M0 阶段：仅错误助手（api_err / api_err_db）占位。activation_store / dct_accessor / doc_accessor
 # / md_accessor 在 M1 填充（激活器读写映射配置、cm_* 写入闸口、CR 单据读取、治理表读写）。
-# 接 cmx-database-pg 全局 manager；表由 model_center（cm_* / cv_*）和迁移（md_* / cmx_mdm_activation）建。
+# 接 cmx-database-pg 全局 manager；表由 model_center（cm_* / cv_*）和迁移（md_* / mdm_activation）建。
 
 [dependencies]
 # 内部依赖 - MDM 中立模型（LifecycleStatus / DTO）

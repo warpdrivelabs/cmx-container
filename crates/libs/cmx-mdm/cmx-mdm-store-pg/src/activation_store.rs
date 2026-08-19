@@ -1,4 +1,4 @@
-//! cmx_mdm_activation 激活映射配置读写。
+//! mdm_activation 激活映射配置读写。
 //!
 //! - [`find_by_doc_type`]：激活器主用（按 source_doc_type + cr_type 取映射）。
 //! - [`list`] / [`upsert`]：映射配置器 UI 用。
@@ -23,7 +23,7 @@ pub async fn find_by_doc_type(
     let sql = r#"SELECT activation_code, source_doc_type, cr_type, target_dict, target_table,
                         header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field,
                         doc_code_rules, key_fields
-                 FROM cmx_mdm_activation
+                 FROM mdm_activation
                  WHERE source_doc_type = $1 AND cr_type = $2 AND is_active = TRUE
                  LIMIT 1"#;
     let ds = mm
@@ -81,10 +81,10 @@ pub async fn list(
         r#"SELECT id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                   header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field,
                   header_groups, doc_code_rules, key_fields, is_active
-           FROM cmx_mdm_activation WHERE {} ORDER BY sort_order_of_none(), activation_code"#,
+           FROM mdm_activation WHERE {} ORDER BY sort_order_of_none(), activation_code"#,
         where_clauses.join(" AND ")
     );
-    // 上面 ORDER BY sort_order_of_none() 是占位——cmx_mdm_activation 无 sort_order 列，改用 activation_code
+    // 上面 ORDER BY sort_order_of_none() 是占位——mdm_activation 无 sort_order 列，改用 activation_code
     let sql = sql.replace("ORDER BY sort_order_of_none(), ", "ORDER BY ");
     let ds = mm
         .query_sql_with_datavalues(db_id, None, &sql, params, "mdm_act_list")
@@ -121,7 +121,7 @@ pub async fn upsert(
         .map_err(|e| api_err(&format!("doc_code_rules 序列化失败: {e}")))?;
     let key_fields_json = serde_json::to_string(&cfg.key_fields)
         .map_err(|e| api_err(&format!("key_fields 序列化失败: {e}")))?;
-    let sql = r#"INSERT INTO cmx_mdm_activation
+    let sql = r#"INSERT INTO mdm_activation
                    (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
                     header_mapping, line_mappings, code_rule_code, subject_name_field, subject_code_field,
                     header_groups, doc_code_rules, key_fields, is_active)
@@ -172,7 +172,7 @@ pub async fn delete_by_code(
     db_id: &str,
     activation_code: &str,
 ) -> Result<u64, cmx_api_types::Error> {
-    let sql = "DELETE FROM cmx_mdm_activation WHERE activation_code = $1";
+    let sql = "DELETE FROM mdm_activation WHERE activation_code = $1";
     let n = mm
         .execute_sql_with_datavalues(
             db_id,
@@ -202,7 +202,7 @@ pub struct LineTableInfo {
 /// 按 target_dict 聚合所有激活映射的明细表清单（合并/还原 reparent 用）。
 ///
 /// 告诉合并引擎「这个主数据有哪些子表、子表通过哪个外键列挂在头表上」，以便 victim 的
-/// 明细行 reparent 到 master。数据源是 `cmx_mdm_activation.line_mappings`（JSONB 数组，
+/// 明细行 reparent 到 master。数据源是 `mdm_activation.line_mappings`（JSONB 数组，
 /// 元素含 `{targetTable, parentIdField, targetDict}`），按 `target_dict` 过滤所有激活配置聚合。
 ///
 /// 返回 `(明细表名, 外键列名, 明细字典码)` 三元组：target_dict 供调用方查 DCT uniqueKeys
@@ -214,7 +214,7 @@ pub async fn line_tables_for_dict(
     db_id: &str,
     dict_code: &str,
 ) -> Result<Vec<(String, String, String)>, cmx_api_types::Error> {
-    let sql = "SELECT line_mappings FROM cmx_mdm_activation WHERE target_dict = $1 AND is_active = TRUE";
+    let sql = "SELECT line_mappings FROM mdm_activation WHERE target_dict = $1 AND is_active = TRUE";
     let ds = mm
         .query_sql_with_datavalues(
             db_id,

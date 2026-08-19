@@ -200,7 +200,7 @@
     {
       "id": "portal.mdm.activation-mapper",
       "name": "MDM 激活映射配置器",
-      "details": "配置 CR 单据字段→主数据字段的激活映射，存入 cmx_mdm_activation 供激活器读取执行。支持头映射（两列 select 对照）+ 明细映射（按 lineType 分组）。",
+      "details": "配置 CR 单据字段→主数据字段的激活映射，存入 mdm_activation 供激活器读取执行。支持头映射（两列 select 对照）+ 明细映射（按 lineType 分组）。",
       "sourceType": "js",
       "relPath": "portal/mdm/activation-mapper.js"
     },

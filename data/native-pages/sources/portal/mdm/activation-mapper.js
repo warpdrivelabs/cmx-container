@@ -132,7 +132,7 @@ async function loadDictCatalog() {
   } catch (e) { console.error('[activation-mapper] loadDictCatalog fail', e) }
 }
 
-// 编码规则目录：GET /api/code/rules（与 cmx_mdm_activation 同库，故沿用 coord.dbId 即业务库）。
+// 编码规则目录：GET /api/code/rules（与 mdm_activation 同库，故沿用 coord.dbId 即业务库）。
 // 返回 { rules: [{ ruleCode, ruleName }] }，供卡片② doc_code_rules 规则下拉选择。
 async function loadCodeRules() {
   state.codeRules = []
@@ -356,7 +356,7 @@ function styleCss() {
 function headHtml() {
   return `<div class="pg-head"><div>
     <div class="pg-title">激活映射配置</div>
-    <div class="pg-sub">配置 CR 单据字段 → 主数据字段的激活映射（cmx_mdm_activation），供激活器读取执行</div></div>
+    <div class="pg-sub">配置 CR 单据字段 → 主数据字段的激活映射（mdm_activation），供激活器读取执行</div></div>
     <cmx-toolbar>
       <ui5-button design="Emphasized" icon="add" id="amNew">新增映射</ui5-button>
       <ui5-button design="Transparent" icon="refresh" slot="actions" id="amReload">刷新</ui5-button>

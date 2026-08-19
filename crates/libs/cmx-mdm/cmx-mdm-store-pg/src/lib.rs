@@ -2,7 +2,7 @@
 //!
 //! 模块结构：
 //! - [`doc_accessor`]：读 CR 单据（cv_mdm_apply 头 + cv_mdm_apply_line 行）。
-//! - [`activation_store`]：cmx_mdm_activation 激活映射配置读写（激活器 + UI 配置器）。
+//! - [`activation_store`]：mdm_activation 激活映射配置读写（激活器 + UI 配置器）。
 //! - [`dct_accessor`]：cm_* 主数据写入闸口（强制 lifecycle_status='published'，唯一入口）。
 //! - [`sql_builder`]：cm_* 写入的 SQL 构造与列值转换工具（dct_accessor 内部用）。
 //! - [`md_accessor`]：md_audit / md_event_log 治理表写入 + CR 状态归档。
@@ -18,7 +18,7 @@
 
 /// 激活器 / 合并 / 还原三套主流程的单事务编排。
 mod activation_service;
-/// cmx_mdm_activation 激活映射配置读写（激活器 + UI 配置器）。
+/// mdm_activation 激活映射配置读写（激活器 + UI 配置器）。
 mod activation_store;
 /// CR 变更请求服务（状态校验 / 列表 / 详情 / 作废）。
 mod cr_service;
