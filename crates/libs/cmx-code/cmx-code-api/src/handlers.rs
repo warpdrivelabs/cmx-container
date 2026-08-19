@@ -20,7 +20,7 @@ use crate::{engine, store::{gap_store, rule_store}};
 // 辅助
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// 域/应用/模块三维标识（从请求头取，前端规则管理页会带）。
+/// 域/应用/模块三维标识（从请求头取，可选：前端带了就按此过滤/补全，不带时逐键为空）。
 #[derive(Debug, Clone, Default)]
 pub struct Dam {
     pub domain_code: String,
@@ -28,7 +28,10 @@ pub struct Dam {
     pub module_code: String,
 }
 
-/// 从请求头取 DAM（domain_code/application_code/module_code）。
+/// 从请求头取 DAM（domain_code/application_code/module_code，均可选）。
+///
+/// 头缺失时对应键为空字符串：list/get/delete 的过滤子句按空键省略（不带维度条件），
+/// create/update 只在 rule 自身字段为空时才用请求头补——不传时规则不挂模块维度。
 fn dam_from(headers: &HeaderMap) -> Dam {
     let read = |key: &str| -> String {
         headers
