@@ -675,10 +675,17 @@ impl MigrationRunner {
 
             debug!(sql = %full_sql.chars().take(200).collect::<String>(), "执行 SQL 语句");
 
-            self.db
+            if let Err(e) = self.db
                 .execute_sql(&self.default_db_id, txn_id, &full_sql)
                 .await
-                .map_err(|e| MigrationError::SqlExecutionError(e.to_string()))?;
+            {
+                let snippet = sql_snippet(&full_sql, 300);
+                error!(sql = %snippet, error = %e, "SQL 语句执行失败");
+                return Err(MigrationError::SqlExecutionError(format!(
+                    "{}\n-- 出错 SQL（前 300 字符）: {}",
+                    e, snippet
+                )));
+            }
         }
 
         Ok(())
@@ -876,6 +883,17 @@ fn dollar_quote_delim_len(rest: &str) -> Option<usize> {
     }
 }
 
+/// 截取 SQL 片段用于错误日志（按字符截断避免中文乱码，超长语句不刷屏）
+fn sql_snippet(sql: &str, max_chars: usize) -> String {
+    let total = sql.chars().count();
+    if total <= max_chars {
+        sql.to_string()
+    } else {
+        let head: String = sql.chars().take(max_chars).collect();
+        format!("{}…（截断，全文 {} 字符）", head, total)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -975,5 +993,18 @@ mod tests {
         );
         assert_eq!(decide_takeover(true, MAX_TAKEOVER_ROUNDS + 1, MAX_TAKEOVER_ROUNDS),
             TakeoverDecision::GiveUp);
+    }
+
+    #[test]
+    fn sql片段_短语句原样返回() {
+        assert_eq!(sql_snippet("SELECT 1;", 300), "SELECT 1;");
+    }
+
+    #[test]
+    fn sql片段_超长按字符截断() {
+        let long = "中".repeat(500) + ";";
+        let snippet = sql_snippet(&long, 300);
+        assert!(snippet.starts_with(&"中".repeat(300)));
+        assert!(snippet.contains("501 字符"), "snippet 尾注: {snippet}");
     }
 }

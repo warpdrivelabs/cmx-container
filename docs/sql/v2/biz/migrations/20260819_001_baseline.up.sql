@@ -1705,12 +1705,16 @@ INSERT INTO md_dist_watermark (key, last_seq) VALUES ('fanout', 0) ON CONFLICT (
 -- cr_report_sheet 多 sheet 改造后原唯一索引不再成立，改部分唯一索引。
 -- cr_* 表 DDL 由模型中心运行时部署：表未部署时静默跳过，部署后重放本基线即补上。
 -- ============================================================
-DO $mig$
-BEGIN
-    DROP INDEX IF EXISTS uk_cr_report_sheet_1;
-    CREATE UNIQUE INDEX IF NOT EXISTS uk_cr_report_sheet_1_active
-        ON cr_report_sheet (report_id, sheet_name) WHERE archived = 0;
-EXCEPTION WHEN undefined_table THEN
-    RAISE NOTICE 'cr_report_sheet 未部署（模型中心部署后生效），跳过索引修正';
-END
-$mig$;
+-- cr_report_sheet 允许「一报表 + 一版本」承载多个 sheet。
+--
+-- 背景：cr_report_sheet 早期定义遗留了一条 2 列唯一索引
+--   uk_cr_report_sheet_1 UNIQUE (report_code, version_code)
+-- 它把「同一报表同一版本只能有 1 个 sheet」写死。插入第 2 个 sheet 时必然报
+--   duplicate key value violates unique constraint "uk_cr_report_sheet_1"
+-- 表现为报表设计器「插入多 sheet 保存出错」。
+--
+-- 主键 PRIMARY KEY (report_code, version_code, sheet_index) 本就保证了 sheet 唯一性，
+-- 且定义源 cmxfico_report_dct_meta_v1.json 的 uniqueKeys 已是 3 列
+--   [["report_code","version_code","sheet_index"]]，
+-- 故这条 2 列索引是过时孤儿，删除即可，DDL 同步不会再生成它。
+DROP INDEX IF EXISTS uk_cr_report_sheet_1;
