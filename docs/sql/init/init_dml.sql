@@ -115,6 +115,11 @@ INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order
 
 
 
+INSERT INTO md_dist_watermark (key, last_seq) VALUES ('fanout', 0) ON CONFLICT (key) DO NOTHING;
+
+
+
+
 
 -- INSERT INTO cmx_permission (id, code, name, resource_type, sort_order, status, archived, description) VALUES
 --     ('1898765432100002001', 'user:list',        '用户列表',   'api',  1, 1, 0, '查看用户列表'),
