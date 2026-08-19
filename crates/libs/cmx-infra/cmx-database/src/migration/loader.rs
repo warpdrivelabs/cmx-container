@@ -137,3 +137,67 @@ impl MigrationLoader {
         format!("{:x}", result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造唯一临时目录（测试结束由调用方负责清理）
+    fn temp_root(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "cmx_migration_loader_{}_{}_{}",
+            tag,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// 扫描是**非递归**的：仅匹配本层 `*.up.sql`，不进入子目录、不匹配其他后缀。
+    ///
+    /// v2 目录约定 `<dir>/<platform|biz>/migrations/*.up.sql`，调用方必须把
+    /// 目录拼到 `migrations` 子目录层（见 cmx-platform-app config/migration.rs
+    /// 的 `migration_round_dir`），否则本测试所述行为会导致静默漏扫
+    #[test]
+    fn 扫描非递归_仅匹配本层up文件() {
+        let root = temp_root("nonrecursive");
+        // 本层：1 个有效迁移 + 2 个应被忽略的文件
+        fs::write(root.join("20260819_001_baseline.up.sql"), "SELECT 1;").unwrap();
+        fs::write(root.join("20260819_001_baseline.down.sql"), "SELECT 2;").unwrap();
+        fs::write(root.join("init_ddl.sql"), "CREATE TABLE t (id INT);").unwrap();
+        // 子目录：即使内含 up 文件也不得被扫描
+        let sub = root.join("migrations");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("20260820_001_hidden.up.sql"), "SELECT 3;").unwrap();
+
+        let migrations = MigrationLoader::new(root.clone()).load_migrations().unwrap();
+        assert_eq!(migrations.len(), 1, "只应扫描到本层 1 个 .up.sql");
+        assert_eq!(migrations[0].version, "20260819_001");
+        assert!(migrations[0].down_sql.is_some(), "同名 down 文件应被识别");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn 目录不存在_返回空且不报错() {
+        let migrations = MigrationLoader::new(PathBuf::from(
+            "/nonexistent/cmx/migration/dir",
+        ))
+        .load_migrations()
+        .unwrap();
+        assert!(migrations.is_empty());
+    }
+
+    #[test]
+    fn 文件名解析_日期序号与描述() {
+        let (version, name) =
+            MigrationLoader::parse_migration_filename("20260812_001_mdm_治理表.up.sql")
+                .unwrap();
+        assert_eq!(version, "20260812_001");
+        assert_eq!(name, "mdm_治理表");
+    }
+}

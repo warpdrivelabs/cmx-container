@@ -95,6 +95,19 @@ impl DatabaseManager {
         self.default_db_id.read().await.clone()
     }
 
+    /// 获取业务库 db_id（不回退默认库）。
+    ///
+    /// 与 [`DatabaseManager::get_biz_db_id`] 的区别：未配置业务库时返回 `None`
+    /// 而非回退默认库，供调用方需要区分「有无业务库」的场景使用
+    /// （如迁移引擎决定是否对业务库执行迁移，避免把业务库建到主库）。
+    pub async fn get_biz_db_id_opt(&self) -> Option<String> {
+        let configs = self.pool_manager.list_configs().await;
+        configs
+            .iter()
+            .find(|config| config.source_type.as_deref() == Some("biz"))
+            .map(|config| config.db_id.clone())
+    }
+
     /// 注册数据源
     pub async fn register_data_source(&self, db_config: DbConfig) -> Result<()> {
         if db_config.clone().default {

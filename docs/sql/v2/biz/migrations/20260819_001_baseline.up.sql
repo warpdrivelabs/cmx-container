@@ -1,0 +1,856 @@
+-- ============================================================
+-- 迁移说明：业务库基线迁移 —— MDM 治理表 + 流程运行态表 + 种子
+-- 影响表：md_* 11 张治理表；cmx_flow_* 15 张流程运行态表；cr_report_sheet 索引
+--         （cr_* 报表表 DDL 由模型中心部署）
+-- 操作类型：CREATE TABLE/INDEX IF NOT EXISTS + 对齐 ALTER + INSERT ON CONFLICT（无损幂等）
+-- 回滚方式：无独立 down（基线不做回滚）
+-- 说明：本文件 = biz/init_ddl.sql + biz/init_dml.sql 合并
+--       + cr_report_sheet 索引修正（原 20260720_001_cr_report_sheet_multisheet）。
+--       流程表建业务库与流程引擎运行时一致（FLOW_DB_ID=业务库）；
+--       存量环境若曾把 md_* 建在主库，见 docs/sql/v2/README.md 搬运指引。
+-- ============================================================
+
+-- ============================================================
+-- CMX 业务库全量 DDL — docs/sql/v2/biz/init_ddl.sql
+--
+-- 目标库：业务数据源（source_type = "biz"）
+-- 归属规则：非 cmx_ 业务表 + cmx_flow_* 流程运行态表建业务库：
+--   · md_*  11 张 —— MDM 治理表
+--   · cmx_flow_* 15 张 —— 流程运行态（与流程引擎 FLOW_DB_ID=业务库一致；
+--     IAM 侧 cmx_org/cmx_position/cmx_user_position 留主库，见 ../platform/）
+-- 风格：无损幂等；每表区块：CREATE TABLE → 结构对齐 ALTER → COMMENT → 索引
+-- 注意：cf_*/cr_*/cm_* 等业务表 DDL 由模型中心/插件运行时部署，不在本文件
+--       （种子见 seeds/，表部署后手工执行）
+-- ============================================================
+
+
+-- ================================================================
+-- cmx-flow 流程引擎（M1 + M2）：运行态(RU) 3 表 + 历史态(HI) 2 表
+-- 无 FOREIGN KEY（关联字段 + 索引替代）；实例终态时同事务归档到 HI 表。
+-- 详见 docs/sql/migrations/20260717_001_cmx_flow_engine_tables.up.sql
+-- ================================================================
+
+-- 流程实例（运行态聚合根）
+CREATE TABLE IF NOT EXISTS cmx_flow_instance
+(
+    id                  VARCHAR(64)  NOT NULL,
+    definition_key      VARCHAR(128) NOT NULL,
+    business_key        VARCHAR(128),
+    state               VARCHAR(16)  NOT NULL,
+    variables           JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at          TIMESTAMPTZ  NOT NULL,
+    updated_at          TIMESTAMPTZ  NOT NULL,
+    ended_at            TIMESTAMPTZ,
+    org_id              VARCHAR(64),
+    parent_instance_id  VARCHAR(64),
+    parent_token_id     VARCHAR(64),
+    parent_node_bpmn_id VARCHAR(128),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_instance                    IS '流程实例（运行态聚合根）';
+COMMENT ON COLUMN cmx_flow_instance.state              IS '实例状态：ACTIVE / COMPLETED / TERMINATED';
+COMMENT ON COLUMN cmx_flow_instance.variables          IS '实例级流程变量（JSONB 动态 KV）';
+COMMENT ON COLUMN cmx_flow_instance.parent_instance_id IS '父实例 id（M5 子流程：子实例指向主实例；主实例为 NULL）';
+COMMENT ON COLUMN cmx_flow_instance.parent_token_id    IS '父实例中挂起等待的令牌 id（子完成时精确唤醒）';
+COMMENT ON COLUMN cmx_flow_instance.parent_node_bpmn_id IS '父实例中发起本子实例的 callActivity 节点 bpmn id（M5.3 多挂载去重键；单挂载恒空）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_defkey ON cmx_flow_instance (definition_key);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_bizkey ON cmx_flow_instance (business_key);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_state  ON cmx_flow_instance (state);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_parent ON cmx_flow_instance (parent_instance_id);
+
+-- 流程令牌（执行指针）
+CREATE TABLE IF NOT EXISTS cmx_flow_token
+(
+    id           VARCHAR(64)  NOT NULL,
+    instance_id  VARCHAR(64)  NOT NULL,
+    node_bpmn_id VARCHAR(128) NOT NULL,
+    state        VARCHAR(16)  NOT NULL,
+    parent_id    VARCHAR(64),
+    created_at   TIMESTAMPTZ  NOT NULL,
+    updated_at   TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_token       IS '流程令牌（执行指针；一实例多令牌）';
+COMMENT ON COLUMN cmx_flow_token.state IS '令牌状态：ACTIVE / WAITING / JOINING / WAITING_SUBFLOW / ENDED';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_token_instance ON cmx_flow_token (instance_id);
+
+-- 用户任务（等待态外化）
+CREATE TABLE IF NOT EXISTS cmx_flow_task
+(
+    id               VARCHAR(64)  NOT NULL,
+    instance_id      VARCHAR(64)  NOT NULL,
+    token_id         VARCHAR(64)  NOT NULL,
+    node_bpmn_id     VARCHAR(128) NOT NULL,
+    name             VARCHAR(255),
+    assignee         VARCHAR(128),
+    candidate_groups VARCHAR(512),
+    element_value    JSONB,
+    owner_user_id    VARCHAR(64),
+    parent_task_id   VARCHAR(64),
+    delegation_state VARCHAR(16),
+    completed        BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at       TIMESTAMPTZ  NOT NULL,
+    completed_at     TIMESTAMPTZ,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_task IS '用户任务（userTask 等待态的外化产物）';
+COMMENT ON COLUMN cmx_flow_task.element_value    IS '多实例子任务携带的当前元素（会签每人各自数据；单实例为 NULL）';
+COMMENT ON COLUMN cmx_flow_task.owner_user_id    IS 'M4.3 任务所有者（委派时 ≠ assignee）';
+COMMENT ON COLUMN cmx_flow_task.parent_task_id   IS 'M4.3 父任务（加签临时任务指向原任务）';
+COMMENT ON COLUMN cmx_flow_task.delegation_state IS 'M4.3 转签状态：NULL/DELEGATED/ADDSIGN/SUSPENDED';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_instance ON cmx_flow_task (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_assignee ON cmx_flow_task (assignee);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_open     ON cmx_flow_task (assignee, completed);
+
+-- 历史实例（终态归档）
+CREATE TABLE IF NOT EXISTS cmx_flow_hi_instance
+(
+    id             VARCHAR(64)  NOT NULL,
+    definition_key VARCHAR(128) NOT NULL,
+    business_key   VARCHAR(128),
+    state          VARCHAR(16)  NOT NULL,
+    variables      JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at     TIMESTAMPTZ  NOT NULL,
+    ended_at       TIMESTAMPTZ,
+    duration_ms    BIGINT,
+    archived_at    TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_hi_instance             IS '历史流程实例（终态归档，供审计/查询）';
+COMMENT ON COLUMN cmx_flow_hi_instance.duration_ms IS '实例存续时长（毫秒）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_instance_defkey ON cmx_flow_hi_instance (definition_key);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_instance_bizkey ON cmx_flow_hi_instance (business_key);
+
+-- 历史任务（办结归档）
+CREATE TABLE IF NOT EXISTS cmx_flow_hi_task
+(
+    id           VARCHAR(64)  NOT NULL,
+    instance_id  VARCHAR(64)  NOT NULL,
+    node_bpmn_id VARCHAR(128) NOT NULL,
+    name         VARCHAR(255),
+    assignee     VARCHAR(128),
+    created_at   TIMESTAMPTZ  NOT NULL,
+    completed_at TIMESTAMPTZ,
+    duration_ms  BIGINT,
+    archived_at  TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_hi_task             IS '历史用户任务（办结归档，供工时分析/审计）';
+COMMENT ON COLUMN cmx_flow_hi_task.duration_ms IS '任务办理时长（毫秒）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_task_instance ON cmx_flow_hi_task (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_task_assignee ON cmx_flow_hi_task (assignee);
+
+-- 多实例执行域（M3：会签/或签账本；详见 migrations/20260717_002_cmx_flow_multi_instance.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_mi_scope
+(
+    id                   VARCHAR(64)  NOT NULL,
+    instance_id          VARCHAR(64)  NOT NULL,
+    node_bpmn_id         VARCHAR(128) NOT NULL,
+    sequential           BOOLEAN      NOT NULL DEFAULT FALSE,
+    total                INTEGER      NOT NULL,
+    completed            INTEGER      NOT NULL DEFAULT 0,
+    next_index           INTEGER      NOT NULL DEFAULT 0,
+    collection           JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    element_var          VARCHAR(128),
+    completion_condition VARCHAR(512),
+    finished             BOOLEAN      NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_mi_scope             IS '多实例执行域（会签/或签的一次展开：计数与游标账本）';
+COMMENT ON COLUMN cmx_flow_mi_scope.sequential  IS 'true=顺序(或签)；false=并行(会签)';
+COMMENT ON COLUMN cmx_flow_mi_scope.total       IS '子实例总数（nrOfInstances）';
+COMMENT ON COLUMN cmx_flow_mi_scope.completed   IS '已办结子实例数（nrOfCompletedInstances）';
+COMMENT ON COLUMN cmx_flow_mi_scope.finished    IS '本域是否已收口（完成条件命中或全部完成）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_mi_scope_instance ON cmx_flow_mi_scope (instance_id);
+
+-- 定时器作业（M2.5：边界定时器到期表；详见 migrations/20260717_003_cmx_flow_job.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_job
+(
+    id               VARCHAR(64)  NOT NULL,
+    instance_id      VARCHAR(64)  NOT NULL,
+    token_id         VARCHAR(64)  NOT NULL,
+    boundary_bpmn_id VARCHAR(128) NOT NULL,
+    cancel_activity  BOOLEAN      NOT NULL DEFAULT TRUE,
+    due_at           TIMESTAMPTZ  NOT NULL,
+    created_at       TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_job                 IS '定时器作业（边界定时器到期表）';
+COMMENT ON COLUMN cmx_flow_job.token_id        IS '挂载令牌 id（停在宿主 userTask）；令牌离开即撤销作业';
+COMMENT ON COLUMN cmx_flow_job.cancel_activity IS 'true=中断型；false=非中断型';
+COMMENT ON COLUMN cmx_flow_job.due_at          IS '到期时刻（宿主到达 + 时长）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_job_instance ON cmx_flow_job (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_job_due      ON cmx_flow_job (due_at);
+
+-- 任务候选人池（M4.1：多人候选待认领）
+CREATE TABLE IF NOT EXISTS cmx_flow_task_candidate
+(
+    id               VARCHAR(64)  NOT NULL,
+    task_id          VARCHAR(64)  NOT NULL,
+    instance_id      VARCHAR(64)  NOT NULL,
+    candidate_type   VARCHAR(16)  NOT NULL,
+    candidate_ref    VARCHAR(128) NOT NULL,
+    resolved_user_id VARCHAR(64)  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_task_candidate                IS '任务候选人池（多人候选待认领；随快照全删重插）';
+COMMENT ON COLUMN cmx_flow_task_candidate.candidate_type IS '候选来源：USER / ROLE / POSITION / ORG';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_candidate_instance ON cmx_flow_task_candidate (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_candidate_user     ON cmx_flow_task_candidate (resolved_user_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_candidate_task     ON cmx_flow_task_candidate (task_id);
+
+-- 抄送记录（M4.2：知会 + 已读；详见 migrations/20260718_002_cmx_flow_cc.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_cc
+(
+    id            VARCHAR(64)  NOT NULL,
+    instance_id   VARCHAR(64)  NOT NULL,
+    node_bpmn_id  VARCHAR(128),
+    to_user_id    VARCHAR(64)  NOT NULL,
+    from_user_id  VARCHAR(64),
+    reason        VARCHAR(500),
+    read_at       TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_cc            IS '抄送记录表（只读知会 + 已读追踪；不阻塞流程）';
+COMMENT ON COLUMN cmx_flow_cc.read_at    IS '已读时刻（NULL = 未读）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_cc_instance ON cmx_flow_cc (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_cc_to_user  ON cmx_flow_cc (to_user_id, read_at);
+
+-- 转签台账（M4.3：转办/加签/委派；详见 migrations/20260718_003_cmx_flow_delegation.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_task_delegation
+(
+    id           VARCHAR(64)  NOT NULL,
+    task_id      VARCHAR(64)  NOT NULL,
+    instance_id  VARCHAR(64)  NOT NULL,
+    kind         VARCHAR(20)  NOT NULL,
+    from_user_id VARCHAR(64)  NOT NULL,
+    to_user_id   VARCHAR(64)  NOT NULL,
+    temp_task_id VARCHAR(64),
+    reason       VARCHAR(500),
+    created_at   TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_task_delegation      IS '转签台账（转办/加签/委派流转链）';
+COMMENT ON COLUMN cmx_flow_task_delegation.kind IS 'TRANSFER / ADDSIGN_BEFORE / ADDSIGN_AFTER / DELEGATE';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_delegation_instance ON cmx_flow_task_delegation (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_delegation_task     ON cmx_flow_task_delegation (task_id);
+
+-- 子流程组织绑定（M5.2：逻辑 key + 组织 → 具体子流程；详见 migrations/20260718_005_cmx_flow_subflow_binding.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_subflow_binding
+(
+    id                    VARCHAR(64)  NOT NULL,
+    called_key            VARCHAR(128) NOT NULL,
+    org_id                VARCHAR(64),
+    target_definition_key VARCHAR(128) NOT NULL,
+    enabled               BOOLEAN      NOT NULL DEFAULT TRUE,
+    remark                VARCHAR(500),
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_subflow_binding       IS '子流程组织绑定（逻辑 key + 组织 → 具体子流程；M5.2 路由数据源）';
+COMMENT ON COLUMN cmx_flow_subflow_binding.org_id IS '适用组织（NULL = 默认兜底绑定）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_subflow_binding_key ON cmx_flow_subflow_binding (called_key);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_subflow_binding_org ON cmx_flow_subflow_binding (org_id);
+
+-- ================================================================
+-- cmx-flow 流程定义持久化层（设计器 阶段0）
+-- 含 DAM 三段列 + 版本变更说明列；详见 migrations/20260718_007/009/010
+-- ================================================================
+
+-- 流程定义主记录（当前指针：草稿 XML + 已发布版本指向）
+CREATE TABLE IF NOT EXISTS cmx_flow_definition (
+    key            VARCHAR(128) PRIMARY KEY,
+    name           VARCHAR(255) NOT NULL,
+    module         VARCHAR(64),
+    category       VARCHAR(64),
+    state          VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',
+    active_version INTEGER,
+    draft_xml      TEXT,
+    domain         VARCHAR(64),
+    application    VARCHAR(64),
+    updated_at     TIMESTAMPTZ  NOT NULL,
+    updated_by     VARCHAR(64)
+);
+COMMENT ON TABLE  cmx_flow_definition                IS '流程定义主记录（当前指针：草稿 XML + 已发布版本指向）';
+COMMENT ON COLUMN cmx_flow_definition.key            IS '流程定义 key（= BPMN process id）';
+COMMENT ON COLUMN cmx_flow_definition.state          IS '状态：DRAFT / PUBLISHED';
+COMMENT ON COLUMN cmx_flow_definition.active_version IS '当前已发布版本号（未发布为 NULL）';
+COMMENT ON COLUMN cmx_flow_definition.draft_xml      IS '当前草稿的 BPMN XML（设计器产物）';
+COMMENT ON COLUMN cmx_flow_definition.domain         IS '所属域（DAM 三段之一，如 fi）';
+COMMENT ON COLUMN cmx_flow_definition.application    IS '所属应用（DAM 三段之一，如 cmxfico）';
+COMMENT ON COLUMN cmx_flow_definition.module         IS '所属模块（DAM 三段之一，如 gl）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_definition_module ON cmx_flow_definition (module);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_definition_state  ON cmx_flow_definition (state);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_definition_dam    ON cmx_flow_definition (domain, application, module);
+
+-- 流程定义版本历史（不可变，每次发布追加 BPMN 快照）
+CREATE TABLE IF NOT EXISTS cmx_flow_definition_version (
+    id           VARCHAR(64)  PRIMARY KEY,
+    def_key      VARCHAR(128) NOT NULL,
+    version      INTEGER      NOT NULL,
+    bpmn_xml     TEXT         NOT NULL,
+    note         VARCHAR(512),
+    published_at TIMESTAMPTZ  NOT NULL,
+    published_by VARCHAR(64)
+);
+COMMENT ON TABLE  cmx_flow_definition_version         IS '流程定义版本历史（不可变，每次发布追加 BPMN 快照）';
+COMMENT ON COLUMN cmx_flow_definition_version.version IS '版本号（同 def_key 下从 1 递增）';
+COMMENT ON COLUMN cmx_flow_definition_version.note    IS '本版本变更说明（发布时填写，可空）';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cmx_flow_def_version ON cmx_flow_definition_version (def_key, version);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_def_version_key   ON cmx_flow_definition_version (def_key);
+
+-- 2. 主数据版本留痕（激活器写入）
+CREATE TABLE IF NOT EXISTS md_audit (
+    id            BIGINT       NOT NULL,
+    dict_code     VARCHAR(64)  NOT NULL,
+    record_id     BIGINT       NOT NULL,
+    version       INT          NOT NULL,
+    action        VARCHAR(16)  NOT NULL,
+    source_cr_id  BIGINT,
+    field         VARCHAR(64),
+    old_value     JSONB,
+    new_value     JSONB,
+    operated_by   BIGINT       NOT NULL,
+    operated_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_audit.id            IS '主键（应用层生成）';
+COMMENT ON COLUMN md_audit.dict_code     IS 'cm_* 字典码';
+COMMENT ON COLUMN md_audit.record_id     IS 'cm_*.id（无物理FK）';
+COMMENT ON COLUMN md_audit.version       IS '激活版本号';
+COMMENT ON COLUMN md_audit.action        IS 'create/update/freeze/merge/archive';
+COMMENT ON COLUMN md_audit.source_cr_id  IS '触发此变更的 CR 单据 cv_mdm_apply.id';
+COMMENT ON COLUMN md_audit.field         IS '变更字段（变更场景）';
+COMMENT ON COLUMN md_audit.old_value     IS '旧值';
+COMMENT ON COLUMN md_audit.new_value     IS '新值';
+COMMENT ON COLUMN md_audit.operated_by   IS '操作人ID';
+COMMENT ON TABLE  md_audit IS '主数据版本留痕（激活器写入）';
+COMMENT ON COLUMN md_audit.id            IS '主键（应用层生成）';
+COMMENT ON COLUMN md_audit.dict_code     IS 'cm_* 字典码';
+COMMENT ON COLUMN md_audit.record_id     IS 'cm_*.id（无物理FK）';
+COMMENT ON COLUMN md_audit.version       IS '激活版本号';
+COMMENT ON COLUMN md_audit.action        IS 'create/update/freeze/merge/archive';
+COMMENT ON COLUMN md_audit.source_cr_id  IS '触发此变更的 CR 单据 cv_mdm_apply.id';
+COMMENT ON COLUMN md_audit.field         IS '变更字段（变更场景）';
+COMMENT ON COLUMN md_audit.old_value     IS '旧值';
+COMMENT ON COLUMN md_audit.new_value     IS '新值';
+COMMENT ON COLUMN md_audit.operated_by   IS '操作人ID';
+CREATE INDEX IF NOT EXISTS idx_md_audit_record ON md_audit (dict_code, record_id, version);
+
+-- 3. 交叉引用（Key Mapping）
+CREATE TABLE IF NOT EXISTS md_xref (
+    id             BIGINT       NOT NULL,
+    dict_code      VARCHAR(64)  NOT NULL,
+    record_id      BIGINT       NOT NULL,
+    source_system  VARCHAR(64)  NOT NULL,
+    source_ref     VARCHAR(128) NOT NULL,
+    xref_status    VARCHAR(16)  NOT NULL DEFAULT 'active',
+    confidence     SMALLINT     NOT NULL DEFAULT 50,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_xref.id          IS '主键（应用层生成）';
+COMMENT ON COLUMN md_xref.xref_status IS '引用状态 active/inactive';
+COMMENT ON TABLE  md_xref IS '主数据交叉引用（Key Mapping）';
+COMMENT ON COLUMN md_xref.id          IS '主键（应用层生成）';
+COMMENT ON COLUMN md_xref.xref_status IS '引用状态 active/inactive';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_xref_src     ON md_xref (source_system, source_ref);
+CREATE        INDEX IF NOT EXISTS idx_md_xref_record ON md_xref (dict_code, record_id);
+
+-- 4. 值映射（Value Mapping）
+CREATE TABLE IF NOT EXISTS md_value_map (
+    id        BIGINT       NOT NULL,
+    field     VARCHAR(64)  NOT NULL,
+    src_sys   VARCHAR(64)  NOT NULL,
+    src_val   VARCHAR(128) NOT NULL,
+    tgt_sys   VARCHAR(64)  NOT NULL,
+    tgt_val   VARCHAR(128) NOT NULL,
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_value_map.id IS '主键（应用层生成）';
+COMMENT ON TABLE  md_value_map IS '主数据值映射（Value Mapping）';
+COMMENT ON COLUMN md_value_map.id IS '主键（应用层生成）';
+
+-- 5. 查重规则配置（查重界面内维护，find-duplicates 读取执行）
+CREATE TABLE IF NOT EXISTS md_match_config (
+    id             BIGINT       NOT NULL,
+    rule_name      VARCHAR(128) NOT NULL,
+    dict_code      VARCHAR(64)  NOT NULL,
+    target_table   VARCHAR(64)  NOT NULL,
+    specs          JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    cluster_keys   JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    survive_fields JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    thresholds     JSONB,
+    is_active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_match_config.id IS '主键（应用层生成）';
+COMMENT ON COLUMN md_match_config.specs IS '比较字段 [{field,weight,kind:Exact|EditDistance}]';
+COMMENT ON TABLE  md_match_config IS '查重规则配置（按字典维度），查重界面内维护，find-duplicates 读取执行';
+COMMENT ON COLUMN md_match_config.id IS '主键（应用层生成）';
+COMMENT ON COLUMN md_match_config.specs IS '比较字段 [{field,weight,kind:Exact|EditDistance}]';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_match_config_dict_rule ON md_match_config (dict_code, rule_name);
+CREATE        INDEX IF NOT EXISTS idx_md_match_config_dict      ON md_match_config (dict_code);
+
+-- 6. 匹配组/存活裁决
+CREATE TABLE IF NOT EXISTS md_merge_record (
+    id               BIGINT       NOT NULL,
+    dict_code        VARCHAR(64)  NOT NULL,
+    group_key        VARCHAR(256) NOT NULL,
+    member_ids       JSONB        NOT NULL,
+    master_id        BIGINT,
+    score            SMALLINT     NOT NULL,
+    decision         VARCHAR(16)  NOT NULL,
+    survivorship_log JSONB,
+    status           VARCHAR(16)  NOT NULL DEFAULT 'pending',
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_merge_record.id               IS '主键（应用层生成）';
+COMMENT ON COLUMN md_merge_record.dict_code        IS 'cm_* 字典码';
+COMMENT ON COLUMN md_merge_record.group_key        IS '合并组业务键，如 merge:{master_id}';
+COMMENT ON COLUMN md_merge_record.member_ids       IS '簇内记录 id 数组 [master_id, ...victim_ids]';
+COMMENT ON COLUMN md_merge_record.master_id        IS '主记录 id（合并后保留的一方）';
+COMMENT ON COLUMN md_merge_record.score            IS '合并时簇内最高匹配分（0-100）';
+COMMENT ON COLUMN md_merge_record.decision         IS '裁决结果 AutoMerge/Review（查重阶段判定）';
+COMMENT ON COLUMN md_merge_record.survivorship_log IS '存活留痕 JSONB {fields:[{field,from,value}],reparented:{明细表:[行id]}}';
+COMMENT ON COLUMN md_merge_record.status           IS 'pending/reviewed/rejected/unmerged（待审/已合并/已驳回/已还原）';
+COMMENT ON TABLE  md_merge_record IS '合并事务记录（管家确认合并的载体；承载 survivorship_log 存活留痕 + 状态流转。与 md_match_scan 职责分离：scan=系统扫描的嫌疑重复，group=确认执行的合并事务）';
+COMMENT ON COLUMN md_merge_record.id               IS '主键（应用层生成）';
+COMMENT ON COLUMN md_merge_record.dict_code        IS 'cm_* 字典码';
+COMMENT ON COLUMN md_merge_record.group_key        IS '合并组业务键，如 merge:{master_id}';
+COMMENT ON COLUMN md_merge_record.member_ids       IS '簇内记录 id 数组 [master_id, ...victim_ids]';
+COMMENT ON COLUMN md_merge_record.master_id        IS '主记录 id（合并后保留的一方）';
+COMMENT ON COLUMN md_merge_record.score            IS '合并时簇内最高匹配分（0-100）';
+COMMENT ON COLUMN md_merge_record.decision         IS '裁决结果 AutoMerge/Review（查重阶段判定）';
+COMMENT ON COLUMN md_merge_record.survivorship_log IS '存活留痕 JSONB {fields:[{field,from,value}],reparented:{明细表:[行id]}}';
+COMMENT ON COLUMN md_merge_record.status           IS 'pending/reviewed/rejected/unmerged（待审/已合并/已驳回/已还原）';
+CREATE INDEX IF NOT EXISTS idx_md_merge_record_dict ON md_merge_record (dict_code, status);
+
+-- 7. 查重发现项（全库扫描结果载体，管家评审用；与 md_merge_record 职责分离）
+CREATE TABLE IF NOT EXISTS md_match_scan (
+    id            BIGINT       NOT NULL,
+    dict_code     VARCHAR(64)  NOT NULL,
+    cluster_key   VARCHAR(255) NOT NULL,
+    cluster_hash  VARCHAR(64)  NOT NULL,
+    member_ids    JSONB        NOT NULL,
+    member_count  SMALLINT     NOT NULL,
+    max_score     SMALLINT     NOT NULL,
+    status        VARCHAR(16)  NOT NULL DEFAULT 'pending',
+    scaned_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    resolved_at   TIMESTAMPTZ,
+    resolved_by   BIGINT,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_match_scan.id            IS '主键（应用层生成）';
+COMMENT ON COLUMN md_match_scan.cluster_key   IS '簇键标识，如 credit_code:C1';
+COMMENT ON COLUMN md_match_scan.cluster_hash  IS 'member_ids 升序后 hash，去重用';
+COMMENT ON COLUMN md_match_scan.member_ids    IS '簇内记录 id 数组 [id1,id2,...]';
+COMMENT ON COLUMN md_match_scan.max_score     IS '簇内最高配对分';
+COMMENT ON COLUMN md_match_scan.status        IS 'pending/resolved/ignored';
+COMMENT ON TABLE  md_match_scan IS '查重发现项（系统扫描出的重复簇，管家评审载体）';
+COMMENT ON COLUMN md_match_scan.id            IS '主键（应用层生成）';
+COMMENT ON COLUMN md_match_scan.cluster_key   IS '簇键标识，如 credit_code:C1';
+COMMENT ON COLUMN md_match_scan.cluster_hash  IS 'member_ids 升序后 hash，去重用';
+COMMENT ON COLUMN md_match_scan.member_ids    IS '簇内记录 id 数组 [id1,id2,...]';
+COMMENT ON COLUMN md_match_scan.max_score     IS '簇内最高配对分';
+COMMENT ON COLUMN md_match_scan.status        IS 'pending/resolved/ignored';
+CREATE INDEX IF NOT EXISTS idx_md_match_scan_dict_status ON md_match_scan (dict_code, status);
+CREATE INDEX IF NOT EXISTS idx_md_match_scan_hash        ON md_match_scan (dict_code, cluster_hash);
+
+-- 8. 分发订阅
+CREATE TABLE IF NOT EXISTS md_subscription (
+    id             BIGINT       NOT NULL,
+    target_sys     VARCHAR(64)  NOT NULL,
+    dict_code      VARCHAR(64)  NOT NULL,
+    filter         JSONB,
+    field_map      JSONB,
+    channel        VARCHAR(16)  NOT NULL,
+    active         BOOLEAN      NOT NULL DEFAULT TRUE,
+    name           VARCHAR(128),
+    description    VARCHAR(512),
+    channel_config JSONB        NOT NULL DEFAULT '{}',
+    event_types    JSONB        NOT NULL DEFAULT '[]',
+    retry_max      INT          NOT NULL DEFAULT 8,
+    timeout_ms     INT          NOT NULL DEFAULT 10000,
+    batch_size     INT          NOT NULL DEFAULT 50,
+    created_by     VARCHAR(64),
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_subscription.id      IS '主键（应用层生成）';
+COMMENT ON COLUMN md_subscription.channel IS '通道 event/rest/batch';
+ALTER TABLE md_subscription ADD COLUMN IF NOT EXISTS name           VARCHAR(128), ADD COLUMN IF NOT EXISTS description    VARCHAR(512), ADD COLUMN IF NOT EXISTS channel_config JSONB        NOT NULL DEFAULT '{}', ADD COLUMN IF NOT EXISTS event_types    JSONB        NOT NULL DEFAULT '[]', ADD COLUMN IF NOT EXISTS retry_max      INT          NOT NULL DEFAULT 8, ADD COLUMN IF NOT EXISTS timeout_ms     INT          NOT NULL DEFAULT 10000, ADD COLUMN IF NOT EXISTS batch_size     INT          NOT NULL DEFAULT 50, ADD COLUMN IF NOT EXISTS created_by     VARCHAR(64), ADD COLUMN IF NOT EXISTS updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now();
+COMMENT ON COLUMN md_subscription.name           IS '订阅名称（展示）';
+COMMENT ON COLUMN md_subscription.channel_config IS '通道配置：webhook {url,secret,headers{}}；rest_pull {consumerId}；kafka {brokers,topic,partition_key}（骨架）';
+COMMENT ON COLUMN md_subscription.event_types    IS '订阅事件类型 JSON 数组；[] = 全部(created/updated/merged)';
+COMMENT ON COLUMN md_subscription.retry_max     IS '最大尝试次数（含首发）';
+COMMENT ON COLUMN md_subscription.timeout_ms    IS '单次投递超时（毫秒）';
+COMMENT ON COLUMN md_subscription.batch_size    IS '单轮该订阅最大投递数';
+COMMENT ON COLUMN md_subscription.created_by    IS '创建人用户 id';
+COMMENT ON COLUMN md_subscription.updated_at    IS '最近更新时间';
+COMMENT ON COLUMN md_subscription.channel       IS '通道 webhook/kafka/rocketmq/rest_pull';
+COMMENT ON TABLE  md_subscription IS '分发订阅配置';
+COMMENT ON COLUMN md_subscription.id             IS '主键（应用层生成）';
+COMMENT ON COLUMN md_subscription.target_sys     IS '目标系统标识（uk：同系统同字典同通道唯一）';
+COMMENT ON COLUMN md_subscription.filter         IS '行级过滤条件 {conditions:[{field,op,value}],logic:"and"}';
+COMMENT ON COLUMN md_subscription.field_map      IS '列级转换 {include:[],rename:{},mask:[]}（value_map 预留）';
+COMMENT ON COLUMN md_subscription.channel        IS '通道 webhook/kafka/rocketmq/rest_pull';
+COMMENT ON COLUMN md_subscription.name           IS '订阅名称（展示）';
+COMMENT ON COLUMN md_subscription.description    IS '订阅描述';
+COMMENT ON COLUMN md_subscription.channel_config IS '通道配置：webhook {url,secret,headers{}}；rest_pull {consumerId}；kafka {brokers,topic,partition_key}（骨架）';
+COMMENT ON COLUMN md_subscription.event_types    IS '订阅事件类型 JSON 数组；[] = 全部(created/updated/merged)';
+COMMENT ON COLUMN md_subscription.retry_max      IS '最大尝试次数（含首发）';
+COMMENT ON COLUMN md_subscription.timeout_ms     IS '单次投递超时（毫秒）';
+COMMENT ON COLUMN md_subscription.batch_size     IS '单轮该订阅最大投递数';
+COMMENT ON COLUMN md_subscription.created_by     IS '创建人用户 id';
+COMMENT ON COLUMN md_subscription.updated_at     IS '最近更新时间';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_subscription ON md_subscription (target_sys, dict_code, channel);
+
+-- 9. 分发事件日志（激活器激活成功时写入；主键 VARCHAR(64) snowflake，seq 为有序拉取列非主键）
+CREATE TABLE IF NOT EXISTS md_event_log (
+    id          VARCHAR(64)  NOT NULL,
+    seq         BIGSERIAL    NOT NULL,
+    dict_code   VARCHAR(64)  NOT NULL,
+    record_id   BIGINT       NOT NULL,
+    event_type  VARCHAR(16)  NOT NULL,
+    payload     JSONB        NOT NULL,
+    emitted_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_event_log.id         IS '主键（snowflake，应用层生成，对齐全库主键惯例）';
+COMMENT ON COLUMN md_event_log.seq        IS '有序拉取序列（DB 自增，非主键，供消费者 delta 排序）';
+COMMENT ON COLUMN md_event_log.event_type IS 'created/updated/merged';
+COMMENT ON TABLE  md_event_log IS '分发事件日志（delta，消费者按 seq 拉取）';
+COMMENT ON COLUMN md_event_log.id         IS '主键（snowflake，应用层生成，对齐全库主键惯例）';
+COMMENT ON COLUMN md_event_log.seq        IS '有序拉取序列（DB 自增，非主键，供消费者 delta 排序）';
+COMMENT ON COLUMN md_event_log.event_type IS 'created/updated/merged';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_event_log_seq   ON md_event_log (seq);
+CREATE        INDEX IF NOT EXISTS idx_md_event_log_dict ON md_event_log (dict_code, seq);
+
+-- 9a. 分发投递实例（事件×订阅：队列状态机 + 投递流水，M5 分发引擎载体）
+CREATE TABLE IF NOT EXISTS md_dispatch_log (
+    id               BIGINT       NOT NULL,
+    subscription_id  BIGINT       NOT NULL,
+    event_id         VARCHAR(64)  NOT NULL,
+    event_seq        BIGINT       NOT NULL,
+    dict_code        VARCHAR(64)  NOT NULL,
+    record_id        BIGINT       NOT NULL,
+    status           VARCHAR(16)  NOT NULL,
+    attempts         INT          NOT NULL DEFAULT 0,
+    next_retry_at    TIMESTAMPTZ,
+    last_error       TEXT,
+    http_status      INT,
+    response_snippet VARCHAR(512),
+    delivered_at     TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_dispatch_log.id IS '主键（应用层 snowflake，对齐 md_ 治理表惯例）';
+COMMENT ON COLUMN md_dispatch_log.subscription_id IS '订阅 id → md_subscription.id';
+COMMENT ON COLUMN md_dispatch_log.event_id IS '事件 id → md_event_log.id（幂等键之一）';
+COMMENT ON COLUMN md_dispatch_log.event_seq IS '事件序号 → md_event_log.seq（排序/诊断冗余）';
+COMMENT ON COLUMN md_dispatch_log.dict_code IS '字典代码（冗余，过滤用）';
+COMMENT ON COLUMN md_dispatch_log.record_id IS '主数据记录 id';
+COMMENT ON COLUMN md_dispatch_log.status IS 'pending待投/running投递中/delivered成功/failed待重试/dead死信/skipped人工跳过';
+COMMENT ON COLUMN md_dispatch_log.attempts IS '已尝试次数';
+COMMENT ON COLUMN md_dispatch_log.next_retry_at IS 'failed 的下次可抢占时间（指数退避）；NULL=非 failed';
+COMMENT ON COLUMN md_dispatch_log.last_error IS '最近一次错误信息';
+COMMENT ON COLUMN md_dispatch_log.http_status IS 'webhook 响应码';
+COMMENT ON COLUMN md_dispatch_log.response_snippet IS '响应体摘要（截断 512）';
+COMMENT ON COLUMN md_dispatch_log.delivered_at IS '投递成功时间';
+COMMENT ON COLUMN md_dispatch_log.created_at IS '创建时间';
+COMMENT ON COLUMN md_dispatch_log.updated_at IS '最近状态变更时间';
+COMMENT ON TABLE  md_dispatch_log IS '分发投递实例（事件×订阅）：队列状态机 + 投递流水';
+COMMENT ON COLUMN md_dispatch_log.id IS '主键（应用层 snowflake，对齐 md_ 治理表惯例）';
+COMMENT ON COLUMN md_dispatch_log.subscription_id IS '订阅 id → md_subscription.id';
+COMMENT ON COLUMN md_dispatch_log.event_id IS '事件 id → md_event_log.id（幂等键之一）';
+COMMENT ON COLUMN md_dispatch_log.event_seq IS '事件序号 → md_event_log.seq（排序/诊断冗余）';
+COMMENT ON COLUMN md_dispatch_log.dict_code IS '字典代码（冗余，过滤用）';
+COMMENT ON COLUMN md_dispatch_log.record_id IS '主数据记录 id';
+COMMENT ON COLUMN md_dispatch_log.status IS 'pending待投/running投递中/delivered成功/failed待重试/dead死信/skipped人工跳过';
+COMMENT ON COLUMN md_dispatch_log.attempts IS '已尝试次数';
+COMMENT ON COLUMN md_dispatch_log.next_retry_at IS 'failed 的下次可抢占时间（指数退避）；NULL=非 failed';
+COMMENT ON COLUMN md_dispatch_log.last_error IS '最近一次错误信息';
+COMMENT ON COLUMN md_dispatch_log.http_status IS 'webhook 响应码';
+COMMENT ON COLUMN md_dispatch_log.response_snippet IS '响应体摘要（截断 512）';
+COMMENT ON COLUMN md_dispatch_log.delivered_at IS '投递成功时间';
+COMMENT ON COLUMN md_dispatch_log.created_at IS '创建时间';
+COMMENT ON COLUMN md_dispatch_log.updated_at IS '最近状态变更时间';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_dispatch_sub_event ON md_dispatch_log (subscription_id, event_id);
+CREATE INDEX IF NOT EXISTS idx_md_dispatch_due   ON md_dispatch_log (status, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_md_dispatch_sub   ON md_dispatch_log (subscription_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_md_dispatch_event ON md_dispatch_log (event_id);
+
+-- 9b. 分发引擎扇出水位（全局单行 fanout）
+CREATE TABLE IF NOT EXISTS md_dist_watermark (
+    key        VARCHAR(32) NOT NULL,
+    last_seq   BIGINT      NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (key)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_dist_watermark.key IS '水位键（当前仅 fanout）';
+COMMENT ON COLUMN md_dist_watermark.last_seq IS '已扇出处理的 md_event_log 最大 seq（无论是否命中订阅）';
+COMMENT ON COLUMN md_dist_watermark.updated_at IS '最近推进时间';
+COMMENT ON TABLE  md_dist_watermark IS '分发引擎扇出水位（全局单行 fanout）';
+COMMENT ON COLUMN md_dist_watermark.key IS '水位键（当前仅 fanout）';
+COMMENT ON COLUMN md_dist_watermark.last_seq IS '已扇出处理的 md_event_log 最大 seq（无论是否命中订阅）';
+COMMENT ON COLUMN md_dist_watermark.updated_at IS '最近推进时间';
+
+-- 9c. pull 消费者游标登记（监控/对账用；消费端仍应自持 seq）
+CREATE TABLE IF NOT EXISTS md_consumer_offset (
+    id          BIGINT      NOT NULL,
+    consumer_id VARCHAR(64) NOT NULL,
+    dict_code   VARCHAR(64) NOT NULL,
+    acked_seq   BIGINT      NOT NULL DEFAULT 0,
+    acked_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
+COMMENT ON COLUMN md_consumer_offset.id IS '主键（应用层 snowflake）';
+COMMENT ON COLUMN md_consumer_offset.consumer_id IS '下游消费者标识（建议 = target_sys）';
+COMMENT ON COLUMN md_consumer_offset.dict_code IS '字典代码';
+COMMENT ON COLUMN md_consumer_offset.acked_seq IS '已确认消费到的 seq';
+COMMENT ON COLUMN md_consumer_offset.acked_at IS '最近确认时间';
+COMMENT ON TABLE  md_consumer_offset IS 'pull 消费者游标登记（监控/对账用；消费端仍应自持 seq）';
+COMMENT ON COLUMN md_consumer_offset.id IS '主键（应用层 snowflake）';
+COMMENT ON COLUMN md_consumer_offset.consumer_id IS '下游消费者标识（建议 = target_sys）';
+COMMENT ON COLUMN md_consumer_offset.dict_code IS '字典代码';
+COMMENT ON COLUMN md_consumer_offset.acked_seq IS '已确认消费到的 seq';
+COMMENT ON COLUMN md_consumer_offset.acked_at IS '最近确认时间';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_consumer_offset ON md_consumer_offset (consumer_id, dict_code);
+
+-- ============================================================
+-- 补丁段：旧 init_ddl 快照未收录的终态表（对象覆盖核对发现）
+-- ============================================================
+
+-- 单据↔流程实例关联 + 任务意见留痕（原迁移 20260801_001_cmx_flow_biz_link）
+CREATE TABLE IF NOT EXISTS cmx_flow_biz_link (
+    id           VARCHAR(64)  PRIMARY KEY,
+    instance_id  VARCHAR(64)  NOT NULL,
+    biz_table    VARCHAR(128) NOT NULL,
+    biz_id       VARCHAR(128) NOT NULL,
+    biz_key      VARCHAR(128),
+    role         VARCHAR(32)  NOT NULL DEFAULT 'primary',
+    created_at   TIMESTAMPTZ  NOT NULL
+);
+COMMENT ON TABLE  cmx_flow_biz_link              IS '单据↔流程实例关联（F1；发起时回写，双向可查）';
+COMMENT ON COLUMN cmx_flow_biz_link.biz_table    IS '业务表名（如 cf_pay_request）';
+COMMENT ON COLUMN cmx_flow_biz_link.biz_id       IS '业务单据主键（字符串兼容 bigint/code/uuid）';
+COMMENT ON COLUMN cmx_flow_biz_link.role         IS '关联角色：primary 主单 / 其它扩展（一单多流程时区分）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_biz_link_instance ON cmx_flow_biz_link (instance_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cmx_flow_biz_link_biz ON cmx_flow_biz_link (biz_table, biz_id, instance_id);
+
+CREATE TABLE IF NOT EXISTS cmx_flow_task_comment (
+    id           VARCHAR(64)  PRIMARY KEY,
+    instance_id  VARCHAR(64)  NOT NULL,
+    task_id      VARCHAR(64)  NOT NULL,
+    node_bpmn_id VARCHAR(128),
+    user_id      VARCHAR(64),
+    decision     VARCHAR(32),
+    comment      TEXT,
+    created_at   TIMESTAMPTZ  NOT NULL
+);
+COMMENT ON TABLE  cmx_flow_task_comment          IS '审批意见留痕（F3；办结时按环节记，供表单审批区展示历史）';
+COMMENT ON COLUMN cmx_flow_task_comment.decision IS '决策：approve / reject 等';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_comment_instance ON cmx_flow_task_comment (instance_id);
+
+-- ============================================================
+-- CMX 业务库内置数据（DML）— docs/sql/v2/biz/init_dml.sql
+--
+-- 目标库：业务数据源（source_type = "biz"）
+-- 内容：MDM 治理种子（查重规则 + 分发水位）
+-- 风格：无损幂等，全部 ON CONFLICT / NOT EXISTS 防重，可重复执行
+-- 来源：迁移 20260812_001（supplier 默认查重）+ 20260818_001 段3（13 条）
+-- ============================================================
+
+-- ============================================================
+-- 1. 查重规则（md_match_config）
+-- ============================================================
+
+-- Seed: supplier 默认查重规则（id 固定值 1，应用层 next_pk_id 不会冲突）
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 1, '供应商默认查重', 'supplier', 'cm_supplier',
+       '[{"field":"credit_code","weight":40,"kind":"Exact"},{"field":"tax_no","weight":30,"kind":"Exact"},{"field":"name","weight":30,"kind":"EditDistance"}]'::jsonb,
+       '["credit_code","tax_no","name"]'::jsonb,
+       '["name","tax_no","credit_code","short_name","phone"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'supplier' AND rule_name = '供应商默认查重');
+
+-- ---- MDM 多域查重规则 13 条（20260818_001 段3） ----
+-- ─────────────────────────────────────────────
+-- 4. 查重规则 md_match_config（id 2~14 顺排；NOT EXISTS 防重）
+-- ─────────────────────────────────────────────
+
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 2, '客户默认查重', 'customer', 'cm_customer',
+       '[{"field":"credit_code","weight":40,"kind":"Exact"},{"field":"name","weight":60,"kind":"EditDistance"}]'::jsonb,
+       '["credit_code","name"]'::jsonb,
+       '["name","short_name","customer_type","credit_level","credit_code","tax_no","phone","address"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'customer' AND rule_name = '客户默认查重');
+
+-- 物料默认查重：名称编辑距离 + 规格/型号精确（同名不同规格是不同物料）
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 3, '物料默认查重', 'material', 'cm_material',
+       '[{"field":"name","weight":50,"kind":"EditDistance"},{"field":"spec","weight":25,"kind":"Exact"},{"field":"model","weight":25,"kind":"Exact"}]'::jsonb,
+       '["name","spec","model"]'::jsonb,
+       '["name","short_name","spec","model","unit","material_type","barcode"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'material' AND rule_name = '物料默认查重');
+
+-- 科目默认查重：科目编码精确 + 名称编辑距离（survive 不含 parent_id/full_path 等树形列——层级结构不参与字段存活裁决）
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 4, '科目默认查重', 'gl_account', 'cm_gl_account',
+       '[{"field":"acct_no","weight":60,"kind":"Exact"},{"field":"name","weight":40,"kind":"EditDistance"}]'::jsonb,
+       '["acct_no","name"]'::jsonb,
+       '["name","acct_no","acct_type","direction"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'gl_account' AND rule_name = '科目默认查重');
+
+
+
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 5, '币种默认查重', 'currency', 'cm_currency',
+       '[{"field":"currency_code","weight":60,"kind":"Exact"},{"field":"name","weight":40,"kind":"EditDistance"}]'::jsonb,
+       '["currency_code","name"]'::jsonb,
+       '["name","symbol","decimal_places","is_base"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'currency' AND rule_name = '币种默认查重');
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 6, '计量单位默认查重', 'uom', 'cm_uom',
+       '[{"field":"uom_code","weight":60,"kind":"Exact"},{"field":"name","weight":40,"kind":"EditDistance"}]'::jsonb,
+       '["uom_code","name"]'::jsonb,
+       '["name","unit_type"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'uom' AND rule_name = '计量单位默认查重');
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 7, '物料分类默认查重', 'material_class', 'cm_material_class',
+       '[{"field":"class_code","weight":50,"kind":"Exact"},{"field":"name","weight":50,"kind":"EditDistance"}]'::jsonb,
+       '["class_code","name"]'::jsonb,
+       '["name","class_type"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'material_class' AND rule_name = '物料分类默认查重');
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 8, '成本中心默认查重', 'cost_center', 'cm_cost_center',
+       '[{"field":"cost_center_code","weight":50,"kind":"Exact"},{"field":"name","weight":50,"kind":"EditDistance"}]'::jsonb,
+       '["cost_center_code","name"]'::jsonb,
+       '["name","dept_id"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'cost_center' AND rule_name = '成本中心默认查重');
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 9, '利润中心默认查重', 'profit_center', 'cm_profit_center',
+       '[{"field":"profit_center_code","weight":50,"kind":"Exact"},{"field":"name","weight":50,"kind":"EditDistance"}]'::jsonb,
+       '["profit_center_code","name"]'::jsonb,
+       '["name"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'profit_center' AND rule_name = '利润中心默认查重');
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 10, '公司默认查重', 'company', 'cm_company',
+       '[{"field":"credit_code","weight":50,"kind":"Exact"},{"field":"name","weight":50,"kind":"EditDistance"}]'::jsonb,
+       '["credit_code","name"]'::jsonb,
+       '["name","short_name","credit_code","legal_person","base_currency_id","registered_address"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'company' AND rule_name = '公司默认查重');
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 11, '组织默认查重', 'organization', 'cm_organization',
+       '[{"field":"org_code","weight":50,"kind":"Exact"},{"field":"name","weight":50,"kind":"EditDistance"}]'::jsonb,
+       '["org_code","name"]'::jsonb,
+       '["name","company_id","org_type"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'organization' AND rule_name = '组织默认查重');
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 12, '部门默认查重', 'department', 'cm_department',
+       '[{"field":"dept_code","weight":50,"kind":"Exact"},{"field":"name","weight":50,"kind":"EditDistance"}]'::jsonb,
+       '["dept_code","name"]'::jsonb,
+       '["name","org_id"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'department' AND rule_name = '部门默认查重');
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 13, '岗位默认查重', 'position', 'cm_position',
+       '[{"field":"position_code","weight":60,"kind":"Exact"},{"field":"name","weight":40,"kind":"EditDistance"}]'::jsonb,
+       '["position_code","name"]'::jsonb,
+       '["name","job_family","job_grade"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'position' AND rule_name = '岗位默认查重');
+
+INSERT INTO md_match_config (id, rule_name, dict_code, target_table, specs, cluster_keys, survive_fields, thresholds, is_active)
+SELECT 14, '员工默认查重', 'employee', 'cm_employee',
+       '[{"field":"emp_no","weight":50,"kind":"Exact"},{"field":"name","weight":30,"kind":"EditDistance"},{"field":"mobile","weight":20,"kind":"Exact"}]'::jsonb,
+       '["emp_no","name","mobile"]'::jsonb,
+       '["name","mobile","email","company_id","dept_id","position_id","hire_date","emp_status"]'::jsonb,
+       '{"auto_merge":95,"review":80}'::jsonb,
+       TRUE
+WHERE NOT EXISTS (SELECT 1 FROM md_match_config WHERE dict_code = 'employee' AND rule_name = '员工默认查重');
+
+
+-- ============================================================
+-- 2. 分发水位（md_dist_watermark）
+-- ============================================================
+
+INSERT INTO md_dist_watermark (key, last_seq) VALUES ('fanout', 0) ON CONFLICT (key) DO NOTHING;
+
+-- ============================================================
+-- 报表索引修正（原迁移 20260720_001_cr_report_sheet_multisheet）
+-- cr_report_sheet 多 sheet 改造后原唯一索引不再成立，改部分唯一索引。
+-- cr_* 表 DDL 由模型中心运行时部署：表未部署时静默跳过，部署后重放本基线即补上。
+-- ============================================================
+DO $mig$
+BEGIN
+    DROP INDEX IF EXISTS uk_cr_report_sheet_1;
+    CREATE UNIQUE INDEX IF NOT EXISTS uk_cr_report_sheet_1_active
+        ON cr_report_sheet (report_id, sheet_name) WHERE archived = 0;
+EXCEPTION WHEN undefined_table THEN
+    RAISE NOTICE 'cr_report_sheet 未部署（模型中心部署后生效），跳过索引修正';
+END
+$mig$;
