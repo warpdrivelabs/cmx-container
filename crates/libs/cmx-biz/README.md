@@ -1,8 +1,8 @@
 # cmx-biz
 
-> cmx 平台业务领域层，承载平台基础业务实体（Domain/Application/Module/SysDatasource）的 Entity/BMC/Filter/Service 定义，以及协议无关的插件函数调用与服务编排执行核心逻辑。
+> cmx 平台业务领域层，承载平台基础业务实体（Domain/Application/Module/SysDatasource/Form/Menu）的 Entity/BMC/Filter/Service 定义，以及协议无关的插件函数调用与服务编排执行核心逻辑。
 
-[![Version](https://img.shields.io/badge/version-0.1.11-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
 [![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
 [![Authors](https://img.shields.io/badge/authors-skylake%40pansoft.com-lightgrey.svg)]()
 
@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-`cmx-biz` 是 cmx-container 平台的业务领域层，定位为「**模型层 + 协议无关执行核心**」的双重职责 crate。它向上为协议层（`cmx-api` HTTP、`cmx-rpc` gRPC）提供统一的业务实体与执行入口，向下基于基础设施层（`cmx-database`、`cmx-service`、`cmx-traits`、`cmx-core`）完成数据持久化与运行时调用。
+`cmx-biz` 是 cmx-container 平台的业务领域层，定位为「**模型层 + 协议无关执行核心**」的双重职责 crate。它向上为协议层（HTTP 皮肤 crate `cmx-biz-api` / `cmx-common-api`，gRPC 皮肤 crate `cmx-rpcs/cmx-orchestrator-rpc` 等）提供统一的业务实体与执行入口，向下基于基础设施层（`cmx-database`、`cmx-service`、`cmx-traits`、`cmx-core`）完成数据持久化与运行时调用。
 
 ### 「模型层 vs 执行逻辑」边界说明
 
@@ -18,16 +18,19 @@
 
 | 类别 | 模块 | 职责 |
 |------|------|------|
-| **模型层** | `domain` / `application` / `module` / `datasource` | 平台基础业务实体的 Entity / BMC / Filter / Service 定义，承担 CRUD 与自定义业务方法 |
+| **模型层** | `domain` / `application` / `module`（含 `module/version`）/ `datasource` / `form` / `menu` | 平台基础业务实体的 Entity / BMC / Filter / Service 定义，承担 CRUD 与自定义业务方法 |
+| **文件副作用** | `dam_asset_service` | DAM 资源目录的创建/改名搬移/引用校验（文件系统副作用，主数据在库） |
 | **执行逻辑** | `function_invoker` / `service_executor` | 从 HTTP 与 gRPC 两条协议路径中提取的「协议无关」共享执行核心，消除重复代码 |
+| **导入路由** | `resource_importer` | Form/Menu/Perm 多类别数据导入路由器（`ResourceDataImporter` trait 实现） |
+| **校验/错误码** | `validation` / `errcode` | 落库前列级校验 + 统一错误码与约束翻译 |
 
 为什么把执行逻辑放在 `cmx-biz` 而不是协议层？
 
 - 这两段执行链路（插件函数调用、服务编排执行）处理的是统一的业务调用上下文 `SVRContext`，不依赖 HTTP / protobuf 等协议细节；
-- 若放在 `cmx-api`，则 `cmx-rpc` 要么重复实现一遍（违反 DRY），要么反向依赖 `cmx-api`（引入 HTTP 概念，破坏分层）；
-- 放在 `cmx-biz` 后，`cmx-api` 与 `cmx-rpc` 各自只负责协议适配（参数提取、响应封装），共享的执行核心位于二者之下的业务层，依赖方向单向且无环。
+- 若放在 HTTP 皮肤 crate（如 `cmx-common-api`），则 gRPC 皮肤要么重复实现一遍（违反 DRY），要么反向依赖 HTTP 层（引入 HTTP 概念，破坏分层）；
+- 放在 `cmx-biz` 后，HTTP 皮肤与 gRPC 皮肤各自只负责协议适配（参数提取、响应封装），共享的执行核心位于二者之下的业务层，依赖方向单向且无环。
 
-`function_invoker` 同时实现 `cmx_traits::function_invoker::FunctionInvoker` trait（`BizFunctionInvoker`），供组装层（如 `web-server`）构造后以 trait 对象注入 `cmx-rpc`，使 `cmx-rpc` 不必直接依赖 `cmx-biz`。
+`function_invoker` 同时实现 `cmx_traits::function_invoker::FunctionInvoker` trait（`BizFunctionInvoker`），供组装层（`cmx-platform-app` 的 `build_function_invoker`）构造后以 trait 对象注入 RPC 层，使 RPC 基础设施与皮肤 crate 不必直接依赖 `cmx-biz`。
 
 ---
 
@@ -74,13 +77,19 @@ async fn get_domain_tree(db_id: &str) -> anyhow::Result<Vec<TreeNode<DomainTreeN
 | 功能 | 说明 |
 |------|------|
 | Domain（域/租户）管理 | `cmx_domain` 表的 Entity/BMC/Filter/Service，含搜索、树形查询 |
-| Application（应用）管理 | `cmx_application` 表的 Entity/BMC/Filter，应用按域归属 |
-| Module（模块）管理 | `cmx_module` 表的 Entity/BMC/Filter，模块按应用归属 |
+| Application（应用）管理 | `cmx_application` 表的 Entity/BMC/Filter/Service，应用按域归属 |
+| Module（模块）管理 | `cmx_module` 表的 Entity/BMC/Filter/Service，模块按应用归属 |
+| Module 版本管理 | `cmx_module_current_version` / `cmx_module_version_history` 两表，get_current / record_import / list_history |
+| Form（表单）管理 | `cmx_form` 表的 Entity/BMC/Filter/Service + `LocalFormDefinitionImporter` |
+| Menu（菜单）管理 | `cmx_menu` 表的 Entity/BMC/Filter/Service（含树形字段计算、get_tree）+ `LocalMenuDefinitionImporter` |
 | SysDatasource（数据源）管理 | `cmx_sys_datasource` 表的完整 CRUD，含动态连接池注册/注销、连接测试、字段加密 |
 | 域-应用-模块树形查询 | 通过 `tree.sql` 一次查询构建三级树，实现 `TreeNodeData` trait |
+| DAM 资产文件服务 | `dam_asset_service`：模块资源目录创建/域应用模块改名搬移/删除前引用校验 |
+| 资源数据导入路由 | `ResourceDataImporterImpl`：Form/Menu/Perm 多类别导入路由（Perm 经 trait 对象注入） |
 | 协议无关插件函数调用 | `invoke_plugin_function` 自由函数 + `BizFunctionInvoker` trait 实现 |
 | 协议无关服务编排执行 | `execute_service` 自由函数，封装 Orchestrator 调用与结果映射 |
-| StepStatus 字符串互转 | `step_status_to_str` / `parse_step_status`，作为 str↔enum 双向转换的单一来源 |
+| StepStatus 字符串互转 | `step_status_to_str` / `parse_step_status`（重导出自 `cmx_traits::step_status`） |
+| 落库校验与错误码 | `validation`（列规范+缓存+校验器）+ `errcode`（稳定错误码+约束翻译，`Violation` 结构化承载） |
 | OpenAPI Schema 生成 | 可选 `openapi` feature，启用后实体派生 `utoipa::ToSchema` |
 
 ### 可选 Features
@@ -88,7 +97,7 @@ async fn get_domain_tree(db_id: &str) -> anyhow::Result<Vec<TreeNode<DomainTreeN
 | Feature | 默认启用 | 说明 |
 |---------|---------|------|
 | `default` | ✅ | 基础功能（无 OpenAPI） |
-| `openapi` | ❌ | 启用 `utoipa::ToSchema` 派生，供 `cmx-api` 自动生成 OpenAPI 文档 |
+| `openapi` | ❌ | 启用 `utoipa::ToSchema` 派生，供 HTTP 皮肤 crate（`cmx-biz-api`）自动生成 OpenAPI 文档 |
 
 ---
 
@@ -97,35 +106,56 @@ async fn get_domain_tree(db_id: &str) -> anyhow::Result<Vec<TreeNode<DomainTreeN
 ```text
 cmx-biz
 ├── src
-│   ├── lib.rs                  # 模块导出与公共 API re-export（BizError/Result）
-│   ├── error.rs                # BizError 错误类型 + From<BizError> for cmx_api_types::Error
+│   ├── lib.rs                  # 模块导出与公共 API re-export（BizError/Result/api_err/api_err_db）
+│   ├── error.rs                # BizError 错误类型 + From 转换（cmx_api_types::Error / TraitError）
+│   ├── errcode/                # 统一错误码 + 错误信息库（CmxErrCode / Violation，约束翻译）
+│   ├── validation/             # 落库前列级校验（列规范 + 进程内缓存 + 校验器）
 │   ├── function_invoker.rs     # 插件函数调用核心逻辑（自由函数 + BizFunctionInvoker）
 │   ├── service_executor.rs     # 服务编排执行核心逻辑（execute_service + StepStatus 转换）
+│   ├── dam_asset_service.rs    # DAM 资产文件服务（目录创建/改名搬移/引用校验）
+│   ├── resource_importer.rs    # ResourceDataImporterImpl（Form/Menu/Perm 导入路由器）
 │   ├── domain/                 # 域/租户管理模块
 │   │   ├── mod.rs              #   模块导出
 │   │   ├── entity.rs           #   Domain / DomainForCreate / DomainForUpdate / DomainTreeNodeData
 │   │   ├── bmc.rs              #   DomainBmc（cmx_domain 表元信息）
 │   │   ├── filter.rs           #   DomainFilter（modql 过滤器）
-│   │   ├── service.rs          #   DomainService（search / get_tree）
+│   │   ├── service.rs          #   DomainService（search / get_tree / create / update / delete）
 │   │   └── tree.sql            #   域-应用-模块递归 CTE 查询
 │   ├── application/            # 应用管理模块
 │   │   ├── mod.rs              #   模块导出
 │   │   ├── entity.rs           #   Application / ApplicationForCreate / ApplicationForUpdate
 │   │   ├── bmc.rs              #   ApplicationBmc（cmx_application 表元信息）
 │   │   ├── filter.rs           #   ApplicationFilter
-│   │   └── service.rs          #   占位文件（待迁移）
+│   │   └── service.rs          #   ApplicationService（create / update / delete）
 │   ├── module/                 # 模块管理模块
 │   │   ├── mod.rs              #   模块导出
 │   │   ├── entity.rs           #   Module / ModuleForCreate / ModuleForUpdate
 │   │   ├── bmc.rs              #   ModuleBmc（cmx_module 表元信息）
 │   │   ├── filter.rs           #   ModuleFilter
-│   │   └── service.rs          #   占位文件（待迁移）
+│   │   ├── service.rs          #   ModuleService（create / update / delete）
+│   │   └── version/            #   版本管理（cmx_module_current_version / cmx_module_version_history）
+│   │       ├── bmc.rs          #     两个表的 BMC
+│   │       └── service.rs      #     get_current / record_import / list_history
+│   ├── form/                   # 表单管理模块
+│   │   ├── mod.rs              #   模块导出
+│   │   ├── entity.rs           #   Form / FormForCreate / FormForUpdate
+│   │   ├── bmc.rs              #   FormBmc（cmx_form 表元信息）
+│   │   ├── filter.rs           #   FormFilter
+│   │   ├── service.rs          #   FormService（CRUD / delete_by_code / list_by_module / list / page）
+│   │   └── definition_importer.rs  # LocalFormDefinitionImporter
+│   ├── menu/                   # 菜单管理模块
+│   │   ├── mod.rs              #   模块导出
+│   │   ├── entity.rs           #   Menu / MenuForCreate / MenuForUpdate / MenuTreeNodeData
+│   │   ├── bmc.rs              #   MenuBmc（cmx_menu 表元信息）
+│   │   ├── filter.rs           #   MenuFilter
+│   │   ├── service.rs          #   MenuService（CRUD / delete_by_code / delete_by_module / count_by_module / list_by_module / list / page / get_tree，含树形字段计算）
+│   │   └── definition_importer.rs  # LocalMenuDefinitionImporter
 │   └── datasource/             # 系统数据源管理模块
 │       ├── mod.rs              #   模块导出
 │       ├── entity.rs           #   SysDatasource / SysDatasourceForCreate / SysDatasourceForUpdate
 │       ├── bmc.rs              #   SysDatasourceBmc（cmx_sys_datasource 表元信息，含 db_url 加密）
 │       ├── filter.rs           #   SysDatasourceFilter
-│       └── service.rs          #   SysDatasourceService（CRUD + 动态连接池管理）
+│       └── service.rs          #   SysDatasourceService（CRUD + 动态连接池管理 + get_by_db_id + test_connection）
 └── Cargo.toml
 ```
 
@@ -140,8 +170,23 @@ cmx-biz
 应用与模块管理。两者均按「域 → 应用 → 模块」三级层级组织：
 - `Application` 通过 `domain_code` 归属域，编码全局唯一（如 FI、CO、MM）
 - `Module` 通过 `application_code` 归属应用，编码全局唯一（如 GL、AR、AP）
+- `ApplicationService` / `ModuleService` 各提供 `create` / `update` / `delete` 自定义方法；查询类操作通过 `GenericCrudService::<XxxBmc, XxxFilter>` 在 handler 中直接调用
+- `module/version` 维护模块版本：`cmx_module_current_version`（当前版本）与 `cmx_module_version_history`（历史），提供 `get_current` / `record_import` / `list_history`
 
-当前两个模块的 `service.rs` 为占位文件，CRUD 通过 `GenericCrudService::<XxxBmc, XxxFilter>` 在 handler 中直接调用。
+#### `form` / `menu`
+
+表单与菜单管理（插件资源导入的本地实现）：
+- `Form` 对应 `cmx_form` 表，`FormService` 提供 CRUD / `delete_by_code` / `list_by_module` / `list` / `page`
+- `Menu` 对应 `cmx_menu` 表，`MenuService` 除 CRUD 外含树形字段计算与 `get_tree`（返回 `MenuTreeNodeData` 树）
+- 两个模块各带 `LocalFormDefinitionImporter` / `LocalMenuDefinitionImporter`，实现 `cmx_traits::resource` 的定义导入 trait，供 `ResourceDataImporterImpl` 路由
+
+#### `dam_asset_service`
+
+DAM 资产文件服务。域/应用/模块主数据已迁库（三表），本服务只管文件副作用：创建模块时确保 DAM 树根下三级资源目录存在（`ensure_module_dirs` / `ensure_app_dirs`）；改名时搬移目录并重写 `resource_root`/`manifest_path` 列（`on_domain_renamed` / `on_application_renamed` / `on_module_renamed`）；删除前引用完整性校验（`check_domain_deletable` / `check_application_deletable`）。路径工具来自 `cmx-jsonstore`。
+
+#### `resource_importer`
+
+`ResourceDataImporterImpl` 实现 `cmx_traits::resource::ResourceDataImporter` trait，按 `ResourceDataCategory` 路由到对应定义导入器，支持 Perm（权限）/ Form（表单）/ Menu（菜单）三类。Form/Menu 的 Local 实现在本 crate；Perm 经 `PermissionZipImporter` trait 对象注入（由 cmx-iam 实现），无需依赖 cmx-iam。HTTP 端点与 gRPC 服务端均通过此 trait 调用，统一路径与缓存失效逻辑。
 
 #### `datasource`
 
@@ -154,7 +199,7 @@ cmx-biz
 
 插件函数调用核心。提供两个层次的 API：
 - 自由函数 `invoke_plugin_function(...)`：完整的协议无关调用链（检查安装 → 加载 WASM → 构建 FunctionInput → rmp-serde 序列化 → 调用 → 反序列化，含 JSON fallback）
-- 结构体 `BizFunctionInvoker`：实现 `cmx_traits::function_invoker::FunctionInvoker` trait，持有 `RuntimeInvoker` 与 `PluginQuery`，将 trait 调用委托给自由函数，供组装层注入 `cmx-rpc`
+- 结构体 `BizFunctionInvoker`：实现 `cmx_traits::function_invoker::FunctionInvoker` trait，持有 `RuntimeInvoker` 与 `PluginQuery`，将 trait 调用委托给自由函数，供组装层构造后注入 RPC 子系统
 
 **调用结果处理约定**：基础设施错误（插件未安装、WASM 加载失败、序列化失败）通过 `Err(BizError)` 返回；WASM 函数执行失败通过 `Ok(FunctionInvokeResult { success: false, ... })` 返回，由调用方决定如何映射为协议级错误。
 
@@ -174,13 +219,19 @@ cmx-biz
 |------|------|
 | `cmx-core` | 核心模型：`FunctionInput` / `FunctionOutput` / `SVRContext` / `ExecutionStep` / `StepStatus` / `DataSet` / `Row` / `Schema` |
 | `cmx-api-types` | 通用 API 类型：`TreeNodeData` trait / `TreeNode` |
-| `cmx-traits` | trait 定义：`PluginQuery` / `RuntimeInvoker` / `InvokeOptions` / `ServiceQuery` / `FunctionInvoker` / `TraitError` |
+| `cmx-traits` | trait 定义：`PluginQuery` / `RuntimeInvoker` / `InvokeOptions` / `ServiceQuery` / `FunctionInvoker` / `ServiceInvoker` / `ResourceDataImporter` 系列 / `TraitError` |
 | `cmx-database` | `DatabaseManager` / `GenericCrudService` / `DbBmc` / `DbConfig` / `PoolConfig` / `DbType` / 事务上下文 |
+| `cmx-database-pg` | tokio-postgres 零拷贝新链路 |
 | `cmx-service` | `Orchestrator` / `ExecuteOptions` / `DebugPrepareResult` |
+| `cmx-jsonstore` | `data_root` / `data_path` 路径解析（DAM 资产服务用） |
+| `cmx-utils` | 雪花 ID |
 | `serde` / `serde_json` | 序列化框架 |
 | `rmp-serde` | MessagePack 序列化（WASM 函数输入/输出编码） |
 | `modql` | MongoDB 风格的查询过滤语言（含 sea-query 集成） |
 | `sea-query` / `sea-query-sqlx` / `sqlx` | SQL 查询构建与异步执行 |
+| `rust_decimal` / `base64` | Decimal 列绑定 / keyset 游标编解码 |
+| `tokio` | 异步文件目录搬移（DAM 资产服务用） |
+| `zip` | 远程资源 ZIP 接收端解压 |
 | `time` / `chrono` | 时间处理 |
 | `uuid` | 唯一标识符 |
 | `thiserror` | 错误类型派生 |
@@ -191,42 +242,46 @@ cmx-biz
 ### 下游使用方（谁依赖 cmx-biz）
 
 | 使用方 | 引用方式 | 实际用途 |
-|--------|---------|---------|
-| `cmx-api` | `cmx-biz = { workspace = true, features = ["openapi"] }` | HTTP handler 直接使用 `DomainService` / `SysDatasourceService` / 各 Entity DTO，调用 `invoke_plugin_function` / `execute_service` 自由函数，并启用 `openapi` 生成 Schema |
-| `web-server` | `cmx-biz = { workspace = true }` | 组装层，构造 `BizFunctionInvoker` 实现并以 `Arc<dyn FunctionInvoker>` trait 对象注入 `cmx-rpc`，避免基础设施层直接依赖业务层 |
-| `cmx-rpc` | **不直接依赖**（仅依赖 `cmx-traits`） | gRPC 协议层通过 `cmx_traits::function_invoker::FunctionInvoker` trait 接收注入，源码不 `use cmx_biz`，Cargo.toml 也不声明 `cmx-biz`，实现完全解耦 |
+|--------|---------|----------|
+| `cmx-biz-api` | `cmx-biz = { workspace = true, features = ["openapi"] }` | HTTP 皮肤层（domain/application/menu/sys_datasource/form 的 handler），直接使用各 Service 与 Entity DTO，启用 `openapi` 生成 Schema |
+| `cmx-common-api` | `cmx-biz = { workspace = true, features = ["openapi"] }` | HTTP 服务编排 handler（`/api/service/*`）直接调用 `invoke_plugin_function` / `execute_service` 自由函数 |
+| `cmx-platform-app` | `cmx-biz = { workspace = true }` | 组装层，`build_function_invoker` 构造 `BizFunctionInvoker` 并以 `Arc<dyn FunctionInvoker>` 注入 `cmx_service_base::init_rpc` |
+| `cmx-orchestrator-rpc`（gRPC 皮肤） | **不直接依赖**（仅依赖 `cmx-traits`） | 通过构造函数接收 `Arc<dyn FunctionInvoker>` / `Arc<dyn ServiceInvoker>`，源码不 `use cmx_biz`，实现完全解耦 |
+| 其它（cmx-plugin / cmx-model-deploy / cmx-dct / cmx-doc / cmx-mdm 各 crate） | `cmx-biz = { workspace = true }` | 复用实体、Service、errcode/validation 或依赖链传递 |
 
 ### 在整体架构中的位置
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│  协议层                                                       │
-│  ┌────────────────────┐    ┌────────────────────────────┐    │
-│  │ cmx-api (HTTP)     │    │ cmx-rpc (gRPC)             │    │
-│  │ - 参数提取          │    │ - protobuf 序列化          │    │
-│  │ - 响应封装 (JSON)   │    │ - 响应封装 (protobuf)      │    │
-│  └─────────┬──────────┘    └───────────┬────────────────┘    │
-│            │                            │                     │
-│            │  直接调用 Entity/Service    │ 通过 trait 调用       │
-│            │                            │ (FunctionInvoker /  │
-│            │                            │  ServiceInvoker)    │
-└────────────┼────────────────────────────┼─────────────────────┘
-             ▼                            ▼
-┌──────────────────────────────────────────────────────────────┐
-│  cmx-biz（业务领域层）                                        │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │ 模型层：domain / application / module / datasource      │  │
-│  │   Entity + BMC + Filter + Service                       │  │
-│  ├────────────────────────────────────────────────────────┤  │
-│  │ 执行核心：function_invoker / service_executor           │  │
-│  │   协议无关的统一调用入口（自由函数 + trait 实现）        │  │
-│  └────────────────────────────────────────────────────────┘  │
-└────────────┬─────────────────────────────────────────────────┘
-             ▼
-┌──────────────────────────────────────────────────────────────┐
-│  基础设施层                                                   │
-│  cmx-database │ cmx-service │ cmx-traits │ cmx-core          │
-└──────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│  协议层（皮肤 crate）                                          │
+│  ┌─────────────────────────┐   ┌───────────────────────────┐   │
+│  │ cmx-biz-api 等 (HTTP)   │   │ cmx-orchestrator-rpc(gRPC)│   │
+│  │ - 参数提取               │   │ - protobuf 序列化         │   │
+│  │ - 响应封装 (JSON)        │   │ - 响应封装 (protobuf)     │   │
+│  └───────────┬─────────────┘   └────────────┬──────────────┘   │
+│              │ cmx-common-api                │ 通过 trait 调用   │
+│              │ 直接调 invoke/execute         │ (FunctionInvoker/│
+│              │                               │  ServiceInvoker) │
+└──────────────┼────────────────────────────────┼─────────────────┘
+               ▼                                ▼
+┌────────────────────────────────────────────────────────────────┐
+│  cmx-biz（业务领域层）                                         │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │ 模型层：domain/application/module/version/               │ │
+│  │         datasource/form/menu（Entity+BMC+Filter+Service） │ │
+│  ├──────────────────────────────────────────────────────────┤ │
+│  │ 执行核心：function_invoker / service_executor             │ │
+│  │   协议无关的统一调用入口（自由函数 + trait 实现）         │ │
+│  ├──────────────────────────────────────────────────────────┤ │
+│  │ 配套：dam_asset_service / resource_importer /            │ │
+│  │       errcode / validation                               │ │
+│  └──────────────────────────────────────────────────────────┘ │
+└──────────────┬─────────────────────────────────────────────────┘
+               ▼
+┌────────────────────────────────────────────────────────────────┐
+│  基础设施层                                                    │
+│  cmx-database(-pg) │ cmx-service │ cmx-traits │ cmx-core      │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -416,7 +471,7 @@ async fn search_domains(
 
 ### 三、协议无关插件函数调用（执行核心）
 
-`function_invoker` 提供两个层次的 API：自由函数（供 `cmx-api` 直接调用）与 trait 实现（供 `cmx-rpc` 通过 trait 对象调用）。
+`function_invoker` 提供两个层次的 API：自由函数（供 HTTP 皮肤 crate `cmx-common-api` 直接调用）与 trait 实现（供 gRPC 皮肤 `cmx-orchestrator-rpc` 经组装层注入的 trait 对象调用）。
 
 #### 3.1 直接调用自由函数（HTTP 协议层场景）
 
@@ -473,31 +528,37 @@ async fn call_plugin(
 
 #### 3.2 通过 trait 对象调用（gRPC 协议层 / 组装层注入场景）
 
-`BizFunctionInvoker` 实现 `cmx_traits::function_invoker::FunctionInvoker` trait，由组装层（`web-server`）构造后以 `Arc<dyn FunctionInvoker>` 注入 `cmx-rpc`，使 `cmx-rpc` 不必直接依赖 `cmx-biz`。
+`BizFunctionInvoker` 实现 `cmx_traits::function_invoker::FunctionInvoker` trait，由组装层（`cmx-platform-app` 的 `build_function_invoker`）构造后以 `Arc<dyn FunctionInvoker>` 注入 `cmx_service_base::init_rpc`，使 RPC 基础设施 `cmx-rpc` 与 gRPC 皮肤 crate 均不必直接依赖 `cmx-biz`。
 
-**组装层注入示例（参考 `web-server/src/main.rs`）：**
+**组装层注入示例（参考 `cmx-platform-app/src/config/rpc.rs`）：**
 
 ```rust
 use std::sync::Arc;
 use cmx_biz::function_invoker::BizFunctionInvoker;
 use cmx_traits::function_invoker::FunctionInvoker;
 
-// 在 web-server 组装层构造实现：
+// 组装层构造实现（build_function_invoker）：
 // - 从 cmx-runtime 获取 RuntimeInvoker（WASM 引擎）
 // - 从 cmx-plugin  获取 PluginQuery（插件元数据查询）
 // 注：cmx-biz 不直接依赖 cmx-runtime / cmx-plugin，运行时依赖通过 trait 注入
-let function_invoker: Arc<dyn FunctionInvoker> = Arc::new(
-    BizFunctionInvoker::new(
+pub fn build_function_invoker() -> Arc<dyn FunctionInvoker> {
+    Arc::new(BizFunctionInvoker::new(
         cmx_runtime::GlobalExtismEngine::get_as_invoker(),
         cmx_plugin::GlobalPluginManager::get_as_plugin_query(),
-    ),
-);
+    ))
+}
 
-// 把 trait 对象透传给 cmx-rpc 的初始化函数：
-// init_rpc(service_invoker, function_invoker, plugin_data_importer).await?;
+// 把 trait 对象透传给 RPC 子系统初始化（cmx_service_base::rpc::init_rpc，5 参数）：
+// init_rpc(
+//     rpc_bundles,               // 皮肤 crate 提供的 Bundle 列表（如 OrchestratorBundle）
+//     service_invoker,           // Arc<dyn ServiceInvoker>
+//     build_function_invoker(),  // Arc<dyn FunctionInvoker>
+//     data_importer,             // Option<Arc<dyn ResourceDataImporter>>
+//     auth_service,              // Option<Arc<dyn AuthService>>
+// ).await?;
 ```
 
-**消费方（cmx-rpc）使用方式：**
+**消费方（gRPC 皮肤 `cmx-orchestrator-rpc`）使用方式：**
 
 ```rust
 use std::sync::Arc;
@@ -509,7 +570,7 @@ async fn grpc_call_plugin(
     plugin_id: &str,
     function_name: &str,
 ) -> Result<(), TraitError> {
-    // cmx-rpc 源码不出现 `use cmx_biz::...`，仅依赖 cmx-traits 的 trait
+    // cmx-orchestrator-rpc 源码不出现 `use cmx_biz::...`，仅依赖 cmx-traits 的 trait
     let result = invoker
         .invoke_plugin_function(
             plugin_id,
@@ -621,19 +682,29 @@ let status: Option<StepStatus> = parse_step_status("Failed");
 use cmx_biz::BizError;
 
 // 各错误变体对应的场景：
-// - BizError::Crud(ServiceError)     数据库 CRUD 操作错误（自动 From）
-// - BizError::Database(String)       数据库管理错误（连接池注册/注销等）
-// - BizError::Business(String)        业务逻辑错误（数据校验失败、不支持的 db_type 等）
-// - BizError::NotFound(String)       数据未找到（插件未安装、实体不存在等）
-// - BizError::SerdeJson(Error)        JSON 序列化错误（自动 From）
-// - BizError::PluginInvoke(String)   插件函数调用错误
-// - BizError::Orchestration(String)   服务编排错误
-// - BizError::Internal(String)        内部错误（tree.sql 查询失败、必填字段缺失等）
+// - BizError::Crud(ServiceError)        数据库 CRUD 操作错误（自动 From）
+// - BizError::Database(String)          数据库管理错误（连接池注册/注销等）
+// - BizError::Business(String)          业务逻辑错误（数据校验失败、不支持的 db_type 等）
+// - BizError::NotFound(String)          数据未找到（插件未安装、实体不存在等）
+// - BizError::Conflict(String)          资源冲突/乐观锁（单据已被他人修改），映射 HTTP 409
+// - BizError::Validation(Vec<Violation>) 落库前列级校验失败（结构化 violations，一次回报全部），映射 HTTP 422
+// - BizError::DbConstraint{code,message} 数据库约束错误（PG 原始错误翻译为优雅提示 + 稳定错误码 CmxErrCode）
+// - BizError::SerdeJson(Error)          JSON 序列化错误（自动 From）
+// - BizError::PluginInvoke(String)      插件函数调用错误
+// - BizError::Orchestration(String)     服务编排错误
+// - BizError::Internal(String)          内部错误（tree.sql 查询失败、必填字段缺失等）
 
 // 便捷构造器：
 let _e1 = BizError::business("不支持的数据库类型: redis");
 let _e2 = BizError::not_found("插件 billing-calculator 未安装");
-let _e3 = BizError::internal("缺少必填字段: code");
+let _e3 = BizError::conflict("单据已被他人修改，请刷新后重试");
+let _e4 = BizError::validation(vec![/* Violation 列表 */]);
+let _e5 = BizError::from_db_error(&pg_raw_error); // PG 原始错误 → 稳定错误码 + 中文提示
+let _e6 = BizError::internal("缺少必填字段: code");
+
+// 辅助方法：
+// - violations()：取结构化 violations（仅 Validation 变体），供 handler 组装 data.violations
+// - from_batch_item(index, e)：批量保存加「第 N 单」前缀，保留原变体（Conflict 仍映射 409）
 ```
 
 #### 5.2 在协议层传播错误
@@ -664,6 +735,9 @@ async fn handler() -> Result<(), Error> {
 // 映射规则：
 // - BizError::Business(msg)        -> TraitError::Business(msg)
 // - BizError::NotFound(msg)        -> TraitError::NotFound(msg)
+// - BizError::Conflict(msg)        -> TraitError::Business(msg)（TraitError 无 Conflict 语义，保留文案）
+// - BizError::Validation(vs)       -> TraitError::Business(首条 violation 消息)
+// - BizError::DbConstraint{..}     -> TraitError::Business(已翻译 message)
 // - BizError::PluginInvoke(msg)    -> TraitError::WasmInvokeFailed(msg)
 // - BizError::Orchestration(msg)    -> TraitError::OrchestrationFailed(msg)
 // - BizError::Crud / Database / SerdeJson / Internal -> TraitError::Internal(...)
@@ -675,31 +749,32 @@ async fn handler() -> Result<(), Error> {
 
 ### 1. 为什么 cmx-biz 同时是「模型层」又是「执行核心」？
 
-`function_invoker` 与 `service_executor` 处理的是统一的业务调用上下文 `SVRContext`，不依赖 HTTP / protobuf 等协议细节。如果放在 `cmx-api`：
+`function_invoker` 与 `service_executor` 处理的是统一的业务调用上下文 `SVRContext`，不依赖 HTTP / protobuf 等协议细节。如果放在 HTTP 皮肤 crate（如 `cmx-common-api`）：
 
-- `cmx-rpc` 要么重复实现一遍（违反 DRY），要么反向依赖 `cmx-api`（引入 HTTP 概念，破坏分层）；
-- 放在 `cmx-biz` 后，`cmx-api` 与 `cmx-rpc` 各自只负责协议适配（参数提取、响应封装），共享的执行核心位于二者之下的业务层，依赖方向单向且无环。
+- gRPC 皮肤（`cmx-orchestrator-rpc`）要么重复实现一遍（违反 DRY），要么反向依赖 HTTP 层（引入 HTTP 概念，破坏分层）；
+- 放在 `cmx-biz` 后，HTTP 皮肤与 gRPC 皮肤各自只负责协议适配（参数提取、响应封装），共享的执行核心位于二者之下的业务层，依赖方向单向且无环。
 
-### 2. 为什么 `BizFunctionInvoker` 不直接放在 `cmx-rpc`？
+### 2. 为什么 `BizFunctionInvoker` 不直接放在 `cmx-rpc` / gRPC 皮肤 crate？
 
-`BizFunctionInvoker` 依赖 `RuntimeInvoker`（来自 `cmx-runtime`）与 `PluginQuery`（来自 `cmx-plugin`）。若放在 `cmx-rpc`，则基础设施层 `cmx-rpc` 要反向依赖 `cmx-runtime` / `cmx-plugin` 等业务实现层，破坏分层。
+`BizFunctionInvoker` 依赖 `RuntimeInvoker`（来自 `cmx-runtime`）与 `PluginQuery`（来自 `cmx-plugin`）。若放在 `cmx-rpc` 或皮肤 crate，则基础设施层要反向依赖 `cmx-runtime` / `cmx-plugin` 等业务实现层，破坏分层。
 
-正确做法是把「业务实现」放在 `cmx-biz`，把「trait 定义」放在 `cmx-traits`，把「组装」放在 `web-server`：
+正确做法是把「业务实现」放在 `cmx-biz`，把「trait 定义」放在 `cmx-traits`，把「组装」放在 `cmx-platform-app`（组装层）：
 
 ```text
-web-server (组装层)
-   │  构造 BizFunctionInvoker（依赖 cmx-runtime / cmx-plugin / cmx-biz）
+cmx-platform-app (组装层)
+   │  build_function_invoker 构造 BizFunctionInvoker
+   │ （依赖 cmx-runtime / cmx-plugin / cmx-biz）
    ▼
 Arc<dyn FunctionInvoker>  ← trait 定义在 cmx-traits
-   │
+   │  注入 cmx_service_base::init_rpc → ServerDeps
    ▼
-cmx-rpc (协议层，仅依赖 cmx-traits)
+cmx-rpc + cmx-orchestrator-rpc (基础设施 + gRPC 皮肤，仅依赖 cmx-traits)
 ```
 
 ### 3. 为什么自由函数与 trait 实现并存？
 
-- **自由函数 `invoke_plugin_function(...)`**：供 `cmx-api` HTTP handler 直接调用，签名接受 `&Arc<dyn RuntimeInvoker>` 等具体参数，便于 handler 显式控制。
-- **trait 实现 `BizFunctionInvoker`**：供 `cmx-rpc` 通过 `Arc<dyn FunctionInvoker>` 注入调用，把运行时依赖隐藏在结构体字段后。
+- **自由函数 `invoke_plugin_function(...)`**：供 HTTP 皮肤 crate（`cmx-common-api`）的 handler 直接调用，签名接受 `&Arc<dyn RuntimeInvoker>` 等具体参数，便于 handler 显式控制。
+- **trait 实现 `BizFunctionInvoker`**：供 gRPC 皮肤经组装层注入的 `Arc<dyn FunctionInvoker>` 调用，把运行时依赖隐藏在结构体字段后。
 - 二者共享同一份调用链实现：`BizFunctionInvoker::invoke_plugin_function` 内部直接委托给同名自由函数，避免重复实现。
 
 ### 4. 为什么「WASM 函数执行失败」走 `Ok` 而非 `Err`？
@@ -710,9 +785,9 @@ cmx-rpc (协议层，仅依赖 cmx-traits)
 
 这种区分让协议层拥有错误映射的最终决定权，避免在业务核心层硬编码协议语义。
 
-### 5. 为什么 `application` / `module` 的 `service.rs` 是占位文件？
+### 5. `application` / `module` 的 Service 为什么只提供 `create` / `update` / `delete`？
 
-当前两个模块的 CRUD 通过 `GenericCrudService::<XxxBmc, XxxFilter>` 在 handler 中直接调用，不需要自定义 Service。`service.rs` 保留为占位文件是为了未来迁移自定义业务方法时无需修改模块结构。
+查询类操作通过 `GenericCrudService::<XxxBmc, XxxFilter>` 在 handler 中直接调用即可，无需再包一层。而 `create` / `update` / `delete` 涉及标准 CRUD 之外的文件副作用与引用校验：`create` 写库后确保 DAM 资源目录存在；`update` 检测 code/domain 变更时搬移目录并重写 `module` 表路径列；应用 `delete` 前校验其下无模块。故集中在自定义 Service 中以事务包装维护。
 
 ---
 
@@ -726,13 +801,13 @@ cmx-rpc (协议层，仅依赖 cmx-traits)
 
 **A**: 定义在 `cmx_traits::function_invoker`，`cmx-biz` 通过 `pub use cmx_traits::function_invoker::FunctionInvokeResult;` 重导出，保持 `cmx_biz::function_invoker::FunctionInvokeResult` 路径向后兼容。同理 `step_status_to_str` / `parse_step_status` 实现位于 `cmx_traits::step_status`，本 crate 仅做重导出。
 
-### Q3: 为什么 `cmx-rpc` 不在 `Cargo.toml` 中声明 `cmx-biz`？
+### Q3: 为什么 `cmx-orchestrator-rpc` 不在 `Cargo.toml` 中声明 `cmx-biz`？
 
-**A**: 因为 `cmx-rpc` 源码不直接 `use cmx_biz::...`，它只通过 `cmx_traits::function_invoker::FunctionInvoker` trait 接收实现注入。组装层（`web-server`）负责构造 `BizFunctionInvoker` 并以 `Arc<dyn FunctionInvoker>` 透传给 `cmx-rpc` 的初始化函数。这样 `cmx-rpc` 的依赖图保持精简，不引入业务层概念。
+**A**: 因为 gRPC 皮肤 crate 源码不直接 `use cmx_biz::...`，它只通过 `cmx_traits::function_invoker::FunctionInvoker` trait 接收实现注入。组装层（`cmx-platform-app`）负责构造 `BizFunctionInvoker` 并以 `Arc<dyn FunctionInvoker>` 传给 `cmx_service_base::init_rpc`，最终注入 gRPC Server 的 `ServerDeps`。这样 RPC 基础设施与皮肤 crate 的依赖图保持精简，不引入业务层概念。
 
 ### Q4: 启用 `openapi` feature 后有什么变化？
 
-**A**: 所有 `Entity` / `ForCreate` / `ForUpdate` / `TreeNodeData` 结构体派生 `utoipa::ToSchema`，可在 `cmx-api` 中通过 `#[dependencies]` 或 `#[to_schema]` 引用来自动生成 OpenAPI 文档。未启用 `openapi` 时，这些派生宏不生效，编译产物更小。
+**A**: 所有 `Entity` / `ForCreate` / `ForUpdate` / `TreeNodeData` 结构体派生 `utoipa::ToSchema`，可在 HTTP 皮肤 crate（如 `cmx-biz-api`）中通过 `#[dependencies]` 或 `#[to_schema]` 引用来自动生成 OpenAPI 文档。未启用 `openapi` 时，这些派生宏不生效，编译产物更小。
 
 ### Q5: 数据源 `db_url` 是如何加密的？
 

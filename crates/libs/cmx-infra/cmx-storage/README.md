@@ -2,6 +2,10 @@
 
 > 统一对象存储抽象层，支持本地文件系统、S3 兼容存储等多平台，基于 OpenDAL 构建，为上层应用提供一致的文件操作接口。
 
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
+[![Authors](https://img.shields.io/badge/authors-skylake%40pansoft.com-lightgrey.svg)]()
+
 ## 快速开始
 
 ### 安装
@@ -47,9 +51,10 @@ instances: vec![instance],
 default_platform: Some("minio-1".to_string()),
 };
 
-// 3. 创建存储管理器和服务
-let manager = Arc::new(StorageManager::new( & config).expect("初始化失败"));
-let storage_service = Arc::new(DefaultStorageService::new(manager));
+// 3. 创建存储管理器和服务（服务依赖数据库管理器，文件元数据写入 cmx_file_detail）
+let manager = Arc::new(StorageManager::new(&config).expect("初始化失败"));
+let db = cmx_database::get_default_db_manager();
+let storage_service = Arc::new(DefaultStorageService::new(manager, db));
 
 // 4. 上传文件
 let request = UploadRequest {
@@ -77,7 +82,7 @@ println!("文件上传成功: {}", file_info.url);
 | 预签名 URL    | 支持生成下载/上传的临时签名 URL（S3 后端）                |
 | 分片上传       | 支持大文件分片上传和断点续传                           |
 | 跨平台复制      | 支持不同存储平台间的文件复制                           |
-| REST API   | 提供完整的基于 axum 的 HTTP 接口                   |
+| REST API   | 基于 axum 的 HTTP 接口（路由定义在 cmx-apis/cmx-storage-api） |
 | OpenAPI 文档 | 使用 utoipa 生成 Swagger UI 文档               |
 
 ### 可选 Features
@@ -90,21 +95,24 @@ println!("文件上传成功: {}", file_info.url);
 
 ```
 cmx-storage
-├── config           # 配置解析（TOML 配置 → Rust 结构体）
-├── error            # 错误类型定义
-├── global           # GlobalStorageService 全局单例
-├── manager          # StorageManager 多平台后端管理器
+├── config.rs        # 配置解析（TOML 配置 → Rust 结构体）
+├── error.rs         # 错误类型定义
+├── global.rs        # GlobalStorageService 全局单例
+├── manager.rs       # StorageManager 多平台后端管理器
 ├── backend/         # 存储后端抽象层
 │   ├── mod.rs      # StorageBackend trait + 工厂函数
 │   ├── s3.rs       # S3 后端实现（支持预签名、分片）
 │   └── local.rs    # 本地文件系统后端实现
-├── service          # StorageService trait + DefaultStorageService
-├── types            # 公共类型定义（FileInfo、UploadRequest 等）
-├── bmc              # 数据库表元信息与 CRUD 实体
-├── path_gen         # 文件存储路径生成策略
-├── mime_detect      # MIME Type 检测（魔数 + 扩展名）
-├── multipart        # 分片上传管理器
-└── handler          # axum REST API handler
+├── service/         # StorageService trait + DefaultStorageService（按职责拆分子模块）
+│   ├── mod.rs      # trait 定义 + DefaultStorageService（按职责拆分子模块）
+│   ├── upload.rs / download.rs / delete.rs / query.rs
+│   ├── presign.rs / copy.rs / multipart.rs / thumbnail.rs
+│   └── helpers.rs    # 内部辅助（MD5 计算、文件记录创建/查询、秒传检测，pub(super)）
+├── types.rs         # 公共类型定义（FileInfo、UploadRequest 等）
+├── bmc.rs           # 数据库表元信息与 CRUD 实体
+├── path_gen.rs      # 文件存储路径生成策略
+├── mime_detect.rs   # MIME Type 检测（魔数 + 扩展名）
+└── handler.rs       # handler 侧 AppState（HTTP 路由已迁至 cmx-apis/cmx-storage-api）
 ```
 
 ### 主要模块说明
@@ -168,8 +176,8 @@ if manager.has_platform("local-1") {
 use cmx_storage::service::{StorageService, DefaultStorageService};
 use cmx_storage::types::{FileInfo, FileDownload, FileQuery, FilePage};
 
-// 创建存储服务
-let service: Arc<dyn StorageService> = Arc::new(DefaultStorageService::new(manager));
+// 创建存储服务（需传入数据库管理器，文件元数据入库）
+let service: Arc<dyn StorageService> = Arc::new(DefaultStorageService::new(manager, db));
 
 // 上传文件
 let file_info: FileInfo = service.upload(request).await?;
@@ -197,7 +205,9 @@ let new_file = service.copy_file( & file_id, Some("minio-1")).await?;
 
 #### `handler` - REST API
 
-提供完整的 HTTP 接口，集成到主应用后访问 `/api/storage/*`：
+HTTP 接口（axum）的 handler 与路由已迁至皮肤 crate `crates/libs/cmx-apis/cmx-storage-api`
+（2026-07/08 handler 大迁移），经其 `ModuleRoutes`（前缀 storage）由 `cmx-platform-app`
+挂载到 `/api` 下；cmx-storage 本体仅保留 handler 使用的 `AppState`。集成后访问 `/api/storage/*`：
 
 | 方法     | 路径                                | 说明                        |
 |--------|-----------------------------------|---------------------------|
@@ -205,7 +215,7 @@ let new_file = service.copy_file( & file_id, Some("minio-1")).await?;
 | GET    | `/api/storage/download`           | 下载文件                      |
 | POST   | `/api/storage/batch-download`     | 批量下载（ZIP）                 |
 | GET    | `/api/storage/info`               | 获取文件信息                    |
-| DELETE | `/api/storage/delete`             | 删除文件                      |
+| POST   | `/api/storage/delete`             | 删除文件（既有接口，已按新规范改用 POST） |
 | POST   | `/api/storage/page`               | 分页查询文件列表                  |
 | POST   | `/api/storage/presign-download`   | 预签名下载 URL                 |
 | POST   | `/api/storage/presign-upload`     | 预签名上传 URL                 |
@@ -252,56 +262,47 @@ base_path = "portalcenter/"
 
 #### 1.2 在应用启动流程中初始化存储服务
 
-在 `web-server/src/config.rs` 中添加初始化函数：
+初始化函数由 `cmx-service-base` 提供（`crates/libs/cmx-service-base/src/storage.rs`，
+feature `storage`），返回 `Result<()>`，并会额外注册本地文件的静态访问路由：
 
 ```rust
-pub async fn init_storage() {
-    use cmx_storage::config::StorageManagerConfig;
-    use cmx_storage::global::GlobalStorageService;
-    use cmx_storage::manager::StorageManager;
-    use cmx_storage::service::DefaultStorageService;
-    use std::sync::Arc;
-
-    info!("初始化文件存储服务...");
-
+pub async fn init_storage() -> Result<()> {
     // 1. 从配置加载存储配置
     let config = ConfigManager::global();
-    let storage_config = StorageManagerConfig::from_config(config)
-        .expect("存储配置加载失败");
+    let storage_config = StorageManagerConfig::from_config(&config)?;
 
-    // 2. 创建存储管理器（初始化所有后端）
-    let manager = Arc::new(
-        StorageManager::new(&storage_config).expect("存储管理器初始化失败"),
-    );
+    // 2. 创建存储管理器（初始化所有后端），并收集本地访问配置
+    let manager = Arc::new(StorageManager::new(&storage_config)?);
+    let local_access_configs: Vec<(String, String)> = manager
+        .get_local_access_configs()
+        .into_iter()
+        .map(|(pattern, path)| (pattern.to_string(), path.to_string()))
+        .collect();
 
-    // 3. 创建存储服务
+    // 3. 创建存储服务（依赖数据库管理器，文件元数据入库）
+    let db_manager = get_default_db_manager();
     let service: Arc<dyn cmx_storage::service::StorageService> =
-        Arc::new(DefaultStorageService::new(manager));
+        Arc::new(DefaultStorageService::new(manager, db_manager));
 
-    // 4. 注册到全局单例
-    GlobalStorageService::initialize(service)
-        .expect("存储服务全局初始化失败");
-
-    info!("文件存储服务初始化完成");
+    // 4. 注册到全局单例，并注册本地文件静态访问路由（local 后端）
+    GlobalStorageService::initialize(service)?;
+    GlobalStorageService::init_local_access_configs(local_access_configs);
+    Ok(())
 }
 ```
 
-#### 1.3 在 main.rs 中调用初始化
+#### 1.3 初始化顺序
+
+`init_storage()` 由 `cmx-platform-app` 的启动流程自动调用，位于数据源初始化之后
+（存储服务依赖数据库写文件元数据）：
 
 ```rust
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // ... 其他初始化 ...
-
-    // 初始化数据库（必须在存储之前，因为存储服务依赖数据库）
-    init_datasources().await;
-
-    // 初始化文件存储服务
-    init_storage().await;
-
-    // ... 后续启动 ...
-}
+// cmx-platform-app/src/lib.rs（节选）
+init_datasources()...   // 数据库先就绪（存储元数据入库依赖数据库）
+init_storage().await;   // 文件存储服务初始化
 ```
+
+自行装配的应用需保证：先初始化数据库（`cmx-database` 默认数据源），再调用 `init_storage()`。
 
 #### 1.4 全局存储服务使用
 
@@ -331,7 +332,7 @@ let file_info = GlobalStorageService::get().service().upload(request).await?;
 
 ```rust
 use axum::{extract::State, Json};
-use cmx_api::app_state::CmxAppState;
+use cmx_api_core::CmxAppState;
 
 // 在主应用状态中注入存储服务
 // CmxAppState 已实现 FromRef<StorageService>，可自动提取
@@ -349,7 +350,8 @@ pub async fn my_handler(
 **方式二：通过 FromRef 为 handler::AppState 实现自动提取**
 
 ```rust
-// cmx-api/src/app_state.rs
+// cmx-api-core/src/app_state.rs
+// （注：此 impl 必须定义在 CmxAppState 的本地 crate cmx-api-core，以满足孤儿规则）
 impl axum::extract::FromRef<CmxAppState> for cmx_storage::handler::AppState {
     fn from_ref(state: &CmxAppState) -> Self {
         Self {
@@ -417,9 +419,11 @@ init_storage() 调用
     │
     ├── StorageManager::new()  ──→ 初始化所有存储后端
     │
-    ├── DefaultStorageService::new()  ──→ 创建服务实例
+    ├── DefaultStorageService::new(manager, db)  ──→ 创建服务实例
     │
-    └── GlobalStorageService::initialize()  ──→ 注册全局单例 ✅
+    ├── GlobalStorageService::initialize()  ──→ 注册全局单例 ✅
+    │
+    └── GlobalStorageService::init_local_access_configs()  ──→ 注册本地静态访问路由
     │
     ▼
 应用运行中

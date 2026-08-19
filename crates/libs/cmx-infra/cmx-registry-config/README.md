@@ -2,6 +2,10 @@
 
 > 注册中心与配置中心可扩展抽象层，支持 Nacos、Mock 及后续扩展（Consul、Etcd、Apollo 等）。
 
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
+[![Authors](https://img.shields.io/badge/authors-skylake%40pansoft.com-lightgrey.svg)]()
+
 ---
 
 ## 一、快速开始
@@ -50,9 +54,9 @@ use cmx_registry_config::{
 通过工厂函数 + `Arc<dyn Trait>` 实现运行时动态派发：
 
 ```rust
-// 工厂函数根据配置类型返回对应实现
-let registry: Arc<dyn ServiceRegistry> = create_registry(&config)?;
-let config_center: Arc<dyn ConfigCenter> = create_config_center(&config)?;
+// 工厂函数根据配置类型返回对应实现（均为 async 函数）
+let registry: Arc<dyn ServiceRegistry> = create_registry(&config).await?;
+let config_center: Arc<dyn ConfigCenter> = create_config_center(&config, None).await?;
 ```
 
 ### 2.3 已有实现
@@ -72,9 +76,12 @@ let config_center: Arc<dyn ConfigCenter> = create_config_center(&config)?;
 
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
-| `SERVICE_REGISTRY_TYPE` | `mock` | 注册中心类型：`mock` / `nacos` |
+| `SERVICE_REGISTRY_TYPE` | `mock`（`NACOS_ENABLED=true` 时默认 `nacos`） | 注册中心类型：`mock` / `nacos` |
 | `SERVICE_REGISTRY_ENABLED` | `false` | 是否启用服务注册 |
 | `SERVICE_REGISTRY_NAME` | `cmx-server` | 注册的服务名称（同时作为 `app_id` 的回退值） |
+| `SERVICE_REGISTRY_GROUP` | `DEFAULT_GROUP` | 注册分组（回退 `NACOS_NAMING_GROUP_NAME`） |
+| `SERVICE_REGISTRY_CLUSTER` | `DEFAULT` | 注册集群名 |
+| `SERVICE_REGISTRY_WEIGHT` | `1.0` | 实例权重 |
 | `NACOS_SERVER_ADDR` | `127.0.0.1:8848` | Nacos 服务器地址 |
 | `NACOS_NAMESPACE` | `""` | 命名空间 |
 | `NACOS_APP_NAME` | `cmx-container` | 应用名称 |
@@ -107,8 +114,8 @@ let config_center: Arc<dyn ConfigCenter> = create_config_center(&config)?;
 
 | 旧变量 | 新映射 |
 |--------|--------|
-| `NACOS_ENABLED=true` | 自动启用注册中心 + 配置中心，类型设为 `nacos` |
-| `NACOS_NAMING_ENABLED` | 映射为 `SERVICE_REGISTRY_ENABLED` |
+| `NACOS_ENABLED=true` | 自动启用注册中心（需 `NACOS_NAMING_ENABLED`≠false，其默认 true）并将类型设为 `nacos`；配置中心还需叠加 `NACOS_CONFIG_ENABLED=true` 才自动启用 |
+| `NACOS_NAMING_ENABLED` | 映射为 `SERVICE_REGISTRY_ENABLED` 的兼容开关（默认 true） |
 | `NACOS_CONFIG_ENABLED` | 映射为 `CONFIG_CENTER_ENABLED` |
 | `NACOS_NAMING_SERVICE_NAME` | 映射为 `SERVICE_REGISTRY_NAME` 的回退值 |
 
@@ -223,8 +230,8 @@ use cmx_registry_config::{
 let registry_config = RegistryConfig::from_env();
 let cc_config = ConfigCenterFullConfig::from_env();
 
-// 创建注册中心实例（返回 Arc<dyn Trait>）
-let registry: Arc<dyn ServiceRegistry> = create_registry(&registry_config)?;
+// 创建注册中心实例（返回 Arc<dyn Trait>，async 函数）
+let registry: Arc<dyn ServiceRegistry> = create_registry(&registry_config).await?;
 
 // 创建配置中心实例。
 // 第二个参数为可选的配置变更处理器：若提供，工厂函数会为每个 listener 自动注册此处理器；
@@ -306,13 +313,16 @@ use cmx_registry_config::{
 GlobalChangeNotifier::initialize();
 
 // 2. 注册结构化监听器
-struct MyListener;
+struct MyListener {
+    // interested_keys 返回 &[String]，非空列表需自持数据（如 Vec<String>）
+    keys: Vec<String>,
+}
 impl ConfigChangeListener for MyListener {
     fn name(&self) -> &str { "my-listener" }
 
     fn interested_keys(&self) -> &[String] {
-        // 返回空切片表示监听所有变更；非空切片按 key 前缀过滤
-        &[]
+        // 空切片表示监听所有变更；非空切片按 key 前缀过滤
+        &self.keys
     }
 
     fn on_change(&self, event: &ConfigChangeEvent) {
@@ -321,7 +331,7 @@ impl ConfigChangeListener for MyListener {
     }
 }
 
-GlobalChangeNotifier::add_listener(Arc::new(MyListener));
+GlobalChangeNotifier::add_listener(Arc::new(MyListener { keys: vec![] }));
 
 // 3. 通知所有监听器（通常由 ConfigReloader 在完成配置替换后调用）
 let event = ConfigChangeEvent {
@@ -334,7 +344,7 @@ GlobalChangeNotifier::notify_listeners(&event);
 ### 5.8 在任意 crate 中访问全局实例
 
 全局单例 `GlobalServiceRegistry` 和 `GlobalConfigCenter` 定义在 `cmx-registry-config` crate 中，
-任何依赖了该 crate 的模块都可以直接访问，无需通过 `web-server` 中转：
+任何依赖了该 crate 的模块都可以直接访问（初始化由 `cmx-service-base` 的 `init_infra()` 完成）：
 
 ```rust
 use cmx_registry_config::{GlobalServiceRegistry, GlobalConfigCenter};
@@ -441,13 +451,13 @@ use cmx_registry_config::{GlobalServiceRegistry, ServiceInstance};
 // 1. 拉取初始实例列表并注册变更回调
 let registry = GlobalServiceRegistry::get();
 let callback: cmx_registry_config::InstanceChangeCallback = Arc::new(
-    |service_name: &str, instances: &[ServiceInstance]| {
+    |service_name: String, instances: Vec<ServiceInstance>| {
         info!(
             "服务 {} 实例变更，当前 {} 个",
             service_name,
             instances.len()
         );
-        for inst in instances {
+        for inst in &instances {
             info!("  - {}:{} (healthy={})", inst.ip, inst.port, inst.healthy);
         }
     },
@@ -467,12 +477,12 @@ println!("当前 {} 个实例", instances.len());
 
 ```rust
 pub type InstanceChangeCallback =
-    Arc<dyn Fn(&str, &[ServiceInstance]) + Send + Sync>;
+    Arc<dyn Fn(String, Vec<ServiceInstance>) + Send + Sync>;
 ```
 
 参数说明：
-- `&str`：发生变更的服务名
-- `&[ServiceInstance]`：变更后的实例列表（已过滤不健康实例）
+- `String`：发生变更的服务名
+- `Vec<ServiceInstance>`：变更后的实例列表（已过滤不健康实例）
 
 #### 1.2 全局缓存读取（轻量场景）
 
@@ -488,8 +498,13 @@ if let Some(instances) = cache.get("cmx-server") {
     println!("缓存中有 {} 个实例", instances.len());
 }
 
-// 按需拉取：缓存为空时触发注册中心拉取
-let instances = cache.get_or_fetch("cmx-server").await?;
+// 按需拉取：缓存为空时执行传入的拉取闭包（泛型 F: FnOnce() -> Fut）
+let instances = cache
+    .get_or_fetch("cmx-server", || async {
+        GlobalServiceRegistry::get()
+            .query_instances("cmx-server", None, vec![])
+    })
+    .await?;
 ```
 
 #### 1.3 与 volo gRPC 客户端集成
@@ -497,12 +512,12 @@ let instances = cache.get_or_fetch("cmx-server").await?;
 volo 负载均衡器自动监听实例变化，无需手动处理：
 
 ```rust
-// cmx-rpc 内部已实现
+// cmx-rpc 内部已实现（client/infra.rs + discover.rs）
 // 1. subscribe_instances 注册 no-op callback
 // 2. start_watch 注册 discover callback
 // 3. cache.update 时 volo 收到 Change 事件并刷新负载均衡器
 //
-// 业务侧无需关心，调用 VoloGrpcClient::get_client 即可
+// 业务侧无需关心，直接使用 cmx-rpcs 各皮肤 crate 生成的客户端即可
 ```
 
 #### 1.4 监听机制原理
@@ -611,14 +626,16 @@ use cmx_registry_config::{
 GlobalChangeNotifier::initialize();
 
 // 2. 实现结构化监听器
-struct DatabaseListener;
+struct DatabaseListener {
+    keys: Vec<String>,
+}
 impl ConfigChangeListener for DatabaseListener {
     fn name(&self) -> &str { "database-listener" }
 
     fn interested_keys(&self) -> &[String] {
-        // 仅监听 database 前缀的配置变更，返回空切片则监听所有变更
-        static KEYS: &[String] = &["database"];
-        KEYS
+        // 仅监听 database 前缀的配置变更，空切片则监听所有变更
+        // （返回 &[String]，非空前缀列表需自持 Vec<String>）
+        &self.keys
     }
 
     fn on_change(&self, event: &ConfigChangeEvent) {
@@ -627,8 +644,8 @@ impl ConfigChangeListener for DatabaseListener {
     }
 }
 
-// 3. 注册监听器
-GlobalChangeNotifier::add_listener(Arc::new(DatabaseListener));
+// 3. 注册监听器（前缀过滤示例：keys = vec!["database".to_string()]）
+GlobalChangeNotifier::add_listener(Arc::new(DatabaseListener { keys: vec!["database".to_string()] }));
 
 // 4. 移除监听器（按 name 匹配）
 GlobalChangeNotifier::remove_listener("database-listener");
@@ -697,7 +714,7 @@ let change_handler: Option<ConfigChangeCallback> = Some(Arc::new(move |content: 
     let reloader = reloader.clone();
     let content = content.to_string();
     tokio::spawn(async move {
-        if let Ok(changed_keys) = reloader.reload(&content) {
+        if let Ok(changed_keys) = reloader.reload(&content).await {
             let event = ConfigChangeEvent {
                 changed_keys,
                 raw_content: content,
@@ -755,7 +772,7 @@ async fn setup_config_watcher() -> anyhow::Result<()> {
         let reloader = reloader.clone();
         let content = content.to_string();
         tokio::spawn(async move {
-            match reloader.reload(&content) {
+            match reloader.reload(&content).await {
                 Ok(changed_keys) => {
                     let event = ConfigChangeEvent {
                         changed_keys,
@@ -800,14 +817,14 @@ async fn setup_config_watcher() -> anyhow::Result<()> {
 ```text
 ┌─────────────────────────────────────────────────────────┐
 │  应用启动                                                 │
-│  ├─ init_infra()                                        │
+│  ├─ init_infra()（cmx-service-base）                  │
 │  │   ├─ create_registry_with_cache                     │
 │  │   ├─ GlobalChangeNotifier::initialize()             │
 │  │   ├─ build_config_change_handler()                  │
 │  │   │   └─ 构造 ConfigReloader + ConfigChangeCallback │
 │  │   ├─ create_config_center(config, change_handler)   │
 │  │   │   └─ 工厂函数为每个 listener 自动注册 change_handler │
-│  │   ├─ start_service_list_syncer (run + shutdown)     │
+│  │   ├─ ServiceListSyncer 启动（run + shutdown）       │
 │  │   └─ 业务模块通过 add_listener 注册 ConfigChangeListener │
 │  │                                                      │
 │  └─ init_rpc()                                          │
@@ -843,7 +860,7 @@ async fn setup_config_watcher() -> anyhow::Result<()> {
 ```rust
 use async_trait::async_trait;
 use crate::error::RegistryError;
-use super::trait_rs::{ServiceInstance, ServiceRegistry};
+use super::registry_traits::{ServiceInstance, ServiceRegistry};
 
 pub struct ConsulRegistry {
     // consul client
@@ -879,20 +896,27 @@ impl ServiceRegistry for ConsulRegistry {
 
 ### 步骤 2：注册到工厂函数
 
-在 `src/registry/mod.rs` 的 `create_registry()` 中添加分支：
+在 `src/registry/mod.rs` 的 `create_registry_with_cache()` 中添加分支
+（`create_registry()` 内部委托它实现）：
 
 ```rust
 match config.registry_type.as_str() {
-    "nacos" => Ok(Arc::new(NacosRegistry::new(&config.nacos)?)),
-    "consul" => Ok(Arc::new(ConsulRegistry::new(&config.consul)?)),  // 新增
-    "mock" => Ok(Arc::new(MockRegistry::new())),
+    "nacos" => {
+        let registry = NacosRegistry::new_with_cache(&config.nacos, cache.clone()).await?;
+        Ok((Arc::new(registry), cache))
+    }
+    "consul" => {
+        let registry = ConsulRegistry::new_with_cache(&config.consul, cache.clone()).await?;  // 新增
+        Ok((Arc::new(registry), cache))
+    }
+    "mock" => Ok((Arc::new(MockRegistry::new_with_cache(cache.clone())), cache)),
     other => Err(RegistryError::UnsupportedType(other.to_string())),
 }
 ```
 
 ### 步骤 3：添加配置结构
 
-在 `src/config.rs` 中新增 Consul 配置。
+在 `src/config_model.rs` 中新增 Consul 配置。
 
 ### 无需修改任何调用方代码
 
@@ -902,21 +926,29 @@ match config.registry_type.as_str() {
 
 ```
 cmx-registry-config/src/
-├── lib.rs                  # 模块入口，re-export 公共 API
-├── error.rs                # RegistryError + ConfigCenterError
-├── config.rs               # 配置模型，环境变量加载
-├── config_source.rs        # RemoteConfigSource (config::Source 实现)
-├── notifier.rs             # 配置变更通知器
+├── lib.rs                   # 模块入口，re-export 公共 API
+├── error.rs                 # RegistryError + ConfigCenterError
+├── config_model.rs          # 配置模型，环境变量加载
+├── config_source.rs         # RemoteConfigSource (config::Source 实现)
+├── notifier.rs              # GlobalChangeNotifier + ConfigChangeListener
+├── reloader.rs              # ConfigReloader（解析新配置 → changed_keys，async reload）
+├── global_registry.rs       # GlobalServiceRegistry 全局单例（set/get/is_initialized）
+├── global_config_center.rs  # GlobalConfigCenter 全局单例
+├── global_instance_cache.rs # GlobalServiceInstanceCache 全局单例
+├── utils.rs                 # 工具函数
+├── tests.rs                 # 集成测试
 ├── registry/
-│   ├── mod.rs              # 工厂函数 create_registry()
-│   ├── trait_rs.rs         # ServiceRegistry trait + ServiceInstance
-│   ├── nacos.rs            # NacosRegistry
-│   └── mock.rs             # MockRegistry
+│   ├── mod.rs               # 工厂 create_registry / create_registry_with_cache
+│   ├── registry_traits.rs   # ServiceRegistry trait + ServiceInstance + InstanceChangeCallback
+│   ├── instance_cache.rs    # ServiceInstanceCache（实例缓存 + 变更回调分发）
+│   ├── service_list_syncer.rs # ServiceListSyncer（服务列表定时同步）
+│   ├── nacos.rs             # NacosRegistry
+│   └── mock.rs              # MockRegistry
 └── config_center/
-    ├── mod.rs              # 工厂函数 create_config_center()
-    ├── trait_rs.rs         # ConfigCenter trait + ConfigChangeCallback
-    ├── nacos.rs            # NacosConfigCenter + NacosListenerAdapter
-    └── mock.rs             # MockConfigCenter
+    ├── mod.rs               # 工厂函数 create_config_center()
+    ├── config_traits.rs     # ConfigCenter trait + ConfigChangeCallback
+    ├── nacos.rs             # NacosConfigCenter + NacosListenerAdapter
+    └── mock.rs              # MockConfigCenter
 ```
 
 ### 配置优先级（从高到低）

@@ -1,10 +1,21 @@
 # cmx-metadata
 
-> 表定义元数据管理模块，负责 JSON 配置加载、DDL 生成/解析、增量 DDL diff、DDL 执行、i18n 伴生表生成。
+> 表定义元数据管理模块：表定义 JSON 加载、DDL 生成/解析、增量 DDL diff、DDL 执行、i18n 伴生表派生、种子数据装载执行器。
+
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
 
 ## 项目简介
 
-cmx-metadata 是 cmx-container 项目的元数据管理层，基础结构体（TableDefine、ColumnDefine 等）定义在 cmx-core 中，本模块提供元数据的加载、解析、执行等功能。
+cmx-metadata 是 cmx-container 项目的**表定义执行器**：把「表定义 JSON」落地为数据库中的物理表（DDL 生成/执行）、维护表结构演进（增量 diff）、派生多语言伴生表，并装载种子数据。
+
+职责边界：
+
+- 基础结构体（`TableDefine` / `ColumnDefine` / `FieldType` / `IndexDefine` / `TableDefinesConfig` / `SeedDataConfig`）定义在 `cmx-core`（`cmx_core::model::meta`），本模块提供加载、解析、生成、执行能力
+- DDL/SQL 执行依赖 `cmx-database` 的全局 `DatabaseManager`（`get_default_db_manager()`），按 `(db_id, txn_id)` 寻址，可参与外部事务
+- **与 cmx-model-meta 的分工**：`cmx-model-meta`（crates/libs/cmx-model/）是模型中心的**设计期元数据建模**（DCT 数据字典 / DOC 业务单据 / FC 弹性组合定义，纯 JSON 文件、不落库）；本 crate 处理的是**物理表定义 → DDL → 建表/迁移/种子数据**的执行链路。模型中心部署时（cmx-model-deploy）会复用本 crate 的执行能力
+
+主要使用方：`cmx-plugin`（插件/模块安装时建表 + 种子数据）、`cmx-model-deploy`（模型部署）、`cmx-common-api`。
 
 ## 快速开始
 
@@ -12,560 +23,438 @@ cmx-metadata 是 cmx-container 项目的元数据管理层，基础结构体（T
 
 ```toml
 [dependencies]
-cmx-metadata = "0.1.0"
+cmx-metadata = { workspace = true }
 ```
 
 ### 核心示例
 
 ```rust
-use cmx_metadata::{load_from_file, PgTableDefineExecutor};
+use cmx_metadata::{
+    load_table_defines_from_path, PostgresDdlDialect,
+    PgTableDefineExecutor, TableDefineDbExecutor, // trait 方法需要
+};
+use std::path::Path;
 
-let config = load_from_file("config.json")?;
-let executor = PgTableDefineExecutor::new(db_manager);
-executor.execute_ddl_by_ids(&config).await?;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. 从表定义 JSON（{ "tables": [...] }）加载
+    let tables = load_table_defines_from_path(Path::new("sys_tables.json"))?;
+
+    // 2. 构造执行器（db_id + 可选事务 ID；SQL 经全局 DatabaseManager 执行）
+    let executor = PgTableDefineExecutor::new("default", None);
+
+    // 3. 建表或升级（表已存在时走增量升级）
+    for table in &tables {
+        executor.create_or_upgrade_table(table).await?;
+    }
+    Ok(())
+}
 ```
 
 ## 核心功能与特性
 
 | 功能 | 说明 |
 |------|------|
-| 配置加载 | 从文件或 JSON 加载表定义配置 |
-| DDL 生成 | 将 TableDefine 转换为 Postgres DDL |
-| DDL 解析 | 将 DDL 字符串转换为 TableDefine |
-| 增量 DDL | 计算表结构变更差异 |
-| DDL 执行 | 执行 DDL 语句到数据库 |
-| i18n 支持 | 生成国际化伴生表 |
+| 表定义加载 | 单表/多表 JSON 文件与字符串加载（`loader`），多配置文件管理与依赖排序（`config`） |
+| DDL 生成 | `DdlDialect` trait（方言抽象）+ `PostgresDdlDialect` 实现：CREATE TABLE / INDEX / COMMENT / DROP / ALTER |
+| DDL 解析 | `DdlParser` trait + `PostgresDdlParser`：DDL 字符串 → `TableDefine`（往返） |
+| 增量 DDL | `DdlDiff`：两组 `TableDefine` 比对，产出 `TableChange` 列表并可转为 ALTER DDL 语句 |
+| DDL 执行 | `PgTableDefineExecutor`（建表/升级）+ `execute_ddl_by_ids` 等自由函数（裸 DDL 语句执行） |
+| 库内表结构回读 | `PgTableDefineExecutor::query_current_table_define`：查 `information_schema` 重建 `TableDefine` |
+| i18n 伴生表 | `derive_i18n_table_define`：为 `i18n: true` 的表派生 `<表名>_i18n` 伴生表定义 |
+| 种子数据 | `load_seed_data`（.json / .csv）+ `PgSeedDataExecutor`（批量 upsert，冲突列可配，产出 `SeedDataSummary`） |
 
 ## 模块结构
 
 ```
 cmx-metadata
 ├── src/
-│   ├── lib.rs              # 库入口
-│   ├── config.rs           # 配置管理
-│   ├── ddl/               # DDL 处理模块
-│   │   ├── mod.rs
-│   │   ├── diff.rs        # 增量 DDL
-│   │   └── postgres.rs    # Postgres DDL 生成
-│   ├── error.rs           # 错误类型
-│   ├── executor.rs        # DDL 执行器
-│   ├── i18n.rs            # 国际化支持
-│   ├── loader.rs          # 配置加载器
-│   ├── parser/            # DDL 解析器
-│   │   ├── mod.rs
-│   │   └── postgres.rs
-│   └── seed/              # 种子数据模块
-│       ├── config.rs
-│       ├── dml.rs
-│       ├── executor.rs
-│       ├── loader.rs
-│       └── mod.rs
+│   ├── lib.rs              # 库入口（导出 DdlDialect / DdlDiff / PgTableDefineExecutor 等）
+│   ├── config.rs           # TableDefinesConfigManager：多配置文件管理、依赖排序、批量装载
+│   ├── loader.rs           # 表定义 JSON 加载（单表/多表，文件/字符串）
+│   ├── ddl/                # DDL 生成与 diff
+│   │   ├── mod.rs          #   DdlDialect trait（方言抽象）
+│   │   ├── postgres.rs     #   PostgresDdlDialect 实现
+│   │   └── diff.rs         #   DdlDiff 增量比对 + TableChange/ColumnChange 等变更类型
+│   ├── parser/             # DDL 解析（DDL → TableDefine）
+│   │   ├── mod.rs          #   DdlParser trait + pg_ddl_to_table_defines 快捷函数
+│   │   └── postgres.rs     #   PostgresDdlParser 实现
+│   ├── executor.rs         # TableDefineDbExecutor trait + PgTableDefineExecutor + 裸 DDL 执行函数
+│   ├── i18n.rs             # derive_i18n_table_define 伴生表派生
+│   ├── seed/               # 种子数据
+│   │   ├── config.rs       #   SeedDataSummary / SeedDataTableResult 等结果类型
+│   │   ├── loader.rs       #   load_seed_data（.json / .csv）
+│   │   ├── dml.rs          #   upsert DML 构建
+│   │   └── executor.rs     #   PgSeedDataExecutor
+│   └── error.rs            # MetadataError
 └── Cargo.toml
 ```
 
+## 核心类型（定义在 cmx-core）
+
+### `TableDefine`（`cmx_core::model::meta::table`）
+
+表定义结构，主要字段：`table_name` / `display_name` / `columns` / `primary_keys` / `indexes` / `version` / `i18n` / `comment` / `schema` / `is_partitioned` / `partition_type` / `partition_columns` / `extensions`（完整字段以 cmx-core 为准）。
+
+### `ColumnDefine`
+
+列定义，主要字段：`name` / `label` / `field_type` / `is_primary_key` / `is_nullable` / `default_value` / `i18n` / `length` / `precision` / `scale` / `db_type` / `ordinal` / `is_foreign_key` / `foreign_key_table`。
+
+### `FieldType`
+
+逻辑字段类型枚举：`String` / `Int` / `Float` / `Decimal` / `DateTime` / `Date` / `Bool` / `Text` / `Binary` / `Array` / `Json` / `Uuid` / `Unknown`。各方言经 `DdlDialect::map_column_type` 映射为具体 SQL 类型。
+
+### `TableDefinesConfig`（`cmx_core::model::meta::plugin`）
+
+建表配置入口（`*_config.json`）：`name` / `description` / `files`（表定义文件列表）/ `depends_on`（依赖的其他配置）/ `priority`（越小越先）/ `seed_data: Vec<SeedDataConfig>`。插件 manifest 的 `table_config_files` 指向此类文件。
+
+### `SeedDataConfig`
+
+种子数据条目：`table_name` / `file`（数据文件路径）/ `conflict_columns`（ON CONFLICT 冲突检测列）/ `enabled`。
+
 ## 使用指南
 
-### 一、配置加载
+### 一、表定义加载
 
-#### 1.1 从文件加载
+#### 1.1 从文件/字符串加载表定义
 
 ```rust
-use cmx_metadata::{load_from_file, MetadataConfig};
+use cmx_metadata::{table_defines_from_str, load_table_defines_from_path};
+use std::path::Path;
 
-let config: MetadataConfig = load_from_file("metadata.json")?;
-println!("Loaded {} tables", config.tables.len());
+// 多表 JSON 文件（{ "tables": [ {...}, ... ] }）
+let tables = load_table_defines_from_path(Path::new("sys_tables.json"))?;
+
+// 单表结构（{ "table_name": ..., "columns": [...] }）
+let table = cmx_metadata::load_table_define_from_path(Path::new("one_table.json"))?;
+
+// 从字符串解析（校验/调试场景）
+let tables = table_defines_from_str(r#"{ "tables": [ /* TableDefine 数组 */ ] }"#)?;
 ```
 
-#### 1.2 从 JSON 字符串加载
+表定义 JSON 片段（与 `TableDefine` serde 格式一致）：
 
-```rust
-use cmx_metadata::{load_from_str, MetadataConfig};
-
-let json_str = r#"
+```json
 {
-    "tables": [
-        {
-            "name": "users",
-            "columns": [
-                {"name": "id", "type": "bigint", "pk": true},
-                {"name": "name", "type": "varchar", "length": 255},
-                {"name": "email", "type": "varchar", "length": 255}
-            ]
-        }
-    ]
+  "table_name": "cmx_domain",
+  "display_name": "域",
+  "version": 1,
+  "primary_keys": ["id"],
+  "i18n": false,
+  "columns": [
+    {
+      "name": "code",
+      "label": "域编码",
+      "field_type": "String",
+      "is_nullable": false,
+      "length": 32,
+      "db_type": "VARCHAR(32)"
+    }
+  ]
 }
-"#;
-
-let config: MetadataConfig = load_from_str(json_str)?;
 ```
 
-#### 1.3 从目录批量加载
+#### 1.2 多配置文件管理（TableDefinesConfigManager）
 
 ```rust
-use cmx_metadata::ConfigLoader;
+use cmx_metadata::config::TableDefinesConfigManager;
+use std::path::Path;
 
-let loader = ConfigLoader::new("metadata/");
-let config = loader.load_all().await?;
-println!("Loaded {} table definitions", config.tables.len());
+// 从多个 *_config.json 构造，按 depends_on / priority 拓扑排序
+let manager = TableDefinesConfigManager::from_config_paths(&[
+    "meta_scripts/domain_app_module_config.json",
+    "meta_scripts/plugin_marketplace_registry_config.json",
+])?;
+
+// 依赖有序的配置列表（priority 小者在前，被依赖者先装载）
+for config in manager.sorted_configs()? {
+    println!("config: {} ({} files)", config.name, config.files.len());
+}
+
+// 以配置目录为基准，批量加载其引用的全部表定义文件
+let all_tables = manager.load_all_tables(Path::new("meta_scripts/"))?;
+println!("共 {} 张表", all_tables.len());
 ```
 
 ### 二、DDL 生成
 
-#### 2.1 生成建表 DDL
-
 ```rust
-use cmx_metadata::{PgDdlGenerator, TableDefine};
+use cmx_metadata::{DdlDialect, PostgresDdlDialect};
 
-let generator = PgDdlGenerator::new();
+let dialect = PostgresDdlDialect;
 
-let table = TableDefine {
-    name: "users".to_string(),
-    schema: Some("public".to_string()),
-    columns: vec![
-        ColumnDefine {
-            name: "id".to_string(),
-            column_type: ColumnType::BigInt,
-            nullable: false,
-            default_value: None,
-            is_primary_key: true,
-            is_auto_increment: true,
-        },
-        ColumnDefine {
-            name: "name".to_string(),
-            column_type: ColumnType::Varchar(255),
-            nullable: false,
-            default_value: None,
-            is_primary_key: false,
-            is_auto_increment: false,
-        },
-    ],
-    indexes: vec![],
-    foreign_keys: vec![],
-};
+// 单表完整 DDL（CREATE TABLE + CREATE INDEX + COMMENT ON）
+let full = dialect.generate_full_ddl(&table)?;
 
-let ddl = generator.generate_create_table(&table)?;
-println!("DDL: {}", ddl);
+// 也可分步获取
+let create = dialect.generate_create_table(&table)?;
+let indexes = dialect.generate_create_indexes(&table)?;   // Vec<String>
+let comments = dialect.generate_comments(&table)?;        // 表注释 + 列注释
+
+// 列级 ALTER 语句生成（供增量变更使用；schema 传 Some("public") 或 None）
+let add_col = dialect.generate_add_column("t", None, &new_column)?;
+let alter_cols = dialect.generate_alter_column("t", None, &old_col, &new_col)?; // Vec<String>
+let drop_col = dialect.generate_drop_column("t", None, "old_col")?;
+let drop_table = dialect.generate_drop_table(&table)?; // DROP TABLE IF EXISTS
+
+// 多表完整 DDL（按入参顺序拼接）
+let ddl = dialect.generate_full_ddl_for_tables(&tables)?;
 ```
 
-#### 2.2 生成索引 DDL
+### 三、DDL 解析（DDL → TableDefine）
 
 ```rust
-use cmx_metadata::{PgDdlGenerator, IndexDefine, IndexType};
-
-let generator = PgDdlGenerator::new();
-
-let index = IndexDefine {
-    name: "idx_users_email".to_string(),
-    table_name: "users".to_string(),
-    columns: vec!["email".to_string()],
-    index_type: IndexType::BTree,
-    unique: true,
-    concurrently: false,
-};
-
-let index_ddl = generator.generate_create_index(&index)?;
-println!("Index DDL: {}", index_ddl);
-```
-
-#### 2.3 生成外键 DDL
-
-```rust
-use cmx_metadata::{PgDdlGenerator, ForeignKeyDefine, ReferentialAction};
-
-let generator = PgDdlGenerator::new();
-
-let fk = ForeignKeyDefine {
-    name: "fk_orders_user".to_string(),
-    table_name: "orders".to_string(),
-    column: "user_id".to_string(),
-    referenced_table: "users".to_string(),
-    referenced_column: "id".to_string(),
-    on_delete: ReferentialAction::Cascade,
-    on_update: ReferentialAction::NoAction,
-};
-
-let fk_ddl = generator.generate_add_foreign_key(&fk)?;
-println!("FK DDL: {}", fk_ddl);
-```
-
-### 三、DDL 解析
-
-#### 3.1 解析建表 DDL
-
-```rust
-use cmx_metadata::{PgParser, ParserConfig};
-
-let parser = PgParser::new(ParserConfig::default());
+use cmx_metadata::parser::{pg_ddl_to_table_defines, PostgresDdlParser};
 
 let ddl = r#"
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
+    name VARCHAR(255) NOT NULL
+);
+CREATE INDEX idx_users_name ON users (name);
 "#;
 
-let table: TableDefine = parser.parse_create_table(ddl)?;
-println!("Table: {}", table.name);
-println!("Columns: {}", table.columns.len());
+// 快捷函数：一次解析多张表
+let tables = pg_ddl_to_table_defines(ddl)?;
+
+// 或经 trait（方言抽象）
+use cmx_metadata::parser::DdlParser;
+let parser = PostgresDdlParser;
+let one_table = parser.parse_create_table("CREATE TABLE users (id BIGINT PRIMARY KEY)")?;
+let many = parser.parse_ddl(ddl)?;
 ```
 
-#### 3.2 解析 ALTER TABLE
+### 四、增量 DDL（diff → ALTER 语句）
 
 ```rust
-use cmx_metadata::PgParser;
+use cmx_metadata::{DdlDiff, PostgresDdlDialect};
 
-let parser = PgParser::new(ParserConfig::default());
+let dialect = PostgresDdlDialect;
 
-let alter_ddl = r#"
-ALTER TABLE users
-    ADD COLUMN phone VARCHAR(20),
-    ALTER COLUMN name TYPE VARCHAR(500),
-    DROP COLUMN old_column
-"#;
+// 比对两组表定义（如：库内现状 vs 新版定义），产出变更列表
+let changes = DdlDiff::diff(&old_tables, &new_tables);
+for change in &changes {
+    println!("change: {:?}", change); // TableChange::CreateTable / DropTable / ModifyTable(...)
+}
 
-let alter_ops = parser.parse_alter_table(alter_ddl)?;
-for op in alter_ops {
-    println!("Operation: {:?}", op);
+// 变更列表 → ALTER DDL 语句
+let stmts = DdlDiff::changes_to_ddl(&dialect, &changes)?;
+
+// 一步到位：diff + to_ddl
+let stmts = DdlDiff::diff_to_ddl(&dialect, &old_tables, &new_tables)?;
+for s in &stmts {
+    println!("{}", s);
 }
 ```
 
-### 四、增量 DDL
-
-#### 4.1 计算表结构差异
-
-```rust
-use cmx_metadata::{DiffCalculator, TableDefine, ColumnType};
-
-let calculator = DiffCalculator::new();
-
-// 原始表结构
-let old_table = TableDefine {
-    name: "users".to_string(),
-    columns: vec![
-        ColumnDefine {
-            name: "id".to_string(),
-            column_type: ColumnType::BigInt,
-            nullable: false,
-            default_value: None,
-            is_primary_key: true,
-            is_auto_increment: true,
-        },
-        ColumnDefine {
-            name: "name".to_string(),
-            column_type: ColumnType::Varchar(255),
-            nullable: false,
-            default_value: None,
-            is_primary_key: false,
-            is_auto_increment: false,
-        },
-    ],
-    ..Default::default()
-};
-
-// 新表结构
-let new_table = TableDefine {
-    name: "users".to_string(),
-    columns: vec![
-        ColumnDefine {
-            name: "id".to_string(),
-            column_type: ColumnType::BigInt,
-            nullable: false,
-            default_value: None,
-            is_primary_key: true,
-            is_auto_increment: true,
-        },
-        ColumnDefine {
-            name: "name".to_string(),
-            column_type: ColumnType::Varchar(500),  // 长度变更
-            nullable: false,
-            default_value: None,
-            is_primary_key: false,
-            is_auto_increment: false,
-        },
-        ColumnDefine {
-            name: "email".to_string(),  // 新增列
-            column_type: ColumnType::Varchar(255),
-            nullable: false,
-            default_value: None,
-            is_primary_key: false,
-            is_auto_increment: false,
-        },
-    ],
-    ..Default::default()
-};
-
-let diff = calculator.calculate_diff(&old_table, &new_table)?;
-
-println!("Added columns: {:?}", diff.added_columns);
-println!("Modified columns: {:?}", diff.modified_columns);
-println!("Dropped columns: {:?}", diff.dropped_columns);
-```
-
-#### 4.2 生成增量 DDL
-
-```rust
-use cmx_metadata::{DiffToDdl, DiffResult};
-
-let converter = DiffToDdl::new();
-
-let alter_ddl = converter.convert(&diff)?;
-println!("Generated DDL: {}", alter_ddl);
-
-// 输出示例:
-// ALTER TABLE users ALTER COLUMN name TYPE VARCHAR(500);
-// ALTER TABLE users ADD COLUMN email VARCHAR(255) NOT NULL;
-```
+变更类型（`ddl::diff`）：`TableChange`（建表/删表/改表）、`ColumnChange`（加列/改列/删列）、`IndexChange`（加索引/删索引）、`ColumnCommentChange`（注释变更）。
 
 ### 五、DDL 执行
 
-#### 5.1 执行单个 DDL
+#### 5.1 PgTableDefineExecutor（建表/升级）
 
 ```rust
-use cmx_metadata::{PgTableDefineExecutor, DatabaseManager};
+use cmx_metadata::{PgTableDefineExecutor, TableDefineDbExecutor};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db_manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-    let executor = PgTableDefineExecutor::new(db_manager);
+// db_id 定位数据源；txn_id 传入则语句加入外部事务
+let executor = PgTableDefineExecutor::new("default", None);
 
-    executor.execute("CREATE TABLE users (id BIGSERIAL PRIMARY KEY)").await?;
+// 表不存在则建表；已存在则按列/索引 diff 升级
+executor.create_or_upgrade_table(&table).await?;
 
-    Ok(())
+// 也可以显式二选一
+executor.create_table(&table).await?;
+executor.upgrade_table(&table).await?;
+```
+
+#### 5.2 回读库内表结构
+
+```rust
+// 查 information_schema.columns / 表索引，重建 TableDefine（用于与新版定义 diff）
+let current = executor.query_current_table_define(&table).await?;
+let stmts = DdlDiff::diff_to_ddl(&PostgresDdlDialect, &[current], &[table])?;
+```
+
+#### 5.3 裸 DDL 语句执行（自由函数）
+
+```rust
+use cmx_metadata::execute_ddl_by_ids;
+
+// 逐条执行（多语句）；单条可用 execute_ddl_statement_by_ids（返回 affected rows）
+execute_ddl_by_ids("default", None, &stmts).await?;
+```
+
+注：所有执行入口均通过 `cmx_database::get_default_db_manager()` 全局管理器发送 SQL，executor 本身只持有 `(db_id, txn_id)` 寻址信息。
+
+### 六、国际化（i18n）伴生表
+
+```rust
+use cmx_metadata::i18n::derive_i18n_table_define;
+
+// 表级 i18n=true 且存在 i18n=true 的列时，派生 <table_name>_i18n 伴生表；
+// 伴生表含 ref_id + locale 组合主键与全部 i18n 列；否则返回 None
+if let Some(i18n_table) = derive_i18n_table_define(&table) {
+    executor.create_or_upgrade_table(&i18n_table).await?;
 }
 ```
 
-#### 5.2 执行表定义
+### 七、种子数据
+
+#### 7.1 数据文件格式
+
+`SeedDataConfig.file` 支持 `.json`（对象数组，一行一条）与 `.csv`（首行为列名）：
+
+```json
+[
+  { "code": "FI", "name": "财务域" },
+  { "code": "SCM", "name": "供应链域" }
+]
+```
+
+#### 7.2 装载与执行
 
 ```rust
-use cmx_metadata::{PgTableDefineExecutor, MetadataConfig, load_from_file};
+use cmx_core::model::meta::plugin::SeedDataConfig;
+use cmx_metadata::seed::PgSeedDataExecutor;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db_manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-    let executor = PgTableDefineExecutor::new(db_manager);
+let seed_configs = vec![SeedDataConfig {
+    table_name: "cmx_domain".to_string(),
+    file: "seeddata/cmx_domain.json".to_string(),
+    conflict_columns: vec!["code".to_string()], // ON CONFLICT (code) DO UPDATE
+    enabled: true,
+}];
 
-    let config: MetadataConfig = load_from_file("tables.json")?;
+let executor = PgSeedDataExecutor::with_batch_size("default", None, 500); // 批量插入大小
 
-    // 执行所有表的 DDL
-    for table in &config.tables {
-        executor.execute_ddl_for_table(table).await?;
-    }
-
-    Ok(())
+// 以插件/模块根目录为基准，按表定义批量装载（列名对齐 + upsert），返回汇总
+let summary = executor.execute_all_seed_data(&tables, &seed_configs, Path::new("module_root/")).await;
+if summary.has_errors() {
+    for r in &summary.table_results { /* SeedDataTableResult：成功行数/失败明细 */ }
 }
 ```
 
-#### 5.3 按 ID 执行 DDL
-
-```rust
-use cmx_metadata::{PgTableDefineExecutor, MetadataConfig};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db_manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-    let executor = PgTableDefineExecutor::new(db_manager);
-
-    let config: MetadataConfig = load_from_file("tables.json")?;
-
-    // 只执行指定的表（通过 table_id）
-    let target_ids = vec!["users", "orders"];
-    executor.execute_ddl_by_ids(&config, &target_ids).await?;
-
-    Ok(())
-}
-```
-
-### 六、国际化(i18n)支持
-
-#### 6.1 生成 i18n 伴生表
-
-```rust
-use cmx_metadata::{I18nGenerator, TableDefine, Language};
-
-let generator = I18nGenerator::new();
-
-// 为指定表生成 i18n 伴生表
-let source_table = TableDefine {
-    name: "products".to_string(),
-    columns: vec![
-        ColumnDefine {
-            name: "id".to_string(),
-            column_type: ColumnType::BigInt,
-            nullable: false,
-            default_value: None,
-            is_primary_key: true,
-            is_auto_increment: true,
-        },
-        ColumnDefine {
-            name: "name".to_string(),
-            column_type: ColumnType::Varchar(255),
-            nullable: false,
-            default_value: None,
-            is_primary_key: false,
-            is_auto_increment: false,
-        },
-        ColumnDefine {
-            name: "description".to_string(),
-            column_type: ColumnType::Text,
-            nullable: true,
-            default_value: None,
-            is_primary_key: false,
-            is_auto_increment: false,
-        },
-    ],
-    ..Default::default()
-};
-
-let i18n_tables = generator.generate_i18n_tables(&source_table, &[
-    Language::ZhCn,
-    Language::EnUs,
-])?;
-
-for table in &i18n_tables {
-    println!("Generated table: {}", table.name);
-    // 创建 i18n 表...
-}
-```
-
-#### 6.2 配置语言支持
-
-```rust
-use cmx_metadata::{I18nConfig, Language};
-
-let i18n_config = I18nConfig {
-    default_language: Language::EnUs,
-    supported_languages: vec![
-        Language::ZhCn,
-        Language::EnUs,
-        Language::JaJp,
-    ],
-    fallback_language: Language::EnUs,
-    i18n_table_suffix: "_i18n".to_string(),
-};
-```
-
-### 七、种子数据管理
-
-#### 7.1 加载种子数据配置
-
-```rust
-use cmx_metadata::seed::{SeedLoader, SeedConfig};
-
-let loader = SeedLoader::new("seeds/");
-let seed_config: SeedConfig = loader.load("users.yaml").await?;
-```
-
-#### 7.2 执行种子数据
-
-```rust
-use cmx_metadata::seed::{SeedExecutor, SeedConfig};
-
-let executor = SeedExecutor::new(db_manager);
-
-// 加载种子数据
-let seed_config: SeedConfig = SeedConfig {
-    table_name: "users".to_string(),
-    data: vec![
-        vec!["id", "name", "email"],
-        vec!["1", "张三", "zhangsan@example.com"],
-        vec!["2", "李四", "lisi@example.com"],
-    ],
-    // 或使用 YAML 格式
-    // data_yaml: "...",
-
-    // 冲突处理策略
-    on_conflict: SeedConflictStrategy::Upsert,
-    unique_columns: vec!["email".to_string()],
-};
-
-// 执行种子数据
-executor.execute(&seed_config).await?;
-```
-
-### 八、完整示例
+### 八、完整示例（模块安装视角）
 
 ```rust
 use cmx_metadata::{
-    load_from_file, MetadataConfig,
-    PgDdlGenerator, PgParser, DiffCalculator, DiffToDdl,
-    PgTableDefineExecutor, DatabaseManager, DatabaseManagerConfig,
+    load_table_defines_from_path, TableDefinesConfigManager,
+    PgTableDefineExecutor, TableDefineDbExecutor,
+    seed::PgSeedDataExecutor,
 };
 use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. 加载表定义配置
-    let config: MetadataConfig = load_from_file("tables.json")?;
+    let module_root = Path::new("my_module/");
 
-    // 2. 初始化数据库执行器
-    let db_manager = DatabaseManager::new(DatabaseManagerConfig::default()).await?;
-    let executor = PgTableDefineExecutor::new(db_manager);
+    // 1. 读取配置入口（manifest.table_config_files 指向的 *_config.json）
+    let manager = TableDefinesConfigManager::from_config_paths(&["my_module/config/tables_config.json"])?;
 
-    // 3. 创建 DDL 生成器
-    let generator = PgDdlGenerator::new();
+    // 2. 依赖有序装载全部表定义
+    let tables = manager.load_all_tables(&module_root.join("config"))?;
 
-    // 4. 为每个表生成并执行 DDL
-    for table in &config.tables {
-        println!("Processing table: {}", table.name);
-
-        // 生成建表 DDL
-        let create_ddl = generator.generate_create_table(table)?;
-        println!("DDL: {}", create_ddl);
-
-        // 执行 DDL
-        executor.execute_ddl_for_table(table).await?;
-        println!("Created table: {}", table.name);
+    // 3. 建表/升级
+    let ddl_executor = PgTableDefineExecutor::new("default", None);
+    for table in &tables {
+        ddl_executor.create_or_upgrade_table(table).await?;
     }
 
-    // 5. 生成索引
-    for index in &config.indexes {
-        let index_ddl = generator.generate_create_index(index)?;
-        executor.execute(&index_ddl).await?;
-        println!("Created index: {}", index.name);
-    }
+    // 4. 种子数据（各配置的 seed_data 汇总）
+    let seeds = manager
+        .sorted_configs()?
+        .iter()
+        .flat_map(|c| c.seed_data.clone())
+        .collect::<Vec<_>>();
+    let summary = PgSeedDataExecutor::new("default", None)
+        .execute_all_seed_data(&tables, &seeds, module_root)
+        .await;
+    println!("种子数据：成功 {} 条 / 失败 {} 条", summary.total_success(), summary.total_failed());
 
-    // 6. 生成外键
-    for fk in &config.foreign_keys {
-        let fk_ddl = generator.generate_add_foreign_key(fk)?;
-        executor.execute(&fk_ddl).await?;
-        println!("Created foreign key: {}", fk.name);
-    }
-
-    println!("All metadata operations completed!");
     Ok(())
 }
 ```
 
 ### 九、错误处理
 
+`MetadataError`（thiserror）变体：
+
+| 变体 | 场景 |
+|------|------|
+| `Io(std::io::Error)` | 文件读写错误（自动 From） |
+| `Json(serde_json::Error)` | JSON 解析错误（自动 From） |
+| `DdlGeneration(String)` | DDL 生成失败 |
+| `DdlParse(String)` | DDL 解析失败 |
+| `DdlExecution(String)` | DDL/SQL 执行失败 |
+| `ConfigNotFound(String)` | 配置文件或表项未找到 |
+| `ConfigDependency(String)` | 配置依赖缺失或循环 |
+| `SeedData(String)` | 种子数据装载失败 |
+
 ```rust
 use cmx_metadata::MetadataError;
 
 match result {
-    Ok(_) => println!("Success"),
-    Err(e) => {
-        match e {
-            MetadataError::TableNotFound(name) => {
-                eprintln!("Table not found: {}", name);
-            }
-            MetadataError::ColumnNotFound(table, column) => {
-                eprintln!("Column not found: {}.{}", table, column);
-            }
-            MetadataError::DdlGenerationFailed(msg) => {
-                eprintln!("DDL generation failed: {}", msg);
-            }
-            MetadataError::DdlExecutionFailed(msg) => {
-                eprintln!("DDL execution failed: {}", msg);
-            }
-            MetadataError::ParseError(msg) => {
-                eprintln!("Parse error: {}", msg);
-            }
-            MetadataError::ValidationFailed(msg) => {
-                eprintln!("Validation failed: {}", msg);
-            }
-        }
-    }
+    Err(MetadataError::DdlExecution(msg)) => eprintln!("DDL 执行失败: {}", msg),
+    Err(MetadataError::ConfigDependency(msg)) => eprintln!("配置依赖问题: {}", msg),
+    Err(e) => eprintln!("其他错误: {}", e),
+    _ => {}
 }
 ```
+
+## 与其他 crate 的关系
+
+### 上游依赖
+
+| 依赖 | 用途 |
+|------|------|
+| `cmx-core` | TableDefine / ColumnDefine / FieldType / TableDefinesConfig / SeedDataConfig 等元数据结构 |
+| `cmx-database` | 全局 DatabaseManager（`get_default_db_manager`）执行 SQL |
+| `sea-query` / `sea-query-sqlx` | SQL 构建（种子数据 upsert 等） |
+| `serde` / `serde_json` / `csv` / `regex` / `chrono` / `tokio` / `tracing` | 序列化、CSV 解析、异步、日志 |
+
+### 下游使用方
+
+| 使用方 | 用途 |
+|--------|------|
+| `cmx-plugin` | 插件/模块安装：表定义导入（`table_definition_importer`）→ 建表 → 种子数据 |
+| `cmx-model-deploy` | 模型中心部署的建表与初始化 |
+| `cmx-common-api` | HTTP 侧元数据相关能力 |
+
+## 关键设计决策
+
+### 1. 为什么用 `DdlDialect` / `DdlParser` trait 抽象？
+
+表定义（`TableDefine`）是方言无关的逻辑模型（`FieldType` 为逻辑类型），生成与解析均经 trait 隔离：`PostgresDdlDialect` 是当前唯一完整实现，新增 MySQL/Oracle 等方言只需实现 trait，加载/diff/执行链路无需改动。
+
+### 2. 为什么执行器只持 `(db_id, txn_id)` 而不持有连接？
+
+`PgTableDefineExecutor` / `PgSeedDataExecutor` 均不持有 `DatabaseManager`，而是每次经 `cmx_database::get_default_db_manager()` 全局管理器按 `(db_id, txn_id)` 寻址执行。好处：
+
+- 同一套执行器可在任意数据源（多租户动态数据源）上工作；
+- 传入外部事务 ID 即可无缝加入调用方事务（如模块安装的“建表+种子+台账”原子流程）；
+- 无连接生命周期管理负担，executor 可随意克隆/复用。
+
+### 3. 为什么 diff 的中间表示是 `Vec<TableChange>` 而非直接生成 SQL？
+
+`DdlDiff::diff` 产出结构化变更（建表/删表/加列/改列/索引/注释），`changes_to_ddl` 再按方言渲染为 SQL。两层解耦后：调用方可先审阅/过滤变更（如禁止删列）再生成 DDL，也便于未来接入非 SQL 目标（如生成迁移脚本文件）。
+
+## 常见问题
+
+### Q1: cmx-metadata 与 cmx-model-meta 是什么关系？
+
+**A**: 两者都含「元数据」但层次不同。`cmx-model-meta` 管模型中心的设计期元数据（DCT 字典定义 / DOC 单据定义 / FC 弹性组合，JSON 文件存储、不落库）；`cmx-metadata` 管物理表定义（`TableDefine` JSON → DDL → 建表/迁移/种子数据）。模型部署（cmx-model-deploy）会把模型中心的定义落到数据库时，复用本 crate 的执行器。
+
+### Q2: 表定义结构体为什么不在本 crate 定义？
+
+**A**: `TableDefine` / `ColumnDefine` / `FieldType` / `TableDefinesConfig` / `SeedDataConfig` 定义在 `cmx-core`（`cmx_core::model::meta`），因为插件 SDK、插件运行时（WASM 内）等也需要同一份结构。本 crate 是围绕这些结构的加载/生成/解析/执行器。
+
+### Q3: 建表时如何避免破坏已有数据？
+
+**A**: `create_or_upgrade_table` 先尝试 `create_table`，失败（表已存在）则走 `upgrade_table`——内部经 `query_current_table_define` 回读库内结构后与目标定义 diff，仅生成加列/改列/索引等增量语句，不做删表重建。
+
+### Q4: 种子数据重复执行会重复插入吗？
+
+**A**: 不会。`SeedDataConfig.conflict_columns` 配置冲突检测列后按 PostgreSQL `ON CONFLICT ... DO UPDATE` upsert；`SeedDataSummary` 还提供 `has_warnings()`（库内行数少于文件行数时提示）供上层核对。
+
+### Q5: 如何在事务中执行 DDL？
+
+**A**: `PgTableDefineExecutor::new(db_id, txn_id)` 与 `PgSeedDataExecutor::new(db_id, txn_id)` 的第二个参数接受事务 ID（由 `DatabaseManager` 事务上下文的 guard 提供），所有语句将携带同一 `txn_id` 执行，随外部事务一起提交/回滚。

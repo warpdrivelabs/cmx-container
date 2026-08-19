@@ -2,7 +2,7 @@
 
 > CMX 平台通用 HTTP 类型库，统一 REST API 响应格式、错误处理、OpenAPI 文档参数和树形结构。
 
-[![Version](https://img.shields.io/badge/version-0.1.5-blue.svg)]
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]
 [![Edition](https://img.shields.io/badge-edition-2024-orange.svg)]
 
 ## 快速开始
@@ -29,7 +29,7 @@ let resp = ApiResp::ok_with_pagination(vec![1, 2, 3], 1, 20, 100);
 assert!(resp.pagination.is_some());
 
 // 构建错误响应
-let resp: ApiResp<() > = ApiResp::fail(400, "参数错误");
+let resp: ApiResp<()> = ApiResp::fail(400, "参数错误");
 assert_eq!(resp.code, 400);
 ```
 
@@ -148,13 +148,11 @@ fn find_user(id: u64) -> Result<User> {
 use cmx_api_types::{Error, ErrCode};
 
 let err = Error::not_found("用户不存在");
-assert_eq!(err.code(), ErrCode::NotFound);
 assert_eq!(err.status_code(), axum::http::StatusCode::NOT_FOUND);
 
 // BusinessError 特殊：HTTP 200 但 JSON code = 1
 let err = Error::business_error("余额不足");
 assert_eq!(err.status_code(), axum::http::StatusCode::OK);
-assert_eq!(err.code(), ErrCode::BusinessError);
 ```
 
 #### 3.3 限流错误
@@ -182,10 +180,10 @@ struct UserFilter {
 }
 
 let params: PageParamsDoc<UserFilter> = PageParamsDoc {
-filter: None,
-filters: None,
-current: Some(2),
-size: Some(50),
+    filters: None,
+    current: Some(2),
+    size: Some(50),
+    order_bys: None,
 };
 
 assert_eq!(params.get_page(), 2);
@@ -199,9 +197,8 @@ assert_eq!(params.get_offset(), 50);
 use cmx_api_types::ListParamsDoc;
 
 let params: ListParamsDoc<UserFilter> = ListParamsDoc {
-filter: Some(UserFilter { name: Some("张三".into()) }),
-filters: None,
-order_bys: Some("-create_time".into()),
+    filters: None,
+    order_bys: Some("-create_time".into()),
 };
 
 let list_options = params.to_list_options();

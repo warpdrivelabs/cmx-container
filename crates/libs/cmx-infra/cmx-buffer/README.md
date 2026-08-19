@@ -2,6 +2,10 @@
 
 > 基于 Redis 实现的缓存和分布式锁管理模块，提供高效、安全、易用的缓存访问接口和分布式锁机制。
 
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
+[![Authors](https://img.shields.io/badge/authors-skylake%40pansoft.com-lightgrey.svg)]()
+
 ## 项目简介
 
 cmx-buffer 是 cmx-container 项目的缓存和锁管理层，基于 Redis 实现，支持单机和集群两种模式，提供缓存操作、分布式锁、发布订阅等功能。
@@ -9,10 +13,12 @@ cmx-buffer 是 cmx-container 项目的缓存和锁管理层，基于 Redis 实�
 ## 特性
 
 - **多模式支持**：支持单机和集群两种 Redis 部署模式
-- **高性能连接**：基于 redis-rs 原生异步多路复用连接（无需外部连接池）
-- **分布式锁**：支持原子获取、自动续期、安全释放
-- **发布订阅**：支持心跳保活机制，避免连接静默断开
-- **丰富操作**：支持字符串、集合、有序集合、TTL 等常用 Redis 数据结构
+- **高性能连接**：基于 redis-rs 原生异步多路复用连接（单机 ConnectionManager / 集群 ClusterConnection，均自带断线重连，无需外部连接池）
+- **分布式锁**：支持原子获取、自动续期（看门狗）、安全释放
+- **发布订阅**：GlobalSubscriber 回调式订阅，心跳保活 + 断线自动重连重订阅
+- **丰富操作**：支持字符串、哈希、集合、有序集合、TTL、Lua 脚本等常用 Redis 能力
+- **测试友好**：内置 Mock Redis 后端（HashMap 模拟，支持分布式锁单测）
+- **Wasm host**：BufferHostFunctions 供 WebAssembly 插件经 host 调用缓存能力
 
 ## 快速开始
 
@@ -20,7 +26,7 @@ cmx-buffer 是 cmx-container 项目的缓存和锁管理层，基于 Redis 实�
 
 ```toml
 [dependencies]
-cmx-buffer = "0.1.0"
+cmx-buffer = { workspace = true }
 ```
 
 ### 基础示例
@@ -40,19 +46,25 @@ let value: Option<String> = cache.ops().get("key").await?;
 ```
 cmx-buffer
 ├── src/
-│   ├── lib.rs              # 库入口
+│   ├── lib.rs              # 库入口（create_redis_client 等便捷函数）
 │   ├── cache/              # 缓存操作模块
-│   │   ├── ops.rs          # 缓存操作接口
-│   │   ├── pubsub.rs       # 发布/订阅功能
+│   │   ├── mod.rs          # CacheManager + GlobalCacheManager 全局单例
+│   │   ├── ops.rs          # 缓存操作接口（字符串/序列化）
+│   │   ├── hash.rs         # 哈希表操作（HashOps）
+│   │   ├── pubsub.rs       # 发布/订阅 + GlobalSubscriber / ChannelHandler
+│   │   ├── script.rs       # Lua 脚本操作（ScriptOps）
 │   │   ├── set.rs          # 集合操作
 │   │   ├── sorted_set.rs   # 有序集合操作
 │   │   └── ttl.rs          # TTL 操作
-│   ├── client.rs           # Redis 客户端封装
-│   ├── config.rs           # 配置结构定义
+│   ├── client.rs           # Redis 客户端封装 + GlobalRedisClient / SharedRedisClient
+│   ├── config.rs           # 配置结构定义（RedisConfig / CacheConfig / LockConfig）
 │   ├── error.rs            # 错误类型定义
+│   ├── host_functions.rs   # Wasm host 函数（BufferHostFunctions）
 │   ├── lock/               # 分布式锁模块
-│   │   └── manager.rs      # 锁管理器
-│   └── logging.rs          # 日志记录工具
+│   │   ├── mod.rs          # GlobalLockManager + create_lock_manager 工厂
+│   │   └── manager.rs      # LockManager / LockGuard / LockOptions / LockConfig
+│   ├── logging.rs          # 日志记录工具
+│   └── mock.rs             # 测试用 Mock Redis 后端（MockRedisBackend）
 └── Cargo.toml
 ```
 
@@ -428,87 +440,146 @@ async fn publish_operations(cache: &CacheManager) -> cmx_buffer::Result<()> {
 }
 ```
 
-### 6.2 订阅频道（带心跳）
+### 6.2 订阅频道（回调式）
 
-`Subscriber` 使用独立连接订阅频道，支持心跳保活，避免长时间无消息时连接被断开。
-
-```rust
-use cmx_buffer::{Subscriber, PubSubMessage};
-use std::time::Duration;
-
-async fn subscribe_channels() -> cmx_buffer::Result<()> {
-    let mut subscriber = Subscriber::new(
-        "redis://127.0.0.1:6379",
-        vec!["news".to_string(), "sports".to_string()],
-    ).await?;
-
-    println!("已订阅 news 和 sports 频道");
-
-    // 接收消息
-    while let Some(msg) = subscriber.recv().await {
-        println!("[{}] {}", msg.channel, msg.payload);
-    }
-
-    Ok(())
-}
-```
-
-**使用 SubscriberBuilder 精细控制：**
+`GlobalSubscriber` 使用独立订阅连接（单机 / 集群均支持，RESP3 + push_sender
+统一接收），消息按频道自动路由到注册的处理器；断线时由后台分发任务自动重建
+连接并重新订阅（显式销毁旧连接，确保无重复订阅）。
 
 ```rust
-use cmx_buffer::{SubscriberBuilder, PubSubMessage};
-use std::time::Duration;
+use std::sync::Arc;
+use cmx_buffer::{ChannelHandler, GlobalSubscriber, RedisClient};
 
-async fn advanced_subscribe() -> cmx_buffer::Result<()> {
-    let mut subscriber = SubscriberBuilder::new("redis://127.0.0.1:6379")
-        .channels(vec!["news".to_string()])          // 订阅的频道
-        .patterns(vec!["user:*".to_string()])         // 订阅的模式
-        .heartbeat_interval(Duration::from_secs(20))  // 心跳间隔（秒），默认 30
-        .build()
+async fn subscribe_channels(client: &RedisClient) -> cmx_buffer::Result<()> {
+    let subscriber = GlobalSubscriber::new(client).await?;
+
+    // 方式一：闭包处理器（内部包装为 FnChannelHandler）
+    subscriber
+        .register_channel_fn("news", |channel, payload| {
+            println!("[{}] {}", channel, payload);
+        })
         .await?;
 
-    while let Some(msg) = subscriber.recv().await {
-        println!("[{}] {}", msg.channel, msg.payload);
+    // 方式二：实现 ChannelHandler trait 的结构体处理器
+    struct AlertHandler;
+    #[async_trait::async_trait]
+    impl ChannelHandler for AlertHandler {
+        async fn handle(&self, channel: &str, payload: &str) {
+            println!("[alert:{}] {}", channel, payload);
+        }
     }
+    subscriber
+        .register_channel("alerts", Arc::new(AlertHandler))
+        .await?;
+
+    // 模式订阅（通配符）与取消订阅
+    subscriber.register_pattern("user:*", Arc::new(AlertHandler)).await?;
+    subscriber.unregister_channel("news").await?;
 
     Ok(())
 }
 ```
 
-> **心跳机制**：Subscriber 内部会定时（默认 30 秒）向 Redis 发送 PING 命令保活。如果心跳失败，会自动断开连接并终止消息接收任务。长时间运行的订阅服务建议开启心跳。
+> **心跳与重连**：订阅连接按 `RedisConfig.heartbeat_interval`（默认 30 秒，可用
+> `with_heartbeat_interval` 调整）定时 PING 保活；心跳失败或连接断开时自动重连重订阅，
+> 处理器无需重新注册。长时间运行的订阅服务建议保持心跳开启。
 
-**使用 SharedSubscriber 跨任务共享订阅：**
+**使用 GlobalSubscriberManager 全局单例：**
 
 ```rust
-use cmx_buffer::SharedSubscriber;
+use cmx_buffer::GlobalSubscriberManager;
 
-async fn shared_subscribe() -> cmx_buffer::Result<()> {
-    let subscriber = SharedSubscriber::new(
-        "redis://127.0.0.1:6379",
-        vec!["updates".to_string()],
-    ).await?;
+async fn init_global_subscriber() -> cmx_buffer::Result<()> {
+    // 应用启动时初始化一次（创建 GlobalSubscriber 并自动订阅预订阅频道/模式）
+    GlobalSubscriberManager::initialize().await?;
 
-    // clone 跨任务使用
-    let sub2 = subscriber.clone();
-    tokio::spawn(async move {
-        while let Some(msg) = sub2.recv().await {
-            println!("Task2: [{}] {}", msg.channel, msg.payload);
-        }
-    });
-
-    while let Some(msg) = subscriber.recv().await {
-        println!("Task1: [{}] {}", msg.channel, msg.payload);
-    }
+    // 任意位置获取并注册处理器
+    let subscriber = GlobalSubscriberManager::get();
+    subscriber
+        .register_channel_fn("updates", |ch, msg| {
+            println!("Task: [{}] {}", ch, msg);
+        })
+        .await?;
 
     Ok(())
 }
 ```
 
-## 七、分布式锁
+## 七、哈希与 Lua 脚本操作
+
+### 7.1 哈希操作（HashOps）
+
+通过 `cache.hash()` 获取哈希操作接口，适合存储对象字段级数据：
+
+```rust
+use cmx_buffer::CacheManager;
+use std::collections::HashMap;
+
+async fn hash_operations(cache: &CacheManager) -> cmx_buffer::Result<()> {
+    // 设置/读取单个字段
+    cache.hash().hset("user:1", "name", "Alice").await?;
+    cache.hash().hset("user:1", "email", "alice@example.com").await?;
+    let name: Option<String> = cache.hash().hget("user:1", "name").await?;
+
+    // 仅当字段不存在时设置
+    cache.hash().hsetnx("user:1", "name", "Bob").await?;
+
+    // 读取全部字段 / 仅键 / 仅值 / 字段数
+    let all: HashMap<String, String> = cache.hash().hgetall("user:1").await?;
+    let keys: Vec<String> = cache.hash().hkeys("user:1").await?;
+    let vals: Vec<String> = cache.hash().hvals("user:1").await?;
+    let len: u64 = cache.hash().hlen("user:1").await?;
+
+    // 批量设置 / 批量读取
+    let items: HashMap<&str, &str> = HashMap::from([("city", "BJ"), ("age", "30")]);
+    cache.hash().hmset("user:1", &items).await?;
+    let values: Vec<Option<String>> = cache.hash().hmget("user:1", &["city", "age"]).await?;
+
+    // 字段存在性 / 自增 / 删除字段
+    let exists: bool = cache.hash().hexists("user:1", "age").await?;
+    let age: i64 = cache.hash().hincrby("user:1", "age", 1).await?;
+    let removed: u64 = cache.hash().hdel("user:1", &["city", "age"]).await?;
+
+    Ok(())
+}
+```
+
+### 7.2 Lua 脚本操作（ScriptOps）
+
+通过 `cache.script()` 执行 Lua 脚本，保证多命令原子性（cmx-auth 的 Refresh Rotation
+等即基于此实现）：
+
+```rust
+use cmx_buffer::CacheManager;
+
+async fn script_operations(cache: &CacheManager) -> cmx_buffer::Result<()> {
+    // EVAL：直接执行脚本（keys 与 args 分开传）
+    let script = r"
+        local current = redis.call('GET', KEYS[1])
+        if current then return current end
+        redis.call('SET', KEYS[1], ARGV[1])
+        return ARGV[1]
+    ";
+    let result = cache.script().eval(script, &["lock:key"], &["owner-1"]).await?;
+
+    // SCRIPT LOAD + EVALSHA：预加载脚本，之后用 SHA1 执行，节省带宽
+    let sha1: String = cache.script().script_load(script).await?;
+    let result = cache.script().evalsha(&sha1, &["lock:key"], &["owner-2"]).await?;
+
+    // 检查脚本是否已缓存在服务端
+    let cached: Vec<bool> = cache.script().script_exists(&[&sha1]).await?;
+
+    Ok(())
+}
+```
+
+> 另有 `eval_with_fallback`：优先 `EVALSHA` 执行，遇到 `NOSCRIPT` 错误时自动回退重新 `EVAL`。
+
+## 八、分布式锁
 
 > 详细文档请参阅 [DISTRIBUTED_LOCK.md](./DISTRIBUTED_LOCK.md)
 
-### 7.1 核心概念
+### 8.1 核心概念
 
 cmx-buffer 分布式锁参考 Redisson 设计，提供 RAII 自动释放 + 可选看门狗自动续期机制：
 
@@ -519,7 +590,7 @@ cmx-buffer 分布式锁参考 Redisson 设计，提供 RAII 自动释放 + 可�
 | `try_lock(key)` | 不等待 | `Result<Option<LockGuard>>` | 启用 |
 | `try_lock_with_options(key, opts)` | 可控 | `Result<Option<LockGuard>>` | 由 `lease_time` 控制 |
 
-### 7.2 基础使用
+### 8.2 基础使用
 
 ```rust
 use cmx_buffer::{RedisClient, LockManager, RedisConfig};
@@ -544,13 +615,13 @@ async fn basic_lock_usage() -> cmx_buffer::Result<()> {
 }
 ```
 
-### 7.3 阻塞式获取锁（带重试）
+### 8.3 阻塞式获取锁（带重试）
 
 ```rust
 use cmx_buffer::LockManager;
 
 async fn blocking_lock(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
-    // 自动重试获取锁（默认重试 3 次，间隔 200ms）
+    // 阻塞式获取：失败后按 retry_interval（默认 200ms）无限重试，直到获取成功
     let _guard = lock_manager.lock("my_resource").await?;
     println!("锁获取成功，看门狗自动续期已开启");
 
@@ -562,7 +633,7 @@ async fn blocking_lock(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
 }
 ```
 
-### 7.4 自定义锁选项
+### 8.4 自定义锁选项
 
 ```rust
 use cmx_buffer::{LockManager, LockOptions};
@@ -596,16 +667,18 @@ async fn custom_options(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
 }
 ```
 
-### 7.5 锁配置
+### 8.5 锁配置
 
 ```rust
 use cmx_buffer::{LockConfig, RedisClient, LockManager, RedisConfig};
 
 async fn configure_lock() -> cmx_buffer::Result<()> {
+    // LockConfig 字段：expire_seconds（锁过期秒数，默认 30）/
+    // retry_interval_ms（重试间隔毫秒，默认 200）/
+    // renew_threshold（看门狗续期阈值比例，默认 0.3）
     let lock_config = LockConfig::new()
         .with_expire(60)            // 锁过期时间（秒），默认 30
-        .with_retry_times(5)        // 重试次数，默认 3
-        .with_retry_interval(200);  // 重试间隔（毫秒），默认 200
+        .with_retry_interval(500);  // 重试间隔（毫秒），默认 200
 
     let redis_config = RedisConfig::new("redis://127.0.0.1:6379");
     let client = RedisClient::new(redis_config).await?;
@@ -616,7 +689,7 @@ async fn configure_lock() -> cmx_buffer::Result<()> {
 }
 ```
 
-## 八、错误处理
+## 九、错误处理
 
 ```rust
 use cmx_buffer::{Error, Result};
@@ -633,6 +706,9 @@ async fn handle_errors() -> Result<()> {
                 Error::ConnectionError(msg) => {
                     eprintln!("Redis 连接失败: {}", msg);
                 }
+                Error::PoolError(msg) => {
+                    eprintln!("连接池错误: {}", msg);
+                }
                 Error::TimeoutError(msg) => {
                     eprintln!("操作超时: {}", msg);
                 }
@@ -648,11 +724,17 @@ async fn handle_errors() -> Result<()> {
                 Error::SerializeError(msg) => {
                     eprintln!("序列化失败: {}", msg);
                 }
+                Error::KeyTypeError(msg) => {
+                    eprintln!("键类型不匹配: {}", msg);
+                }
+                Error::ConfigError(msg) => {
+                    eprintln!("配置错误: {}", msg);
+                }
                 Error::PubSubError(msg) => {
                     eprintln!("Pub/Sub 错误: {}", msg);
                 }
-                _ => {
-                    eprintln!("未知错误: {}", e);
+                Error::UnknownError(msg) => {
+                    eprintln!("未知错误: {}", msg);
                 }
             }
         }
@@ -662,7 +744,7 @@ async fn handle_errors() -> Result<()> {
 }
 ```
 
-## 九、全局单例
+## 十、全局单例
 
 cmx-buffer 提供全局单例管理器，方便在应用各处访问缓存和锁：
 
@@ -687,7 +769,7 @@ async fn init_global() -> cmx_buffer::Result<()> {
 }
 ```
 
-## 十、完整示例
+## 十一、完整示例
 
 ```rust
 use cmx_buffer::{

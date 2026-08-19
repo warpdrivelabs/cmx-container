@@ -2,6 +2,15 @@
 
 > WASM 插件演示模块，基于 Extism PDK + cmx-plugin-sdk 开发，用于验证插件功能并提供各种演示函数。
 
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2021-orange.svg)]()
+
+## 当前状态：非活跃 member（已注释）
+
+本 crate 已从 workspace members 中注释掉（见根 `Cargo.toml` 中 `#    "crates/libs/cmx-wasmdemo",`），不参与常规构建；源码保留供参考。因此它自带版本号（`0.1.0`）与 `edition 2021`，不随 workspace 版本（0.1.12 / 2024）走。
+
+**活跃的替代示范**：新插件开发请参考 `crates/libs/cmx-plugin-demo`（workspace 活跃 member，以「订单管理」业务场景、三层分离架构演示 cmx-plugin-sdk 全部宿主能力，含 IAM 权限等新增能力）。
+
 ## 概述
 
 本模块展示了如何开发 WASM 插件并与宿主函数交互，涵盖日志、缓存、数据库、插件调用和服务编排等核心能力。
@@ -16,7 +25,7 @@ cmx-wasmdemo
 │   ├── host_traits.rs      # 宿主功能 trait (HostFunctions)
 │   ├── core.rs             # 插件核心业务逻辑 (PluginCore<H>)
 │   ├── extism_layer.rs     # Extism 导出层 (#[plugin_fn] 入口，需 extism feature)
-│   └── tests/              # 单元测试
+│   └── tests.rs            # 单元测试（MockHost）
 └── Cargo.toml
 ```
 
@@ -136,9 +145,9 @@ cp target/wasm32-wasip1/release/cmx_wasmdemo.wasm /path/to/plugins/cmx-wasmdemo/
 
 ```rust
 pub struct FunctionInput {
-    pub input: serde_json::Value,    // 业务输入
-    pub context: SVRContext,         // 上下文（含 initial_input、step_outputs、txn_id 等）
-    pub binary_data: Option<Vec<u8>>,
+    pub input: serde_json::Value,                        // 业务输入
+    pub context: SVRContext,                             // 上下文（含 initial_input、step_outputs、txn_id 等）
+    pub binary_data: HashMap<String, Vec<u8>>,          // 二进制附件（按名称索引）
 }
 ```
 
@@ -304,9 +313,9 @@ pub struct DeleteData { pub table: String, pub name: String, }
 |----------|--------|------|
 | `cmx:log` | `log_info`, `log_error`, `log_debug`, `log_warn` | 日志记录 |
 | `cmx:database` | `db_query`, `db_execute` | 数据库操作 |
-| `cmx:cache` | `cache_get`, `cache_set`, `cache_delete` | 缓存操作 |
-| `cmx:plugin` | `call_plugin` | 插件间调用 |
-| `cmx:service` | `call_service_by_key` | 服务编排调用 |
+| `cmx:buffer` | `cache_get`, `cache_set`, `cache_delete` | 缓存操作 |
+| `cmx:plugin` | `call_plugin`, `call_service_by_key` | 插件间调用 / 服务编排调用 |
+| `cmx:iam` | `iam_query` | 身份与权限查询（本插件未使用，SDK 已提供） |
 
 ---
 

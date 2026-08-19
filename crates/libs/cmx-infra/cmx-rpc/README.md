@@ -4,6 +4,10 @@
 >
 > 具体领域的 gRPC 皮肤（client / server impl / Bundle）**不在本 crate**——见 `cmx-rpcs/*` 皮肤 crate。
 
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
+[![Authors](https://img.shields.io/badge/authors-skylake%40pansoft.com-lightgrey.svg)]()
+
 ## 三层架构（契约中心化 · 实现归域 · 装配显式）
 
 | 层 | crate | 职责 |

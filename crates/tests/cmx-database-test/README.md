@@ -57,6 +57,28 @@ DATABASE_URL=... INSERT_ROWS=5000 QUERY_SIZES="5000,10000" \
 
 结果写入 `RESULTS.md`（含结论解读）。
 
+## 端到端与内存基准（独立 bin）
+
+除主基准外，本 crate 还有两个独立 bin 与一个 Node 脚本，专测「老 DataSet/JSON 链路 vs Zmc 零拷贝二进制链路」：
+
+| 入口 | 形态 | 测什么 |
+|------|------|--------|
+| `--bin e2e-server` | Rust HTTP 服务 | 同一张 50 列宽表三个端点：`GET /old/json`（sqlx→DataSet 全量物化→列式 JSON）、`GET /sqlx/zmc.bin`（sqlx 流式→逐行 Zmc 编码→msgpack）、`GET /tokio/zmc.bin`（tokio-pg 流式→Zmc→msgpack）；响应头携带取数/编码耗时与活跃/峰值堆内存（`x-t-fetch-ms` / `x-mem-peak-b` 等） |
+| `--bin mem-bench` | Rust 命令行 | 计数分配器包装系统分配器，对 sqlx/DataSet vs tokio-pg/ZmcDataSet 各三阶段（取数/结构/输出）记录真实堆内存足迹 |
+| `e2e_bench.mjs` | Node/V8 脚本 | 前端侧基准：驱动真实前端模块（`cmx-msgpack-decode.js` / `cmx-data-set.js`）测下载、解析、展示构建耗时与 V8 heap 内存，与服务端响应头指标合并出报告 |
+
+```bash
+# 1. 起对比服务器
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/cmx ROWS=100000 PORT=18099 \
+  cargo run -p cmx-database-test --bin e2e-server --release
+
+# 2. 跑前端侧基准（另一终端）
+node --expose-gc e2e_bench.mjs http://127.0.0.1:18099 3   # 3 轮取中位，输出 E2E_RESULTS.md
+
+# 3. 内存对标
+cargo run -p cmx-database-test --bin mem-bench --release   # 产出 MEM_RESULTS.md
+```
+
 ## 模块
 
 - `schema.rs` — 50 列表结构、DDL、列名、占位符
@@ -64,6 +86,8 @@ DATABASE_URL=... INSERT_ROWS=5000 QUERY_SIZES="5000,10000" \
 - `report.rs` — 计时、延迟分位数、对比表格
 - `bench_sqlx.rs` — sqlx 各场景实现
 - `bench_tokio_pg.rs` — tokio-postgres 各场景 + pipelining
+- `e2e_server.rs` — 三链路端到端对比 HTTP 服务（独立 bin）
+- `mem_bench.rs` — 内存对标基准（独立 bin，见上节）
 - `main.rs` — 编排、跑全部场景、出报告
 
 ## 说明

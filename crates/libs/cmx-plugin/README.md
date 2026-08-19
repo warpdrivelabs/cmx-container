@@ -2,9 +2,12 @@
 
 > 插件注册表、ZIP 加载、签名验证、生命周期管理模块。
 
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
+[![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
+
 ## 项目简介
 
-cmx-plugin 是 cmx-container 项目的插件管理层，提供插件的安装、卸载、激活、升级、降级、回滚等生命周期管理功能，以及集群部署、安全验证、审计日志等能力。
+cmx-plugin 是 cmx-container 项目的插件管理层，提供插件的安装、卸载、激活、升级、降级、回滚等生命周期管理功能，以及模块迁移包导入/导出、集群部署、安全验证、审计日志等能力。
 
 核心设计理念：
 - **分层架构**：持久化层（PluginPersistence）→ 运行时层（RuntimeOps）→ 事件发布层（EventPublisher），由编排器（PluginOperationExecutor）统一协调
@@ -49,6 +52,9 @@ async fn init() {
 | 一致性校验补偿 | DB vs Registry vs 本地文件三层状态对比，自动补偿差异 |
 | 审计日志 | 操作审计记录，支持按插件/操作/时间范围过滤 |
 | 插件市场 | 插件发布、搜索、下载、评分统计 |
+| 模块包安装/导出 | `ModuleInstallService`（模块迁移包导入：版本校验→upsert cmx_module→资源安装→逐插件安装）/ `ModuleExportService`（聚合 zip 导出） |
+| 远程定义导入 | `remote_importers`（form/menu/permission/table 四类，经 cmx-resource-rpc gRPC 传输） |
+| 插件间调用宿主函数 | `PluginHostFunctions`（深度限制/循环检测/超时三层防护） |
 
 ## 模块结构
 
@@ -56,6 +62,7 @@ async fn init() {
 cmx-plugin
 ├── core/                   # 核心模块
 │   ├── manager.rs          # 插件管理器（核心协调器）
+│   ├── factory.rs          # PluginManagerBuilder（依赖注入构造器）
 │   ├── registry.rs         # 插件注册表（内存级）
 │   └── context.rs          # 插件上下文
 ├── domain/                 # 领域模型
@@ -64,7 +71,7 @@ cmx-plugin
 │   └── dependency.rs       # 依赖检查模型
 ├── service/                # 服务层
 │   ├── executor.rs         # 插件操作编排器（统一编排持久化→运行时→事件）
-│   ├── persistence.rs      # 持久化操作层（仅 DB + 文件系统）
+│   ├── persistence.rs      # 持久化操作层（仅 DB + 文件系统；建表 DDL 已迁至模块安装流程）
 │   ├── runtime_ops.rs      # 运行时操作层（仅内存注册/卸载 + 文件同步）
 │   ├── event_publisher.rs  # 统一事件发布器（GlobalEventBus + Redis）
 │   ├── install.rs          # 安装服务
@@ -72,6 +79,12 @@ cmx-plugin
 │   ├── downgrade.rs        # 降级服务
 │   ├── uninstall.rs        # 卸载服务
 │   ├── deploy.rs           # 部署服务（智能安装/升级/覆盖安装）
+│   ├── module_install.rs   # 模块包安装（ModuleInstallService，迁移包导入编排）
+│   ├── module_export.rs    # 模块包导出（ModuleExportService，聚合 zip 导出）
+│   ├── table_definition_importer.rs  # 表定义导入器（模块 metadata）
+│   ├── remote_importers/   # 远程定义导入器（form/menu/permission/table）
+│   ├── api_doc_generator.rs # API 文档生成
+│   ├── control.rs          # 控制服务（预留，导出暂未启用）
 │   ├── plugin_sync.rs      # Redis 通知处理器（跨实例运行时同步）
 │   ├── reconciliation.rs   # 定时一致性校验任务
 │   ├── initializer.rs      # 启动时插件同步
@@ -80,12 +93,12 @@ cmx-plugin
 │   ├── data_parser.rs      # 数据解析
 │   ├── service_parser.rs   # 服务定义解析
 │   ├── record_builder.rs   # 数据库记录构建
-│   └── utils.rs            # 工具函数（DDL 执行等）
+│   └── utils.rs            # 工具函数（execute_seed_data 等）
 ├── cluster/                # 集群模块
 │   ├── node.rs             # 节点管理器
 │   └── notification.rs     # Redis Pub/Sub 通知器
 ├── infrastructure/         # 基础设施层
-│   ├── database/           # 数据库（PluginRepository、VersionHistory、SchemaManager）
+│   ├── database/           # 数据库（PluginRepository、VersionHistory、SchemaManager、表元数据）
 │   ├── cache/              # 多层缓存（Memory + Redis）
 │   ├── storage/            # 文件存储 + 备份管理
 │   └── messaging/          # 消息
@@ -93,7 +106,6 @@ cmx-plugin
 │   ├── validator.rs        # 安全验证器
 │   └── signature.rs        # 签名验证器
 ├── runtime/                # 运行时模块
-│   ├── activation.rs       # 激活管理器
 │   └── service_registry.rs # 服务注册表
 ├── config/                 # 配置模块
 │   ├── settings.rs         # PluginManagerSettings 等
@@ -112,6 +124,7 @@ cmx-plugin
 │   ├── repository.rs       # 市场数据仓库
 │   ├── service.rs          # 市场服务
 │   └── stats.rs            # 统计服务
+├── center_client/          # 服务中心客户端（精简版：config / packer / types）
 ├── common/                 # 通用工具
 │   ├── definition.rs       # 插件定义解析
 │   ├── dependency.rs       # 依赖检查工具
@@ -119,9 +132,11 @@ cmx-plugin
 │   ├── scanner.rs          # 本地插件扫描
 │   ├── service.rs          # 服务工具
 │   └── source_utils.rs     # 来源构建工具
+├── bin/                    # 辅助二进制
+│   └── migrate_to_module_packages.rs  # 旧插件数据迁移到模块包
 ├── error.rs                # 错误类型定义
-├── host_functions.rs       # 插件宿主函数
-└── traits_impl.rs          # Trait 实现
+├── host_functions.rs       # 插件间调用宿主函数（PluginHostFunctions）
+└── traits_impl.rs          # Trait 实现（PluginManager → cmx_traits::plugin::PluginQuery）
 ```
 
 ## 核心类型
@@ -158,6 +173,18 @@ cmx-plugin
 ### EventPublisher
 
 统一事件发布器，封装 GlobalEventBus（进程内事件）和 Redis PluginNotifier（跨实例通知）。
+
+### ModuleInstallService / ModuleExportService
+
+模块迁移包的导入/导出对称服务：
+- `ModuleInstallService`（`service::module_install`）：解压模块包并解析 `module.manifest.json` → 版本校验（从 `cmx_module_current_version` 读当前版本，避免旧覆盖新）→ upsert `cmx_module` → 版本登记（`record_import`）→ 安装模块级资源（metadata/permissions/forms/menus）→ 遍历插件子包复用 `InstallService::install` 逐个安装；来源支持 `ModulePackageSource::Bytes`（API 上传）与 `Local`（本地 zip）
+- `ModuleExportService`（`service::module_export`）：从数据库 + 文件系统聚合模块数据导出为单一 zip（forms/menus/metadata/permissions/plugins 五类目录），与导入流程严格对称
+
+注：Module 实体的常规 CRUD handler 在 HTTP 皮肤 crate `cmx-biz-api`，模块迁移包的 HTTP 端点在 `cmx-plugin-api`（分家避免循环依赖）。
+
+### PluginHostFunctions
+
+WASM 插件间调用宿主函数（`host_functions.rs`），通过 GlobalRuntime 实现跨插件服务调用，自带三层防护：调用深度限制（默认 8 层）、循环检测、Extism 原生超时（默认 30 秒）。
 
 ## 使用指南
 
@@ -242,7 +269,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         build_type: Some("release".to_string()),
         publish_to_marketplace: false,
         app_id: Some("my-app".to_string()),
-        send_event: true,
         marketplace_source_id: None,
         marketplace_publish_info: None,
     };
@@ -273,7 +299,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         build_type: None,
         publish_to_marketplace: false,
         app_id: None,
-        send_event: true,
         marketplace_source_id: None,
         marketplace_publish_info: None,
     };
@@ -302,12 +327,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             path: PathBuf::from("/tmp/my-plugin.zip"),
         },
         db_id: None,
-        auto_activate: false,
         version_constraint: None,
         build_type: Some("release".to_string()),
         marketplace_source_id: None,
         app_id: Some("my-app".to_string()),
-        send_event: true,
     };
 
     let result = manager.install(request).await?;
@@ -328,17 +351,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let request = UpgradeRequest {
         plugin_id: "my-plugin".to_string(),
-        source: Some(PluginSource::Remote {
+        source: PluginSource::Remote {
             url: "https://plugins.example.com/my-plugin-2.0.0.zip".to_string(),
             checksum: None,
-        }),
+        },
         version_constraint: None,
         force: false,
         operator: Some("admin".to_string()),
         build_type: None,
         marketplace_source_id: None,
         app_id: Some("my-app".to_string()),
-        send_event: true,
     };
 
     let result = manager.upgrade(request).await?;
@@ -363,7 +385,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         source: None,
         operator: None,
         app_id: Some("my-app".to_string()),
-        send_event: true,
     };
 
     let result = manager.downgrade(request).await?;
@@ -387,7 +408,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         force: false,
         operator: "admin".to_string(),
         app_id: Some("my-app".to_string()),
-        send_event: true,
     };
 
     manager.uninstall(request).await?;
@@ -581,7 +601,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         build_type: Some("release".to_string()),
         publish_to_marketplace: false,
         app_id: Some("my-app".to_string()),
-        send_event: true,
         marketplace_source_id: None,
         marketplace_publish_info: None,
     };
@@ -615,6 +634,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 **A**: 通过三层机制保证：1) Redis Pub/Sub 实时通知（毫秒级）；2) 定时一致性校验任务补偿差异（秒级）；3) 启动时全量同步（分钟级，仅一次）。所有操作天然幂等，无需分布式锁或请求去重。
 
-### Q: DDL 执行如何保证安全？
+### Q: DDL 执行在哪里进行？
 
-**A**: DDL 操作通过 `execute_ddl_with_lock` 使用分布式锁保护，确保同一插件的 DDL 不会并发执行。DDL 在事务内执行，与 DML 操作原子提交。
+**A**: 建表 DDL 已迁移到模块安装流程（`ModuleInstallService` 安装模块级资源时经 `table_definition_importer` 处理模块 metadata）；插件安装（`PluginPersistence`）仅执行插件包内的 seed data 初始化（`execute_seed_data`）。

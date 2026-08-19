@@ -1,10 +1,30 @@
-# cmx-api
+# cmx-common-api
 
-> 提供 Web API 开发所需的基础组件，包括错误处理、响应封装、中间件和通用 CRUD 框架。
+> 通用 API 层与装配中枢（原 `cmx-api` 重命名）：re-export `cmx-api-core` 共享骨架，保留 service / debug / portal / dev 四组 handler 与路由聚合、OpenAPI 文档。
+
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]
+[![Edition](https://img.shields.io/badge-edition-2024-orange.svg)]
 
 ## 项目简介
 
-cmx-api 是 cmx-container 项目的 HTTP API 层，基于 Axum 框架构建，提供 RESTful API 路由、请求/响应处理、数据验证和 OpenAPI 文档生成等功能。
+`cmx-common-api` 是 `cmx-apis/` crate 家族中的「跨域通用 + 装配中枢」成员。2026-07/08 的
+「cmx-api 依赖与 handler 重构」把原大 `cmx-api` 拆为皮肤 crate 族：共享骨架下沉
+`cmx-api-core`，各业务域 handler 迁出到自己的 `cmx-*-api` crate；本 crate 保留跨域通用
+handler、路由聚合入口与 OpenAPI 文档切片，并通过 re-export 保持旧 `cmx_api::xxx` 路径兼容
+（`cmx_common_api::CmxAppState`、`cmx_common_api::rest::handler::create` 等仍可用）。
+
+## cmx-apis crate 家族
+
+| crate | 职责 |
+|-------|------|
+| `cmx-api-core` | 共享骨架：CmxAppState / ModuleRoutes / rest / middleware / CRUD 宏 |
+| `cmx-api-types` | 通用类型：ApiResp / Error / `*Doc` 参数 / TreeNode（叶子 crate） |
+| `cmx-common-api`（本 crate） | 跨域通用 handler（service/debug/portal/dev）+ 路由聚合 + OpenAPI |
+| `cmx-biz-api` | 业务域：Domain / Application / Menu / SysDatasource / Form / Module CRUD |
+| `cmx-iam-api` | 认证与 IAM：Auth / User / Role / Permission / API Key / OAuth2 |
+| `cmx-plugin-api` | 插件：插件管理 / 表元数据 / 插件市场 / Module 包 |
+| `cmx-storage-api` | 文件存储 |
+| `cmx-ai-api` | AI 中继（薄 HTTP 皮肤，委托 `cmx-ai` crate） |
 
 ## 快速开始
 
@@ -12,642 +32,506 @@ cmx-api 是 cmx-container 项目的 HTTP API 层，基于 Axum 框架构建，�
 
 ```toml
 [dependencies]
-cmx-api = "0.1.0"
+cmx-common-api = { workspace = true }
 ```
 
 ### 核心示例
 
 ```rust
-use cmx_api::{ApiResp, CmxAppState, routes};
-use axum::{Router, routing::get};
+use cmx_common_api::{routes::routes_impl::{api_routes, swagger_routes}, CmxAppState};
 
-let app = Router::new()
-    .route("/api/health", get(|| async { ApiResp::success("OK") }))
-    .with_state(app_state);
+// 通用路由（service/debug/portal + /health）
+let router = api_routes().with_state(CmxAppState::default());
 
-println!("{}", ApiResp::success("hello"));
+// Swagger UI（挂载后访问 /swagger-ui/）
+let swagger = swagger_routes();
 ```
 
 ## 核心功能与特性
 
 | 功能 | 说明 |
 |------|------|
-| REST 协议层 | 提供标准 REST 接口封装 |
-| CRUD 框架 | 通用增删改查路由自动注册 |
-| 业务模型 Handler | 自定义 HTTP Handler 实现 |
-| 中间件 | 请求追踪、CORS、Cookie 管理等 |
-| 错误处理 | 统一错误类型和响应封装 |
-| OpenAPI 文档 | 自动生成 Swagger UI |
+| 共享骨架 re-export | `CmxAppState` / `ModuleRoutes` / `rest` / `middleware` / CRUD 宏（来自 cmx-api-core） |
+| 通用类型 re-export | `ApiResp` / `Error` / `Pagination` / `*Doc` / `TreeNode`（来自 cmx-api-types） |
+| service handler | WASM 插件服务调用与元数据管理（`/api/service/*`） |
+| debug handler | 插件调试会话查询（`/api/debug/*`） |
+| portal handler | 门户/设计器业务（迁移自 Node 后端，40+ 端点） |
+| dev handler | 开发脚手架（`dev-tools` feature，仅单节点 dev） |
+| 路由聚合 | `api_routes()` 统一注册 + `swagger_routes()` + `/health` 健康检查 |
+| OpenAPI 文档 | `ApiDoc`（service）+ `PortalApiDoc`（portal 切片） |
 
 ## 模块结构
 
 ```
-cmx-api
+cmx-common-api
 ├── src/
-│   ├── lib.rs              # 库入口
-│   ├── api_response.rs     # API 响应封装
-│   ├── app_state.rs        # 应用状态管理
-│   ├── error.rs            # 错误类型定义
-│   ├── middleware/         # 中间件模块
-│   │   ├── mod.rs
-│   │   ├── mw_context.rs
-│   │   ├── mw_cors.rs
-│   │   ├── mw_rate_limit.rs
-│   │   ├── mw_security_headers.rs
-│   │   └── mw_trace.rs
-│   ├── handlers/           # 业务模型 Handler
-│   │   ├── application/
-│   │   ├── debug/
-│   │   ├── dev/
-│   │   ├── domain/
-│   │   ├── module/
-│   │   ├── plugin/
-│   │   ├── service/
-│   │   ├── sys_datasource/
-│   │   └── table_metadata/
-│   ├── rest/               # REST 协议层
-│   │   ├── handler.rs
-│   │   ├── header_parse.rs
-│   │   ├── mod.rs
-│   │   ├── param_doc.rs
-│   │   └── tree.rs
-│   ├── routes/             # 路由注册
-│   │   ├── crud_handlers.rs
-│   │   ├── macros.rs
-│   │   ├── mod.rs
-│   │   ├── routes_impl.rs
-│   │   └── traits.rs
-│   └── openapi.rs          # OpenAPI 文档
-└── Cargo.toml
+│   ├── lib.rs              # 库入口：re-export cmx-api-core 骨架 + cmx-api-types 类型
+│   ├── handlers/           # 剩余跨域通用 handler
+│   │   ├── service/        # 服务调用（handler.rs + models.rs）
+│   │   ├── debug/          # 插件调试会话（handler.rs + response.rs；request.rs 为未挂载遗留文件）
+│   │   ├── portal/         # 门户/设计器业务（ai/data/launcher/legacy/meta/notify/pages/registry）
+│   │   └── dev/            # 开发脚手架（#[cfg(feature = "dev-tools")]）
+│   ├── routes/
+│   │   ├── mod.rs          # re-export cmx-api-core 的 routes::{macros, traits}
+│   │   └── routes_impl.rs  # api_routes() 聚合 + swagger_routes() + health_check
+│   └── openapi.rs          # ApiDoc + PortalApiDoc
+└── Cargo.toml              # feature: dev-tools（默认关闭）
 ```
 
 ## 主要模块说明
 
-### `rest`
+### `handlers` —— 通用业务 Handler
 
-REST 协议层模块，提供 CRUD 操作接口：
-- `create`: 创建资源
-- `create_many`: 批量创建
-- `get_by_id`: 根据 ID 获取
-- `update`: 更新资源
-- `update_many`: 批量更新
-- `delete`: 删除资源
-- `list`: 列表查询
-- `page`: 分页查询
+- `service`：WASM 插件服务调用 `/api/service/*`（详见「五、service 模块端点」）。
+- `debug`：插件调试会话状态查询（断点/上下文/调用栈）：
 
-### `middleware`
+  | 方法 | 路径 | 作用 |
+  |------|------|------|
+  | GET | `/api/debug/current` | 查询当前用户的插件调试会话状态 |
+- `portal`：门户/设计器业务（迁移自 CMXPortalManager / CMXHTMLDesigner 的 Node 后端），
+  路由路径与 Node 后端保持一致，响应统一 `ApiResp` 信封（详见「六、portal 模块端点」）。
+- `dev`：开发脚手架（项目模板生成，本地 fs 写入/解压 zip，违反集群无状态约束，仅
+  `dev-tools` feature 启用时注册并打印告警）。启用方式：
 
-提供以下中间件：
-- `mw_context_resolver`: 请求上下文解析
-- `cors_layer`: CORS 跨域支持
-- `mw_trace`: 请求追踪
-- `mw_rate_limit`: 限流
-- `mw_security_headers`: 安全响应头
+  ```toml
+  [dependencies]
+  cmx-common-api = { workspace = true, features = ["dev-tools"] }
+  ```
 
-### `handlers`
+  启用后启动时打印告警：`dev-tools feature 已启用：开发脚手架端点暴露，仅限单节点 dev，
+  不可水平扩展！`。`legacy` 子模块为门户旧接口兼容层。
 
-业务 Handler 模块，包含各业务域的 HTTP 处理逻辑。
+### `routes` —— 路由聚合
+
+`routes_impl::api_routes()` 依次 merge service / debug / portal（及 dev-tools 下的 dev）
+并挂 `/health` 健康检查（无需认证，供 Docker HEALTHCHECK 与负载均衡器使用）；
+`swagger_routes()` 挂 Swagger UI；`health_check()` 为独立可复用的健康检查 handler。
+
+### `openapi` —— 文档切片
+
+- `ApiDoc`：service 域路径与 schemas（FunctionCallRequest/Response、ServiceExecute* 等）。
+- `PortalApiDoc`：门户切片，不带 `info`（切片惯例），统一 tag「门户接口」，由
+  cmx-platform-app `OpenApi::merge()` 合并进主文档；独立门户微服务（cmx-portalservice）
+  复用同一装配核，Swagger 同样可见。
 
 ## 使用指南
 
 ### 一、应用状态管理
 
-#### 1.1 定义应用状态
+`CmxAppState` 定义于 `cmx-api-core`（本 crate re-export），通过 builder 风格注入各服务
+trait 对象：
 
 ```rust
-use cmx_api::{CmxAppState, AppStateInner};
+use cmx_common_api::CmxAppState;
 use std::sync::Arc;
 
-#[derive(Clone)]
-struct MyService {
-    db: DatabasePool,
-    cache: RedisClient,
-}
-
-type MyAppState = CmxAppState<MyService>;
-
-fn create_app_state() -> MyAppState {
-    let inner = AppStateInner {
-        service: Arc::new(MyService {
-            db: create_db_pool(),
-            cache: create_redis_client(),
-        }),
-        // 其他状态字段...
-    };
-
-    CmxAppState::new(inner)
-}
+let state = CmxAppState::new()
+    .with_plugin_query(plugin_manager)       // Arc<dyn PluginQuery>
+    .with_runtime_invoker(wasm_engine)       // Arc<dyn RuntimeInvoker>
+    .with_service_query(service_query)       // Arc<dyn ServiceQuery>
+    .with_service_storage(service_storage)   // Arc<dyn ServiceStorage>
+    .with_storage_service(storage)           // Arc<dyn StorageService>
+    .with_auth_service(auth)                 // Arc<dyn AuthService>
+    .with_iam(iam_state)                     // Arc<IamState>
+    .with_resource_data_importer(importer)   // Arc<dyn ResourceDataImporter>
+    .with_definition_importers(bundle);      // Arc<DefinitionImporterBundle>
 ```
 
-#### 1.2 在 Handler 中访问状态
+`app_id` 字段在 `new()` 时从 ConfigManager 读取（应用隔离标识，初始化后不可变）。
+
+`CmxAppState` 内部持有（均为 `Option`，经对应 `with_*` 注入）：
+
+| 字段 | 类型 | 用途 |
+|------|------|------|
+| `app_id` | `String` | 应用隔离标识（多租户/多应用） |
+| `plugin_query` | `Arc<dyn PluginQuery>` | 插件查询 |
+| `runtime_invoker` | `Arc<dyn RuntimeInvoker>` | WASM 运行时调用 |
+| `service_query` | `Arc<dyn ServiceQuery>` | 服务查询 |
+| `service_storage` | `Arc<dyn ServiceStorage>` | 服务存储 |
+| `storage_service` | `Arc<dyn StorageService>` | 文件存储 |
+| `auth_service` | `Arc<dyn AuthService>` | 认证 |
+| `iam` | `Arc<IamState>` | IAM 服务状态 |
+| `resource_data_importer` | `Arc<dyn ResourceDataImporter>` | 资源数据导入 |
+| `definition_importers` | `Arc<DefinitionImporterBundle>` | 模块资源定义导入器集合 |
+
+在 handler 中经 `State(state): State<CmxAppState>` 提取器访问。
+
+### 二、统一响应与错误
+
+响应与错误类型来自 `cmx-api-types`（本 crate re-export），详见其 README：
 
 ```rust
-use axum::{extract::State, http::StatusCode};
+use cmx_common_api::{ApiResp, Error};
 
-async fn get_handler(
-    State(state): State<MyAppState>,
-    Path(id): Path<i64>,
-) -> Result<Json<MyEntity>, StatusCode> {
-    let entity = state.service.db.find_by_id(id)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+let resp = ApiResp::ok(user_list);                         // {"code":0,"msg":"success","data":[...]}
+let resp = ApiResp::ok_with_pagination(list, 1, 20, 100);  // 附分页元信息
+let resp: ApiResp<()> = ApiResp::fail(400, "参数错误");
 
-    match entity {
-        Some(e) => Ok(Json(e)),
-        None => Err(StatusCode::NOT_FOUND),
-    }
-}
-```
-
-### 二、API 响应封装
-
-#### 2.1 成功响应
-
-```rust
-use cmx_api::ApiResp;
-use serde_json::Value;
-
-// 方式一：直接返回成功
-ApiResp::success("操作成功")
-
-// 方式二：返回带数据
-ApiResp::success(data)
-
-// 方式三：返回自定义消息
-ApiResp::success_with_message(data, "查询成功")
-
-// 响应格式
-// {
-//     "code": 200,
-//     "message": "success",
-//     "data": { ... }
-// }
-```
-
-#### 2.2 分页响应
-
-```rust
-use cmx_api::ApiResp;
-
-// 返回分页数据
-ApiResp::page(
-    data,           // 数据列表
-    total,          // 总记录数
-    page,           // 当前页码
-    page_size,      // 每页大小
-)
-
-// 响应格式
-// {
-//     "code": 200,
-//     "message": "success",
-//     "data": {
-//         "list": [...],
-//         "pagination": {
-//             "total": 100,
-//             "page": 1,
-//             "page_size": 10,
-//             "total_pages": 10
-//         }
-//     }
-// }
-```
-
-#### 2.3 错误响应
-
-```rust
-use cmx_api::{ApiResp, ApiError};
-
-// 方式一：使用 ApiError
-ApiResp::error(ApiError::not_found("资源不存在"))
-ApiResp::error(ApiError::bad_request("参数错误"))
-ApiResp::error(ApiError::unauthorized("未授权"))
-ApiResp::error(ApiError::internal_error("服务器内部错误"))
-
-// 方式二：自定义错误码和消息
-ApiResp::error_with_code(400, "VALIDATION_ERROR", "字段验证失败")
-
-// 响应格式
-// {
-//     "code": 404,
-//     "message": "资源不存在",
-//     "error": {
-//         "code": "NOT_FOUND",
-//         "details": null
-//     }
-// }
-```
-
-### 三、CRUD 路由注册
-
-#### 3.1 定义 Entity Handler
-
-```rust
-use cmx_api::{EntityHandler, CrudOperations};
-use async_trait::async_trait;
-use serde::{Serialize, Deserialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MyEntity {
-    pub id: i64,
-    pub name: String,
-    pub created_at: DateTime<Utc>,
-}
-
-pub struct MyEntityHandler;
-
-#[async_trait]
-impl EntityHandler for MyEntityHandler {
-    type Entity = MyEntity;
-    type CreateRequest = CreateMyEntity;
-    type UpdateRequest = UpdateMyEntity;
-    type ListQuery = ListQuery;
-
-    async fn create(&self, data: CreateMyEntity) -> Result<Self::Entity, ApiError> {
-        // 创建逻辑
-    }
-
-    async fn get_by_id(&self, id: i64) -> Result<Option<Self::Entity>, ApiError> {
-        // 查询逻辑
-    }
-
-    async fn update(&self, id: i64, data: UpdateMyEntity) -> Result<Self::Entity, ApiError> {
-        // 更新逻辑
-    }
-
-    async fn delete(&self, id: i64) -> Result<(), ApiError> {
-        // 删除逻辑
-    }
-
-    async fn list(&self, query: ListQuery) -> Result<Vec<Self::Entity>, ApiError> {
-        // 列表查询逻辑
-    }
-
-    async fn page(&self, query: ListQuery) -> Result<(Vec<Self::Entity>, i64), ApiError> {
-        // 分页查询逻辑，返回 (数据列表, 总数)
-    }
+// Error 实现 IntoResponse，可直接在 handler 返回 Result<T> 中使用
+fn find_user(id: &str) -> Result<User> {
+    /* ... */ Err(Error::not_found("用户不存在"))
 }
 ```
 
-#### 3.2 注册 CRUD 路由
+常用错误构造器与 HTTP 状态码映射：
+
+| 构造器 / 变体 | 业务码 | HTTP 状态码 |
+|---------------|--------|-------------|
+| `Error::business_error` | 1 | 200 |
+| `Error::bad_request` | 400 | 400 |
+| `Error::unauthorized` | 401 | 401 |
+| `Error::forbidden` | 403 | 403 |
+| `Error::not_found` | 404 | 404 |
+| `Error::conflict`（乐观锁） | 409 | 409 |
+| `Error::validation_error` | 422 | 422 |
+| `Error::rate_limit_exceeded` | 429 | 429 |
+| `Error::internal_error` | 500 | 500 |
+| `Error::service_unavailable` | 503 | 503 |
+| `Error::Timeout` | 504 | 504 |
+
+### 三、路由聚合与平台装配
+
+各域 handler 实现 `ModuleRoutes` trait（定义于 cmx-api-core，本 crate re-export）：
 
 ```rust
-use cmx_api::{register_crud_routes, CmxAppState};
-
-fn main() {
-    let state = create_app_state();
-    let handler = MyEntityHandler;
-
-    let app = register_crud_routes!(
-        Router::new(),
-        "/api/entities",
-        handler,
-        state
-    );
-}
-
-// 生成的路由：
-// POST   /api/entities          - create
-// POST   /api/entities/batch    - create_many
-// GET    /api/entities/:id       - get_by_id
-// PUT    /api/entities/:id       - update
-// PUT    /api/entities/batch     - update_many
-// DELETE /api/entities/:id       - delete
-// GET    /api/entities          - list
-// GET    /api/entities/page     - page
-```
-
-### 四、自定义业务路由
-
-#### 4.1 注册业务 Handler
-
-```rust
-use axum::{routing::post, Router};
-
-async fn custom_handler(
-    State(state): State<MyAppState>,
-    Json(payload): Json<CustomRequest>,
-) -> Result<Json<ApiResp<CustomResponse>>, StatusCode> {
-    // 业务逻辑
-    let result = process_custom业务(state.service, payload).await?;
-
-    Ok(Json(ApiResp::success(result)))
-}
-
-let app = Router::new()
-    .route("/api/entities", post(custom_handler))
-    .with_state(state);
-```
-
-#### 4.2 路由分组
-
-```rust
-use axum::{routing::get, Router};
-
-fn create_entity_routes<S>(service: Arc<S>) -> Router
-where
-    S: MyService + Clone + Send + Sync + 'static,
-{
-    Router::new()
-        .route("/", get(list_entities).post(create_entity))
-        .route("/:id", get(get_entity).put(update_entity).delete(delete_entity))
-        .route("/:id/details", get(get_entity_details))
-        .route("/export", post(export_entities))
-        .with_state(service)
+pub trait ModuleRoutes {
+    fn routes(self) -> Router<CmxAppState>;  // 注册该模块的路由
+    fn prefix() -> &'static str;             // 模块前缀路径
+    fn module_name(&self) -> &'static str;   // 模块名称（日志/调试）
 }
 ```
 
-### 五、中间件使用
-
-#### 5.1 启用中间件
+装配层（cmx-platform-app）逐个 `merge`：
 
 ```rust
-use cmx_api::middleware::{
-    mw_context_resolver, cors_layer, mw_trace, mw_rate_limit,
+use cmx_common_api::routes::routes_impl::api_routes;
+use cmx_common_api::routes::traits::ModuleRoutes;
+use cmx_ai_api::AiModule;
+use cmx_iam_api::{AuthModule, IamModule};
+// ... 其余域 Module
+
+let router = api_routes()       // service + debug + portal + /health（本 crate）
+    .merge(AuthModule.routes()) // 认证（cmx-iam-api）
+    .merge(IamModule.routes())  // IAM（cmx-iam-api）
+    .merge(AiModule.routes())   // AI 中继（cmx-ai-api）
+    /* Doc / Dct / Mdm / Job / Model / Code / Storage / Domain ... */
+    ;
+```
+
+实际装配见 `cmx-platform-app/src/routes.rs`（平台主应用）与 `cmx-portalservice`
+（独立门户微服务，复用 portal 泛型路由）。
+
+`api_routes()` 内部实现（源码即迁移记录，已迁出的域以注释留痕）：
+
+```rust
+pub fn api_routes() -> Router<CmxAppState> {
+    let router = Router::new();
+    // 认证（AuthModule）+ IAM（IamModule）路由已迁至 cmx-iam-api，由 cmx-platform-app 合并。
+    // Domain/Application/Menu/SysDatasource/Form 路由已迁至 cmx-biz-api，由 platform-app 合并。
+    // 插件管理 / 表元数据 / 插件市场 路由已迁至 cmx-plugin-api。
+    // 文件存储路由（StorageModule）已迁至 cmx-storage-api。
+    // AI 中继路由（AiModule）已迁至 cmx-ai-api。
+    let router = router.merge(service::ServiceModule.routes());
+    let router = router.merge(debug::DebugModule.routes());
+    let router = router.merge(portal::PortalModule.routes());
+    // dev-tools feature 启用时才注册 dev 路由（生产禁用）
+    router.route("/health", get(health_check))
+}
+```
+
+### 四、通用 CRUD
+
+#### 4.1 rest 通用 handler（cmx-api-core，本 crate re-export）
+
+`cmx_common_api::rest::handler` 提供 8 个泛型 handler，基于 `DbBmc` + modql Filter 工作：
+
+| handler | 说明 |
+|---------|------|
+| `create` / `create_many` | 创建 / 批量创建 |
+| `get_by_id` | 按 ID 获取（唯一 GET） |
+| `update` / `update_many` | 更新 / 批量更新 |
+| `delete` | 删除 |
+| `list` / `page` | 列表 / 分页查询 |
+
+按 AGENTS.md §八硬约束：除 `get_by_id`（GET）外一律 POST + application/json，
+每个操作独立路径，禁止共享路径。
+
+#### 4.2 register_crud_routes! 宏
+
+按 `(router, bmc, filter, entity_create, entity_update, prefix)` 六参签名注册 8 条 CRUD 路由：
+
+```rust
+use cmx_common_api::register_crud_routes;
+
+let router = register_crud_routes!(
+    router,
+    UserBmc, UserFilter, UserForCreate, UserForUpdate,
+    "/api/users"
+);
+// 生成：POST /api/users/create | /create-many | /update | /update-many | /delete | /list | /page
+//      GET  /api/users/get
+```
+
+#### 4.3 declare_crud_handlers! 宏
+
+为实体生成带 OpenAPI 注解与权限注入的 CRUD handler 模块，支持三种权限配置模式：
+
+```rust
+// 模式一：统一资源名（权限码自动拼 :create/:read/:update/:delete 后缀）
+declare_crud_handlers!(user_crud, User, UserBmc, UserForCreate, UserForUpdate,
+    UserFilter, "User", "/users", "user");
+
+// 模式二：无鉴权（仅 8 参）
+declare_crud_handlers!(user_crud, User, UserBmc, UserForCreate, UserForUpdate,
+    UserFilter, "User", "/users");
+
+// 模式三：精细化 perms(...) 配置
+declare_crud_handlers!(user_crud, User, UserBmc, UserForCreate, UserForUpdate,
+    UserFilter, "User", "/users",
+    perms(create = "user", read = "user", update = "user_admin", delete = "user_admin"));
+```
+
+另有 `register_crud_handlers_module!` / `setup_crud_api!` 组合宏。
+按 AGENTS.md §八：`declare_crud_handlers!` 仅限各 `*-api` crate 内部使用。
+
+### 五、service 模块端点
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| POST | `/api/service/call` | 按 ServiceCallRequest（体内 service_key + 参数）调用服务 |
+| POST | `/api/service/execute` | 携带完整执行上下文的多步编排 |
+| POST | `/api/service/execute/{service_key}` | 按 service_key 直接执行（便于外部系统直连） |
+| POST | `/api/service/page` | 分页查询服务定义（`/list` 已废弃，由 `/page` 取代） |
+| GET | `/api/service/by-plugin` | 按插件查询其下注册的服务清单 |
+| GET | `/api/service/get` | 查询单个服务定义详情 |
+| POST | `/api/service/delete` | 删除服务定义 |
+| GET | `/api/service/exists` | 判断 service_key 是否已注册 |
+| GET | `/api/service/openapi` | 导出本平台服务聚合后的 OpenAPI 规范（供外部 SDK 生成） |
+
+核心请求/响应模型（`handlers::service::models`，均派生 ToSchema 进 Swagger）：
+
+| 模型 | 用途 |
+|------|------|
+| `FunctionCallRequest` / `FunctionCallResponse` | `/call` 函数调用 |
+| `ServiceExecuteRequest` / `ServiceExecuteResponse` / `ServiceExecutionStep` | `/execute` 多步编排（步骤/耗时/错误） |
+| `ServiceOrchestrationError` | 编排错误 |
+| `ServiceListItem` / `ServiceDetailResponse` | `/page`、`/get` 返回 |
+| `ServiceGetQuery` / `ServiceByPluginQuery` / `ServiceExistsQuery` / `ServiceDeleteQuery` / `OpenApiQuery` | 各 GET/DELETE 端点查询参数 |
+
+### 六、portal 模块端点
+
+`PortalModule` 挂 `/api` 下（路径与原 Node 后端一致），按功能分子模块。主要端点：
+
+**ai —— AI 对话中继 + 本地编辑代理**
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| POST | `/api/ai/chat` | 门户 AI 对话 |
+| GET | `/api/agent/capabilities` | 编辑代理能力 |
+| POST | `/api/agent/message` | 代理消息 |
+| POST | `/api/agent/message/stream` | 代理消息（SSE 流式） |
+| POST | `/api/agent/approvals/{id}` | 代理审批 |
+
+**meta —— 工作区节点**
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| GET / POST | `/api/workspace-nodes` | 列出 / 保存工作区节点 |
+| GET / DELETE | `/api/workspace-nodes/{id}` | 获取 / 删除单个节点 |
+
+**pages —— 表单页 / 原生页 / HTML 页面**
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| GET / POST | `/api/form-pages`、`/api/native-pages`、`/api/html-pages` | 列出 / 保存三类页面 |
+| POST | `/api/native-pages/batch`、`/api/html-pages/batch` | 批量保存 |
+| GET | `/api/form-pages/{id}`、`/api/native-pages/{id}`、`/api/html-pages/{id}` | 获取单页 |
+
+**data —— 事实数据 + 帮助中心**
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| GET | `/api/fact/list` | 事实数据列表 |
+| POST | `/api/fact/get` | 事实数据查询 |
+| GET | `/api/fact/{domain}/{app}/{module}/{file}` | 按路径读取事实数据 |
+| GET | `/api/help/catalog` | 帮助中心目录 |
+| POST | `/api/help/get` | 获取帮助文档 |
+| POST/GET/DELETE | `/api/help/doc`、`/api/help/doc/{domain}/{app}/{module}/{file}` | 帮助文档保存 / 读取 / 删除 |
+
+**notify —— 通知中心**
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| GET | `/api/notifications` | 通知列表 |
+| GET | `/api/notifications/centers`、`/api/notifications/counts` | 通知中心 / 未读计数 |
+| POST | `/api/notifications/publish`、`/api/notifications/mark-read` | 发布 / 标记已读 |
+| GET | `/api/notifications/stream` | SSE 主动推送 |
+
+**launcher / registry —— 启动器与注册表派生**
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| POST | `/api/launcher/resolve` | 功能启动器解析 |
+| GET | `/api/registry/domains`、`/api/registry/apps`、`/api/registry/modules`、`/api/registry/dam` | 注册表只读派生（DAM） |
+| GET | `/api/service-catalog`、`/api/service-catalog/{id}` | 服务目录 |
+| GET | `/api/modules`、`/api/modules/{domain}/{application}/{module}` | 模块清单 |
+| GET | `/api/modules/{domain}/{application}/{module}/resources/{type}`、`/api/module-resources` | 模块资源 |
+
+portal handler 不读 AppState（走全局单例 `get_default_db_manager()` / `data_root()`，认证经
+已泛型的 `CmxSvrContext`），路由对 state 泛型 `S`：平台内嵌壳实例化为
+`portal_routes::<CmxAppState>()`，独立门户微服务（cmx-portalservice）实例化为
+`portal_routes::<()>()`，同一份 handler 两处跑、能力不缩水。
+
+> 模型中心接口（definitions / flexible_combination / model deploy）已从 portal 迁至独立 crate
+> `cmx-model-api`（`ModelModule`，位于 `crates/libs/cmx-model/cmx-model-api/`，不在 cmx-apis/
+> 目录下），由 cmx-platform-app 直接合并，不在本 crate。
+
+### 七、中间件
+
+中间件实现于 cmx-api-core（本 crate re-export 为 `cmx_common_api::middleware`）：
+
+- `mw_context_resolver`：请求上下文解析（svrContext）
+- `mw_auth`：认证（支持 `[auth].whitelist` 白名单与 query `access_token` 兜底）
+- `mw_permission`：权限校验
+- `cors_layer`：CORS 跨域（另有 `cors_layer_permissive` 宽松版）
+- `mw_security_headers`：安全响应头
+- `mw_trace` / `trace_layer`：请求追踪（OTel 风格，含 trace/sanitizer/detector 子模块）
+
+> `mw_rate_limit` 限流中间件已在 cmx-api-core 中注释停用（`middleware/mod.rs` 中模块与
+> re-export 均被注释），当前版本不可用；`cmx_api_types::Error::rate_limit_exceeded` 与
+> `into_rate_limit_response()`（Retry-After 头）保留供调用方手工使用。
+
+```rust
+// cmx-platform-app/src/router.rs 的实际装配方式
+use cmx_common_api::middleware::{
+    cors_layer, mw_auth, mw_context_resolver, mw_permission, trace_layer,
 };
 
 let app = Router::new()
-    .layer(mw_context_resolver())  // 请求上下文解析
-    .layer(cors_layer())           // CORS 支持
-    .layer(mw_trace())            // 请求追踪
-    .layer(mw_rate_limit(100))    // 限流：每分钟 100 请求
-    .route("/api/health", get(health_handler));
+    .merge(api_routes)
+    .layer(mw_auth())
+    .layer(mw_permission())
+    .layer(mw_context_resolver())
+    .layer(trace_layer())
+    .layer(cors_layer())
+    .with_state(app_state);
 ```
 
-#### 5.2 自定义中间件
+### 八、OpenAPI 文档
 
 ```rust
-use axum::{
-    middleware::Next,
-    extract::Request,
-    response::Response,
-};
+use cmx_common_api::openapi::{ApiDoc, PortalApiDoc};
+use cmx_common_api::routes::routes_impl::swagger_routes;
+use utoipa::OpenApi;
 
-async fn custom_middleware(
-    request: Request,
-    next: Next,
-) -> Response {
-    let start = std::time::Instant::now();
+// Swagger UI（swagger_routes() 已封装）：
+//   UI:   /swagger-ui/
+//   JSON: /api-docs/openapi.json
+let swagger = swagger_routes();
 
-    // 添加自定义请求处理逻辑
-    let response = next.run(request).await;
-
-    // 添加自定义响应处理逻辑
-    println!("Request took: {:?}", start.elapsed());
-
-    response
-}
-
-let app = Router::new()
-    .route_layer(middleware::from_fn(custom_middleware))
-    // ...
+// 门户切片由平台装配层聚合：
+let merged = ApiDoc::openapi().merge(PortalApiDoc::openapi()); // platform-app 中继续 merge 各域 ApiDoc
 ```
 
-### 六、请求参数解析
+## 路由迁移去向（2026-07/08 handler 大迁移）
 
-#### 6.1 路径参数
+原 cmx-api 的 handler 已按域拆分，`api_routes()` 中的对应注释即迁移记录：
 
-```rust
-use axum::{routing::get, Router, Path};
+| 原 handler（cmx-api） | 去向 |
+|------------------------|------|
+| Auth + IAM（User/Role/Permission/API Key/OAuth2/Audit...） | `cmx-iam-api`（AuthModule / IamModule） |
+| Domain / Application / Menu / SysDatasource / Form | `cmx-biz-api` |
+| Module CRUD + Module 包 | `cmx-biz-api`（ModuleCrudModule）+ `cmx-plugin-api`（ModulePackageModule） |
+| 插件管理 / 表元数据 / 插件市场 | `cmx-plugin-api` |
+| 文件存储 | `cmx-storage-api`（StorageModule） |
+| AI 中继 | `cmx-ai-api`（AiModule） |
+| rest / middleware / CRUD 宏 / actor / db_id / msgpack | 下沉 `cmx-api-core` |
+| validation_fail_resp | 移至 `cmx-biz::errcode` |
 
-async fn get_by_id(
-    Path(id): Path<i64>,
-) -> Result<Json<MyEntity>, StatusCode> {
-    // id 会自动解析为 i64 类型
-}
+各域路由统一由 `cmx-platform-app` 合并进主路由，OpenAPI 切片由 `OpenApi::merge()` 聚合。
 
-async fn get_by_ids(
-    Path(ids): Path<Vec<i64>>,
-) -> Result<Json<Vec<MyEntity>>, StatusCode> {
-    // 路径: /entities/1,2,3
-}
+### 旧路径迁移对照（cmx-api → 现路径）
 
-Router::new().route("/entities/:id", get(get_by_id))
+| 旧路径（cmx-api 时代） | 现路径 |
+|------------------------|--------|
+| `cmx_api::CmxAppState` | `cmx_common_api::CmxAppState`（定义在 cmx-api-core，双路径可用） |
+| `cmx_api::ApiResp` / `Error` / `Result` | `cmx_common_api::ApiResp` / `Error` / `Result`（定义在 cmx-api-types） |
+| `cmx_api::rest::handler::{create, list, page, ...}` | `cmx_common_api::rest::handler::*`（同） |
+| `cmx_api::middleware::{mw_auth, cors_layer, ...}` | `cmx_common_api::middleware::*`（同） |
+| `cmx_api::routes::traits::ModuleRoutes` | `cmx_common_api::routes::traits::ModuleRoutes` |
+| `cmx_api::register_crud_routes!` / `declare_crud_handlers!` | `cmx_common_api::register_crud_routes!` / `declare_crud_handlers!` |
+| `cmx_api::db_id` / `msgpack` / `actor` | 下沉 `cmx-api-core`（cmx_api_core::db_id 等） |
+| `cmx_api::validation_fail_resp` | `cmx_biz::errcode` |
+| `cmx_api::handlers::{application, domain, menu, sys_datasource, module}` | `cmx-biz-api`（+ module 包部分在 `cmx-plugin-api`） |
+| `cmx_api::handlers::{plugin, table_metadata}` | `cmx-plugin-api` |
+| `cmx_api::handlers::service` / `debug` / `portal` | 保留本 crate（`cmx_common_api::handlers::*`） |
+
+## 重构历史
+
+| 时间 | 事件 |
+|------|------|
+| 2026-07-30 | 「cmx-api 依赖与 handler 重构」方案立项：拆分大 cmx-api |
+| 2026-08-11 | 重构完成：共享骨架下沉 cmx-api-core，域 handler 迁入各 `cmx-*-api` 皮肤 crate；cmx-domain-api 分组目录改名 cmx-apis，本 crate 更名 cmx-common-api |
+| 后续 | portal 中模型中心接口再迁独立 crate `cmx-model-api`；AI 中继路由迁 `cmx-ai-api`（OpenApi 切片由 platform-app 聚合） |
+
+## 与其他 crate 的关系
+
+```
+cmx-api-types（叶子：响应/错误/Doc 类型）
+        ↑
+cmx-api-core（共享骨架：CmxAppState/ModuleRoutes/rest/middleware/CRUD 宏）
+        ↑
+cmx-common-api（本 crate：通用 handler + 路由聚合 + OpenAPI 切片）
+        ↑
+cmx-platform-app（平台总装配：合并本 crate api_routes() + 各域 *-api ModuleRoutes）
+
+同级皮肤 crate：cmx-biz-api / cmx-iam-api / cmx-plugin-api / cmx-storage-api / cmx-ai-api
+复用方：cmx-portalservice（独立门户微服务，复用 portal 泛型路由）
 ```
 
-#### 6.2 查询参数
+依赖的主要内部 crate（见 Cargo.toml）：cmx-api-core / cmx-api-types / cmx-biz / cmx-portal /
+cmx-ai / cmx-auth / cmx-rpc / cmx-orchestrator-rpc / cmx-service / cmx-plugin / cmx-storage /
+cmx-debug / cmx-metadata / cmx-buffer / cmx-traits / cmx-utils / cmx-core / cmx-database /
+cmx-database-pg。
 
-```rust
-use axum::{routing::get, extract::Query};
-use serde::Deserialize;
+## 常见问题
 
-#[derive(Debug, Deserialize)]
-pub struct ListQuery {
-    page: Option<u64>,
-    page_size: Option<u64>,
-    #[serde(rename = "name")]
-    name_filter: Option<String>,
-    status: Option<String>,
-}
+### Q: cmx-api 与 cmx-common-api 是什么关系？
 
-async fn list_entities(
-    Query(query): Query<ListQuery>,
-) -> Result<Json<ApiResp<Vec<MyEntity>>>, StatusCode> {
-    let page = query.page.unwrap_or(1);
-    let page_size = query.page_size.unwrap_or(10);
-    // ...
-}
-```
+**A**: 2026-07/08 重构后原 `cmx-api` 拆分：共享骨架下沉 `cmx-api-core`、各域 handler 迁至
+`cmx-*-api` 皮肤 crate；本 crate 因不再是唯一的 "api" crate 而改名 `cmx-common-api`
+（common = 跨域通用 + 装配中枢），并通过 re-export 保持 `cmx_api::CmxAppState`、
+`cmx_api::rest::handler::create` 等旧路径兼容。
 
-#### 6.3 请求头解析
+### Q: 新增一个业务域的 handler 应该放哪？
 
-```rust
-use axum::{routing::get, extract::HeaderMap};
+**A**: 按 AGENTS.md §八「cmx-*-api Handler 规范」：`*-api` crate 应保持为纯 HTTP 适配层，
+Entity / BMC / Filter / Service 归业务 crate；新域 handler 放对应业务域的 `*-api` crate
+（没有则新建），实现 `ModuleRoutes` trait，由 cmx-platform-app 合并；本 crate 只收跨域通用 handler。
 
-async fn get_with_headers(
-    headers: HeaderMap,
-) -> Result<Json<ApiResp<()>>, StatusCode> {
-    // 解析特定请求头
-    if let Some(auth) = headers.get("Authorization") {
-        println!("Token: {:?}", auth);
-    }
+### Q: dev-tools feature 为什么默认关闭？
 
-    // 获取 X-Request-Id
-    let request_id = headers
-        .get("X-Request-Id")
-        .and_then(|v| v.to_str().ok());
-}
-```
+**A**: 开发脚手架涉及本地 fs 写入/解压 zip/写 settings.json，违反集群无状态约束
+（AGENTS.md §五），仅单节点 dev 环境可启用；启用时启动会打印告警日志。
 
-### 七、OpenAPI 文档
+### Q: Swagger UI 从哪访问？
 
-#### 7.1 生成 OpenAPI 规范
+**A**: 装配层 merge `swagger_routes()` 后访问 `/swagger-ui/`，OpenAPI JSON 在
+`/api-docs/openapi.json`（仅含 ApiDoc 覆盖的 service 域；门户与各域切片经 platform-app
+`OpenApi::merge()` 聚合后同样可见）。
 
-```rust
-use cmx_api::openapi::{OpenApiBuilder, Info, Paths};
+### Q: 健康检查端点需要认证吗？
 
-let openapi = OpenApiBuilder::new()
-    .info(Info {
-        title: "My API".to_string(),
-        version: "1.0.0".to_string(),
-        description: Some("API Documentation".to_string()),
-    })
-    .paths(build_paths())
-    .build();
-```
+**A**: 不需要。`/health` 无需认证，返回 `{"status":"ok"}`，供 Docker HEALTHCHECK 和
+负载均衡器探测使用。
 
-#### 7.2 导出 Swagger UI
+### Q: service 的 `/list` 接口去哪了？
 
-```rust
-use axum::{routing::get, Router};
+**A**: 已废弃，由 `POST /api/service/page`（分页查询）取代；源码中留有注释
+`// .route("/list", get(list_services))  // 已废弃，由 /page 取代`。
 
-async fn swagger_ui() -> impl IntoResponse {
-    // 访问 /swagger 显示交互式文档
-}
+### Q: 门户路由能脱离平台单独部署吗？
 
-let app = Router::new()
-    .route("/swagger", get(swagger_ui))
-    .route("/swagger/openapi.json", get(openapi_json));
-```
-
-### 八、错误处理
-
-#### 8.1 使用 ApiError
-
-```rust
-use cmx_api::{ApiError, ApiResp};
-
-fn handle_result<T>(result: Result<T, MyError>) -> Result<Json<ApiResp<T>>, StatusCode> {
-    match result {
-        Ok(data) => Ok(Json(ApiResp::success(data))),
-        Err(e) => {
-            match e {
-                MyError::NotFound => Err(StatusCode::NOT_FOUND),
-                MyError::Validation(msg) => Ok(Json(ApiResp::error_with_code(
-                    400, "VALIDATION_ERROR", &msg
-                ))),
-                MyError::Unauthorized => Err(StatusCode::UNAUTHORIZED),
-                MyError::Internal(msg) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-            }
-        }
-    }
-}
-```
-
-#### 8.2 全局错误处理
-
-```rust
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
-
-impl IntoResponse for MyError {
-    fn into_response(self) -> Response {
-        let (status, code, message) = match self {
-            MyError::NotFound => (StatusCode::NOT_FOUND, "NOT_FOUND", "资源不存在"),
-            MyError::Validation(msg) => (StatusCode::BAD_REQUEST, "VALIDATION_ERROR", &msg),
-            MyError::Unauthorized => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权"),
-            MyError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", &msg),
-        };
-
-        (status, Json(ApiResp::error_with_code(status.as_u16() as i32, code, message))).into_response()
-    }
-}
-```
-
-### 九、完整示例
-
-```rust
-use cmx_api::{
-    ApiResp, ApiError, CmxAppState,
-    register_crud_routes, EntityHandler,
-};
-use axum::{routing::get, Router, Json, Path, extract::Query};
-use async_trait::async_trait;
-use serde::{Serialize, Deserialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
-    pub id: i64,
-    pub username: String,
-    pub email: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateUser {
-    pub username: String,
-    pub email: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateUser {
-    pub email: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UserQuery {
-    pub page: Option<u64>,
-    pub page_size: Option<u64>,
-    pub username: Option<String>,
-}
-
-pub struct UserHandler;
-
-#[async_trait]
-impl EntityHandler for UserHandler {
-    type Entity = User;
-    type CreateRequest = CreateUser;
-    type UpdateRequest = UpdateUser;
-    type ListQuery = UserQuery;
-
-    async fn create(&self, data: CreateUser) -> Result<Self::Entity, ApiError> {
-        let user = User {
-            id: generate_id(),
-            username: data.username,
-            email: data.email,
-        };
-        save_user(&user).await?;
-        Ok(user)
-    }
-
-    async fn get_by_id(&self, id: i64) -> Result<Option<Self::Entity>, ApiError> {
-        find_user_by_id(id).await.map_err(|e| ApiError::internal(e.to_string()))
-    }
-
-    async fn update(&self, id: i64, data: UpdateUser) -> Result<Self::Entity, ApiError> {
-        let mut user = find_user_by_id(id)
-            .await?
-            .ok_or_else(|| ApiError::not_found("用户不存在"))?;
-
-        if let Some(email) = data.email {
-            user.email = email;
-        }
-
-        save_user(&user).await?;
-        Ok(user)
-    }
-
-    async fn delete(&self, id: i64) -> Result<(), ApiError> {
-        delete_user(id).await.map_err(|e| ApiError::internal(e.to_string()))
-    }
-
-    async fn list(&self, query: UserQuery) -> Result<Vec<Self::Entity>, ApiError> {
-        find_users(query).await.map_err(|e| ApiError::internal(e.to_string()))
-    }
-
-    async fn page(&self, query: UserQuery) -> Result<(Vec<Self::Entity>, i64), ApiError> {
-        let page = query.page.unwrap_or(1) as i64;
-        let page_size = query.page_size.unwrap_or(10) as i64;
-        find_users_paged(query, page, page_size)
-            .await
-            .map_err(|e| ApiError::internal(e.to_string()))
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    let state = create_app_state();
-    let handler = UserHandler;
-
-    let app = register_crud_routes!(
-        Router::new(),
-        "/api/users",
-        handler,
-        state
-    );
-
-    println!("Server starting on http://0.0.0.0:8080");
-}
-```
+**A**: 可以（P-S0 门户微服务化）。portal handler 不读 AppState，路由对 state 泛型：
+cmx-portalservice 独立微服务用 `portal_routes::<()>()` 复用同一份路由表与 handler，
+Swagger 同样可见（复用同一装配核）。

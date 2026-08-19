@@ -2,7 +2,7 @@
 
 > 权限/角色注解属性宏 — 对标 Spring Security 注解体系，为 cmx-container 提供 7 个声明式权限控制宏。
 
-[![Version](https://img.shields.io/badge/version-0.1.9-blue.svg)](https://crates.io)
+[![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)](https://crates.io)
 [![Edition](https://img.shields.io/badge/edition-2024-orange.svg)](https://doc.rust-lang.org/edition-guide/)
 [![Type](https://img.shields.io/badge/type-proc--macro-purple.svg)](https://doc.rust-lang.org/reference/procedural-macros.html)
 
@@ -26,9 +26,11 @@
 [dependencies]
 # 内部依赖 - 权限注解宏
 cmx-macros = { workspace = true }
-# 内部依赖 - 核心库（提供 CmxSvrContext / AuthContext / PermissionDeniedError）
+# 内部依赖 - 核心库（提供 AuthContext / SVRContext / PermissionDeniedError / 权限注册表）
 cmx-core = { workspace = true }
-# 内部依赖 - API 类型（提供 Error 转换）
+# 内部依赖 - API 骨架层（提供 CmxSvrContext / CmxAppState / Result；原 cmx-api 已拆分归此）
+cmx-api-core = { workspace = true }
+# 内部依赖 - API 类型（宏注入代码用 ::cmx_api_types::Error::from 做错误转换）
 cmx-api-types = { workspace = true }
 # 编译期全局注册
 inventory = { workspace = true }
@@ -40,7 +42,7 @@ inventory = { workspace = true }
 
 ```rust
 use axum::Json;
-use cmx_api::middleware::CmxSvrContext;
+use cmx_api_core::middleware::CmxSvrContext;
 use cmx_core::model::data::dataset::DataSet;
 
 /// 创建用户接口（必须拥有 user:create 权限）
@@ -141,9 +143,9 @@ cmx-macros
 ```rust
 use axum::extract::State;
 use axum::Json;
-use cmx_api::app_state::CmxAppState;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::Result;
+use cmx_api_core::app_state::CmxAppState;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::Result;
 use cmx_core::model::data::dataset::DataSet;
 
 /// 创建智能体接口
@@ -219,8 +221,8 @@ pub async fn create_agent(
 
 ```rust
 use axum::Json;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::Result;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::Result;
 use cmx_core::model::data::dataset::DataSet;
 
 /// 导出智能体详情接口
@@ -250,8 +252,8 @@ pub async fn export_agent_detail(
 
 ```rust
 use axum::Json;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::Result;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::Result;
 use cmx_core::model::data::dataset::DataSet;
 
 /// 查看报表接口
@@ -285,8 +287,8 @@ pub async fn view_report(
 
 ```rust
 use axum::Json;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::Result;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::Result;
 use cmx_core::model::data::dataset::DataSet;
 
 /// 系统设置接口
@@ -315,8 +317,8 @@ pub async fn system_settings(
 
 ```rust
 use axum::Json;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::Result;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::Result;
 use cmx_core::model::data::dataset::DataSet;
 
 /// 审计管理员操作接口
@@ -346,8 +348,8 @@ pub async fn audit_admin_op(
 
 ```rust
 use axum::Json;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::Result;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::Result;
 use cmx_core::model::data::dataset::DataSet;
 
 /// 团队管理接口
@@ -487,17 +489,16 @@ pub async fn handler(CmxSvrContext(svr_ctx): CmxSvrContext) -> Result<Json<DataS
 
 ```rust
 use axum::Json;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::Result;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::Result;
 use cmx_api_types::Error;
 use cmx_core::model::data::dataset::DataSet;
-use cmx_core::model::iam::PermissionDeniedError;
 
 /// 删除用户接口
 ///
 /// 演示运行时鉴权失败的错误处理。
-/// 鉴权失败时，宏注入的代码会返回 Error::PermissionDenied，
-/// 调用方无需额外处理，错误会自动转换为 HTTP 403 响应。
+/// 鉴权失败时，宏注入的代码返回 PermissionDeniedError，经 From 转换为
+/// Error::Unauthorized（401）/ Error::Forbidden（403），调用方无需额外处理。
 #[cmx_macros::has_permission(
     key = "user:delete",
     group = "用户管理",
@@ -509,7 +510,7 @@ pub async fn delete_user(
     Json(params): Json<DeleteParams>,
 ) -> Result<Json<DataSet>> {
     // ⬇️ 宏注入的检查代码等价于：
-    // if !svr_ctx.has_permission("user:delete") {
+    // if !svr_ctx.auth_context.as_ref().unwrap().has_permission("user:delete") {
     //     return Err(Error::from(PermissionDeniedError::Permission {
     //         user_id: svr_ctx.auth_context.as_ref().unwrap().user_id.clone(),
     //         permission: "user:delete".to_string(),
@@ -522,23 +523,14 @@ pub async fn delete_user(
 }
 
 /// 手动捕获鉴权错误（如需自定义响应）
-pub async fn handle_permission_error(err: &Error) -> (axum::http::StatusCode, String) {
-    // 通过 downcast 检查是否为权限拒绝错误
+///
+/// 注意：`Error` 枚举没有独立的 PermissionDenied 变体——`From<PermissionDeniedError>`
+/// 将 Unauthenticated 映射为 `Error::Unauthorized`（401），其余（Permission/Role/Roles）
+/// 映射为 `Error::Forbidden`（403），错误消息已含 user_id 与缺失的权限/角色。
+pub fn handle_permission_error(err: &Error) -> (axum::http::StatusCode, String) {
     match err {
-        Error::PermissionDenied(denied) => match denied {
-            PermissionDeniedError::Unauthenticated => {
-                (axum::http::StatusCode::UNAUTHORIZED, "未登录或登录已过期".to_string())
-            }
-            PermissionDeniedError::Permission { user_id, permission } => {
-                (axum::http::StatusCode::FORBIDDEN, format!("用户 {} 无权限: {}", user_id, permission))
-            }
-            PermissionDeniedError::Role { user_id, role } => {
-                (axum::http::StatusCode::FORBIDDEN, format!("用户 {} 无角色: {}", user_id, role))
-            }
-            PermissionDeniedError::Roles { user_id, requirement, roles } => {
-                (axum::http::StatusCode::FORBIDDEN, format!("用户 {} 无角色(需{}): {}", user_id, requirement, roles))
-            }
-        },
+        Error::Unauthorized(msg) => (axum::http::StatusCode::UNAUTHORIZED, msg.clone()),
+        Error::Forbidden(msg) => (axum::http::StatusCode::FORBIDDEN, msg.clone()),
         _ => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("内部错误: {}", err)),
     }
 }
@@ -599,7 +591,7 @@ pub fn check_route_handler_coverage(total_routes: usize) {
 
 ```rust
 use axum::{routing::post, Router};
-use cmx_api::app_state::CmxAppState;
+use cmx_api_core::app_state::CmxAppState;
 
 /// 构建用户管理路由
 ///
@@ -618,8 +610,8 @@ pub fn build_user_routes() -> Router<CmxAppState> {
 
 mod user_handlers {
     use axum::Json;
-    use cmx_api::middleware::CmxSvrContext;
-    use cmx_api::Result;
+    use cmx_api_core::middleware::CmxSvrContext;
+    use cmx_api_core::Result;
     use cmx_core::model::data::dataset::DataSet;
 
     #[cmx_macros::has_permission(
@@ -657,8 +649,8 @@ mod user_handlers {
 
 ```rust
 use axum::Json;
-use cmx_api::middleware::CmxSvrContext;
-use cmx_api::Result;
+use cmx_api_core::middleware::CmxSvrContext;
+use cmx_api_core::Result;
 use cmx_core::model::data::dataset::DataSet;
 
 /// utoipa 文档注解可与 cmx-macros 权限注解共存
@@ -698,12 +690,12 @@ pub struct UserForCreate {
 }
 ```
 
-#### 5.4 与 cmx-api 中间件链集成
+#### 5.4 与 cmx-api-core 中间件链集成
 
 ```rust
 use axum::Router;
-use cmx_api::app_state::CmxAppState;
-use cmx_api::middleware::{mw_context_resolver, mw_auth, mw_permission};
+use cmx_api_core::app_state::CmxAppState;
+use cmx_api_core::middleware::{mw_context_resolver, mw_auth, mw_permission};
 
 /// 构建带完整中间件链的路由器
 ///
@@ -727,9 +719,9 @@ pub fn build_app() -> Router<CmxAppState> {
     key = "user:create", group = "用户管理", display = "创建用户", description = "创建新用户"
 )]
 pub async fn create_user(
-    cmx_api::middleware::CmxSvrContext(svr_ctx): cmx_api::middleware::CmxSvrContext,
+    cmx_api_core::middleware::CmxSvrContext(svr_ctx): cmx_api_core::middleware::CmxSvrContext,
     axum::Json(p): axum::Json<serde_json::Value>,
-) -> cmx_api::Result<axum::Json<cmx_core::model::data::dataset::DataSet>> {
+) -> cmx_api_core::Result<axum::Json<cmx_core::model::data::dataset::DataSet>> {
     todo!()
 }
 ```
@@ -817,7 +809,7 @@ impl UserHandlers {
     pub async fn update_user(
         CmxSvrContext(svr_ctx): CmxSvrContext,
         Json(p): Json<serde_json::Value>,
-    ) -> cmx_api::Result<Json<DataSet>> {
+    ) -> cmx_api_core::Result<Json<DataSet>> {
         todo!()
     }
 }
@@ -830,17 +822,18 @@ impl UserHandlers {
 ```rust
 #[cfg(test)]
 mod tests {
-    use cmx_core::model::iam::AuthContext;
-    use cmx_core::model::service::SVRContext;
+    use cmx_core::model::service::{AuthContext, SVRContext};
 
     fn build_admin_svr_ctx() -> SVRContext {
-        let mut ctx = SVRContext::default();
-        ctx.auth_context = Some(AuthContext {
-            user_id: "test-admin".to_string(),
-            username: "admin".to_string(),
-            roles: vec!["admin".to_string()],  // admin 触发短路放行
-            permissions: vec![],
-        });
+        let mut ctx = SVRContext::new(
+            serde_json::Value::Null,
+            Default::default(),
+            chrono::Utc::now(),
+            "test-req".to_string(),
+        );
+        let mut auth = AuthContext::new("test-admin", "admin");
+        auth.roles = vec!["admin".to_string()];  // admin 触发短路放行
+        ctx.auth_context = Some(auth);
         ctx
     }
 
