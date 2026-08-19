@@ -284,7 +284,7 @@ function cmxNotify (kind, msg) {
     dialogHeight: 'auto',
   })
   const body = document.createElement('div')
-  body.style.cssText = 'padding:16px;font-size:13px;color:var(--sapTextColor,#1d2d3e);line-height:1.6;white-space:pre-wrap;max-height:60vh;overflow:auto'
+  body.style.cssText = 'font-size:13px;color:var(--sapTextColor,#1d2d3e);line-height:1.6;white-space:pre-wrap;max-height:60vh;overflow:auto'   // padding 由 .dlg-content 默认提供
   body.textContent = String(msg == null ? '' : msg)
   dlg.setContent(body)
   document.body.appendChild(dlg)
@@ -308,7 +308,7 @@ async function cmxConfirm (message, title) {
     dialogHeight: 'auto',
   })
   const body = document.createElement('div')
-  body.style.cssText = 'padding:16px;font-size:13px;color:var(--sapTextColor,#1d2d3e);line-height:1.6;white-space:pre-wrap'
+  body.style.cssText = 'font-size:13px;color:var(--sapTextColor,#1d2d3e);line-height:1.6;white-space:pre-wrap'   // padding 由 .dlg-content 默认提供
   body.textContent = String(message == null ? '' : message)
   dlg.setContent(body)
   document.body.appendChild(dlg)
@@ -801,7 +801,7 @@ function pickExportFormat (_root) {
       dialogHeight: 'auto',
     })
     const body = document.createElement('div')
-    body.style.cssText = 'padding:16px;font-size:13px;color:var(--sapTextColor,#1d2d3e);font-family:var(--sapFontFamily,Arial,sans-serif);display:flex;flex-direction:column;gap:10px'
+    body.style.cssText = 'font-size:13px;color:var(--sapTextColor,#1d2d3e);font-family:var(--sapFontFamily,Arial,sans-serif);display:flex;flex-direction:column;gap:10px'   // padding 由 .dlg-content 默认提供
     body.innerHTML = `
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:inherit">
         <input type="radio" name="fmt" value="json" checked style="accent-color:var(--neo-cyan,#00b4d8);cursor:pointer">
@@ -883,7 +883,7 @@ function pickImportFileAndMode (_root) {
       dialogHeight: 'auto',
     })
     const body = document.createElement('div')
-    body.style.cssText = 'padding:16px;font-size:13px;color:var(--sapTextColor,#1d2d3e);font-family:var(--sapFontFamily,Arial,sans-serif);display:flex;flex-direction:column;gap:12px'
+    body.style.cssText = 'font-size:13px;color:var(--sapTextColor,#1d2d3e);font-family:var(--sapFontFamily,Arial,sans-serif);display:flex;flex-direction:column;gap:12px'   // padding 由 .dlg-content 默认提供
     body.innerHTML = `
       <div>
         <div style="margin-bottom:6px;font-weight:600;color:inherit">文件：</div>

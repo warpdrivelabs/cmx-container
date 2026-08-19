@@ -245,9 +245,8 @@ function bind (root) {
       dock: side,
       dialogWidth: '440px',
     })
-    // 抽屉内容：一张描述清单
+    // 抽屉内容：一张描述清单（padding 由 .dlg-content 默认提供，dock+setContent 路径契约生效）
     const body = document.createElement('div')
-    body.style.cssText = 'padding:16px;'
     body.innerHTML = `
       <cmx-desc-list border tone="cyan">
         <cmx-desc-item label="单据编号">SO-2026-0729-001</cmx-desc-item>

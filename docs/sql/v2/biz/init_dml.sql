@@ -5,12 +5,14 @@
 -- 内容：MDM 治理种子（激活映射 + 编码规则 + 查重规则 + 分发水位）
 -- 风格：无损幂等，全部 ON CONFLICT / NOT EXISTS 防重，可重复执行
 -- 来源：迁移 20260818_001（激活映射/编码规则/查重）+ 20260812_001 + 20260813_002
+--       + 供应商 gys 激活映射补缺（M3 旧库 UI 配置丢失补齐，随 20260819_001 基线）
 -- ============================================================
 
 -- ============================================================
 -- 1. MDM 激活映射（mdm_activation）
 -- 来源：迁移 20260818_001 段2（10 新域 × create/update 26 条）
 --       + 段3（kh/wl/kj 深化字段版）
+--       + 段2.5（gys 供应商补缺：M3 旧库 UI 配置丢失，随 20260819_001 基线补齐）
 -- 幂等：ON CONFLICT (activation_code) DO UPDATE
 -- ============================================================
 
@@ -439,6 +441,53 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 
 -- ─────────────────────────────────────────────
+
+-- 2.5 供应商（gys）激活映射补缺：M3 时代靠 UI 配置存于旧运行库，库重建后缺失
+--     （MDM_GYS 编码规则兜底同因）。字段对齐现行 supplier 字典：
+--     头 name/short_name/tax_no/credit_code/phone + supplier_bank（cm_bank_account）明细。
+-- ─────────────────────────────────────────────
+
+-- supplier · 新建
+
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
+                                header_groups, is_active)
+VALUES ('mdm_act_gys_create', 'gys__create', 'gys', 'create', 'supplier', 'cm_supplier',
+        '{"name":"name","short_name":"short_name","tax_no":"tax_no","credit_code":"credit_code","phone":"phone"}'::jsonb,
+        '[{"lineType":"bank","targetDict":"supplier_bank","targetTable":"cm_bank_account","parentIdField":"supplier_id","fields":{"account_no":"account_no","bank_name":"bank_name"},"fieldOrder":["account_no","bank_name"]}]'::jsonb,
+        'name',
+        '[{"field":"credit_code","weight":40,"kind":"Exact","dedup":true},{"field":"tax_no","weight":20,"kind":"Exact","dedup":true},{"field":"name","weight":40,"kind":"EditDistance","dedup":true}]'::jsonb,
+        '{}'::jsonb,
+        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name"]},{"groupCode":"qual","groupName":"资质与联系","fields":["tax_no","credit_code","phone"]}]'::jsonb,
+        TRUE)
+ON CONFLICT (activation_code) DO UPDATE SET
+    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
+    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
+    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
+    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
+    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
+    is_active = EXCLUDED.is_active, updated_at = now();
+
+-- supplier · 变更
+
+INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
+                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
+                                header_groups, is_active)
+VALUES ('mdm_act_gys_update', 'gys__update', 'gys', 'update', 'supplier', 'cm_supplier',
+        '{"name":"name","short_name":"short_name","tax_no":"tax_no","credit_code":"credit_code","phone":"phone"}'::jsonb,
+        '[{"lineType":"bank","targetDict":"supplier_bank","targetTable":"cm_bank_account","parentIdField":"supplier_id","fields":{"account_no":"account_no","bank_name":"bank_name"},"fieldOrder":["account_no","bank_name"]}]'::jsonb,
+        'name',
+        '[]'::jsonb,
+        '{}'::jsonb,
+        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name"]},{"groupCode":"qual","groupName":"资质与联系","fields":["tax_no","credit_code","phone"]}]'::jsonb,
+        TRUE)
+ON CONFLICT (activation_code) DO UPDATE SET
+    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
+    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
+    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
+    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
+    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
+    is_active = EXCLUDED.is_active, updated_at = now();
 
 
 -- 3. 第一批三域激活映射（kh/wl/kj，深化字段版：客户商务/客户经理/地址明细、物料分类/多单位、科目辅助核算）
