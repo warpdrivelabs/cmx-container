@@ -8,15 +8,12 @@
 -- ============================================================
 
 -- ============================================================
--- CMX 平台库（主库）全量 DDL — docs/sql/v2/platform/init_ddl.sql
+-- CMX 平台库（主库）全量 DDL（基线内嵌版）
 --
--- 目标库：default 数据源（default = true，平台/主库）
--- 归属规则：cmx_ 前缀平台表建主库（例外：cmx_flow_* 流程运行态表建业务库，
---           见 ../biz/init_ddl.sql）
--- 风格：无损幂等（CREATE TABLE/INDEX IF NOT EXISTS + 结构对齐 ALTER），
---       重复执行不丢数据；已存在但结构漂移的表由区块内对齐 ALTER 补列。
+-- 与 init_ddl.sql 的差异：每表区块内多一段「结构对齐 ALTER」——
+-- 表结构停在旧链中途的存量库，建表语句是 no-op 不补列，须先由对齐区
+-- 补齐到终态，后续 COMMENT / 种子引用新列才不报错；新库则全部即建即过。
 -- 每表区块布局：CREATE TABLE → 结构对齐 ALTER → COMMENT → 索引
--- 来源：docs/sql/init/init_ddl.sql 终态 + 迁移链对齐语句
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS cmx_domain
@@ -41,11 +38,6 @@ CREATE TABLE IF NOT EXISTS cmx_domain
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_domain ADD COLUMN IF NOT EXISTS icon  VARCHAR(100);
-ALTER TABLE cmx_domain ADD COLUMN IF NOT EXISTS title VARCHAR(200);
-COMMENT ON COLUMN cmx_domain.icon  IS '域图标名（UI5 图标标识）';
-COMMENT ON COLUMN cmx_domain.title IS '域英文标题/副标题';
 
 COMMENT ON TABLE cmx_domain IS '域表';
 COMMENT ON COLUMN cmx_domain.id IS 'ID';
@@ -93,12 +85,6 @@ CREATE TABLE IF NOT EXISTS cmx_application
     update_name VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_application ADD COLUMN IF NOT EXISTS icon  VARCHAR(100);
-ALTER TABLE cmx_application ADD COLUMN IF NOT EXISTS title VARCHAR(200);
-COMMENT ON COLUMN cmx_application.icon  IS '应用图标名（UI5 图标标识）';
-COMMENT ON COLUMN cmx_application.title IS '应用英文标题/副标题';
 
 COMMENT ON TABLE cmx_application IS '应用表';
 COMMENT ON COLUMN cmx_application.id IS 'ID';
@@ -152,20 +138,6 @@ CREATE TABLE IF NOT EXISTS cmx_module
     update_name      VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS icon          VARCHAR(100);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS title         VARCHAR(200);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS resource_root VARCHAR(255);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS manifest_path VARCHAR(500);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS theme         VARCHAR(100);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS theme_color   VARCHAR(50);
-COMMENT ON COLUMN cmx_module.icon          IS '模块图标名（UI5 图标标识）';
-COMMENT ON COLUMN cmx_module.title         IS '模块英文标题/副标题';
-COMMENT ON COLUMN cmx_module.resource_root IS '模块资源目录相对路径（相对 data/ 根），格式 domain/application/module';
-COMMENT ON COLUMN cmx_module.manifest_path IS '模块清单文件相对路径，格式 modules/<d>/<a>/<m>/module.json';
-COMMENT ON COLUMN cmx_module.theme         IS '模块主题名';
-COMMENT ON COLUMN cmx_module.theme_color   IS '模块主题色（十六进制或色名）';
 
 COMMENT ON TABLE cmx_module IS '模块表';
 COMMENT ON COLUMN cmx_module.id IS 'ID';
@@ -230,17 +202,7 @@ CREATE TABLE IF NOT EXISTS cmx_sys_datasource
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS domain_code VARCHAR(64);
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS application_code VARCHAR(64);
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS module_code VARCHAR(64);
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS source_type VARCHAR(20);
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS db_name VARCHAR(128);
-COMMENT ON COLUMN cmx_sys_datasource.domain_code IS '所属域编码';
-COMMENT ON COLUMN cmx_sys_datasource.application_code IS '所属应用编码';
-COMMENT ON COLUMN cmx_sys_datasource.module_code IS '所属模块编码';
-COMMENT ON COLUMN cmx_sys_datasource.source_type IS '数据源类型：default-默认库，biz-业务库，other-其他';
-COMMENT ON COLUMN cmx_sys_datasource.db_name IS '数据源名称（便于识别的显示名称）';
+
 DROP INDEX IF EXISTS uk_cmx_datasource_db_id;
 
 COMMENT ON TABLE cmx_sys_datasource IS 'cmx数据源管理';
@@ -318,11 +280,6 @@ CREATE TABLE IF NOT EXISTS cmx_plugin
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_plugin ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default', ADD COLUMN IF NOT EXISTS storage_key VARCHAR (500), ADD COLUMN IF NOT EXISTS storage_checksum VARCHAR (128);
-COMMENT ON COLUMN cmx_plugin.app_id IS '应用隔离标识，用于多租户或多应用场景下的插件隔离';
-COMMENT ON COLUMN cmx_plugin.storage_key IS '存储键，标识插件包在存储系统中的唯一键';
-COMMENT ON COLUMN cmx_plugin.storage_checksum IS '存储校验和，用于验证插件包完整性';
 
 COMMENT ON TABLE cmx_plugin IS '插件注册主表：存储所有已安装插件的核心信息基线版本';
 COMMENT ON COLUMN cmx_plugin.id IS '主键ID';
@@ -395,9 +352,7 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_versions
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_plugin_versions ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_plugin_versions.app_id IS '应用隔离标识，用于多租户或多应用场景下的版本隔离';
+
 
 COMMENT ON TABLE cmx_plugin_versions IS '插件版本历史表：记录插件的版本历史';
 COMMENT ON COLUMN cmx_plugin_versions.id IS '主键ID';
@@ -511,9 +466,7 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_audit_log
     update_name      VARCHAR(100)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_plugin_audit_log ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_plugin_audit_log.app_id IS '应用隔离标识，用于多租户或多应用场景下的审计日志隔离';
+
 
 COMMENT ON TABLE cmx_plugin_audit_log IS '审计日志表：记录插件操作日志';
 COMMENT ON COLUMN cmx_plugin_audit_log.id IS '主键ID';
@@ -716,10 +669,6 @@ CREATE TABLE IF NOT EXISTS cmx_meta_table_define
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_meta_table_define ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default', ADD COLUMN IF NOT EXISTS ddl_status VARCHAR (20) NOT NULL DEFAULT 'pending';
-COMMENT ON COLUMN cmx_meta_table_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据隔离';
-COMMENT ON COLUMN cmx_meta_table_define.ddl_status IS 'DDL执行状态: pending(待执行), executing(执行中), completed(已完成), failed(执行失败)';
 
 COMMENT ON TABLE cmx_meta_table_define IS '表定义元数据';
 COMMENT ON COLUMN cmx_meta_table_define.id IS '主键';
@@ -769,9 +718,6 @@ CREATE TABLE IF NOT EXISTS cmx_meta_table_define_version
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_meta_table_define_version ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_meta_table_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据版本隔离';
 
 COMMENT ON TABLE cmx_meta_table_define_version IS '表元数据版本表';
 COMMENT ON COLUMN cmx_meta_table_define_version.id IS '主键';
@@ -821,9 +767,6 @@ CREATE TABLE IF NOT EXISTS cmx_service_define
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_service_define ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_service_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务隔离';
 
 COMMENT ON TABLE cmx_service_define IS '服务定义表';
 COMMENT ON COLUMN cmx_service_define.id IS '主键';
@@ -871,11 +814,7 @@ CREATE TABLE IF NOT EXISTS cmx_service_define_version
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_service_define_version ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_service_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务版本隔离';
-ALTER TABLE cmx_service_define_version ADD COLUMN IF NOT EXISTS api_doc TEXT;
-COMMENT ON COLUMN cmx_service_define_version.api_doc IS '服务接口文档JSON，由api_doc_generator自动生成';;
+
 
 COMMENT ON TABLE cmx_service_define_version IS '服务定义版本表';
 COMMENT ON COLUMN cmx_service_define_version.id IS '主键';
@@ -2597,79 +2536,6 @@ COMMENT ON TABLE cmx_user_position IS '用户-岗位关联表（一人可多岗�
 CREATE INDEX IF NOT EXISTS idx_cmx_user_position_user ON cmx_user_position (user_id);
 CREATE INDEX IF NOT EXISTS idx_cmx_user_position_pos  ON cmx_user_position (position_id);
 
--- ================================================================
--- MDM 主数据治理表（平台级，不走 compile）
--- 含激活映射配置 / 版本留痕 / 交叉引用 / 值映射 / 匹配组 / 分发订阅 / 事件日志
--- 主键规约：cmx_ 平台表 VARCHAR(64) snowflake；md_ 治理表 BIGINT（承接 cm_*.id）
--- 无外键约束（关联字段 + 索引替代）
--- 详见 migrations/20260804_001_mdm_governance
--- ================================================================
-
--- 1. 激活映射配置（UI 配置器维护，激活器读取执行）
-CREATE TABLE IF NOT EXISTS mdm_activation (
-    id              VARCHAR(64)  NOT NULL,
-    activation_code VARCHAR(64)  NOT NULL,
-    source_doc_type VARCHAR(64)  NOT NULL,
-    cr_type         VARCHAR(16)  NOT NULL,
-    target_dict     VARCHAR(64)  NOT NULL,
-    target_table    VARCHAR(64)  NOT NULL,
-    header_mapping  JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    line_mappings   JSONB                 DEFAULT '{}'::jsonb,
-    code_rule_code  VARCHAR(64),
-    subject_name_field VARCHAR(64),
-    subject_code_field VARCHAR(64),
-    header_groups   JSONB        NOT NULL DEFAULT '[]'::jsonb,
-    doc_code_rules  JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    key_fields      JSONB        NOT NULL DEFAULT '[]'::jsonb,
-    is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    PRIMARY KEY (id)
-);
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS subject_name_field VARCHAR(64);
-ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS subject_code_field VARCHAR(64);
-ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS header_groups   JSONB       NOT NULL DEFAULT '[]'::jsonb;
-ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS is_active       BOOLEAN     NOT NULL DEFAULT TRUE;
-ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS created_at      TIMESTAMPTZ NOT NULL DEFAULT now();
-ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ NOT NULL DEFAULT now();
-COMMENT ON COLUMN mdm_activation.id              IS '主键（snowflake，应用层生成）';
-COMMENT ON COLUMN mdm_activation.activation_code IS '映射码（如 supplier_apply）';
-COMMENT ON COLUMN mdm_activation.source_doc_type IS '来源单据类型（如 mdm_supplier_apply）';
-COMMENT ON COLUMN mdm_activation.cr_type         IS '变更类型 create/update/merge/block/flag_delete';
-COMMENT ON COLUMN mdm_activation.target_dict     IS '目标头字典码（如 supplier）';
-COMMENT ON COLUMN mdm_activation.target_table    IS '目标头物理表名（如 cm_supplier，配置器选字典时从 dct/meta tableName 一并写入，激活器直接用）';
-COMMENT ON COLUMN mdm_activation.header_mapping  IS '头映射 {单据字段:主数据列}';
-COMMENT ON COLUMN mdm_activation.line_mappings   IS '明细映射 [{lineType,targetDict,targetTable,parentIdField,fields}]';
-COMMENT ON COLUMN mdm_activation.code_rule_code  IS 'code 由哪个编码规则生成（新建时接 cmx-code）';
-COMMENT ON COLUMN mdm_activation.subject_name_field IS '主体名字段来源（payload 内字段名，前端按此填 subject_name）';
-COMMENT ON COLUMN mdm_activation.subject_code_field IS '主体编码字段来源（为空则由 codeRule 铸号）';
-COMMENT ON COLUMN mdm_activation.header_groups   IS '头映射分组(UI 展示用,[{groupCode,groupName,fields:[源字段名]}]);激活器不读,header_mapping 落库仍扁平';
-COMMENT ON COLUMN mdm_activation.is_active       IS '是否启用';
-ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS doc_code_rules JSONB NOT NULL DEFAULT '{}'::jsonb;
-COMMENT ON COLUMN mdm_activation.doc_code_rules IS '单据字段铸号规则覆盖 {单据字段:ruleCode}，单据保存铸号时覆盖单据元数据 codeRule 同名字段（激活配置优先）';;
-ALTER TABLE mdm_activation ADD COLUMN IF NOT EXISTS key_fields JSONB NOT NULL DEFAULT '[]'::jsonb;
-COMMENT ON COLUMN mdm_activation.key_fields IS '关键信息字段 [{field,weight,kind,dedup}];field=目标字典列名,数组序=簇键优先级;cr-form 据此渲染步骤①关键信息表单,dedup=true 的字段构造 /mdm/check-key 多字段加权查重,dedup=false 仅展示采集不查重;空则无步骤①(直接完整表单,不查重)';;
-COMMENT ON TABLE  mdm_activation IS 'MDM 激活映射配置（单据→主数据），UI 配置器维护，激活器读取执行';
-COMMENT ON COLUMN mdm_activation.id              IS '主键（snowflake，应用层生成）';
-COMMENT ON COLUMN mdm_activation.activation_code IS '映射码（如 supplier_apply）';
-COMMENT ON COLUMN mdm_activation.source_doc_type IS '来源单据类型（如 mdm_supplier_apply）';
-COMMENT ON COLUMN mdm_activation.cr_type         IS '变更类型 create/update/merge/block/flag_delete';
-COMMENT ON COLUMN mdm_activation.target_dict     IS '目标头字典码（如 supplier）';
-COMMENT ON COLUMN mdm_activation.target_table    IS '目标头物理表名（如 cm_supplier，配置器选字典时从 dct/meta tableName 一并写入，激活器直接用）';
-COMMENT ON COLUMN mdm_activation.header_mapping  IS '头映射 {单据字段:主数据列}';
-COMMENT ON COLUMN mdm_activation.line_mappings   IS '明细映射 [{lineType,targetDict,targetTable,parentIdField,fields}]';
-COMMENT ON COLUMN mdm_activation.code_rule_code  IS '【已废弃】字典 code 铸号规则；字典 code 现改走 dictMeta.codeRule，本列保留不删（避免迁移风险），激活器不再读取';
-COMMENT ON COLUMN mdm_activation.subject_name_field IS '主体名字段来源（payload 内字段名，前端按此填 subject_name）';
-COMMENT ON COLUMN mdm_activation.subject_code_field IS '【已废弃】主体编码字段来源；从未接线（激活器不读），字典 code 走 dictMeta.codeRule 铸号，本列保留不删（避免迁移风险）';
-COMMENT ON COLUMN mdm_activation.header_groups  IS '头映射分组(UI 展示用,[{groupCode,groupName,fields:[源字段名]}]);激活器不读,header_mapping 落库仍扁平';
-COMMENT ON COLUMN mdm_activation.doc_code_rules IS '单据字段铸号规则覆盖 {单据字段:ruleCode};单据保存铸号时覆盖单据元数据 codeRule 同名字段(激活配置优先);激活器不读,由 cr-form 读取经 saveDocData→saver 覆盖铸号';
-COMMENT ON COLUMN mdm_activation.key_fields IS '关键信息字段 [{field,weight,kind,dedup}];field=目标字典列名,数组序=簇键优先级;cr-form 据此渲染步骤①关键信息表单,dedup=true 的字段构造 /mdm/check-key 多字段加权查重,dedup=false 仅展示采集不查重;空则无步骤①(直接完整表单,不查重)';
-COMMENT ON COLUMN mdm_activation.is_active       IS '是否启用';
-CREATE UNIQUE INDEX IF NOT EXISTS uk_mdm_activation_code     ON mdm_activation (activation_code);
-CREATE        INDEX IF NOT EXISTS idx_mdm_activation_doctype ON mdm_activation (source_doc_type, cr_type);
-
 -- =====================================================
 -- cmx-code 编码引擎（两张表合并迁移）
 -- 1. cmx_code_rule  —— 编码规则库（纯算法：段序列，不带 target，可被多处复用）
@@ -3145,7 +3011,6 @@ ON CONFLICT (code) WHERE archived = 0 DO NOTHING;
 -- 幂等：ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING
 -- ============================================================
 
--- ─────────────────────────────────────────────
 -- 1. 编码规则 cmx_code_rule（id 9000000000000002~0015 顺排，MDM_BILL=…0001 已占）
 --    字典 code 铸号：激活器读 dictMeta.codeRule.ruleCode。漏配不报错，code 退化为占位码——故必须 seed。
 -- ─────────────────────────────────────────────
@@ -3246,6 +3111,8 @@ VALUES (9000000000000015, 'MDM_GYS', '供应商主数据编码（SUP+日期+流�
         '', TRUE)
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
+-- ─────────────────────────────────────────────
+
 
 -- MDM 变更申请单据号保底规则（20260813_002）
 INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
@@ -3253,569 +3120,3 @@ VALUES (9000000000000001, 'MDM_BILL', 'MDM 变更申请单据号（CR+日期+流
         '[{"type":"const","value":"CR"},{"type":"dateSerial","format":"YYYYMMDD","width":6,"start":1}]'::jsonb,
         '', TRUE)
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
--- ============================================================
--- 5. MDM 激活映射（mdm_activation）
--- 来源：迁移 20260818_001 段2（10 新域 × create/update 共 26 条）
--- 幂等：ON CONFLICT (activation_code) DO UPDATE
--- ============================================================
-
--- ─────────────────────────────────────────────
--- 2. 激活映射：10 个新域（create + update 各一条；update 的 key_fields 留空——步骤①查重仅新建场景）
--- ─────────────────────────────────────────────
-
--- currency · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_bz_create', 'bz__create', 'bz', 'create', 'currency', 'cm_currency',
-        '{"currency_code":"currency_code","name":"name","symbol":"symbol","decimal_places":"decimal_places","is_base":"is_base"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"currency_code","weight":60,"kind":"Exact","dedup":true},{"field":"name","weight":40,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["currency_code","name","symbol"]},{"groupCode":"attr","groupName":"属性","fields":["decimal_places","is_base"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- currency · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_bz_update', 'bz__update', 'bz', 'update', 'currency', 'cm_currency',
-        '{"currency_code":"currency_code","name":"name","symbol":"symbol","decimal_places":"decimal_places","is_base":"is_base"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["currency_code","name","symbol"]},{"groupCode":"attr","groupName":"属性","fields":["decimal_places","is_base"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- uom · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_jldw_create', 'jldw__create', 'jldw', 'create', 'uom', 'cm_uom',
-        '{"uom_code":"uom_code","name":"name","unit_type":"unit_type"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"uom_code","weight":60,"kind":"Exact","dedup":true},{"field":"name","weight":40,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["uom_code","name","unit_type"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- uom · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_jldw_update', 'jldw__update', 'jldw', 'update', 'uom', 'cm_uom',
-        '{"uom_code":"uom_code","name":"name","unit_type":"unit_type"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["uom_code","name","unit_type"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- material_class · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_wldl_create', 'wldl__create', 'wldl', 'create', 'material_class', 'cm_material_class',
-        '{"class_code":"class_code","name":"name","parent_id":"parent_id","class_type":"class_type"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"class_code","weight":50,"kind":"Exact","dedup":true},{"field":"name","weight":50,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["class_code","name","parent_id"]},{"groupCode":"attr","groupName":"类别属性","fields":["class_type"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- material_class · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_wldl_update', 'wldl__update', 'wldl', 'update', 'material_class', 'cm_material_class',
-        '{"class_code":"class_code","name":"name","parent_id":"parent_id","class_type":"class_type"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["class_code","name","parent_id"]},{"groupCode":"attr","groupName":"类别属性","fields":["class_type"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- cost_center · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_cbzx_create', 'cbzx__create', 'cbzx', 'create', 'cost_center', 'cm_cost_center',
-        '{"cost_center_code":"cost_center_code","name":"name","parent_id":"parent_id","dept_id":"dept_id"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"cost_center_code","weight":50,"kind":"Exact","dedup":true},{"field":"name","weight":50,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["cost_center_code","name","parent_id"]},{"groupCode":"resp","groupName":"责任归属","fields":["dept_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- cost_center · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_cbzx_update', 'cbzx__update', 'cbzx', 'update', 'cost_center', 'cm_cost_center',
-        '{"cost_center_code":"cost_center_code","name":"name","parent_id":"parent_id","dept_id":"dept_id"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["cost_center_code","name","parent_id"]},{"groupCode":"resp","groupName":"责任归属","fields":["dept_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- profit_center · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_lrzx_create', 'lrzx__create', 'lrzx', 'create', 'profit_center', 'cm_profit_center',
-        '{"profit_center_code":"profit_center_code","name":"name","parent_id":"parent_id"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"profit_center_code","weight":50,"kind":"Exact","dedup":true},{"field":"name","weight":50,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["profit_center_code","name","parent_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- profit_center · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_lrzx_update', 'lrzx__update', 'lrzx', 'update', 'profit_center', 'cm_profit_center',
-        '{"profit_center_code":"profit_center_code","name":"name","parent_id":"parent_id"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["profit_center_code","name","parent_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- company · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_gs_create', 'gs__create', 'gs', 'create', 'company', 'cm_company',
-        '{"company_code":"company_code","name":"name","short_name":"short_name","credit_code":"credit_code","legal_person":"legal_person","base_currency_id":"base_currency_id","registered_address":"registered_address"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"credit_code","weight":50,"kind":"Exact","dedup":true},{"field":"name","weight":50,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["company_code","name","short_name"]},{"groupCode":"reg","groupName":"注册信息","fields":["credit_code","legal_person","registered_address"]},{"groupCode":"fin","groupName":"财务","fields":["base_currency_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- company · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_gs_update', 'gs__update', 'gs', 'update', 'company', 'cm_company',
-        '{"company_code":"company_code","name":"name","short_name":"short_name","credit_code":"credit_code","legal_person":"legal_person","base_currency_id":"base_currency_id","registered_address":"registered_address"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["company_code","name","short_name"]},{"groupCode":"reg","groupName":"注册信息","fields":["credit_code","legal_person","registered_address"]},{"groupCode":"fin","groupName":"财务","fields":["base_currency_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- organization · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_zz_create', 'zz__create', 'zz', 'create', 'organization', 'cm_organization',
-        '{"org_code":"org_code","name":"name","parent_id":"parent_id","company_id":"company_id","org_type":"org_type"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"org_code","weight":50,"kind":"Exact","dedup":true},{"field":"name","weight":50,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["org_code","name","parent_id"]},{"groupCode":"attr","groupName":"组织属性","fields":["company_id","org_type"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- organization · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_zz_update', 'zz__update', 'zz', 'update', 'organization', 'cm_organization',
-        '{"org_code":"org_code","name":"name","parent_id":"parent_id","company_id":"company_id","org_type":"org_type"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["org_code","name","parent_id"]},{"groupCode":"attr","groupName":"组织属性","fields":["company_id","org_type"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- department · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_bm_create', 'bm__create', 'bm', 'create', 'department', 'cm_department',
-        '{"dept_code":"dept_code","name":"name","parent_id":"parent_id","org_id":"org_id"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"dept_code","weight":50,"kind":"Exact","dedup":true},{"field":"name","weight":50,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["dept_code","name","parent_id"]},{"groupCode":"attr","groupName":"组织归属","fields":["org_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- department · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_bm_update', 'bm__update', 'bm', 'update', 'department', 'cm_department',
-        '{"dept_code":"dept_code","name":"name","parent_id":"parent_id","org_id":"org_id"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["dept_code","name","parent_id"]},{"groupCode":"attr","groupName":"组织归属","fields":["org_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- position · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_gw_create', 'gw__create', 'gw', 'create', 'position', 'cm_position',
-        '{"position_code":"position_code","name":"name","job_family":"job_family","job_grade":"job_grade"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"position_code","weight":60,"kind":"Exact","dedup":true},{"field":"name","weight":40,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["position_code","name"]},{"groupCode":"attr","groupName":"职级职族","fields":["job_family","job_grade"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- position · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_gw_update', 'gw__update', 'gw', 'update', 'position', 'cm_position',
-        '{"position_code":"position_code","name":"name","job_family":"job_family","job_grade":"job_grade"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["position_code","name"]},{"groupCode":"attr","groupName":"职级职族","fields":["job_family","job_grade"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- employee · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_yg_create', 'yg__create', 'yg', 'create', 'employee', 'cm_employee',
-        '{"emp_no":"emp_no","name":"name","company_id":"company_id","dept_id":"dept_id","position_id":"position_id","mobile":"mobile","email":"email","hire_date":"hire_date","emp_status":"emp_status"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"emp_no","weight":50,"kind":"Exact","dedup":true},{"field":"name","weight":30,"kind":"EditDistance","dedup":true},{"field":"mobile","weight":20,"kind":"Exact","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["emp_no","name","mobile","email"]},{"groupCode":"org","groupName":"组织归属","fields":["company_id","dept_id","position_id"]},{"groupCode":"attr","groupName":"人事属性","fields":["hire_date","emp_status"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- employee · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_yg_update', 'yg__update', 'yg', 'update', 'employee', 'cm_employee',
-        '{"emp_no":"emp_no","name":"name","company_id":"company_id","dept_id":"dept_id","position_id":"position_id","mobile":"mobile","email":"email","hire_date":"hire_date","emp_status":"emp_status"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["emp_no","name","mobile","email"]},{"groupCode":"org","groupName":"组织归属","fields":["company_id","dept_id","position_id"]},{"groupCode":"attr","groupName":"人事属性","fields":["hire_date","emp_status"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
-
--- ─────────────────────────────────────────────
--- 3. 第一批三域激活映射（kh/wl/kj，深化字段版：客户商务/客户经理/地址明细、物料分类/多单位、科目辅助核算）
--- ─────────────────────────────────────────────
-
--- customer · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_kh_create', 'kh__create', 'kh', 'create', 'customer', 'cm_customer',
-        '{"name":"name","short_name":"short_name","customer_type":"customer_type","credit_level":"credit_level","credit_code":"credit_code","tax_no":"tax_no","phone":"phone","address":"address","credit_limit":"credit_limit","payment_term":"payment_term","invoice_type":"invoice_type","industry":"industry","customer_manager_id":"customer_manager_id","settle_currency_id":"settle_currency_id"}'::jsonb,
-        '[{"lineType":"bank","targetDict":"customer_bank","targetTable":"cm_customer_bank","parentIdField":"customer_id","fields":{"account_no":"account_no","account_name":"account_name","bank_name":"bank_name","is_default":"is_default"},"fieldOrder":["account_no","account_name","bank_name","is_default"]},{"lineType":"contact","targetDict":"customer_contact","targetTable":"cm_customer_contact","parentIdField":"customer_id","fields":{"contact_name":"contact_name","position":"position","phone":"phone","email":"email"},"fieldOrder":["contact_name","position","phone","email"]},{"lineType":"address","targetDict":"customer_address","targetTable":"cm_customer_address","parentIdField":"customer_id","fields":{"address_type":"address_type","province":"province","city":"city","district":"district","address_detail":"address_detail","receiver":"receiver","receiver_phone":"receiver_phone","is_default":"is_default"},"fieldOrder":["address_type","province","city","district","address_detail","receiver","receiver_phone","is_default"]}]'::jsonb,
-        'name',
-        '[{"field":"credit_code","weight":40,"kind":"Exact","dedup":true},{"field":"name","weight":60,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name","customer_type","credit_level"]},{"groupCode":"qual","groupName":"资质与联系","fields":["credit_code","tax_no","phone","address"]},{"groupCode":"biz","groupName":"商务信息","fields":["credit_limit","payment_term","invoice_type","industry"]},{"groupCode":"mgr","groupName":"归属","fields":["customer_manager_id","settle_currency_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- customer · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_kh_update', 'kh__update', 'kh', 'update', 'customer', 'cm_customer',
-        '{"name":"name","short_name":"short_name","customer_type":"customer_type","credit_level":"credit_level","credit_code":"credit_code","tax_no":"tax_no","phone":"phone","address":"address","credit_limit":"credit_limit","payment_term":"payment_term","invoice_type":"invoice_type","industry":"industry","customer_manager_id":"customer_manager_id","settle_currency_id":"settle_currency_id"}'::jsonb,
-        '[{"lineType":"bank","targetDict":"customer_bank","targetTable":"cm_customer_bank","parentIdField":"customer_id","fields":{"account_no":"account_no","account_name":"account_name","bank_name":"bank_name","is_default":"is_default"},"fieldOrder":["account_no","account_name","bank_name","is_default"]},{"lineType":"contact","targetDict":"customer_contact","targetTable":"cm_customer_contact","parentIdField":"customer_id","fields":{"contact_name":"contact_name","position":"position","phone":"phone","email":"email"},"fieldOrder":["contact_name","position","phone","email"]},{"lineType":"address","targetDict":"customer_address","targetTable":"cm_customer_address","parentIdField":"customer_id","fields":{"address_type":"address_type","province":"province","city":"city","district":"district","address_detail":"address_detail","receiver":"receiver","receiver_phone":"receiver_phone","is_default":"is_default"},"fieldOrder":["address_type","province","city","district","address_detail","receiver","receiver_phone","is_default"]}]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name","customer_type","credit_level"]},{"groupCode":"qual","groupName":"资质与联系","fields":["credit_code","tax_no","phone","address"]},{"groupCode":"biz","groupName":"商务信息","fields":["credit_limit","payment_term","invoice_type","industry"]},{"groupCode":"mgr","groupName":"归属","fields":["customer_manager_id","settle_currency_id"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- material · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_wl_create', 'wl__create', 'wl', 'create', 'material', 'cm_material',
-        '{"name":"name","short_name":"short_name","spec":"spec","model":"model","class_id":"class_id","material_type":"material_type","barcode":"barcode","base_uom_id":"base_uom_id","purchase_uom_id":"purchase_uom_id","stock_uom_id":"stock_uom_id","purchase_rate":"purchase_rate","brand":"brand","origin":"origin","net_weight":"net_weight","shelf_life_days":"shelf_life_days","batch_flag":"batch_flag","serial_flag":"serial_flag","hs_code":"hs_code","long_desc":"long_desc"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"name","weight":50,"kind":"EditDistance","dedup":true},{"field":"spec","weight":25,"kind":"Exact","dedup":true},{"field":"model","weight":25,"kind":"Exact","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name","material_type","class_id"]},{"groupCode":"spec","groupName":"规格属性","fields":["spec","model","barcode","brand","origin"]},{"groupCode":"uom","groupName":"单位体系","fields":["base_uom_id","purchase_uom_id","stock_uom_id","purchase_rate"]},{"groupCode":"ext","groupName":"扩展属性","fields":["net_weight","shelf_life_days","batch_flag","serial_flag","hs_code","long_desc"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- material · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_wl_update', 'wl__update', 'wl', 'update', 'material', 'cm_material',
-        '{"name":"name","short_name":"short_name","spec":"spec","model":"model","class_id":"class_id","material_type":"material_type","barcode":"barcode","base_uom_id":"base_uom_id","purchase_uom_id":"purchase_uom_id","stock_uom_id":"stock_uom_id","purchase_rate":"purchase_rate","brand":"brand","origin":"origin","net_weight":"net_weight","shelf_life_days":"shelf_life_days","batch_flag":"batch_flag","serial_flag":"serial_flag","hs_code":"hs_code","long_desc":"long_desc"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name","material_type","class_id"]},{"groupCode":"spec","groupName":"规格属性","fields":["spec","model","barcode","brand","origin"]},{"groupCode":"uom","groupName":"单位体系","fields":["base_uom_id","purchase_uom_id","stock_uom_id","purchase_rate"]},{"groupCode":"ext","groupName":"扩展属性","fields":["net_weight","shelf_life_days","batch_flag","serial_flag","hs_code","long_desc"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- gl_account · 新建
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_kj_create', 'kj__create', 'kj', 'create', 'gl_account', 'cm_gl_account',
-        '{"acct_no":"acct_no","name":"name","parent_id":"parent_id","acct_type":"acct_type","direction":"direction","aux_biz_partner":"aux_biz_partner","aux_department":"aux_department","aux_employee":"aux_employee","aux_project":"aux_project","is_cash_flow":"is_cash_flow","foreign_currency_flag":"foreign_currency_flag","quantity_flag":"quantity_flag","ledger_format":"ledger_format"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[{"field":"acct_no","weight":60,"kind":"Exact","dedup":true},{"field":"name","weight":40,"kind":"EditDistance","dedup":true}]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["acct_no","name","parent_id"]},{"groupCode":"attr","groupName":"科目属性","fields":["acct_type","direction"]},{"groupCode":"aux","groupName":"辅助核算","fields":["aux_biz_partner","aux_department","aux_employee","aux_project"]},{"groupCode":"gl","groupName":"核算控制","fields":["is_cash_flow","foreign_currency_flag","quantity_flag","ledger_format"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
--- gl_account · 变更
-
-INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, target_dict, target_table,
-                                header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
-                                header_groups, is_active)
-VALUES ('mdm_act_kj_update', 'kj__update', 'kj', 'update', 'gl_account', 'cm_gl_account',
-        '{"acct_no":"acct_no","name":"name","parent_id":"parent_id","acct_type":"acct_type","direction":"direction","aux_biz_partner":"aux_biz_partner","aux_department":"aux_department","aux_employee":"aux_employee","aux_project":"aux_project","is_cash_flow":"is_cash_flow","foreign_currency_flag":"foreign_currency_flag","quantity_flag":"quantity_flag","ledger_format":"ledger_format"}'::jsonb,
-        '[]'::jsonb,
-        'name',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["acct_no","name","parent_id"]},{"groupCode":"attr","groupName":"科目属性","fields":["acct_type","direction"]},{"groupCode":"aux","groupName":"辅助核算","fields":["aux_biz_partner","aux_department","aux_employee","aux_project"]},{"groupCode":"gl","groupName":"核算控制","fields":["is_cash_flow","foreign_currency_flag","quantity_flag","ledger_format"]}]'::jsonb,
-        TRUE)
-ON CONFLICT (activation_code) DO UPDATE SET
-    source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
-    target_dict = EXCLUDED.target_dict, target_table = EXCLUDED.target_table,
-    header_mapping = EXCLUDED.header_mapping, line_mappings = EXCLUDED.line_mappings,
-    subject_name_field = EXCLUDED.subject_name_field, key_fields = EXCLUDED.key_fields,
-    doc_code_rules = EXCLUDED.doc_code_rules, header_groups = EXCLUDED.header_groups,
-    is_active = EXCLUDED.is_active, updated_at = now();
-
-
-
-
-

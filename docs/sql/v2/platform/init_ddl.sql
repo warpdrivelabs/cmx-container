@@ -4,9 +4,11 @@
 -- 目标库：default 数据源（default = true，平台/主库）
 -- 归属规则：cmx_ 前缀平台表建主库（例外：cmx_flow_* 流程运行态表建业务库，
 --           见 ../biz/init_ddl.sql）
--- 风格：无损幂等（CREATE TABLE/INDEX IF NOT EXISTS + 结构对齐 ALTER），
---       重复执行不丢数据；已存在但结构漂移的表由区块内对齐 ALTER 补列。
--- 每表区块布局：CREATE TABLE → 结构对齐 ALTER → COMMENT → 索引
+-- 风格：表定义即终态（无 ALTER，字段变更直接改表定义并同步新增迁移）；
+--       无损幂等（CREATE TABLE/INDEX IF NOT EXISTS），重复执行不丢数据
+-- 每表区块布局：CREATE TABLE → COMMENT → 索引
+-- 面向：新库手工重建与结构参考；存量库升级走 migrations 基线迁移
+--       （基线内含结构对齐 ALTER 区，可安全补齐漂移库，本文件不含）
 -- 来源：docs/sql/init/init_ddl.sql 终态 + 迁移链对齐语句
 -- ============================================================
 
@@ -31,12 +33,6 @@ CREATE TABLE IF NOT EXISTS cmx_domain
     update_name VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_domain ADD COLUMN IF NOT EXISTS icon  VARCHAR(100);
-ALTER TABLE cmx_domain ADD COLUMN IF NOT EXISTS title VARCHAR(200);
-COMMENT ON COLUMN cmx_domain.icon  IS '域图标名（UI5 图标标识）';
-COMMENT ON COLUMN cmx_domain.title IS '域英文标题/副标题';
 
 COMMENT ON TABLE cmx_domain IS '域表';
 COMMENT ON COLUMN cmx_domain.id IS 'ID';
@@ -84,12 +80,6 @@ CREATE TABLE IF NOT EXISTS cmx_application
     update_name VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_application ADD COLUMN IF NOT EXISTS icon  VARCHAR(100);
-ALTER TABLE cmx_application ADD COLUMN IF NOT EXISTS title VARCHAR(200);
-COMMENT ON COLUMN cmx_application.icon  IS '应用图标名（UI5 图标标识）';
-COMMENT ON COLUMN cmx_application.title IS '应用英文标题/副标题';
 
 COMMENT ON TABLE cmx_application IS '应用表';
 COMMENT ON COLUMN cmx_application.id IS 'ID';
@@ -143,20 +133,6 @@ CREATE TABLE IF NOT EXISTS cmx_module
     update_name      VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS icon          VARCHAR(100);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS title         VARCHAR(200);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS resource_root VARCHAR(255);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS manifest_path VARCHAR(500);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS theme         VARCHAR(100);
-ALTER TABLE cmx_module ADD COLUMN IF NOT EXISTS theme_color   VARCHAR(50);
-COMMENT ON COLUMN cmx_module.icon          IS '模块图标名（UI5 图标标识）';
-COMMENT ON COLUMN cmx_module.title         IS '模块英文标题/副标题';
-COMMENT ON COLUMN cmx_module.resource_root IS '模块资源目录相对路径（相对 data/ 根），格式 domain/application/module';
-COMMENT ON COLUMN cmx_module.manifest_path IS '模块清单文件相对路径，格式 modules/<d>/<a>/<m>/module.json';
-COMMENT ON COLUMN cmx_module.theme         IS '模块主题名';
-COMMENT ON COLUMN cmx_module.theme_color   IS '模块主题色（十六进制或色名）';
 
 COMMENT ON TABLE cmx_module IS '模块表';
 COMMENT ON COLUMN cmx_module.id IS 'ID';
@@ -220,19 +196,6 @@ CREATE TABLE IF NOT EXISTS cmx_sys_datasource
     update_name           VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS domain_code VARCHAR(64);
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS application_code VARCHAR(64);
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS module_code VARCHAR(64);
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS source_type VARCHAR(20);
-ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS db_name VARCHAR(128);
-COMMENT ON COLUMN cmx_sys_datasource.domain_code IS '所属域编码';
-COMMENT ON COLUMN cmx_sys_datasource.application_code IS '所属应用编码';
-COMMENT ON COLUMN cmx_sys_datasource.module_code IS '所属模块编码';
-COMMENT ON COLUMN cmx_sys_datasource.source_type IS '数据源类型：default-默认库，biz-业务库，other-其他';
-COMMENT ON COLUMN cmx_sys_datasource.db_name IS '数据源名称（便于识别的显示名称）';
-DROP INDEX IF EXISTS uk_cmx_datasource_db_id;
 
 COMMENT ON TABLE cmx_sys_datasource IS 'cmx数据源管理';
 COMMENT ON COLUMN cmx_sys_datasource.id IS '主键';
@@ -309,12 +272,6 @@ CREATE TABLE IF NOT EXISTS cmx_plugin
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_plugin ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default', ADD COLUMN IF NOT EXISTS storage_key VARCHAR (500), ADD COLUMN IF NOT EXISTS storage_checksum VARCHAR (128);
-COMMENT ON COLUMN cmx_plugin.app_id IS '应用隔离标识，用于多租户或多应用场景下的插件隔离';
-COMMENT ON COLUMN cmx_plugin.storage_key IS '存储键，标识插件包在存储系统中的唯一键';
-COMMENT ON COLUMN cmx_plugin.storage_checksum IS '存储校验和，用于验证插件包完整性';
-
 COMMENT ON TABLE cmx_plugin IS '插件注册主表：存储所有已安装插件的核心信息基线版本';
 COMMENT ON COLUMN cmx_plugin.id IS '主键ID';
 COMMENT ON COLUMN cmx_plugin.plugin_id IS '插件唯一标识 (如 "example_plugin")';
@@ -385,10 +342,6 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_versions
     marketplace_source_id VARCHAR(64),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_plugin_versions ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_plugin_versions.app_id IS '应用隔离标识，用于多租户或多应用场景下的版本隔离';
 
 COMMENT ON TABLE cmx_plugin_versions IS '插件版本历史表：记录插件的版本历史';
 COMMENT ON COLUMN cmx_plugin_versions.id IS '主键ID';
@@ -501,10 +454,6 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_audit_log
     update_by        VARCHAR(100),
     update_name      VARCHAR(100)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_plugin_audit_log ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_plugin_audit_log.app_id IS '应用隔离标识，用于多租户或多应用场景下的审计日志隔离';
 
 COMMENT ON TABLE cmx_plugin_audit_log IS '审计日志表：记录插件操作日志';
 COMMENT ON COLUMN cmx_plugin_audit_log.id IS '主键ID';
@@ -707,11 +656,6 @@ CREATE TABLE IF NOT EXISTS cmx_meta_table_define
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_meta_table_define ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default', ADD COLUMN IF NOT EXISTS ddl_status VARCHAR (20) NOT NULL DEFAULT 'pending';
-COMMENT ON COLUMN cmx_meta_table_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据隔离';
-COMMENT ON COLUMN cmx_meta_table_define.ddl_status IS 'DDL执行状态: pending(待执行), executing(执行中), completed(已完成), failed(执行失败)';
-
 COMMENT ON TABLE cmx_meta_table_define IS '表定义元数据';
 COMMENT ON COLUMN cmx_meta_table_define.id IS '主键';
 COMMENT ON COLUMN cmx_meta_table_define.table_name IS '表名';
@@ -759,10 +703,6 @@ CREATE TABLE IF NOT EXISTS cmx_meta_table_define_version
     update_name      VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_meta_table_define_version ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_meta_table_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据版本隔离';
 
 COMMENT ON TABLE cmx_meta_table_define_version IS '表元数据版本表';
 COMMENT ON COLUMN cmx_meta_table_define_version.id IS '主键';
@@ -812,10 +752,6 @@ CREATE TABLE IF NOT EXISTS cmx_service_define
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_service_define ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_service_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务隔离';
-
 COMMENT ON TABLE cmx_service_define IS '服务定义表';
 COMMENT ON COLUMN cmx_service_define.id IS '主键';
 COMMENT ON COLUMN cmx_service_define.service_key IS '服务key';
@@ -861,12 +797,6 @@ CREATE TABLE IF NOT EXISTS cmx_service_define_version
     archived       INT4      DEFAULT 0,
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_service_define_version ADD COLUMN IF NOT EXISTS app_id VARCHAR (64) NOT NULL DEFAULT 'default';
-COMMENT ON COLUMN cmx_service_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务版本隔离';
-ALTER TABLE cmx_service_define_version ADD COLUMN IF NOT EXISTS api_doc TEXT;
-COMMENT ON COLUMN cmx_service_define_version.api_doc IS '服务接口文档JSON，由api_doc_generator自动生成';;
 
 COMMENT ON TABLE cmx_service_define_version IS '服务定义版本表';
 COMMENT ON COLUMN cmx_service_define_version.id IS '主键';
@@ -1269,11 +1199,6 @@ CREATE TABLE IF NOT EXISTS cmx_auth_client
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_auth_client DROP CONSTRAINT IF EXISTS uk_cmx_auth_client_client_id;
-DROP INDEX IF EXISTS uk_cmx_auth_client_client_id;
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_auth_client_client_id ON cmx_auth_client (client_id) WHERE archived = 0;
-
 COMMENT ON TABLE cmx_auth_client IS 'OAuth2 客户端表';
 COMMENT ON COLUMN cmx_auth_client.id IS '主键ID';
 COMMENT ON COLUMN cmx_auth_client.client_id IS '客户端标识';
@@ -1531,13 +1456,6 @@ CREATE TABLE IF NOT EXISTS cmx_user
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_user DROP CONSTRAINT IF EXISTS uk_cmx_user_username;
-DROP INDEX IF EXISTS uk_cmx_user_username;
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_user_username ON cmx_user (username) WHERE archived = 0;
-ALTER TABLE cmx_user DROP CONSTRAINT IF EXISTS uk_cmx_user_email;
-DROP INDEX IF EXISTS uk_cmx_user_email;
-
 COMMENT ON TABLE cmx_user IS '用户表';
 COMMENT ON COLUMN cmx_user.id IS '主键ID';
 COMMENT ON COLUMN cmx_user.username IS '用户名（唯一）';
@@ -1625,11 +1543,6 @@ CREATE TABLE IF NOT EXISTS cmx_role
     PRIMARY KEY (id)
 );
 
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_role DROP CONSTRAINT IF EXISTS uk_cmx_role_code;
-DROP INDEX IF EXISTS uk_cmx_role_code;
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_role_code ON cmx_role (code) WHERE archived = 0;
-
 COMMENT ON TABLE cmx_role IS '角色表';
 COMMENT ON COLUMN cmx_role.id IS '主键ID';
 COMMENT ON COLUMN cmx_role.code IS '角色编码（唯一）';
@@ -1667,11 +1580,6 @@ CREATE TABLE IF NOT EXISTS cmx_user_role
     update_name VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_user_role DROP CONSTRAINT IF EXISTS uk_cmx_user_role;
-DROP INDEX IF EXISTS uk_cmx_user_role;
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_user_role ON cmx_user_role (user_id, role_id) WHERE archived = 0;
 
 COMMENT ON TABLE cmx_user_role IS '用户角色关联表';
 COMMENT ON COLUMN cmx_user_role.id IS '主键ID';
@@ -1719,11 +1627,6 @@ CREATE TABLE IF NOT EXISTS cmx_permission
     update_name   VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_permission DROP CONSTRAINT IF EXISTS uk_cmx_permission_code;
-DROP INDEX IF EXISTS uk_cmx_permission_code;
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_permission_code ON cmx_permission (code) WHERE archived = 0;
 
 COMMENT ON TABLE cmx_permission IS '权限表';
 COMMENT ON COLUMN cmx_permission.id IS '主键ID';
@@ -1775,11 +1678,6 @@ CREATE TABLE IF NOT EXISTS cmx_role_permission
     update_name   VARCHAR(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_role_permission DROP CONSTRAINT IF EXISTS uk_cmx_role_permission;
-DROP INDEX IF EXISTS uk_cmx_role_permission;
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_role_permission ON cmx_role_permission (role_id, permission_id) WHERE archived = 0;
 
 COMMENT ON TABLE cmx_role_permission IS '角色权限关联表';
 COMMENT ON COLUMN cmx_role_permission.id IS '主键ID';
@@ -1865,11 +1763,6 @@ CREATE TABLE IF NOT EXISTS cmx_exclusion_rule
     update_name         varchar(100),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_exclusion_rule DROP CONSTRAINT IF EXISTS uk_cmx_exclusion_rule_code;
-DROP INDEX IF EXISTS uk_cmx_exclusion_rule_code;
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_exclusion_rule_code ON cmx_exclusion_rule (code) WHERE archived = 0;;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_exclusion_rule_code ON cmx_exclusion_rule (code) WHERE archived = 0;
 
@@ -2007,11 +1900,6 @@ CREATE TABLE IF NOT EXISTS cmx_menu
     ext_attributes   TEXT,
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-ALTER TABLE cmx_menu DROP CONSTRAINT IF EXISTS uk_cmx_menu_code;
-DROP INDEX IF EXISTS uk_cmx_menu_code;
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_menu_code ON cmx_menu (code) WHERE archived = 0;
 
 COMMENT ON TABLE cmx_menu IS '菜单定义表';
 COMMENT ON COLUMN cmx_menu.id IS '主键ID';
@@ -2587,8 +2475,6 @@ CREATE TABLE IF NOT EXISTS cmx_user_position
 COMMENT ON TABLE cmx_user_position IS '用户-岗位关联表（一人可多岗）';
 CREATE INDEX IF NOT EXISTS idx_cmx_user_position_user ON cmx_user_position (user_id);
 CREATE INDEX IF NOT EXISTS idx_cmx_user_position_pos  ON cmx_user_position (position_id);
-
-
 
 -- =====================================================
 -- cmx-code 编码引擎（两张表合并迁移）

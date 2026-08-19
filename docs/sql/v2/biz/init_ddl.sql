@@ -4,9 +4,11 @@
 -- 目标库：业务数据源（source_type = "biz"）
 -- 归属规则：非 cmx_ 业务表 + cmx_flow_* 流程运行态表建业务库：
 --   · md_*  11 张 —— MDM 治理表
+--   · mdm_activation —— MDM 激活映射（原 cmx_mdm_activation，已归业务库侧）
 --   · cmx_flow_* 15 张 —— 流程运行态（与流程引擎 FLOW_DB_ID=业务库一致；
 --     IAM 侧 cmx_org/cmx_position/cmx_user_position 留主库，见 ../platform/）
--- 风格：无损幂等；每表区块：CREATE TABLE → 结构对齐 ALTER → COMMENT → 索引
+-- 风格：表定义即终态（无 ALTER）；无损幂等；每表区块：CREATE TABLE → COMMENT → 索引
+-- 面向：新库手工重建与结构参考；存量库升级走 migrations 基线迁移
 -- 注意：cf_*/cr_*/cm_* 等业务表 DDL 由模型中心/插件运行时部署，不在本文件
 --       （种子见 seeds/，表部署后手工执行）
 -- ============================================================
@@ -289,7 +291,6 @@ COMMENT ON COLUMN cmx_flow_definition_version.note    IS '本版本变更说明�
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cmx_flow_def_version ON cmx_flow_definition_version (def_key, version);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_def_version_key   ON cmx_flow_definition_version (def_key);
 
-
 -- ================================================================
 -- MDM 主数据治理表（平台级，不走 compile）
 -- 含激活映射配置 / 版本留痕 / 交叉引用 / 值映射 / 匹配组 / 分发订阅 / 事件日志
@@ -300,7 +301,7 @@ CREATE INDEX IF NOT EXISTS idx_cmx_flow_def_version_key   ON cmx_flow_definition
 
 -- 1. 激活映射配置（UI 配置器维护，激活器读取执行）
 CREATE TABLE IF NOT EXISTS mdm_activation (
-                                              id              VARCHAR(64)  NOT NULL,
+    id              VARCHAR(64)  NOT NULL,
     activation_code VARCHAR(64)  NOT NULL,
     source_doc_type VARCHAR(64)  NOT NULL,
     cr_type         VARCHAR(16)  NOT NULL,
@@ -318,9 +319,8 @@ CREATE TABLE IF NOT EXISTS mdm_activation (
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
-    );
-
-
+);
+COMMENT ON TABLE  mdm_activation IS 'MDM 激活映射配置（单据→主数据），UI 配置器维护，激活器读取执行';
 COMMENT ON COLUMN mdm_activation.id              IS '主键（snowflake，应用层生成）';
 COMMENT ON COLUMN mdm_activation.activation_code IS '映射码（如 supplier_apply）';
 COMMENT ON COLUMN mdm_activation.source_doc_type IS '来源单据类型（如 mdm_supplier_apply）';
@@ -329,18 +329,15 @@ COMMENT ON COLUMN mdm_activation.target_dict     IS '目标头字典码（如 su
 COMMENT ON COLUMN mdm_activation.target_table    IS '目标头物理表名（如 cm_supplier，配置器选字典时从 dct/meta tableName 一并写入，激活器直接用）';
 COMMENT ON COLUMN mdm_activation.header_mapping  IS '头映射 {单据字段:主数据列}';
 COMMENT ON COLUMN mdm_activation.line_mappings   IS '明细映射 [{lineType,targetDict,targetTable,parentIdField,fields}]';
-COMMENT ON COLUMN mdm_activation.code_rule_code  IS 'code 由哪个编码规则生成（新建时接 cmx-code）';
+COMMENT ON COLUMN mdm_activation.code_rule_code  IS '【已废弃】字典 code 铸号规则；字典 code 现改走 dictMeta.codeRule，本列保留不删（避免迁移风险），激活器不再读取';
 COMMENT ON COLUMN mdm_activation.subject_name_field IS '主体名字段来源（payload 内字段名，前端按此填 subject_name）';
-COMMENT ON COLUMN mdm_activation.subject_code_field IS '主体编码字段来源（为空则由 codeRule 铸号）';
-COMMENT ON COLUMN mdm_activation.header_groups   IS '头映射分组(UI 展示用,[{groupCode,groupName,fields:[源字段名]}]);激活器不读,header_mapping 落库仍扁平';
+COMMENT ON COLUMN mdm_activation.subject_code_field IS '【已废弃】主体编码字段来源；从未接线（激活器不读），字典 code 走 dictMeta.codeRule 铸号，本列保留不删（避免迁移风险）';
+COMMENT ON COLUMN mdm_activation.header_groups  IS '头映射分组(UI 展示用,[{groupCode,groupName,fields:[源字段名]}]);激活器不读,header_mapping 落库仍扁平';
+COMMENT ON COLUMN mdm_activation.doc_code_rules IS '单据字段铸号规则覆盖 {单据字段:ruleCode};单据保存铸号时覆盖单据元数据 codeRule 同名字段(激活配置优先);激活器不读,由 cr-form 读取经 saveDocData→saver 覆盖铸号';
+COMMENT ON COLUMN mdm_activation.key_fields IS '关键信息字段 [{field,weight,kind,dedup}];field=目标字典列名,数组序=簇键优先级;cr-form 据此渲染步骤①关键信息表单,dedup=true 的字段构造 /mdm/check-key 多字段加权查重,dedup=false 仅展示采集不查重;空则无步骤①(直接完整表单,不查重)';
 COMMENT ON COLUMN mdm_activation.is_active       IS '是否启用';
-COMMENT ON COLUMN mdm_activation.doc_code_rules IS '单据字段铸号规则覆盖 {单据字段:ruleCode}，单据保存铸号时覆盖单据元数据 codeRule 同名字段（激活配置优先）';;
-COMMENT ON COLUMN mdm_activation.key_fields IS '关键信息字段 [{field,weight,kind,dedup}];field=目标字典列名,数组序=簇键优先级;cr-form 据此渲染步骤①关键信息表单,dedup=true 的字段构造 /mdm/check-key 多字段加权查重,dedup=false 仅展示采集不查重;空则无步骤①(直接完整表单,不查重)';;
-COMMENT ON TABLE  mdm_activation IS 'MDM 激活映射配置（单据→主数据），UI 配置器维护，激活器读取执行';
-
 CREATE UNIQUE INDEX IF NOT EXISTS uk_mdm_activation_code     ON mdm_activation (activation_code);
 CREATE        INDEX IF NOT EXISTS idx_mdm_activation_doctype ON mdm_activation (source_doc_type, cr_type);
-
 
 -- 2. 主数据版本留痕（激活器写入）
 CREATE TABLE IF NOT EXISTS md_audit (
@@ -357,18 +354,6 @@ CREATE TABLE IF NOT EXISTS md_audit (
     operated_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_audit.id            IS '主键（应用层生成）';
-COMMENT ON COLUMN md_audit.dict_code     IS 'cm_* 字典码';
-COMMENT ON COLUMN md_audit.record_id     IS 'cm_*.id（无物理FK）';
-COMMENT ON COLUMN md_audit.version       IS '激活版本号';
-COMMENT ON COLUMN md_audit.action        IS 'create/update/freeze/merge/archive';
-COMMENT ON COLUMN md_audit.source_cr_id  IS '触发此变更的 CR 单据 cv_mdm_apply.id';
-COMMENT ON COLUMN md_audit.field         IS '变更字段（变更场景）';
-COMMENT ON COLUMN md_audit.old_value     IS '旧值';
-COMMENT ON COLUMN md_audit.new_value     IS '新值';
-COMMENT ON COLUMN md_audit.operated_by   IS '操作人ID';
 COMMENT ON TABLE  md_audit IS '主数据版本留痕（激活器写入）';
 COMMENT ON COLUMN md_audit.id            IS '主键（应用层生成）';
 COMMENT ON COLUMN md_audit.dict_code     IS 'cm_* 字典码';
@@ -394,10 +379,6 @@ CREATE TABLE IF NOT EXISTS md_xref (
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_xref.id          IS '主键（应用层生成）';
-COMMENT ON COLUMN md_xref.xref_status IS '引用状态 active/inactive';
 COMMENT ON TABLE  md_xref IS '主数据交叉引用（Key Mapping）';
 COMMENT ON COLUMN md_xref.id          IS '主键（应用层生成）';
 COMMENT ON COLUMN md_xref.xref_status IS '引用状态 active/inactive';
@@ -414,9 +395,6 @@ CREATE TABLE IF NOT EXISTS md_value_map (
     tgt_val   VARCHAR(128) NOT NULL,
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_value_map.id IS '主键（应用层生成）';
 COMMENT ON TABLE  md_value_map IS '主数据值映射（Value Mapping）';
 COMMENT ON COLUMN md_value_map.id IS '主键（应用层生成）';
 
@@ -434,10 +412,6 @@ CREATE TABLE IF NOT EXISTS md_match_config (
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_match_config.id IS '主键（应用层生成）';
-COMMENT ON COLUMN md_match_config.specs IS '比较字段 [{field,weight,kind:Exact|EditDistance}]';
 COMMENT ON TABLE  md_match_config IS '查重规则配置（按字典维度），查重界面内维护，find-duplicates 读取执行';
 COMMENT ON COLUMN md_match_config.id IS '主键（应用层生成）';
 COMMENT ON COLUMN md_match_config.specs IS '比较字段 [{field,weight,kind:Exact|EditDistance}]';
@@ -458,17 +432,6 @@ CREATE TABLE IF NOT EXISTS md_merge_record (
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_merge_record.id               IS '主键（应用层生成）';
-COMMENT ON COLUMN md_merge_record.dict_code        IS 'cm_* 字典码';
-COMMENT ON COLUMN md_merge_record.group_key        IS '合并组业务键，如 merge:{master_id}';
-COMMENT ON COLUMN md_merge_record.member_ids       IS '簇内记录 id 数组 [master_id, ...victim_ids]';
-COMMENT ON COLUMN md_merge_record.master_id        IS '主记录 id（合并后保留的一方）';
-COMMENT ON COLUMN md_merge_record.score            IS '合并时簇内最高匹配分（0-100）';
-COMMENT ON COLUMN md_merge_record.decision         IS '裁决结果 AutoMerge/Review（查重阶段判定）';
-COMMENT ON COLUMN md_merge_record.survivorship_log IS '存活留痕 JSONB {fields:[{field,from,value}],reparented:{明细表:[行id]}}';
-COMMENT ON COLUMN md_merge_record.status           IS 'pending/reviewed/rejected/unmerged（待审/已合并/已驳回/已还原）';
 COMMENT ON TABLE  md_merge_record IS '合并事务记录（管家确认合并的载体；承载 survivorship_log 存活留痕 + 状态流转。与 md_match_scan 职责分离：scan=系统扫描的嫌疑重复，group=确认执行的合并事务）';
 COMMENT ON COLUMN md_merge_record.id               IS '主键（应用层生成）';
 COMMENT ON COLUMN md_merge_record.dict_code        IS 'cm_* 字典码';
@@ -497,14 +460,6 @@ CREATE TABLE IF NOT EXISTS md_match_scan (
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_match_scan.id            IS '主键（应用层生成）';
-COMMENT ON COLUMN md_match_scan.cluster_key   IS '簇键标识，如 credit_code:C1';
-COMMENT ON COLUMN md_match_scan.cluster_hash  IS 'member_ids 升序后 hash，去重用';
-COMMENT ON COLUMN md_match_scan.member_ids    IS '簇内记录 id 数组 [id1,id2,...]';
-COMMENT ON COLUMN md_match_scan.max_score     IS '簇内最高配对分';
-COMMENT ON COLUMN md_match_scan.status        IS 'pending/resolved/ignored';
 COMMENT ON TABLE  md_match_scan IS '查重发现项（系统扫描出的重复簇，管家评审载体）';
 COMMENT ON COLUMN md_match_scan.id            IS '主键（应用层生成）';
 COMMENT ON COLUMN md_match_scan.cluster_key   IS '簇键标识，如 credit_code:C1';
@@ -536,20 +491,6 @@ CREATE TABLE IF NOT EXISTS md_subscription (
     updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_subscription.id      IS '主键（应用层生成）';
-COMMENT ON COLUMN md_subscription.channel IS '通道 event/rest/batch';
-ALTER TABLE md_subscription ADD COLUMN IF NOT EXISTS name           VARCHAR(128), ADD COLUMN IF NOT EXISTS description    VARCHAR(512), ADD COLUMN IF NOT EXISTS channel_config JSONB        NOT NULL DEFAULT '{}', ADD COLUMN IF NOT EXISTS event_types    JSONB        NOT NULL DEFAULT '[]', ADD COLUMN IF NOT EXISTS retry_max      INT          NOT NULL DEFAULT 8, ADD COLUMN IF NOT EXISTS timeout_ms     INT          NOT NULL DEFAULT 10000, ADD COLUMN IF NOT EXISTS batch_size     INT          NOT NULL DEFAULT 50, ADD COLUMN IF NOT EXISTS created_by     VARCHAR(64), ADD COLUMN IF NOT EXISTS updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now();
-COMMENT ON COLUMN md_subscription.name           IS '订阅名称（展示）';
-COMMENT ON COLUMN md_subscription.channel_config IS '通道配置：webhook {url,secret,headers{}}；rest_pull {consumerId}；kafka {brokers,topic,partition_key}（骨架）';
-COMMENT ON COLUMN md_subscription.event_types    IS '订阅事件类型 JSON 数组；[] = 全部(created/updated/merged)';
-COMMENT ON COLUMN md_subscription.retry_max     IS '最大尝试次数（含首发）';
-COMMENT ON COLUMN md_subscription.timeout_ms    IS '单次投递超时（毫秒）';
-COMMENT ON COLUMN md_subscription.batch_size    IS '单轮该订阅最大投递数';
-COMMENT ON COLUMN md_subscription.created_by    IS '创建人用户 id';
-COMMENT ON COLUMN md_subscription.updated_at    IS '最近更新时间';
-COMMENT ON COLUMN md_subscription.channel       IS '通道 webhook/kafka/rocketmq/rest_pull';
 COMMENT ON TABLE  md_subscription IS '分发订阅配置';
 COMMENT ON COLUMN md_subscription.id             IS '主键（应用层生成）';
 COMMENT ON COLUMN md_subscription.target_sys     IS '目标系统标识（uk：同系统同字典同通道唯一）';
@@ -578,11 +519,6 @@ CREATE TABLE IF NOT EXISTS md_event_log (
     emitted_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_event_log.id         IS '主键（snowflake，应用层生成，对齐全库主键惯例）';
-COMMENT ON COLUMN md_event_log.seq        IS '有序拉取序列（DB 自增，非主键，供消费者 delta 排序）';
-COMMENT ON COLUMN md_event_log.event_type IS 'created/updated/merged';
 COMMENT ON TABLE  md_event_log IS '分发事件日志（delta，消费者按 seq 拉取）';
 COMMENT ON COLUMN md_event_log.id         IS '主键（snowflake，应用层生成，对齐全库主键惯例）';
 COMMENT ON COLUMN md_event_log.seq        IS '有序拉取序列（DB 自增，非主键，供消费者 delta 排序）';
@@ -609,23 +545,6 @@ CREATE TABLE IF NOT EXISTS md_dispatch_log (
     updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_dispatch_log.id IS '主键（应用层 snowflake，对齐 md_ 治理表惯例）';
-COMMENT ON COLUMN md_dispatch_log.subscription_id IS '订阅 id → md_subscription.id';
-COMMENT ON COLUMN md_dispatch_log.event_id IS '事件 id → md_event_log.id（幂等键之一）';
-COMMENT ON COLUMN md_dispatch_log.event_seq IS '事件序号 → md_event_log.seq（排序/诊断冗余）';
-COMMENT ON COLUMN md_dispatch_log.dict_code IS '字典代码（冗余，过滤用）';
-COMMENT ON COLUMN md_dispatch_log.record_id IS '主数据记录 id';
-COMMENT ON COLUMN md_dispatch_log.status IS 'pending待投/running投递中/delivered成功/failed待重试/dead死信/skipped人工跳过';
-COMMENT ON COLUMN md_dispatch_log.attempts IS '已尝试次数';
-COMMENT ON COLUMN md_dispatch_log.next_retry_at IS 'failed 的下次可抢占时间（指数退避）；NULL=非 failed';
-COMMENT ON COLUMN md_dispatch_log.last_error IS '最近一次错误信息';
-COMMENT ON COLUMN md_dispatch_log.http_status IS 'webhook 响应码';
-COMMENT ON COLUMN md_dispatch_log.response_snippet IS '响应体摘要（截断 512）';
-COMMENT ON COLUMN md_dispatch_log.delivered_at IS '投递成功时间';
-COMMENT ON COLUMN md_dispatch_log.created_at IS '创建时间';
-COMMENT ON COLUMN md_dispatch_log.updated_at IS '最近状态变更时间';
 COMMENT ON TABLE  md_dispatch_log IS '分发投递实例（事件×订阅）：队列状态机 + 投递流水';
 COMMENT ON COLUMN md_dispatch_log.id IS '主键（应用层 snowflake，对齐 md_ 治理表惯例）';
 COMMENT ON COLUMN md_dispatch_log.subscription_id IS '订阅 id → md_subscription.id';
@@ -654,11 +573,6 @@ CREATE TABLE IF NOT EXISTS md_dist_watermark (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (key)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_dist_watermark.key IS '水位键（当前仅 fanout）';
-COMMENT ON COLUMN md_dist_watermark.last_seq IS '已扇出处理的 md_event_log 最大 seq（无论是否命中订阅）';
-COMMENT ON COLUMN md_dist_watermark.updated_at IS '最近推进时间';
 COMMENT ON TABLE  md_dist_watermark IS '分发引擎扇出水位（全局单行 fanout）';
 COMMENT ON COLUMN md_dist_watermark.key IS '水位键（当前仅 fanout）';
 COMMENT ON COLUMN md_dist_watermark.last_seq IS '已扇出处理的 md_event_log 最大 seq（无论是否命中订阅）';
@@ -673,13 +587,6 @@ CREATE TABLE IF NOT EXISTS md_consumer_offset (
     acked_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-
--- —— 结构对齐（漂移库补列/索引重建；新库空操作） ——
-COMMENT ON COLUMN md_consumer_offset.id IS '主键（应用层 snowflake）';
-COMMENT ON COLUMN md_consumer_offset.consumer_id IS '下游消费者标识（建议 = target_sys）';
-COMMENT ON COLUMN md_consumer_offset.dict_code IS '字典代码';
-COMMENT ON COLUMN md_consumer_offset.acked_seq IS '已确认消费到的 seq';
-COMMENT ON COLUMN md_consumer_offset.acked_at IS '最近确认时间';
 COMMENT ON TABLE  md_consumer_offset IS 'pull 消费者游标登记（监控/对账用；消费端仍应自持 seq）';
 COMMENT ON COLUMN md_consumer_offset.id IS '主键（应用层 snowflake）';
 COMMENT ON COLUMN md_consumer_offset.consumer_id IS '下游消费者标识（建议 = target_sys）';

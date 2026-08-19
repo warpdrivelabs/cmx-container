@@ -36,10 +36,15 @@ docs/sql/v2/
 - 这与运行时 `resolve_db_id` 的路由回退（`db_id` 头 → 业务库）一致。
   例外：迁移台账表 `cmx_schema_migrations` 由引擎在**两个库各自**创建，跟随目标库。
 
-**每表区块布局**（init_ddl 与基线内）：`CREATE TABLE → 结构对齐 ALTER → COMMENT → 索引`。
-COMMENT 跟随建表语句；结构对齐 ALTER（历史 `ADD COLUMN IF NOT EXISTS` 的幂等积累）
-插在建表后、COMMENT 前——存量库表结构停留在旧链中途时先补列，后续 COMMENT / 种子
-引用缺失列才不报错；新库则全部即建即过。
+**init_ddl 布局**：表定义即终态（**无 ALTER**，字段变更直接改表定义并同步新增迁移），
+每表区块 `CREATE TABLE → COMMENT（紧跟建表）→ 索引`；面向新库手工重建与结构参考。
+
+**基线迁移布局**：= init_ddl 内容 + 每表区块内插一段「结构对齐 ALTER」+ init_dml
+（`CREATE TABLE → 结构对齐 ALTER → COMMENT → 索引 → 种子`）。
+**为什么基线要含对齐区而 init_ddl 不含**：存量库表结构可能停在旧链中途，建表语句对
+已存在表是 no-op 不补列，须先由对齐区（迁移链历史 `ADD COLUMN IF NOT EXISTS` 的幂等
+积累）补齐到终态，后续 `COMMENT ON COLUMN` / 种子引用新列才不报错；新库即建即过。
+迁移文件是增量变更的载体，允许 ALTER；init_ddl 是终态快照，禁止 ALTER。
 
 **cf_*/cr_*/cm_\* 表的 DDL 不在本目录**——由模型中心/插件运行时部署；对应种子放
 `biz/seeds/`，需在建表完成后手工执行。
@@ -95,14 +100,16 @@ COMMENT 跟随建表语句；结构对齐 ALTER（历史 `ADD COLUMN IF NOT EXIS
 
 ## 六、基线构成溯源
 
-platform 基线 = 旧 `init/init_ddl.sql` 终态（cmx_ 平台表 52 张，不含 flow）
+platform 基线 = 旧 `init/init_ddl.sql` 终态（cmx_ 平台表 51 张，不含流程表）
 + 补丁（20260501 的 idx_version_current）
 + 每表区块内结构对齐（迁移链历史 ALTER / 部分唯一索引重建）
-+ 种子（dam注册 7/11/10 + 角色 3 + 权限 24 + 菜单 147+5 + 编码规则 15 + 激活映射 26）。
++ 种子（dam注册 7/11/10 + 角色 3 + 权限 24 + 菜单 147+5 + 编码规则 15）。
 
-biz 基线 = `md_*` 11 表 + `cmx_flow_*` 15 表（13 张来自旧 init_ddl 流程段 +
-补丁 2 张 cmx_flow_biz_link / cmx_flow_task_comment）+ 治理种子（查重规则 1+13、
-分发水位 1）+ cr_report_sheet 索引修正（原 20260720_001）。
+biz 基线 = `md_*` 11 表 + `mdm_activation`（MDM 激活映射，原 cmx_mdm_activation 改名
+归业务库侧）+ `cmx_flow_*` 15 表（13 张来自旧 init_ddl 流程段 +
+补丁 2 张 cmx_flow_biz_link / cmx_flow_task_comment）
++ 治理种子（激活映射 26+、查重规则 1+13、分发水位 1）
++ cr_report_sheet 索引修正（原 20260720_001）。
 
 有意不迁移（覆盖核对白名单）：
 - 5 张死表 `cmx_plugin_nodes/features/dependencies/deployments`、`cmx_system_plugins`

@@ -358,7 +358,6 @@ ON CONFLICT (code) WHERE archived = 0 DO NOTHING;
 -- 幂等：ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING
 -- ============================================================
 
--- ─────────────────────────────────────────────
 -- 1. 编码规则 cmx_code_rule（id 9000000000000002~0015 顺排，MDM_BILL=…0001 已占）
 --    字典 code 铸号：激活器读 dictMeta.codeRule.ruleCode。漏配不报错，code 退化为占位码——故必须 seed。
 -- ─────────────────────────────────────────────
@@ -459,6 +458,8 @@ VALUES (9000000000000015, 'MDM_GYS', '供应商主数据编码（SUP+日期+流�
         '', TRUE)
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
+-- ─────────────────────────────────────────────
+
 
 -- MDM 变更申请单据号保底规则（20260813_002）
 INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
@@ -466,10 +467,3 @@ VALUES (9000000000000001, 'MDM_BILL', 'MDM 变更申请单据号（CR+日期+流
         '[{"type":"const","value":"CR"},{"type":"dateSerial","format":"YYYYMMDD","width":6,"start":1}]'::jsonb,
         '', TRUE)
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
-
-
-
-
-
-
-
