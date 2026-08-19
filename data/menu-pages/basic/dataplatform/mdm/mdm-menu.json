@@ -1199,6 +1199,59 @@
                     }
                 },
                 {
+                    "id": "mdm-flow-form-binding-admin",
+                    "name": "flow-form-binding-admin",
+                    "caption": "表单注册表",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "form",
+                    "workspace": {
+                        "id": "mdm_flow_form_binding_admin",
+                        "explorer": {
+                            "caption": "表单绑定",
+                            "icon": "form",
+                            "views": [
+                                {
+                                    "id": "mdm-flow-form-binding-admin-explorer",
+                                    "tabLabel": "绑定",
+                                    "icon": "form",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.form-binding-admin",
+                                    "view": "explorer"
+                                }
+                            ]
+                        },
+                        "content": {
+                            "caption": "绑定编辑",
+                            "icon": "detail-view",
+                            "views": [
+                                {
+                                    "id": "mdm-flow-form-binding-admin-content",
+                                    "tabLabel": "编辑",
+                                    "icon": "detail-view",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.form-binding-admin",
+                                    "view": "content"
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "字段说明",
+                            "icon": "hint",
+                            "views": [
+                                {
+                                    "id": "mdm-flow-form-binding-admin-prop",
+                                    "tabLabel": "说明",
+                                    "icon": "hint",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.form-binding-admin",
+                                    "view": "property"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
                     "id": "fi-gl-flow-todo-center-common",
                     "name": "flow-todo-center",
                     "caption": "待办中心",
