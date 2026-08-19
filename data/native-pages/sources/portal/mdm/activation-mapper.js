@@ -363,15 +363,20 @@ function headHtml() {
     </cmx-toolbar></div>`
 }
 
+// 左侧列表标题用「目标字典名称-变更类型名称」：字典名查 dictCatalog（查不到回退 dictCode），
+// 变更类型中文名从 CR_TYPES 的 label「code — 中文名」派生（未匹配回退原值）。
+const dictNameOf = (code) => { const d = state.dictCatalog.find((x) => x.dictCode === code); return (d && d.dictName) || code || '' }
+const crNameOf = (v) => { const t = CR_TYPES.find((x) => x.value === v); return t ? t.label.split('—').pop().trim() : (v || '') }
 function sideItemHtml(it) {
   const code = it.activation_code || ''
   const active = state.current && state.current.activation_code === code
   const cr = it.cr_type || ''
+  const title = (it.target_dict || cr) ? `${dictNameOf(it.target_dict)}-${crNameOf(cr)}` : ''
   const pillCls = { create: 'pill-create', update: 'pill-update', merge: 'pill-merge', block: 'pill-block' }[cr] || 'pill-other'
   return `<div class="side-item ${active ? 'active' : ''}" data-code="${esc(code)}">
     <div class="row1">
       <span class="dot ${it.is_active ? 'on' : 'off'}" title="${it.is_active ? '已启用' : '已停用'}"></span>
-      <span class="t">${esc(code) || '(未命名)'}</span>
+      <span class="t" title="${esc(code)}">${esc(title) || '(未命名)'}</span>
       <span class="pill ${pillCls}">${esc(cr)}</span>
     </div>
     <div class="s">${esc(it.source_doc_type || '')} → ${esc(it.target_dict || '')} · ${esc(it.target_table || '')}</div>
@@ -379,15 +384,21 @@ function sideItemHtml(it) {
 }
 function sideListHtml() {
   const kw = (state.kw || '').trim().toLowerCase()
+  // 命中范围与列表项展示一致：目标字典名称/编码、变更类型中文名/编码、激活编码（含来源单据段）
   const items = state.list
-    .filter((it) => { if (!kw) return true; const c = (it.activation_code || '').toLowerCase(); return c.includes(kw) || (it.target_dict || '').toLowerCase().includes(kw) })
+    .filter((it) => {
+      if (!kw) return true
+      const hay = [it.activation_code, it.target_dict, dictNameOf(it.target_dict), crNameOf(it.cr_type)]
+            .map((s) => (s || '').toLowerCase())
+      return hay.some((s) => s.includes(kw))
+    })
     .map(sideItemHtml).join('')
   return items || '<div class="muted" style="padding:12px">暂无映射，点击「新增映射」</div>'
 }
 function sideHtml() {
   return `<div class="side-card">
     <div class="side-card-head"><ui5-icon name="list"></ui5-icon><span>映射列表（${state.list.length}）</span></div>
-    <div class="side-search"><input type="text" id="amKw" placeholder="搜索激活编码 / 目标字典…" value="${esc(state.kw)}"></div>
+    <div class="side-search"><input type="text" id="amKw" placeholder="搜索字典名称 / 变更类型 / 编码…" value="${esc(state.kw)}"></div>
     <div class="side-list" id="amSideList">${sideListHtml()}</div>
   </div>`
 }
