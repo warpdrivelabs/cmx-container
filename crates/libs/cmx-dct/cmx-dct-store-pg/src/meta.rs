@@ -74,7 +74,11 @@ pub struct SearchQuery {
     pub page: u64,
     /// 每页行数（1..=5000）。
     pub page_size: u64,
-    /// 自分级 children 查询的父 id；None 表示不按 parent 过滤。
+    /// 自分级 children 查询的父 id，三态语义（与 build_search_sql 的 parentId 消费对齐）。
+    ///
+    /// - `None`：前端未传 `parentId` 键 → 不过滤（全量）。
+    /// - `Some(Value::Null)`：前端显式传 `parentId: null` → 过滤 `parent IS NULL`（查根节点）。
+    /// - `Some(v)`：前端传了具体值 → 过滤 `parent = v`（查 children）。
     pub parent_id: Option<Value>,
 }
 
@@ -98,7 +102,8 @@ impl SearchQuery {
     /// - `q`：字符串
     /// - `sort`：`{field, order}`（order 仅认 `"desc"`，其余按升序）
     /// - `page` / `pageSize`：数字（缺省 1 / 500，clamp 到 [1,1] / [1,5000]）
-    /// - `parentId`：任意值（null 视为不过滤）
+    /// - `parentId`：是否携带该键与取值共同决定过滤语义（键缺失 → 不过滤；
+    ///   `null` → 查根节点；具体值 → 查该父行 children）
     pub fn from_body(body: Option<Value>) -> Self {
         let Some(b) = body else {
             return Self::default_query();
@@ -128,10 +133,9 @@ impl SearchQuery {
             .and_then(|v| v.as_u64())
             .unwrap_or(500)
             .clamp(1, 5000);
-        let parent_id = obj
-            .and_then(|o| o.get("parentId"))
-            .filter(|v| !v.is_null())
-            .cloned();
+        // 键是否存在必须保留：不传 → None（不过滤）；显式传 null → Some(Value::Null)
+        // （查根节点）。不能 filter 掉 null，否则两种语义被抹平。
+        let parent_id = obj.and_then(|o| o.get("parentId")).cloned();
         Self {
             filters,
             q,
@@ -162,6 +166,8 @@ impl SearchQuery {
         }
         m.insert("page".into(), Value::Number(self.page.into()));
         m.insert("pageSize".into(), Value::Number(self.page_size.into()));
+        // 前端传了 parentId（哪怕 null）必须写键：Some(Value::Null) → "parentId": null
+        // （下游 build_search_sql 生成 parent IS NULL，查根节点）；None → 整键省略（不过滤）。
         if let Some(pid) = &self.parent_id {
             m.insert("parentId".into(), pid.clone());
         }
@@ -232,10 +238,11 @@ mod tests {
     }
 
     #[test]
-    fn from_body_parent_id_null_is_none() {
+    fn from_body_parent_id_null_is_explicit_null() {
+        // 显式传 parentId: null → Some(Value::Null)（区别于未传键的 None）
         let body = serde_json::json!({"parentId": null});
         let q = SearchQuery::from_body(Some(body));
-        assert!(q.parent_id.is_none());
+        assert_eq!(q.parent_id, Some(Value::Null));
     }
 
     #[test]
@@ -281,6 +288,29 @@ mod tests {
         assert!(raw.get("sort").is_none());
         assert!(raw.get("parentId").is_none());
         assert_eq!(raw.get("page").unwrap().as_u64(), Some(1));
+    }
+
+    #[test]
+    fn to_raw_parent_id_three_states() {
+        // 未传 → 整键省略（不过滤）
+        let raw = SearchQuery::default_query().to_raw();
+        assert!(raw.get("parentId").is_none());
+
+        // 显式 null → 键必须在（下游生成 parent IS NULL，查根节点）
+        let q = SearchQuery {
+            parent_id: Some(Value::Null),
+            ..SearchQuery::default_query()
+        };
+        let raw = q.to_raw();
+        assert_eq!(raw.get("parentId"), Some(&Value::Null));
+
+        // 具体值 → 键在且带值（下游生成 parent = $n）
+        let q = SearchQuery {
+            parent_id: Some(Value::String("p1".into())),
+            ..SearchQuery::default_query()
+        };
+        let raw = q.to_raw();
+        assert_eq!(raw.get("parentId").unwrap().as_str(), Some("p1"));
     }
 
     #[test]
