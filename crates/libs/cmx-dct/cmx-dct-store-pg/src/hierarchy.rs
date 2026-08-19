@@ -9,15 +9,17 @@
 //! 此处 dct 在 save_apply 同事务内重算（dct 三段 apply 顺序 deleted→inserted→updated，
 //! 重算在最后统一执行，此时所有增删改已落地，同事务内可见性一致，无竞态）。
 //!
-//! 全部 `pub(crate)`：仅供 [`crate::write`] 模块内部调用，不暴露给 crate 外。
+//! 内部维护函数均 `pub(crate)`（供 [`crate::write`] 模块调用）；跨 crate 调用方
+//! （如 MDM 激活器等外部直写路径）用 [`recompute_dict_hierarchy`] 补偿入口。
 
 use cmx_api_types::Result;
 use cmx_core::model::cell::DataValue;
-use cmx_database_pg::DatabaseManager;
-use cmx_dct_model::{DictView, to_dv_by_col, valid_col};
+use cmx_database_pg::{DatabaseManager, get_default_pg_db_manager};
+use cmx_dct_model::{DctQuery, DictView, to_dv_by_col, valid_col};
 use serde_json::Value;
 
 use crate::error::map_db_err;
+use crate::resolve::resolve_dict;
 
 /// 分级字典的 parent 列名。仅当 self_hierarchy=true + parent_field 非空 + is_leaf 是合法列时返回。
 /// 不满足任一条件（非分级字典或缺列）返回 None，调用方据此跳过所有层级维护。
@@ -391,4 +393,35 @@ mod tests {
         assert_eq!(non_empty_id_str(&json!(true)), Some("true".to_string()));
         assert_eq!(non_empty_id_str(&json!({})), None);
     }
+}
+
+/// 外部直写路径（如 MDM 激活器 `dict_upsert` / 按 id 直改）后的层级列补偿重算。
+///
+/// `save` 路径已在 `save_apply` 末尾统一维护 level_no/full_path/is_leaf；但经
+/// `dict_upsert` 等单行直写的调用方绕过了该维护——`build_upsert_sql_dv` 的 backfill
+/// 只能给出根级兜底值（level_no=1、full_path=code），子节点的真实层级/物化路径会失真
+/// （parent_id 本身正确，父子拓扑无损）。本函数为这类调用方提供"写入后补偿重算"入口。
+///
+/// - `ids`：受影响节点（行自身 + 其父；父的 is_leaf 需随子节点增删翻转）
+/// - 非分级字典（self_hierarchy=false / parent 列缺失）→ no-op，返回 `Ok(false)`
+/// - 分级字典 → 在 `txn_id` 事务内执行 [`recompute_hierarchy_subtree`]，返回 `Ok(true)`
+///
+/// 幂等：重算只依赖当前父子拓扑（parent_id + code），不依赖历史值——重复执行结果一致。
+pub async fn recompute_dict_hierarchy(
+    q: &DctQuery,
+    ids: &[i64],
+    db_id: &str,
+    txn_id: &str,
+) -> Result<bool> {
+    if ids.is_empty() {
+        return Ok(false);
+    }
+    let view = resolve_dict(q, false).await?;
+    let Some(pf) = hierarchy_parent_field(&view) else {
+        return Ok(false);
+    };
+    let id_strs: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
+    let mm = get_default_pg_db_manager();
+    recompute_hierarchy_subtree(mm, db_id, txn_id, &view, &pf, &id_strs).await?;
+    Ok(true)
 }
