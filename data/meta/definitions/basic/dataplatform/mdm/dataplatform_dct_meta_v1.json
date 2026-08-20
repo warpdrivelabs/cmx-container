@@ -83,7 +83,8 @@
             "align": "left"
           },
           "width": "140px",
-          "align": "left"
+          "align": "left",
+          "searchable": true
         },
         {
           "dataType": "VARCHAR",
@@ -357,7 +358,8 @@
             "align": "left"
           },
           "width": "140px",
-          "align": "left"
+          "align": "left",
+          "searchable": true
         },
         {
           "dataType": "VARCHAR",
@@ -1052,7 +1054,8 @@
             "align": "left"
           },
           "width": "140px",
-          "align": "left"
+          "align": "left",
+          "searchable": true
         },
         {
           "dataType": "VARCHAR",
@@ -1072,7 +1075,8 @@
             "align": "left"
           },
           "width": "120px",
-          "align": "left"
+          "align": "left",
+          "searchable": true
         },
         {
           "dataType": "VARCHAR",
@@ -1638,7 +1642,8 @@
               "label": "否"
             }
           ],
-          "defaultValue": "0"
+          "defaultValue": "0",
+          "filterable": false
         },
         {
           "dataType": "TINYINT",
@@ -1671,7 +1676,8 @@
               "label": "否"
             }
           ],
-          "defaultValue": "0"
+          "defaultValue": "0",
+          "filterable": false
         },
         {
           "dataType": "TINYINT",

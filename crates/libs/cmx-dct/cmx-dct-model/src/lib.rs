@@ -455,20 +455,48 @@ pub fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Da
         }
     }
 
-    // q: 对 code/label 模糊。
+    // q: 对 code/label + searchable 标记列模糊。
     if let Some(kw) = raw.get("q").and_then(|v| v.as_str()) {
         let kw = kw.trim();
         if !kw.is_empty() {
-            let c = &view.code_field;
-            let l = &view.label_field;
-            if valid_col(view, c) && valid_col(view, l) {
+            // 候选列：code/label 恒在（历史行为）+ 字段定义里 searchable==true 的列
+            // （field-edit-display-modes §四 governance 键）。列名经 valid_col 白名单
+            // 校验 + 双引号包裹防注入；仅文本类列参与（ILIKE 对非文本列会报类型错，
+            // 非文本列标记了也跳过，防御性收窄）。
+            let mut cols: Vec<String> = Vec::new();
+            for c in [&view.code_field, &view.label_field] {
+                if valid_col(view, c) && !cols.contains(c) {
+                    cols.push(c.clone());
+                }
+            }
+            for col in &view.columns {
+                let marked = col
+                    .extra
+                    .as_ref()
+                    .and_then(|e| e.get("searchable"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let textual = matches!(
+                    col.data_type.to_uppercase().as_str(),
+                    "VARCHAR" | "TEXT" | "NVARCHAR" | "CHAR"
+                );
+                if marked
+                    && textual
+                    && valid_col(view, &col.name)
+                    && !cols.contains(&col.name)
+                {
+                    cols.push(col.name.clone());
+                }
+            }
+            if !cols.is_empty() {
                 n += 1;
                 let p = n;
-                wheres.push(format!(
-                    "(\"{}\" ILIKE ${} OR \"{}\" ILIKE ${})",
-                    c, p, l, p
-                ));
-                // code/label 恒为 VARCHAR，ILIKE 模糊串直接用 String。
+                let conds: Vec<String> = cols
+                    .iter()
+                    .map(|c| format!("\"{}\" ILIKE ${}", c, p))
+                    .collect();
+                wheres.push(format!("({})", conds.join(" OR ")));
+                // 候选列均为文本，ILIKE 模糊串复用同一参数。
                 params.push(DataValue::String(format!("%{}%", kw)));
             }
         }
@@ -738,6 +766,35 @@ mod tests {
             code_rule: None,
             unique_keys: vec![],
         }
+    }
+
+    /// q 模糊：searchable 标记列（文本）参与 OR ILIKE，与 code/name 同参数。
+    #[test]
+    fn q_search_expands_searchable_columns() {
+        let mut v = view();
+        let mut c = col("short_name", "VARCHAR", false);
+        c.extra = Some(json!({"searchable": true}));
+        v.columns.push(c);
+        let (sql, _cnt, params) = build_search_sql(&v, &json!({"q": "钢"}));
+        assert!(
+            sql.contains("\"code\" ILIKE $1") && sql.contains("\"name\" ILIKE $1")
+                && sql.contains("\"short_name\" ILIKE $1"),
+            "sql: {sql}"
+        );
+        assert_eq!(params.len(), 1);
+        assert!(matches!(&params[0], DataValue::String(s) if s == "%钢%"));
+    }
+
+    /// q 模糊：非文本列即使标了 searchable 也不参与（ILIKE 对非文本列报类型错）。
+    #[test]
+    fn q_search_skips_non_text_searchable() {
+        let mut v = view();
+        let mut c = col("weight", "NUMERIC", false);
+        c.extra = Some(json!({"searchable": true}));
+        v.columns.push(c);
+        let (sql, _cnt, _params) = build_search_sql(&v, &json!({"q": "5"}));
+        assert!(sql.contains("\"code\" ILIKE"), "sql: {sql}");
+        assert!(!sql.contains("\"weight\" ILIKE"), "sql: {sql}");
     }
 
     /// 标量过滤 → `col = $1`。

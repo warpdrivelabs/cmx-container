@@ -38,7 +38,7 @@ pub async fn dict_search(
     search: &SearchQuery,
     db_id: &str,
 ) -> Result<SearchResult> {
-    let view = resolve_dict(q, false).await?;
+    let view = resolve_dict(q, true).await?;
     let (sql, count_sql, params) = build_search(&view, search);
 
     let mm = get_default_pg_db_manager();
@@ -105,7 +105,7 @@ pub async fn dict_search_zmc(
     search: &SearchQuery,
     db_id: &str,
 ) -> Result<ZmcDataSet> {
-    let view = resolve_dict(q, false).await?;
+    let view = resolve_dict(q, true).await?;
     let (sql, count_sql, params) = build_search(&view, search);
 
     let mm = get_default_pg_db_manager();
