@@ -62,7 +62,8 @@ pub async fn mdm_audit_list(
 
 /// 列变更事件。
 ///
-/// `GET /api/mdm/events` —— 事件 delta 查询，`since` 为序列起点（增量拉取）+ 分页。
+/// `GET /api/mdm/events` —— 事件 delta 查询，`since` 为序列起点（增量拉取）+ 分页；
+/// `order=desc` 按 seq 倒序（监控页最新在前），缺省正序保持消费端 delta 契约。
 #[utoipa::path(
     get,
     path = "/api/mdm/events",
@@ -85,6 +86,7 @@ pub async fn mdm_events_list(
         &db_id,
         q.dict_code.as_deref(),
         q.since,
+        q.order.as_deref(),
         q.page,
         q.page_size,
     )
@@ -416,6 +418,9 @@ pub struct GovListQuery {
     /// 事件序列起点（事件 delta 拉取用）。
     #[serde(default)]
     pub since: Option<i64>,
+    /// 排序方向（事件列表专用：`desc` 最新在前，监控页用；缺省正序保持 delta 消费契约）。
+    #[serde(default)]
+    pub order: Option<String>,
     /// 目标系统（订阅列表过滤）。
     #[serde(default, alias = "targetSys")]
     pub target_sys: Option<String>,

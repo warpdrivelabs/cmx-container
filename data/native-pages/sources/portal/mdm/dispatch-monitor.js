@@ -89,7 +89,18 @@ const D_STATUS = {
 }
 const statusName = (s) => (D_STATUS[s] || {}).name || s || ''
 
-function fmtTime(t) { if (!t) return ''; const s = String(t); return s.length > 19 ? s.slice(0, 19).replace('T', ' ') : s }
+// 后端时间均为 UTC（RFC3339，如 2026-08-18T14:20:35.679665+00:00）——统一换算成东八区墙钟展示，
+// 不直接截取字符串（截出来是 UTC，比北京少 8 小时，排序观感错乱）。无时区标记的 naive 串视为已是本地时间。
+function fmtTime(t) {
+  if (t == null || t === '') return ''
+  const s = String(t).trim()
+  if (!/[Zz]|[+-]\d{2}:?\d{2}$/.test(s)) return s.replace('T', ' ').slice(0, 19)
+  const d = new Date(s.replace(/\.(\d{3})\d+/, '.$1'))   // 截掉 >3 位小数秒，兼容各引擎解析
+  if (isNaN(d.getTime())) return s.replace('T', ' ').slice(0, 19)
+  const b = new Date(d.getTime() + 8 * 60 * 60 * 1000)   // 东八区 = UTC+8，取 UTC 分量即北京墙钟
+  const p = (n) => String(n).padStart(2, '0')
+  return `${b.getUTCFullYear()}-${p(b.getUTCMonth() + 1)}-${p(b.getUTCDate())} ${p(b.getUTCHours())}:${p(b.getUTCMinutes())}:${p(b.getUTCSeconds())}`
+}
 function trunc(s, n) { const v = s == null ? '' : String(s); return v.length > n ? `${v.slice(0, n)}…` : v }
 
 // ── 按 host 隔离的 state（多实例安全）──────────────────────────────────────
@@ -269,7 +280,8 @@ async function loadDispatch(st) {
   st.dLoaded = true
 }
 async function loadEvents(st) {
-  const q = { page: String(st.ePage), pageSize: String(st.ePageSize) }
+  // order=desc：事件日志最新在前（后端缺省 seq ASC 是消费端 delta 契约，监控页显式倒序）
+  const q = { page: String(st.ePage), pageSize: String(st.ePageSize), order: 'desc' }
   if (st.eDict.trim()) q.dictCode = st.eDict.trim()
   const d = (await apiGet(`/api/mdm/events?${new URLSearchParams(q)}`, st.dbId)) || {}
   st.eRows = d.list || []
