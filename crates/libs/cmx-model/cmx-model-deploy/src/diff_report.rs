@@ -109,6 +109,7 @@ pub(crate) fn report_create_table(def: &TableDefine) -> Value {
         "columnCount": def.columns.len(),
         "addedIndexes": def.indexes.iter().map(index_to_json).collect::<Vec<_>>(),
         "droppedIndexes": [],
+        "preservedIndexes": [],
         "commentChange": null,
         "modifiedColumnComments": [],
     })
@@ -136,6 +137,7 @@ fn no_change_report(desired: &TableDefine) -> Value {
         "columnCount": desired.columns.len(),
         "addedIndexes": [],
         "droppedIndexes": [],
+        "preservedIndexes": [],
         "commentChange": null,
         "modifiedColumnComments": [],
     })
@@ -182,12 +184,25 @@ pub(crate) fn diff_table_to_report(current: &TableDefine, desired: &TableDefine)
                 }
             }
             // 索引变更：AddIndex 用设计期名，DropIndex 用 DB 真实名（均为 IndexDefine）。
+            // PreservedManualIndex：手工创建的索引（非系统命名且不在定义中），保留不删，
+            // 单独成组提示用户「不会被删除，如不需要请手工清理」。
             let mut added_idx = Vec::new();
             let mut dropped_idx = Vec::new();
+            let mut preserved_idx = Vec::new();
             for ic in index_changes {
                 match ic {
                     IndexChange::AddIndex(i) => added_idx.push(index_to_json(i)),
                     IndexChange::DropIndex(i) => dropped_idx.push(index_to_json(i)),
+                    IndexChange::PreservedManualIndex(i) => {
+                        let mut v = index_to_json(i);
+                        if let Some(obj) = v.as_object_mut() {
+                            obj.insert(
+                                "message".to_string(),
+                                json!("用户手工创建的索引，部署不会删除；如不再需要请手工 DROP"),
+                            );
+                        }
+                        preserved_idx.push(v);
+                    }
                 }
             }
             // 表注释变更：DdlDiff 的 comment_change 只存新值，from 需从 current 取。
@@ -238,6 +253,7 @@ pub(crate) fn diff_table_to_report(current: &TableDefine, desired: &TableDefine)
                 "columnCount": desired.columns.len(),
                 "addedIndexes": added_idx,
                 "droppedIndexes": dropped_idx,
+                "preservedIndexes": preserved_idx,
                 "commentChange": comment_change_json,
                 "modifiedColumnComments": modified_col_comments,
             })

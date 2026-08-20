@@ -160,6 +160,17 @@ pub struct IndexDefine {
     /// 索引类型：唯一索引或普通索引
     #[serde(default)]
     pub kind: IndexKind,
+    /// 索引是否有效。内省侧标记 INVALID / NOT-READY 索引（如 `CREATE INDEX
+    /// CONCURRENTLY` 失败残留）：diff 视为"内容永不匹配"→ 必产生 DropIndex
+    /// （定义中有同内容索引时再 CREATE，重建为有效索引），避免其占名导致
+    /// CREATE 撞 `already exists` 中断部署。设计期（编译产出）恒为 true。
+    #[serde(default = "default_index_valid")]
+    pub valid: bool,
+}
+
+/// [`IndexDefine::valid`] 的 serde 默认值（旧序列化数据无该字段时按有效还原）
+fn default_index_valid() -> bool {
+    true
 }
 
 // ==========================================

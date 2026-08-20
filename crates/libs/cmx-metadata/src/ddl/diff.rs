@@ -49,12 +49,16 @@ pub enum ColumnChange {
 /// 描述对索引的变更操作：
 /// - 新增索引
 /// - 删除索引
+/// - 保留手工索引（不删除，仅报告提示）
 #[derive(Debug, Clone)]
 pub enum IndexChange {
     /// 新增索引
     AddIndex(IndexDefine),
     /// 删除索引（携带旧索引定义，name 为数据库真实索引名，columns/kind 供报告展示）
     DropIndex(IndexDefine),
+    /// 手工创建的索引（非系统命名前缀且不在当前定义中）：**保留不删**，
+    /// 不生成任何 DDL，仅随变更携带供部署计划报告提示（视为 DBA 手工创建）。
+    PreservedManualIndex(IndexDefine),
 }
 
 /// 列注释变更（仅 `COMMENT ON COLUMN` 的 label 不同，列结构无变化）
@@ -274,7 +278,7 @@ impl DdlDiff {
     /// 检查列的以下属性是否发生变化：
     /// - 字段类型（field_type）
     /// - 可空性（is_nullable）
-    /// - 默认值（default_value）
+    /// - 默认值（default_value，经 [`Self::defaults_equivalent`] 语义比较，见其文档）
     /// - 长度（length）
     /// - 精度（precision）、小数位（scale）：仅对 [`FieldType::Decimal`] 比较
     ///
@@ -294,7 +298,7 @@ impl DdlDiff {
     fn column_changed(old: &ColumnDefine, new: &ColumnDefine) -> bool {
         if old.field_type != new.field_type
             || old.is_nullable != new.is_nullable
-            || old.default_value != new.default_value
+            || !Self::defaults_equivalent(old.default_value.as_deref(), new.default_value.as_deref())
             || old.length != new.length
         {
             return true;
@@ -303,6 +307,49 @@ impl DdlDiff {
         // numeric_precision/scale 是 PG 类型派生属性（如 bigint 恒为 64/0），不应参与 diff。
         matches!(new.field_type, FieldType::Decimal)
             && (old.precision != new.precision || old.scale != new.scale)
+    }
+
+    /// 判断两侧列默认值表达式是否语义等价（用于 diff 消除假阳性）。
+    ///
+    /// # 为何不能直接字符串比较
+    /// 两侧默认值的来源形态不同：
+    /// - 编译侧（cmx-model-deploy `normalize_default_value`）：产出最终 SQL 表达式，
+    ///   字符串/日期/JSON 带单引号定界、布尔大写（`'active'` / `TRUE` / `'{"a":1}'`）；
+    /// - 内省侧（executor `clean_pg_default` 清洗 pg_attrdef.adbin）：多数已去 cast
+    ///   去引号、布尔小写、jsonb 带规范化空格（`active` / `true` / `{"a": 1}`）。
+    ///
+    /// 直接 `!=` 比较必然不等 → 首次部署 SET DEFAULT 进库后，此后**每次部署**都重复
+    /// `ALTER COLUMN ... SET DEFAULT`（无操作 DDL 噪音的永久假阳性）。此处对两侧做
+    /// **同一套**归一化（[`norm_default_expr`]）后再比较，并保留 None/Some 的真差异判定。
+    ///
+    /// # 已知局限（知情保留）
+    /// PG 对 timestamp 字面量默认值会规范化补零（`'2023-01-01'` 落库为
+    /// `'2023-01-01 00:00:00'::timestamp`），两侧文本不等会保留为变更；当前存量
+    /// 定义无日期类默认值，不做日期语义解析。
+    fn defaults_equivalent(old: Option<&str>, new: Option<&str>) -> bool {
+        match (old, new) {
+            (None, None) => true,
+            (Some(a), Some(b)) => {
+                let (na, nb) = (norm_default_expr(a), norm_default_expr(b));
+                if na == nb {
+                    return true;
+                }
+                // jsonb 形态差异（PG 序列化加空格）：两侧都是合法 JSON 时按语义比较
+                match (
+                    serde_json::from_str::<serde_json::Value>(&na),
+                    serde_json::from_str::<serde_json::Value>(&nb),
+                ) {
+                    (Ok(va), Ok(vb)) => va == vb,
+                    _ => false,
+                }
+            }
+            // None 与空串等价：内省侧 clean_pg_default 对 nextval/NULL 返回空串，
+            // 编译侧无默认值为 None——两侧都表示"无默认值"。
+            (a, b) => {
+                let empty = |v: Option<&str>| v.is_none_or(|s| s.trim().is_empty());
+                empty(a) && empty(b)
+            }
+        }
     }
 
     /// 比对索引变更
@@ -316,6 +363,23 @@ impl DdlDiff {
     /// 同一组列+类型的索引会被误判为「先删后建」，产生永久假阳性。故此处只比较语义内容
     /// （columns 顺序敏感 + kind），名字仅用于执行 DDL（AddIndex 用设计期名，DropIndex 用 DB 真实名）。
     ///
+    /// # INVALID 索引强制重建
+    /// 内省侧对 INVALID / NOT-READY 索引（`CREATE INDEX CONCURRENTLY` 失败残留）标记
+    /// `valid = false`，此处视为「内容永不匹配」：无论定义中是否有同内容索引都产生
+    /// DropIndex（定义中有则再 AddIndex，先 DROP 后 CREATE 重建为有效索引），避免
+    /// INVALID 索引占名导致 CREATE 撞 `already exists` 中断部署。
+    ///
+    /// # 手工索引保护
+    /// DB 中多余（定义中无内容匹配）的索引**并非都该删**：DBA 手工创建的索引
+    /// （如性能优化临时加的）不在定义里，按「定义即真相」一刀切删除会造成误伤。
+    /// 删除判定按三档：
+    /// 1. INVALID 索引——留着必占名，无条件 DROP（自愈优先于保护）；
+    /// 2. 系统命名（`uk_` / `idx_` 前缀，与 compile.rs `auto_index_name` /
+    ///    前端 `_autoIndexName` 的前缀约定一致）或名字仍在当前定义中（自定义名
+    ///    条目改列重建、删后同名重建）——本系统管理的，DROP；
+    /// 3. 其余——视为手工创建，产出 [`IndexChange::PreservedManualIndex`]
+    ///    保留不删（仅报告提示，不生成 DDL）。
+    ///
     /// # 参数
     /// * `old_idxs` - 旧版本索引定义列表
     /// * `new_idxs` - 新版本索引定义列表
@@ -323,9 +387,9 @@ impl DdlDiff {
     /// # 返回值
     /// * `Vec<IndexChange>` - 索引变更列表
     fn diff_indexes(old_idxs: &[IndexDefine], new_idxs: &[IndexDefine]) -> Vec<IndexChange> {
-        // 索引内容相等：列名序列与类型都一致（顺序敏感，与复合索引语义一致）。
+        // 索引内容相等：双侧均有效、列名序列与类型一致（顺序敏感，与复合索引语义一致）。
         let same_content =
-            |a: &IndexDefine, b: &IndexDefine| a.columns == b.columns && a.kind == b.kind;
+            |a: &IndexDefine, b: &IndexDefine| a.valid && b.valid && a.columns == b.columns && a.kind == b.kind;
 
         let mut changes = Vec::new();
 
@@ -336,10 +400,22 @@ impl DdlDiff {
             }
         }
 
+        // 当前定义仍使用的名字（含自定义名）：本系统管理的删除/重建不受手工保护拦
+        let managed_names: std::collections::HashSet<&str> =
+            new_idxs.iter().map(|n| n.name.as_str()).collect();
+
         // 删除索引：old 中无任何 new 索引与之内容相等（携带旧定义，name 为 DB 真实名供 DROP）。
         for old_idx in old_idxs {
-            if !new_idxs.iter().any(|n| same_content(n, old_idx)) {
+            if new_idxs.iter().any(|n| same_content(n, old_idx)) {
+                continue; // 内容匹配 → 无变更
+            }
+            let managed = !old_idx.valid // INVALID 自愈优先：占名必撞 CREATE
+                || is_system_index_name(&old_idx.name)
+                || managed_names.contains(old_idx.name.as_str());
+            if managed {
                 changes.push(IndexChange::DropIndex(old_idx.clone()));
+            } else {
+                changes.push(IndexChange::PreservedManualIndex(old_idx.clone()));
             }
         }
 
@@ -430,34 +506,38 @@ impl DdlDiff {
                             }
                         }
                     }
-                    // 处理索引变更
+                    // 处理索引变更：先 DROP 后 CREATE——
+                    // ① 改列集合的旧索引先释放名字；② 防御设计期自动名与 DB 侧同名索引
+                    //    （DBA 手工建 / CONCURRENTLY 失败的 INVALID 残留）撞名，CREATE 报
+                    //    already exists 阻断部署而排在后面的 DROP 本可解冲突。
+                    // 索引 DDL 整体位于列变更之后：新索引可引用本次新增的列。
                     for ic in index_changes {
-                        match ic {
-                            // 新增索引
-                            IndexChange::AddIndex(idx) => {
-                                let qualified = match schema {
-                                    Some(s) => format!("\"{}\".\"{}\"", s, table_name),
-                                    None => format!("\"{}\"", table_name),
-                                };
-                                let cols = idx
-                                    .columns
-                                    .iter()
-                                    .map(|c| format!("\"{}\"", c))
-                                    .collect::<Vec<_>>()
-                                    .join(", ");
-                                let unique = match idx.kind {
-                                    cmx_core::model::cell::IndexKind::Unique => "UNIQUE ",
-                                    cmx_core::model::cell::IndexKind::Normal => "",
-                                };
-                                stmts.push(format!(
-                                    "CREATE {}INDEX \"{}\" ON {} ({});",
-                                    unique, idx.name, qualified, cols
-                                ));
-                            }
-                            // 删除索引（name 为 DB 真实索引名）
-                            IndexChange::DropIndex(idx) => {
-                                stmts.push(format!("DROP INDEX IF EXISTS \"{}\";", idx.name));
-                            }
+                        // 删除索引（name 为 DB 真实索引名）
+                        if let IndexChange::DropIndex(idx) = ic {
+                            stmts.push(format!("DROP INDEX IF EXISTS \"{}\";", idx.name));
+                        }
+                    }
+                    for ic in index_changes {
+                        // 新增索引
+                        if let IndexChange::AddIndex(idx) = ic {
+                            let qualified = match schema {
+                                Some(s) => format!("\"{}\".\"{}\"", s, table_name),
+                                None => format!("\"{}\"", table_name),
+                            };
+                            let cols = idx
+                                .columns
+                                .iter()
+                                .map(|c| format!("\"{}\"", c))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            let unique = match idx.kind {
+                                cmx_core::model::cell::IndexKind::Unique => "UNIQUE ",
+                                cmx_core::model::cell::IndexKind::Normal => "",
+                            };
+                            stmts.push(format!(
+                                "CREATE {}INDEX \"{}\" ON {} ({});",
+                                unique, idx.name, qualified, cols
+                            ));
                         }
                     }
                     // 处理表注释变更
@@ -516,6 +596,64 @@ impl DdlDiff {
         let changes = Self::diff(old, new);
         Self::changes_to_ddl(dialect, &changes)
     }
+}
+
+/// 系统自动命名的索引前缀（与 compile.rs `auto_index_name`、前端 `_autoIndexName`
+/// 的前缀约定一致）：带这些前缀的多余索引视为本系统产物，允许自动清理；其余视为
+/// 手工创建，保留不删（见 [`DdlDiff::diff_indexes`] 的「手工索引保护」）。
+fn is_system_index_name(name: &str) -> bool {
+    name.starts_with("uk_") || name.starts_with("idx_")
+}
+
+/// 单侧默认值表达式的比较归一化（形态对齐，不做语义转换）。
+///
+/// [`DdlDiff::defaults_equivalent`] 对两侧各过一遍本函数后比较，覆盖编译侧与
+/// 内省侧的形态差异：
+/// - 剥离引号外的 `::type` cast 后缀（`'active'::character varying` → `'active'`）；
+/// - 剥外层单引号定界并还原 `''` 转义（`'it''s'` → `it's`）；
+/// - 纯布尔字面量统一小写（`TRUE` vs `true`）。
+///
+/// jsonb 的空格差异（`{"a": 1}` vs `{"a":1}`）由 `defaults_equivalent` 的语义级
+/// 比较兜底，本函数不做 JSON 解析。
+fn norm_default_expr(s: &str) -> String {
+    let mut t = s.trim();
+    // 剥引号外的 cast 后缀：取第一个引号外 `::` 之前的部分
+    if let Some(pos) = cast_delimiter_pos(t) {
+        t = t[..pos].trim();
+    }
+    // 剥外层单引号定界（含 '' 转义还原）
+    let core = if t.len() >= 2 && t.starts_with('\'') && t.ends_with('\'') {
+        t[1..t.len() - 1].replace("''", "'")
+    } else {
+        t.to_string()
+    };
+    // 纯布尔字面量统一小写（字符串默认值本身可能就是 'true' 文本，双侧对称归一无碍）
+    if core.eq_ignore_ascii_case("true") {
+        return "true".to_string();
+    }
+    if core.eq_ignore_ascii_case("false") {
+        return "false".to_string();
+    }
+    core
+}
+
+/// 返回字符串中**第一个引号外** `::` 的字节位置（无则 None）。
+///
+/// 引号内（含 `''` 转义）的 `::` 不算——如 `nextval('seq'::regclass)` 的 `::`
+/// 在引号内，不会被当作 cast 后缀剥除。
+fn cast_delimiter_pos(s: &str) -> Option<usize> {
+    let b = s.as_bytes();
+    let mut in_quote = false;
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\'' => in_quote = !in_quote,
+            b':' if !in_quote && i + 1 < b.len() && b[i + 1] == b':' => return Some(i),
+            _ => {}
+        }
+        i += 1;
+    }
+    None
 }
 
 #[cfg(test)]
@@ -677,6 +815,7 @@ mod tests {
                 name: "idx_new".to_string(),
                 columns: vec!["col1".to_string()],
                 kind: IndexKind::Normal,
+                valid: true,
             }],
         )];
 
@@ -774,12 +913,14 @@ mod tests {
             name: "cf_t_code_key".to_string(),
             columns: vec!["code".to_string()],
             kind: IndexKind::Unique,
+            valid: true,
         };
         // 设计期侧（规范化名 uk_t_1）
         let design_idx = IndexDefine {
             name: "uk_cf_t_1".to_string(),
             columns: vec!["code".to_string()],
             kind: IndexKind::Unique,
+            valid: true,
         };
         let old = vec![make_simple_table("cf_t", vec![], vec![db_idx.clone()])];
         let new = vec![make_simple_table("cf_t", vec![], vec![design_idx])];
@@ -791,41 +932,271 @@ mod tests {
         );
     }
 
-    /// 索引列不同时仍应正确报 AddIndex + DropIndex。
+    /// 索引列真变更：设计期重建新索引（AddIndex）；DB 侧旧索引的处置按命名分档——
+    /// `<表>_<列>_key` 是 PG 列级 UNIQUE/ADD CONSTRAINT 的自动命名（无 uk_/idx_ 前缀、
+    /// 名字不在定义中）→ 按「手工索引保护」规则保留不删（部署计划提示，如确认废弃可
+    /// 手工 DROP）；系统命名（uk_/idx_）的旧索引才会被 DROP 清理（见下一个用例）。
     #[test]
     fn diff_indexes_detects_real_column_change() {
         let db_idx = IndexDefine {
             name: "cf_t_code_key".to_string(),
             columns: vec!["code".to_string()],
             kind: IndexKind::Unique,
+            valid: true,
         };
         let design_idx = IndexDefine {
             name: "uk_cf_t_1".to_string(),
             columns: vec!["name".to_string()], // 列不同
             kind: IndexKind::Unique,
+            valid: true,
         };
         let old = vec![make_simple_table("cf_t", vec![], vec![db_idx.clone()])];
         let new = vec![make_simple_table("cf_t", vec![], vec![design_idx.clone()])];
         let changes = DdlDiff::diff(&old, &new);
         assert_eq!(changes.len(), 1, "应产出 1 个 AlterTable");
         if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
-            assert_eq!(index_changes.len(), 2, "应报 AddIndex + DropIndex");
+            assert_eq!(index_changes.len(), 2, "应报 AddIndex + PreservedManualIndex: {index_changes:?}");
             assert!(
                 index_changes
                     .iter()
                     .any(|c| matches!(c, IndexChange::AddIndex(i) if i.name == "uk_cf_t_1")),
                 "应有 AddIndex(设计期名): {index_changes:?}"
             );
-            // DropIndex 应携带 DB 真实名（供 DROP 执行）
+            // PG 自动命名（_key）不在系统前缀与定义名中 → 手工保护，不产生 DROP
             assert!(
                 index_changes
                     .iter()
-                    .any(|c| matches!(c, IndexChange::DropIndex(i) if i.name == "cf_t_code_key")),
-                "应有 DropIndex(DB真实名): {index_changes:?}"
+                    .any(|c| matches!(c, IndexChange::PreservedManualIndex(i) if i.name == "cf_t_code_key")),
+                "PG 自动命名旧索引应被保护保留: {index_changes:?}"
             );
         } else {
             panic!("Expected AlterTable");
         }
+    }
+
+    /// 系统命名（uk_/idx_ 前缀）的旧索引列真变更 → DROP + Add 正常重建清理。
+    #[test]
+    fn diff_indexes_system_named_rebuild_drops_old() {
+        let db_idx = IndexDefine {
+            name: "uk_cf_t_9".to_string(), // 系统前缀 → 允许自动清理
+            columns: vec!["code".to_string()],
+            kind: IndexKind::Unique,
+            valid: true,
+        };
+        let design_idx = IndexDefine {
+            name: "uk_cf_t_1".to_string(),
+            columns: vec!["name".to_string()], // 列不同
+            kind: IndexKind::Unique,
+            valid: true,
+        };
+        let old = vec![make_simple_table("cf_t", vec![], vec![db_idx])];
+        let new = vec![make_simple_table("cf_t", vec![], vec![design_idx])];
+        let changes = DdlDiff::diff(&old, &new);
+        if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
+            assert_eq!(index_changes.len(), 2, "{index_changes:?}");
+            assert!(index_changes.iter().any(|c| matches!(c, IndexChange::DropIndex(i) if i.name == "uk_cf_t_9")));
+            assert!(index_changes.iter().any(|c| matches!(c, IndexChange::AddIndex(i) if i.name == "uk_cf_t_1")));
+        } else {
+            panic!("Expected AlterTable");
+        }
+    }
+
+    /// INVALID 索引（valid=false，如 CREATE INDEX CONCURRENTLY 失败残留）即使与定义
+    /// 内容完全相同，也应强制 DROP + CREATE 重建为有效索引——否则它占着名字且永远无效。
+    #[test]
+    fn diff_indexes_recreates_invalid_index() {
+        let invalid_idx = IndexDefine {
+            name: "idx_t_name".to_string(),
+            columns: vec!["name".to_string()],
+            kind: IndexKind::Normal,
+            valid: false,
+        };
+        let design_idx = IndexDefine {
+            name: "idx_t_1".to_string(),
+            columns: vec!["name".to_string()], // 内容相同
+            kind: IndexKind::Normal,
+            valid: true,
+        };
+        let old = vec![make_simple_table("t", vec![], vec![invalid_idx])];
+        let new = vec![make_simple_table("t", vec![], vec![design_idx])];
+        let changes = DdlDiff::diff(&old, &new);
+        assert_eq!(changes.len(), 1, "INVALID 索引应触发 AlterTable");
+        if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
+            assert_eq!(index_changes.len(), 2, "应报 DropIndex + AddIndex（重建）");
+            assert!(
+                index_changes
+                    .iter()
+                    .any(|c| matches!(c, IndexChange::DropIndex(i) if i.name == "idx_t_name")),
+                "应有 DropIndex(DB真实名，释放占名): {index_changes:?}"
+            );
+            assert!(
+                index_changes
+                    .iter()
+                    .any(|c| matches!(c, IndexChange::AddIndex(i) if i.name == "idx_t_1")),
+                "应有 AddIndex(重建为有效索引): {index_changes:?}"
+            );
+        } else {
+            panic!("Expected AlterTable");
+        }
+    }
+
+    /// INVALID 索引在定义中无对应内容时，仅产生 DropIndex（清理残留），不产生 AddIndex。
+    #[test]
+    fn diff_indexes_drops_invalid_index_absent_in_new() {
+        let invalid_idx = IndexDefine {
+            name: "idx_t_stale".to_string(),
+            columns: vec!["gone".to_string()],
+            kind: IndexKind::Normal,
+            valid: false,
+        };
+        let old = vec![make_simple_table("t", vec![], vec![invalid_idx])];
+        let new = vec![make_simple_table("t", vec![], vec![])];
+        let changes = DdlDiff::diff(&old, &new);
+        assert_eq!(changes.len(), 1);
+        if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
+            assert_eq!(index_changes.len(), 1, "应仅报 DropIndex");
+            assert!(matches!(&index_changes[0], IndexChange::DropIndex(i) if i.name == "idx_t_stale"));
+        } else {
+            panic!("Expected AlterTable");
+        }
+    }
+
+    /// 手工索引保护：非系统命名前缀（uk_/idx_）且名字不在定义中的多余索引，
+    /// 视为手工创建 → 保留不删（PreservedManualIndex，无 DDL），仅报告提示。
+    #[test]
+    fn diff_indexes_preserves_manual_index() {
+        let manual = IndexDefine {
+            name: "my_dba_index".to_string(), // 无系统前缀
+            columns: vec!["name".to_string()],
+            kind: IndexKind::Normal,
+            valid: true,
+        };
+        let system = IndexDefine {
+            name: "idx_t_old".to_string(), // 系统前缀 → 允许清理
+            columns: vec!["code".to_string()],
+            kind: IndexKind::Normal,
+            valid: true,
+        };
+        let old = vec![make_simple_table("t", vec![], vec![manual.clone(), system])];
+        let new = vec![make_simple_table("t", vec![], vec![])];
+        let changes = DdlDiff::diff(&old, &new);
+        if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
+            assert_eq!(index_changes.len(), 2, "{index_changes:?}");
+            assert!(
+                index_changes.iter().any(|c| matches!(c, IndexChange::PreservedManualIndex(i) if i.name == "my_dba_index")),
+                "手工索引应保留: {index_changes:?}"
+            );
+            assert!(
+                index_changes.iter().any(|c| matches!(c, IndexChange::DropIndex(i) if i.name == "idx_t_old")),
+                "系统命名索引应正常清理: {index_changes:?}"
+            );
+            // 保留项不生成任何 DDL
+            let dialect = PostgresDdlDialect::default();
+            let ddl = DdlDiff::changes_to_ddl(&dialect, &changes).unwrap();
+            assert!(
+                !ddl.iter().any(|s| s.contains("my_dba_index")),
+                "保留索引不得出现在 DDL: {ddl:?}"
+            );
+        } else {
+            panic!("Expected AlterTable");
+        }
+    }
+
+    /// 自定义名索引改列重建：名字仍在定义中（new 有同名条目）→ 不受手工保护拦截，
+    /// 正常 Drop + Add（否则旧索引占名，CREATE 撞 already exists）。
+    #[test]
+    fn diff_indexes_custom_name_rebuild_not_blocked() {
+        let old_idx = IndexDefine {
+            name: "uk_my_custom".to_string(),
+            columns: vec!["code".to_string()],
+            kind: IndexKind::Unique,
+            valid: true,
+        };
+        let new_idx = IndexDefine {
+            name: "uk_my_custom".to_string(),
+            columns: vec!["tax_no".to_string()], // 改列
+            kind: IndexKind::Unique,
+            valid: true,
+        };
+        let old = vec![make_simple_table("t", vec![], vec![old_idx])];
+        let new = vec![make_simple_table("t", vec![], vec![new_idx])];
+        let changes = DdlDiff::diff(&old, &new);
+        if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
+            assert_eq!(index_changes.len(), 2, "同名自定义索引应 Drop+Add 重建: {index_changes:?}");
+            assert!(index_changes.iter().any(|c| matches!(c, IndexChange::DropIndex(i) if i.name == "uk_my_custom")));
+            assert!(!index_changes.iter().any(|c| matches!(c, IndexChange::PreservedManualIndex(_))));
+        } else {
+            panic!("Expected AlterTable");
+        }
+    }
+
+    /// INVALID 且手工名的索引：自愈优先于手工保护（INVALID 占名必撞 CREATE），仍 DROP。
+    #[test]
+    fn diff_indexes_invalid_manual_index_still_dropped() {
+        let invalid_manual = IndexDefine {
+            name: "my_dba_broken".to_string(),
+            columns: vec!["code".to_string()],
+            kind: IndexKind::Normal,
+            valid: false,
+        };
+        let old = vec![make_simple_table("t", vec![], vec![invalid_manual])];
+        let new = vec![make_simple_table("t", vec![], vec![])];
+        let changes = DdlDiff::diff(&old, &new);
+        if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
+            assert_eq!(index_changes.len(), 1);
+            assert!(matches!(&index_changes[0], IndexChange::DropIndex(i) if i.name == "my_dba_broken"));
+        } else {
+            panic!("Expected AlterTable");
+        }
+    }
+
+    /// 默认值「编译形态 vs 内省形态」语义等价：不判变更（消除每次部署重复
+    /// SET DEFAULT 的永久假阳性）；真差异仍应判变更。
+    #[test]
+    fn column_changed_default_form_equivalence() {
+        // 同一列的两种形态：内省（去 cast 去引号/小写/jsonb 带空格）vs 编译（定界/大写/紧凑）
+        let equiv_pairs = [
+            ("active", "'active'"),                       // VARCHAR：内省已剥 cast+引号
+            ("'active'", "'active'"),                     // 内省未剥引号形态（无 cast）
+            ("true", "TRUE"),                             // bool 大小写
+            ("1", "1"),                                   // 整数裸字面量
+            ("{\"a\": 1}", "'{\"a\":1}'"),                // jsonb 空格差异（语义比较）
+            ("now()", "now()"),                           // 表达式透传
+        ];
+        for (old_v, new_v) in equiv_pairs {
+            let mut old_col = make_col("status", FieldType::String, true);
+            old_col.default_value = Some(old_v.to_string());
+            let mut new_col = make_col("status", FieldType::String, true);
+            new_col.default_value = Some(new_v.to_string());
+            assert!(
+                !DdlDiff::column_changed(&old_col, &new_col),
+                "等价形态不应判变更: {old_v} vs {new_v}"
+            );
+        }
+
+        // 真差异：值不同必须判变更
+        let mut old_col = make_col("status", FieldType::String, true);
+        old_col.default_value = Some("a".to_string());
+        let mut new_col = make_col("status", FieldType::String, true);
+        new_col.default_value = Some("b".to_string());
+        assert!(DdlDiff::column_changed(&old_col, &new_col), "值不同应判变更");
+
+        // None vs 空串等价（内省 nextval/NULL 清洗为空串，编译侧无默认值为 None）
+        let mut col_empty = make_col("id", FieldType::Int, false);
+        col_empty.default_value = Some(String::new());
+        let col_none = make_col("id", FieldType::Int, false);
+        assert!(
+            !DdlDiff::column_changed(&col_empty, &col_none),
+            "None 与空串都表示无默认值"
+        );
+
+        // None vs 有值：真差异
+        let col_some = {
+            let mut c = make_col("id", FieldType::Int, false);
+            c.default_value = Some("1".to_string());
+            c
+        };
+        assert!(DdlDiff::column_changed(&col_none, &col_some), "无默认值 vs 有默认值应判变更");
     }
 
     /// 列注释（label）变更：结构相同但 label 不同，应产出 AlterTable 且
@@ -915,5 +1286,72 @@ mod tests {
         } else {
             panic!("Expected AlterTable");
         }
+    }
+
+    /// 索引 DDL 顺序：改列集合（或撞名）场景，DROP 必须先于 CREATE——
+    /// 否则 CREATE 与 DB 侧同名索引（DBA 手工建 / CONCURRENTLY 失败的 INVALID 残留 /
+    /// 改列前的旧索引）撞名报 already exists，排后面的 DROP 本可解冲突却没机会执行。
+    #[test]
+    fn index_ddl_drop_before_create() {
+        let idx = |name: &str, col: &str| IndexDefine {
+            name: name.to_string(),
+            columns: vec![col.to_string()],
+            kind: IndexKind::Normal,
+            valid: true,
+        };
+        let cols = || {
+            vec![
+                make_col("a", FieldType::String, true),
+                make_col("b", FieldType::String, true),
+            ]
+        };
+        // DB 现状：idx_t_1 on (a)；设计期：同名 idx_t_1 on (b)——内容不匹配 → DropIndex + AddIndex
+        let old = vec![make_simple_table("t", cols(), vec![idx("idx_t_1", "a")])];
+        let new = vec![make_simple_table("t", cols(), vec![idx("idx_t_1", "b")])];
+        let changes = DdlDiff::diff(&old, &new);
+        let stmts = DdlDiff::changes_to_ddl(&PostgresDdlDialect::default(), &changes).unwrap();
+        let drop_pos = stmts.iter().position(|s| s.starts_with("DROP INDEX"));
+        let create_pos = stmts.iter().position(|s| s.starts_with("CREATE INDEX"));
+        assert!(drop_pos.is_some(), "应有 DROP INDEX: {stmts:?}");
+        assert!(create_pos.is_some(), "应有 CREATE INDEX: {stmts:?}");
+        assert!(
+            drop_pos.unwrap() < create_pos.unwrap(),
+            "DROP 必须先于 CREATE（撞名防护）: {stmts:?}"
+        );
+        // DROP 用 DB 真实名（old 侧还原的 idx_t_1）
+        assert!(stmts[drop_pos.unwrap()].contains("idx_t_1"));
+    }
+
+    /// 新索引引用本次新增列：CREATE INDEX 应出现在 ADD COLUMN 之后（列变更先行）。
+    #[test]
+    fn index_create_after_add_column() {
+        let old = vec![make_simple_table(
+            "t",
+            vec![make_col("a", FieldType::String, true)],
+            vec![],
+        )];
+        let new = vec![make_simple_table(
+            "t",
+            vec![
+                make_col("a", FieldType::String, true),
+                make_col("b", FieldType::String, true),
+            ],
+            vec![IndexDefine {
+                name: "idx_t_b".to_string(),
+                columns: vec!["b".to_string()],
+                kind: IndexKind::Normal,
+                valid: true,
+            }],
+        )];
+        let changes = DdlDiff::diff(&old, &new);
+        let stmts = DdlDiff::changes_to_ddl(&PostgresDdlDialect::default(), &changes).unwrap();
+        let add_pos = stmts.iter().position(|s| s.contains("ADD COLUMN"));
+        let create_pos = stmts.iter().position(|s| s.starts_with("CREATE INDEX"));
+        assert!(add_pos.is_some(), "应有 ADD COLUMN: {stmts:?}");
+        assert!(create_pos.is_some(), "应有 CREATE INDEX: {stmts:?}");
+        assert!(
+            add_pos.unwrap() < create_pos.unwrap(),
+            "CREATE INDEX 必须在 ADD COLUMN 之后（新索引引用新列）: {stmts:?}"
+        );
     }
 }

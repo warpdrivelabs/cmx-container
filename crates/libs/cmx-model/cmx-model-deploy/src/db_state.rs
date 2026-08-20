@@ -34,12 +34,20 @@ use crate::META_VERSION;
 /// 5. `(Some(a), Some(l))`：转 i64 比较
 ///    - `a < l` → `"upgrade"`（可升级）
 ///    - `a > l` → `"downgrade"`（降级，前端应警示）
-///    - `a == l` 且 `status == "drift"` → `"drift"`（版本一致但内容漂移）
+///    - `a == l` 且 `status == "drift"` → `"drift"`
+///    - `a == l` 且**两侧 checksum 均存在且不等** → `"drift"`（版本未变但内容漂移；
+///      任一侧缺失（老台账未写 checksum）→ 保持 `"current"` 不误报）
 ///    - `a == l` 否则 → `"current"`
 ///
 /// 解析失败时（version 非数字）回退为 `0`，因此 `"v1"` / `"1"` 解析为相同值，
 /// 多数情况不会误判；只有一边能解析一边不能时才可能错位（极少）。
-pub(crate) fn scenario_of(applied: Option<&str>, latest: Option<&str>, status: &str) -> &'static str {
+pub(crate) fn scenario_of(
+    applied: Option<&str>,
+    latest: Option<&str>,
+    status: &str,
+    applied_checksum: Option<&str>,
+    latest_checksum: Option<&str>,
+) -> &'static str {
     // 1) 失败优先：任何状态下 status="failed" 都重试
     if status == "failed" {
         return "retry";
@@ -57,6 +65,9 @@ pub(crate) fn scenario_of(applied: Option<&str>, latest: Option<&str>, status: &
                 "downgrade"
             } else if status == "drift" {
                 "drift"
+            } else if let (Some(ac), Some(lc)) = (applied_checksum, latest_checksum) {
+                // 版本号一致但内容不一致 → 内容漂移；任一侧缺失（老台账）不参与判定
+                if ac != lc { "drift" } else { "current" }
             } else {
                 "current"
             }
@@ -243,7 +254,20 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
     // 3) 发现所有模块（DB 列表 + FS 补全）
     let db_items = collect_db_definitions().await?;
     let fs_keys = scan_fs_module_keys();
-    let descriptors = discover_modules(db_items, fs_keys);
+    let mut descriptors = discover_modules(db_items, fs_keys);
+
+    // 3-b) 预填 latest 定义的规范化 checksum（drift 检测用）。
+    // 复用 compile::read_def → definitions store 内存缓存（bump_generation 失效），
+    // 缓存命中时无磁盘 IO；读文件失败保持 None（无 latest checksum 不参与 drift 判定）。
+    for d in descriptors.iter_mut() {
+        for kind in Kind::db_backed() {
+            let Some(kd) = d.latest.get_mut(kind) else { continue };
+            kd.checksum = crate::compile::read_def(&d.domain, &d.application, &d.module, &kd.file)
+                .await
+                .ok()
+                .map(|doc| crate::checksum::normalized_def_checksum(&doc));
+        }
+    }
 
     // 4) 组装 modules 数组 + 累计 counts
     let mut counts = Counts::default();
@@ -387,6 +411,10 @@ struct KindDef {
     tables: i64,
     /// 摘要（前端"模块定义"列表展示用）
     summary: String,
+    /// 定义内容规范化 checksum（drift 检测用）。发现阶段不填（`None`），
+    /// 由 `db_state` 协调者预填（读文件 + `normalized_def_checksum`）；
+    /// 读文件失败保持 `None`（无 latest checksum 时不参与 drift 判定，不误报）。
+    checksum: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -667,6 +695,8 @@ fn ingest_db_definitions(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string(),
+            // checksum 由 db_state 协调者预填（需读文件内容，本函数为同步投影阶段）
+            checksum: None,
         };
         let key = format!("{domain}/{app}/{module}");
         // entry().or_insert_with：仅在该 key 还没条目时新建 Defined 描述符
@@ -775,8 +805,25 @@ fn compute_versioned_cell(kind: Kind, desc: &ModuleDescriptor, applied: Option<&
     let latest = def.map(|k| k.ver.to_string());
     // applied status（与库内 cmx_model_module_kind 行对齐）
     let (app_ver, status) = extract_applied_status(applied, kind);
+    // 双侧 checksum（drift 判定依据）：
+    // - applied 侧：台账 cmx_model_module_kind.def_checksum（read_modules 已透出；老台账可能没有）
+    // - latest 侧：db_state 协调者预填的 KindDef.checksum（读文件失败为 None）
+    let kind_key = kind.as_str().to_ascii_lowercase();
+    let app_cs = applied
+        .and_then(|a| a.get(kind_key.as_str()))
+        .and_then(|k| k.get("def_checksum"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    let latest_cs = def.and_then(|k| k.checksum.clone());
     // 算 scenario：失败→retry；未装→create；版本对比→upgrade / downgrade / current / drift
-    let scenario = scenario_of(app_ver.as_deref(), latest.as_deref(), &status);
+    let scenario = scenario_of(
+        app_ver.as_deref(),
+        latest.as_deref(),
+        &status,
+        app_cs.as_deref(),
+        latest_cs.as_deref(),
+    );
     // 历史版本 JSON 列表（ver 倒序）
     let versions_json: Vec<Value> = vers
         .iter()
@@ -813,7 +860,8 @@ fn compute_none_cell(applied: Option<&Value>) -> Value {
     // applied 走 DCT 槽位（其它 kind 共享同结构）
     let (app_ver, status) = extract_applied_status(applied, Kind::DCT);
     // latest=None（未建模）；scenario 落到 "current"（若已装）或 "none"（未装）
-    let scenario = scenario_of(app_ver.as_deref(), None, &status);
+    // （无磁盘定义 → 无 latest checksum，drift 判定不参与）
+    let scenario = scenario_of(app_ver.as_deref(), None, &status, None, None);
     json!({
         "applied": app_ver,
         "latest": Value::Null,
@@ -1000,4 +1048,34 @@ fn build_installed_record(
         "seed": seed_cell,
         "menu": menu_cell,
     })
+}
+
+#[cfg(test)]
+mod scenario_tests {
+    use super::scenario_of;
+
+    #[test]
+    fn version_equal_checksum_drift() {
+        // 版本一致 + 两侧 checksum 都在且不等 → drift（本次新增的内容漂移检测）
+        assert_eq!(scenario_of(Some("3"), Some("3"), "current", Some("aaa"), Some("bbb")), "drift");
+        // checksum 一致 → current
+        assert_eq!(scenario_of(Some("3"), Some("3"), "current", Some("aaa"), Some("aaa")), "current");
+    }
+
+    #[test]
+    fn version_equal_missing_checksum_stays_current() {
+        // 老台账兼容：任一侧 checksum 缺失 → 不参与判定，保持 current（不误报 drift）
+        assert_eq!(scenario_of(Some("3"), Some("3"), "current", None, Some("bbb")), "current");
+        assert_eq!(scenario_of(Some("3"), Some("3"), "current", Some("aaa"), None), "current");
+        assert_eq!(scenario_of(Some("3"), Some("3"), "current", None, None), "current");
+    }
+
+    #[test]
+    fn version_compare_takes_precedence() {
+        // 版本不相等时 checksum 不参与（upgrade / downgrade / create / retry 优先级更高）
+        assert_eq!(scenario_of(Some("2"), Some("3"), "current", Some("a"), Some("b")), "upgrade");
+        assert_eq!(scenario_of(Some("3"), Some("2"), "current", Some("a"), Some("b")), "downgrade");
+        assert_eq!(scenario_of(None, Some("3"), "none", None, Some("b")), "create");
+        assert_eq!(scenario_of(Some("3"), Some("3"), "failed", Some("a"), Some("b")), "retry");
+    }
 }

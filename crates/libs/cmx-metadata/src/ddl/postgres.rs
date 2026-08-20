@@ -288,9 +288,15 @@ impl DdlDialect for PostgresDdlDialect {
     }
 }
 
-/// 渲染默认值：数值/布尔/NULL/SQL函数直接输出，其他加单引号
+/// 渲染默认值：已定界原样输出；数值/布尔/NULL/SQL函数直接输出，其他加单引号
 fn render_default_value(val: &str) -> String {
     let trimmed = val.trim();
+    // 已定界的字面量/复合表达式（编译层按字段类型产出，首字符为单引号，
+    // 如 '0'、'{}'、'it''s'、'{}'::jsonb）→ 原样输出，不走下方内容启发式
+    // （否则 VARCHAR 列默认值 "0" 会被裸输出成数字、复合表达式会被二次包引号）。
+    if trimmed.starts_with('\'') {
+        return trimmed.to_string();
+    }
     // 数值
     if trimmed.parse::<f64>().is_ok() {
         return trimmed.to_string();
@@ -460,12 +466,14 @@ mod tests {
                     name: "uk_cmx_domain_code".to_string(),
                     columns: vec!["code".to_string()],
                     kind: IndexKind::Unique,
-                },
+                    valid: true,
+},
                 IndexDefine {
                     name: "idx_cmx_domain_type".to_string(),
                     columns: vec!["type".to_string()],
                     kind: IndexKind::Normal,
-                },
+                    valid: true,
+},
             ],
             version: 1,
             create_time: None,
@@ -524,6 +532,10 @@ mod tests {
         assert_eq!(render_default_value("true"), "TRUE");
         assert_eq!(render_default_value("false"), "FALSE");
         assert_eq!(render_default_value("NULL"), "NULL");
+        // 已定界（首字符单引号）原样输出：编译层按字段类型产出的字面量/复合表达式
+        assert_eq!(render_default_value("'0'"), "'0'");
+        assert_eq!(render_default_value("'{}'::jsonb"), "'{}'::jsonb");
+        assert_eq!(render_default_value("  'it''s'  "), "'it''s'");
         assert_eq!(
             render_default_value("CURRENT_TIMESTAMP"),
             "CURRENT_TIMESTAMP"
@@ -552,6 +564,7 @@ mod tests {
                 name: "idx_test_name".to_string(),
                 columns: vec!["name".to_string()],
                 kind: IndexKind::Normal,
+                valid: true,
             }],
             version: 1,
             create_time: None,

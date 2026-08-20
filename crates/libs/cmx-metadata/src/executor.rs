@@ -219,11 +219,17 @@ impl PgTableDefineExecutor {
 
         // ============================================
         // 步骤3：查询索引信息（排除主键索引）
+        // INVALID / NOT-READY 索引（CREATE INDEX CONCURRENTLY 失败残留等）同样带出，
+        // 以 valid=false 标记：diff 视为"内容永不匹配"→ 必产生 DropIndex 释放占名；
+        // 定义中有同内容索引时再 CREATE（先 DROP 后 CREATE 顺序），重建为有效索引。
+        // 这样既避免 INVALID 索引占名导致 CREATE 撞 already exists 中断部署，
+        // 也避免其被当作"有效已存在"而永远不被修复。
         // ============================================
         let idx_sql = format!(
             "SELECT i.relname AS index_name, \
                  ix.indisunique AS is_unique, \
-                 array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) AS columns \
+                 array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) AS columns, \
+                 (NOT ix.indisvalid OR NOT ix.indisready) AS is_invalid \
                  FROM pg_class t \
                  JOIN pg_index ix ON t.oid = ix.indrelid \
                  JOIN pg_class i ON i.oid = ix.indexrelid \
@@ -231,7 +237,7 @@ impl PgTableDefineExecutor {
                  JOIN pg_namespace n ON n.oid = t.relnamespace \
                  WHERE t.relname = '{}' AND n.nspname = '{}' \
                  AND NOT ix.indisprimary \
-                 GROUP BY i.relname, ix.indisunique \
+                 GROUP BY i.relname, ix.indisunique, (NOT ix.indisvalid OR NOT ix.indisready) \
                  ORDER BY i.relname",
             table_name, schema_name
         );
@@ -364,6 +370,11 @@ impl PgTableDefineExecutor {
             };
             // PostgreSQL array_agg 返回的数组格式可能是字符串或数组
             let idx_columns = parse_pg_array_column(row.get(2));
+            // INVALID / NOT-READY 标记（见步骤3注释）：diff 侧据此强制 DROP + 重建
+            let is_invalid = match row.get(3) {
+                Some(DataValue::Bool(b)) => *b,
+                _ => false,
+            };
 
             if !idx_name.is_empty() {
                 indexes.push(IndexDefine {
@@ -374,6 +385,7 @@ impl PgTableDefineExecutor {
                     } else {
                         IndexKind::Normal
                     },
+                    valid: !is_invalid,
                 });
             }
         }

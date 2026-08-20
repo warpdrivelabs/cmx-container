@@ -1016,6 +1016,7 @@ function mcResultDetailHtml (r, summary = '查看详情') {
         const unchanged = Array.isArray(ch.unchangedColumns) ? ch.unchangedColumns : []
         const addedIdx = Array.isArray(ch.addedIndexes) ? ch.addedIndexes : []
         const droppedIdx = Array.isArray(ch.droppedIndexes) ? ch.droppedIndexes : []
+        const preservedIdx = Array.isArray(ch.preservedIndexes) ? ch.preservedIndexes : []
         const cmt = ch.commentChange || null
         const colCmts = Array.isArray(ch.modifiedColumnComments) ? ch.modifiedColumnComments : []
         const addedHtml = added.length
@@ -1035,6 +1036,10 @@ function mcResultDetailHtml (r, summary = '查看详情') {
         const droppedIdxHtml = droppedIdx.length
           ? `<div class="mc-change-sec"><b>删除索引 ${droppedIdx.length}</b><div class="mc-change-tags">${droppedIdx.map((i) => `<span title="${esc(idxLabel(i))}">${esc(i.name || '')}<em>${esc(idxLabel(i))}</em></span>`).join('')}</div></div>`
           : ''
+        // 手工索引保护：非系统命名（uk_/idx_ 前缀）且不在定义中的索引视为用户手工创建，保留不删。
+        const preservedIdxHtml = preservedIdx.length
+          ? `<div class="mc-change-sec"><b>保留手工索引 ${preservedIdx.length}</b><div class="mc-change-tags">${preservedIdx.map((i) => `<span title="${esc(idxLabel(i))}" class="mc-tag-preserved">${esc(i.name || '')}<em>${esc(i.message || '用户手工创建的索引，部署不会删除；如不再需要请手工 DROP')}</em></span>`).join('')}</div></div>`
+          : ''
         const commentHtml = cmt
           ? `<div class="mc-change-sec"><b>表注释</b><div class="mc-mod-col"><code>${esc(cmt.from || '∅')} → ${esc(cmt.to || '∅')}</code></div></div>`
           : ''
@@ -1053,7 +1058,7 @@ function mcResultDetailHtml (r, summary = '查看详情') {
             ${ch.displayName ? `<small>${esc(ch.displayName)}</small>` : ''}
             <i>${Number(ch.columnCount || 0)} 列</i>
           </div>
-          ${addedHtml}${modifiedHtml}${addedIdxHtml}${droppedIdxHtml}${commentHtml}${colCommentHtml}${noChangeHtml}
+          ${addedHtml}${modifiedHtml}${addedIdxHtml}${droppedIdxHtml}${preservedIdxHtml}${commentHtml}${colCommentHtml}${noChangeHtml}
         </div>`
       }).join('')
     : `<div class="mc-change-table"><div class="mc-change-sec"><b>涉及表</b><div class="mc-change-tags">${tableNames.map((t) => `<span>${esc(t)}</span>`).join('')}</div></div></div>`
@@ -1259,6 +1264,7 @@ function mcPlanHtml () {
           const unchanged = Array.isArray(ch.unchangedColumns) ? ch.unchangedColumns : []
           const addedIdx = Array.isArray(ch.addedIndexes) ? ch.addedIndexes : []
           const droppedIdx = Array.isArray(ch.droppedIndexes) ? ch.droppedIndexes : []
+          const preservedIdx = Array.isArray(ch.preservedIndexes) ? ch.preservedIndexes : []
           const cmt = ch.commentChange || null
           const colCmts = Array.isArray(ch.modifiedColumnComments) ? ch.modifiedColumnComments : []
           const addedHtml = added.length
@@ -1278,6 +1284,10 @@ function mcPlanHtml () {
           const droppedIdxHtml = droppedIdx.length
             ? `<div class="mc-change-sec"><b>删除索引 ${droppedIdx.length}</b><div class="mc-change-tags">${droppedIdx.map((i) => `<span title="${esc(idxLabel(i))}">${esc(i.name || '')}<em>${esc(idxLabel(i))}</em></span>`).join('')}</div></div>`
             : ''
+          // 手工索引保护：非系统命名（uk_/idx_ 前缀）且不在定义中的索引视为用户手工创建，保留不删。
+          const preservedIdxHtml = preservedIdx.length
+            ? `<div class="mc-change-sec"><b>保留手工索引 ${preservedIdx.length}</b><div class="mc-change-tags">${preservedIdx.map((i) => `<span title="${esc(idxLabel(i))}" class="mc-tag-preserved">${esc(i.name || '')}<em>${esc(i.message || '用户手工创建的索引，部署不会删除；如不再需要请手工 DROP')}</em></span>`).join('')}</div></div>`
+            : ''
           const commentHtml = cmt
             ? `<div class="mc-change-sec"><b>表注释</b><div class="mc-mod-col"><code>${esc(cmt.from || '∅')} → ${esc(cmt.to || '∅')}</code></div></div>`
             : ''
@@ -1296,7 +1306,7 @@ function mcPlanHtml () {
               ${ch.displayName ? `<small>${esc(ch.displayName)}</small>` : ''}
               <i>${Number(ch.columnCount || 0)} 列</i>
             </div>
-            ${addedHtml}${modifiedHtml}${addedIdxHtml}${droppedIdxHtml}${commentHtml}${colCommentHtml}${noChangeHtml}
+            ${addedHtml}${modifiedHtml}${addedIdxHtml}${droppedIdxHtml}${preservedIdxHtml}${commentHtml}${colCommentHtml}${noChangeHtml}
           </div>`
         }).join('')
       : `<div class="mc-change-table"><div class="mc-change-sec"><b>涉及表</b><div class="mc-change-tags">${tableNames.map((t) => `<span>${esc(t)}</span>`).join('')}</div></div></div>`
@@ -2227,6 +2237,8 @@ function styleHtml () {
     .mc-change-sec>b{display:block;margin-bottom:5px;font-size:11px;color:var(--sapContent_LabelColor,#5f6b76)}
     .mc-change-tags{display:flex;flex-wrap:wrap;gap:5px}
     .mc-change-tags span{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:3px 7px;border:1px solid var(--sapGroup_TitleBorderColor,#dfe6ee);border-radius:6px;background:var(--sapField_Background,#fff);font:11px/1.3 ui-monospace,Menlo,Consolas,monospace;color:var(--sapTextColor,#1d2d3e)}
+    /* 保留的手工索引：中性底 + 提示色边，与将执行的变更（新增/删除）区分 */
+    .mc-change-tags span.mc-tag-preserved{border-color:var(--sapInformationBorderColor,#d0e7fd);background:var(--sapInformationBackground,#f5faff)}
     .mc-change-tags em,.mc-mod-col em{font-style:normal;font-family:var(--sapFontFamily,Arial,sans-serif);font-size:10px;color:var(--sapContent_LabelColor,#6a6d70)}
     .mc-mod-col{display:grid;grid-template-columns:minmax(90px,.5fr) minmax(0,1fr);gap:6px 8px;align-items:start;margin-top:5px;font-size:11px}
     .mc-mod-col>span{font:600 11px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--sapTextColor,#1d2d3e);min-width:0;overflow:hidden;text-overflow:ellipsis}
