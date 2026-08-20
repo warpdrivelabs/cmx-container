@@ -1,7 +1,9 @@
 /**
  * MDM 激活映射配置器（native-page · 对齐高保真原型重设计）。
  *
- * 布局：页头 → 左右分栏（左「映射列表」面板 / 右「映射配置」面板）。
+ * 布局：工作区三区中的 explorer/content 双区联动。
+ *   explorer → 映射列表（搜索、点选，位置对齐编码规则管理的规则列表）
+ *   content  → 顶部工具栏（保存/删除/复制/启用）+ 映射配置表单
  *   配置面板四张编号卡片：
  *     ① 基本信息（CR 路由键 → 目标字典定位）
  *     ② 编码规则与查重（两小节：单据字段铸号覆盖 doc_code_rules / 主体识别与查重 subject_name_field + key_fields）
@@ -182,29 +184,51 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 
 function styleCss() {
   return `
-  .pg { height:100%; overflow:hidden; box-sizing:border-box; padding:16px 20px;
+  .pg { height:100%; overflow:hidden; box-sizing:border-box; padding:0;
     display:flex; flex-direction:column;
     background:var(--sapBackgroundColor); color:var(--sapTextColor);
     font-family:var(--sapFontFamily,'72','Segoe UI',Arial,sans-serif); }
-  .pg-head { flex:0 0 auto; margin-bottom:14px; display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
-  .pg-title { font-size:20px; font-weight:600; color:var(--sapTitleColor); }
-  .pg-sub { font-size:12px; color:var(--sapContent_LabelColor); margin-top:2px; }
-  .layout { flex:1 1 auto; min-height:0; display:flex; gap:14px; align-items:stretch; }
-  .side { width:280px; flex:0 0 280px; min-height:0; display:flex; flex-direction:column; }
+  .explorer { height:100%; min-height:0; box-sizing:border-box; display:flex; flex-direction:column;
+    background:var(--sapBackgroundColor); color:var(--sapTextColor);
+    font-family:var(--sapFontFamily,'72','Segoe UI',Arial,sans-serif); }
   .main { flex:1 1 auto; min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; }
   .main-scroll { flex:1 1 auto; min-height:0; overflow-y:auto;
-    display:flex; flex-direction:column; gap:14px; padding-right:6px; }
+    display:flex; flex-direction:column; gap:14px; padding:14px 16px 16px; }
   .main-scroll > * { flex-shrink:0; } /* 卡片保持自然高度，超出由 .main-scroll 滚动 */
 
+  /* content 顶部工具栏：对齐编码规则管理页的段序列工具栏 */
+  .content-toolbar { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:10px 14px;
+    border-bottom:1px solid var(--sapGroup_TitleBorderColor,#d9d9d9);
+    background:color-mix(in srgb,var(--sapBackgroundColor,#fff) 75%,#000 0%); }
+  .content-title { font-size:13px; font-weight:600; color:var(--sapTitleColor); white-space:nowrap; }
+  .content-toolbar .spacer { flex:1 1 auto; }
+  .content-toolbar .code-chip { max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; font-weight:600;
+    padding:2px 8px; border-radius:8px; color:var(--neo-cyan,#00b4d8);
+    background:color-mix(in srgb,var(--neo-cyan,#00b4d8) 10%,transparent); }
+  .content-toolbar .chip-muted { font-size:11px; font-weight:600; padding:2px 8px; border-radius:8px;
+    color:var(--sapContent_LabelColor); background:color-mix(in srgb,var(--sapContent_LabelColor) 14%,transparent); }
+
   /* 侧栏（满高卡片：标题/搜索固定，列表区内部滚动）*/
+  /* explorer 工作区面板：贴合编码规则管理列表的无边框满高形态 */
   .side-card { flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
-    border:1px solid var(--sapList_BorderColor); border-radius:8px; overflow:hidden;
-    background:color-mix(in srgb,var(--sapBackgroundColor) 92%,#000 0%); }
+    overflow:hidden; background:var(--sapBackgroundColor); }
   .side-card-head { flex:0 0 auto; display:flex; align-items:center; gap:8px;
-    padding:11px 14px; font-size:13px; font-weight:600; color:var(--sapTitleColor);
+    padding:10px; font-size:13px; font-weight:600; color:var(--sapTitleColor);
     border-bottom:1px solid var(--sapList_BorderColor);
     background:color-mix(in srgb,var(--sapBackgroundColor) 75%,#000 0%); }
   .side-card-head ui5-icon { width:1rem; height:1rem; color:var(--neo-cyan,#00b4d8); flex:0 0 auto; }
+  .side-card-head .title { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .side-card-head .spacer { flex:1 1 auto; }
+  .side-card-head .head-btn { flex:0 0 auto; box-sizing:border-box; display:inline-flex; align-items:center;
+    justify-content:center; height:24px; min-width:24px; padding:0 6px; border-radius:5px;
+    border:1px solid var(--sapButton_BorderColor,#89919a); background:var(--sapButton_Background,#fff);
+    color:var(--sapButton_TextColor,var(--sapTextColor)); cursor:pointer; font:inherit; font-size:11px;
+    font-weight:600; line-height:1; white-space:nowrap; }
+  .side-card-head .head-btn:hover { background:var(--sapButton_Hover_Background,rgba(0,0,0,.06)); }
+  .side-card-head .head-btn.primary { border-color:transparent;
+    background:var(--sapButton_Emphasized_Background,#0a6ed1); color:var(--sapButton_Emphasized_TextColor,#fff); }
+  .side-card-head .head-btn.primary:hover { background:var(--sapButton_Emphasized_Hover_Background,#0854a0); }
   .side-search { flex:0 0 auto; padding:10px 12px; }
   .side-search input { width:100%; box-sizing:border-box; padding:7px 10px;
     border:1px solid var(--sapList_BorderColor); border-radius:5px; font-size:13px;
@@ -353,20 +377,19 @@ function styleCss() {
   `
 }
 
-function headHtml() {
-  return `<div class="pg-head"><div>
-    <div class="pg-title">激活映射配置</div>
-    <div class="pg-sub">配置 CR 单据字段 → 主数据字段的激活映射（mdm_activation），供激活器读取执行</div></div>
-    <cmx-toolbar>
-      <ui5-button design="Emphasized" icon="add" id="amNew">新增映射</ui5-button>
-      <ui5-button design="Transparent" icon="refresh" slot="actions" id="amReload">刷新</ui5-button>
-    </cmx-toolbar></div>`
-}
-
 // 左侧列表标题用「目标字典名称-变更类型名称」：字典名查 dictCatalog（查不到回退 dictCode），
 // 变更类型中文名从 CR_TYPES 的 label「code — 中文名」派生（未匹配回退原值）。
 const dictNameOf = (code) => { const d = state.dictCatalog.find((x) => x.dictCode === code); return (d && d.dictName) || code || '' }
 const crNameOf = (v) => { const t = CR_TYPES.find((x) => x.value === v); return t ? t.label.split('—').pop().trim() : (v || '') }
+function filteredSideItems() {
+  const kw = (state.kw || '').trim().toLowerCase()
+  if (!kw) return state.list
+  return state.list.filter((it) => {
+    const hay = [it.activation_code, it.target_dict, dictNameOf(it.target_dict), crNameOf(it.cr_type)]
+          .map((s) => (s || '').toLowerCase())
+    return hay.some((s) => s.includes(kw))
+  })
+}
 function sideItemHtml(it) {
   const code = it.activation_code || ''
   const active = state.current && state.current.activation_code === code
@@ -383,24 +406,26 @@ function sideItemHtml(it) {
   </div>`
 }
 function sideListHtml() {
-  const kw = (state.kw || '').trim().toLowerCase()
-  // 命中范围与列表项展示一致：目标字典名称/编码、变更类型中文名/编码、激活编码（含来源单据段）
-  const items = state.list
-    .filter((it) => {
-      if (!kw) return true
-      const hay = [it.activation_code, it.target_dict, dictNameOf(it.target_dict), crNameOf(it.cr_type)]
-            .map((s) => (s || '').toLowerCase())
-      return hay.some((s) => s.includes(kw))
-    })
-    .map(sideItemHtml).join('')
-  return items || '<div class="muted" style="padding:12px">暂无映射，点击「新增映射」</div>'
+  const items = filteredSideItems().map(sideItemHtml).join('')
+  return items || '<div class="muted" style="padding:12px">暂无映射，点击「＋ 新建」</div>'
 }
 function sideHtml() {
+  const items = filteredSideItems()
   return `<div class="side-card">
-    <div class="side-card-head"><ui5-icon name="list"></ui5-icon><span>映射列表（${state.list.length}）</span></div>
+    <div class="side-card-head">
+      <ui5-icon name="list"></ui5-icon>
+      <span class="title">映射（${items.length}/${state.list.length}）</span>
+      <span class="spacer"></span>
+      <button type="button" class="head-btn" id="amReload" data-action="reload" title="刷新">⟳</button>
+      <button type="button" class="head-btn primary" id="amNew" data-action="new" title="新建映射">＋ 新建</button>
+    </div>
     <div class="side-search"><input type="text" id="amKw" placeholder="搜索字典名称 / 变更类型 / 编码…" value="${esc(state.kw)}"></div>
     <div class="side-list" id="amSideList">${sideListHtml()}</div>
   </div>`
+}
+
+function explorerHtml() {
+  return `<div class="explorer">${sideHtml()}</div>`
 }
 
 // ── 卡片1：基本信息 ──────────────────────────────────────────────────────────
@@ -613,24 +638,33 @@ function cloneDlgHtml() {
   </ui5-dialog>`
 }
 
-function formHtml() {
+function contentToolbarHtml() {
   const c = state.current || {}
   // 已持久化 = list 里能按 activation_code 查到 且 非复制副本脏态（选中已有 / 保存后均在 list；新建未保存不在 → 禁删）
   const isPersisted = !!c.activation_code && !cloneDirty && state.list.some((it) => it.activation_code === c.activation_code)
+  if (!state.current) {
+    return `<div class="content-toolbar">
+      <span class="content-title">激活映射</span>
+      <span class="chip-muted">未选择</span>
+      <span class="spacer"></span>
+    </div>`
+  }
+  return `<div class="content-toolbar">
+    <span class="content-title">激活映射</span>
+    ${c.activation_code
+      ? `<span class="code-chip" title="${esc(c.activation_code)}">${esc(c.activation_code)}</span>`
+      : '<span class="chip-muted">新建</span>'}
+    <span class="sw-wrap" id="amActiveWrap"><span>${c.is_active ? '已启用' : '已停用'}</span><span class="sw ${c.is_active ? '' : 'off'}" id="amActiveSw"></span></span>
+    <span class="spacer"></span>
+    <ui5-button design="Negative" icon="delete" id="amDelete" ${isPersisted ? '' : 'disabled'}>删除</ui5-button>
+    ${cloneBtnHtml(isPersisted)}
+    <ui5-button design="Emphasized" icon="save" id="amSave">保存配置</ui5-button>
+  </div>`
+}
+
+function formHtml() {
   return `
   <div class="main-scroll">
-  <div class="banner info"><span class="ic">ℹ️</span><span><b>数据来源提示</b>：目标字典字段、源字段下拉均来自 <b>DCT 字典元数据</b>。先在「目标字典」选择字典，自动加载字段候选。</span></div>
-  <div class="ed-head">
-    <div class="ed-head-left">
-      <div class="ed-title">激活映射 <span class="code">${esc(c.activation_code || '(新建)')}</span></div>
-      <div class="sw-wrap" id="amActiveWrap"><span>${c.is_active ? '已启用' : '已停用'}</span><span class="sw ${c.is_active ? '' : 'off'}" id="amActiveSw"></span></div>
-    </div>
-    <div class="ed-actions">
-      <ui5-button design="Negative" icon="delete" id="amDelete" ${isPersisted ? '' : 'disabled'}>删除</ui5-button>
-      ${cloneBtnHtml(isPersisted)}
-      <ui5-button design="Emphasized" icon="save" id="amSave">保存配置</ui5-button>
-    </div>
-  </div>
   ${cardBasic()}
   ${cardCodeSource()}
   ${cardHeader()}
@@ -639,9 +673,9 @@ function formHtml() {
 }
 
 function viewHtml() {
-  return `<div class="pg">${headHtml()}<div class="layout"><div class="side">${sideHtml()}</div>
-    <div class="main">${state.current ? formHtml() : '<cmx-panel title="映射配置"><div class="muted" style="padding:24px">请从左侧选择或「新增映射」一份映射</div></cmx-panel>'}</div>
-  </div>${cloneDlgHtml()}</div>`
+  return `<div class="pg">${contentToolbarHtml()}
+    <div class="main">${state.current ? formHtml() : '<div class="muted" style="padding:32px 16px;text-align:center">请在左侧选择或新建映射</div>'}</div>
+  ${cloneDlgHtml()}</div>`
 }
 
 // ── 头映射表（普通可编辑表格，规避 revo-grid 弹层/页内时序不渲染问题）──────────
@@ -1153,17 +1187,8 @@ function initCombo() {
   if (!fill()) customElements.whenDefined('cmx-combo-box').then(fill).catch(() => {})
 }
 
-function bind(root) {
+function bindContent(root) {
   rootEl = root
-  root.querySelector('#amKw')?.addEventListener('input', (e) => {
-    state.kw = e.target.value
-    const list = root.querySelector('#amSideList'); if (!list) return
-    list.innerHTML = sideListHtml() // 只重渲列表项，搜索框保持焦点不动
-    bindSide(root)
-  })
-  bindSide(root)
-  root.querySelector('#amNew')?.addEventListener('click', newMapping)
-  root.querySelector('#amReload')?.addEventListener('click', async () => { await loadList(); refresh() })
   root.querySelector('#amSave')?.addEventListener('click', save)
   root.querySelector('#amClone')?.addEventListener('click', () => openCloneDlg())
   root.querySelector('#amDelete')?.addEventListener('click', () => delMapping())
@@ -1173,10 +1198,7 @@ function bind(root) {
     state.current.is_active = !state.current.is_active
     const sw = q('amActiveSw'); if (sw) sw.classList.toggle('off', !state.current.is_active)
     const wrap = q('amActiveWrap'); if (wrap) wrap.querySelector('span').textContent = state.current.is_active ? '已启用' : '已停用'
-    // 同步侧栏状态点
-    const code = state.current.activation_code
-    const dot = root.querySelector(`.side-item[data-code="${cssEsc(code)}"] .dot`)
-    if (dot) dot.classList.toggle('on', state.current.is_active)
+    syncExplorerState()
   })
   // 卡片1 目标字典：cmx-combo-box 帮助选择（选中自动带出 target_table + 加载字段）
   initCombo()
@@ -1207,20 +1229,66 @@ function bind(root) {
   })
   if (state.current) { renderHeaderTable(); renderLineGroups(); renderDocRules(); renderKeyFields() }
 }
-// 侧栏项点击绑定（独立出来，供搜索重渲复用）
-function bindSide(root) {
-  root.querySelectorAll('.side-item').forEach((el) => el.addEventListener('click', () => selectByCode(el.dataset.code)))
+
+function bindExplorer(root) {
+  root.querySelector('#amNew')?.addEventListener('click', newMapping)
+  root.querySelector('#amReload')?.addEventListener('click', async () => { await loadList(); refresh() })
+  root.querySelector('#amSideList')?.addEventListener('click', (e) => {
+    const item = e.target instanceof Element ? e.target.closest('.side-item') : null
+    if (item) selectByCode(item.dataset.code)
+  })
+  root.querySelector('#amKw')?.addEventListener('input', (e) => {
+    state.kw = e.target.value
+    const list = root.querySelector('#amSideList'); if (!list) return
+    list.innerHTML = sideListHtml() // 只重渲列表项，搜索框保持焦点不动
+    const title = root.querySelector('.side-card-head .title')
+    if (title) title.textContent = `映射（${filteredSideItems().length}/${state.list.length}）`
+  })
 }
-// CSS 选择器转义（data-code 可能含特殊字符）
-function cssEsc(s) { return String(s == null ? '' : s).replace(/["\\]/g, '\\$&') }
+
+// content 里的启用开关只改当前对象；这里同步 explorer 列表的选中态与状态点，避免整列表重渲。
+function syncExplorerState() {
+  const currentCode = state.current && state.current.activation_code
+  viewHosts.explorer.forEach((host) => {
+    const root = host.renderRoot || host.shadowRoot; if (!root) return
+    root.querySelectorAll('.side-item').forEach((el) => {
+      const isActive = currentCode && el.dataset.code === currentCode
+      el.classList.toggle('active', !!isActive)
+      const item = state.list.find((it) => it.activation_code === el.dataset.code)
+      const dot = el.querySelector('.dot')
+      if (dot && item) {
+        dot.classList.toggle('on', !!item.is_active)
+        dot.classList.toggle('off', !item.is_active)
+        dot.title = item.is_active ? '已启用' : '已停用'
+      }
+    })
+  })
+}
 
 function refresh() {
-  const host = currentHost; if (!host) return
-  const root = host.renderRoot || host.shadowRoot; if (!root) return
-  root.innerHTML = `<style>${styleCss()}</style>${viewHtml()}`
-  bind(root)
+  renderRegion('content')
+  renderRegion('explorer')
 }
-let currentHost = null
+
+const viewHosts = { explorer: new Set(), content: new Set() }
+
+function registerViewHost(host, region) {
+  if (!host) return
+  viewHosts[region].add(host)
+  // native-pages host 断开时同步移除，避免 refresh 写入已卸载的 shadowRoot。
+  host.onDispose = () => { viewHosts[region].delete(host) }
+}
+
+function renderRegion(region) {
+  viewHosts[region].forEach((host) => {
+    const root = host.renderRoot || host.shadowRoot; if (!root) return
+    const html = region === 'explorer' ? explorerHtml() : viewHtml()
+    root.innerHTML = `<style>${styleCss()}</style>${html}`
+    if (region === 'explorer') bindExplorer(root)
+    else bindContent(root)
+  })
+}
+
 function whenRendered(host, sel, cb, t) {
   const n = t == null ? 60 : t
   const root = host && (host.renderRoot || host.shadowRoot)
@@ -1244,19 +1312,46 @@ function readCoord(ctx) {
   return (c.domain && c.application && c.module) ? c : null
 }
 
+let initDataPromise = null
+let initCoordKey = ''
+
+async function loadPageData() {
+  // 各加载器独立 try/catch：doc/dct 元数据缺失不能阻断激活列表加载。
+  try { await loadMeta() } catch (e) { console.error('[activation-mapper] loadMeta fail', e) }
+  try { await loadDictCatalog() } catch (e) { console.error('[activation-mapper] loadDictCatalog fail', e) }
+  try { await loadCodeRules() } catch (e) { console.error('[activation-mapper] loadCodeRules fail', e) }
+  try { await loadList() } catch (e) { console.error('[activation-mapper] loadList fail', e) }
+}
+
+async function ensurePageData(ctx) {
+  const nextCoord = readCoord(ctx)
+  const nextKey = [nextCoord && nextCoord.domain, nextCoord && nextCoord.application,
+    nextCoord && nextCoord.module, nextCoord && nextCoord.dbId].join('|')
+  // explorer/content 共享同一个 native 模块实例，首个视图加载后另一个视图直接复用，避免接口双调。
+  if (!initDataPromise || nextKey !== initCoordKey) {
+    coord = nextCoord
+    initCoordKey = nextKey
+    initDataPromise = loadPageData()
+  }
+  await initDataPromise
+}
+
 export default {
   defaultView: 'content',
   views: {
     async content(ctx) {
-      const host = ctx && ctx.host; currentHost = host
-      coord = readCoord(ctx)
-      // 各加载器独立 try/catch：doc/dct 元数据缺失不能阻断激活列表加载
-      try { await loadMeta() } catch (e) { console.error('[activation-mapper] loadMeta fail', e) }
-      try { await loadDictCatalog() } catch (e) { console.error('[activation-mapper] loadDictCatalog fail', e) }
-      try { await loadCodeRules() } catch (e) { console.error('[activation-mapper] loadCodeRules fail', e) }
-      try { await loadList() } catch (e) { console.error('[activation-mapper] loadList fail', e) }
-      if (host) whenRendered(host, '.pg', (r) => bind(r))
+      const host = ctx && ctx.host
+      await ensurePageData(ctx)
+      registerViewHost(host, 'content')
+      if (host) whenRendered(host, '.pg', (r) => bindContent(r))
       return `<style>${styleCss()}</style>${viewHtml()}`
+    },
+    async explorer(ctx) {
+      const host = ctx && ctx.host
+      await ensurePageData(ctx)
+      registerViewHost(host, 'explorer')
+      if (host) whenRendered(host, '.explorer', (r) => bindExplorer(r))
+      return `<style>${styleCss()}</style>${explorerHtml()}`
     },
   },
 }
