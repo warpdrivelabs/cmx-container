@@ -4,8 +4,9 @@
  *   title    页面标题（缺省「单据列表」）
  *
  * 聚合模式（不传 docType，菜单「变更申请单」节点）：全类型一张列表，表格多一列「类型」，
- * 筛选栏多一个类型下拉——选项动态来自 GET /api/mdm/activations（source_doc_type → 目标
- * 字典中文名，字典目录与 activation-mapper loadDictCatalog 同源），新域接入零改动自动出现。
+ * 筛选栏多一个类型下拉。类型选项以「激活映射」为唯一真源（设计思想详见 loadTypeOptions）：
+ * 字典出现在下拉的充要条件是配了激活映射（= 能独立走 CR 审批落字典）；新域接入只需在
+ * activation-mapper 配映射，本页零改动自动出现。
  *
  * 布局：页头 → 列表面板（cmx-filter-bar + 企业表格 + 行内操作）→ 详情整页（cr-form）。
  * 纯发起人视角：提交 / 撤回 / 驳回重提 / 作废；审批办理在流程待办中心，本页不承载。
@@ -49,6 +50,8 @@ const STATUS_META = {
   aborted: { name: '已作废', tone: 'neutral' },
 }
 const state = { dbId: '', docType: '', title: '单据列表', filter: 'all', keyword: '', list: [], domain: '', application: '', page: 1, pageSize: 20, total: 0,
+  // 聚合模式专用三件套（构造逻辑见 loadTypeOptions）：typeFilter=下拉选中类型码；
+  // typeMap=类型码→显示名（下拉与「类型」列共用）；typeOptions=下拉选项（类型码数组）。
   aggregate: false, typeFilter: '', typeMap: {}, typeOptions: [] }
 
 function esc(s) {
@@ -115,6 +118,9 @@ function fmtTime(t) { if (!t) return ''; const s = String(t); return s.length > 
 //   return `<table class="tbl"><thead><tr><th>ID</th><th>单据号</th><th>名称</th><th>类型</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${trs}</tbody></table>`
 // }
 
+// 页面骨架（整页仅在进页时渲染一次，之后数据变化走 applyData 局部更新）。
+// 类型下拉（ctType）仅聚合模式渲染；选项显示「中文名（类型码）」双标签——中文名可读，
+// 类型码保证中文名链路降级时仍可辨识；value 恒为类型码（与 docType 过滤词表一致）。
 function viewHtml() {
   return `<div class="pg">
     <div class="pg-head"><div class="pg-title">${state.title}</div>
@@ -277,7 +283,9 @@ function openTab(host, caption, nativePage, context, opts = {}) {
 async function load() {
   const params = { page: state.page, pageSize: state.pageSize }
   if (state.filter !== 'all') params.docStatus = state.filter
-  // 类型过滤：菜单静态 docType 优先；聚合模式下用页内类型下拉的选择值。
+  // 类型过滤两级归一：菜单静态 docType（单类型节点，进页即锁定）优先；聚合模式用页内
+  // 类型下拉的选中值。两者最终都归一为后端 ?docType=（CR 表 doc_type 精确匹配，
+  // 词表 = 激活映射 source_doc_type，后端不做模糊/翻译——所以选项集合即合法过滤值集合）。
   if (state.docType) params.docType = state.docType
   else if (state.typeFilter) params.docType = state.typeFilter
   if (state.keyword) params.keyword = state.keyword
@@ -286,13 +294,28 @@ async function load() {
   state.total = Number(d.total) || 0
 }
 
-// 类型目录（聚合模式）：激活映射 source_doc_type → 目标字典中文名（如 gys → 供应商）。
-// 字典目录从同模块 DCT 定义文件取（与 activation-mapper loadDictCatalog 同源）；任一步失败
-// 则降级显示原始类型码——聚合列表仍可用，只是下拉/列缺中文名。
+// ── 类型目录（聚合模式：类型下拉选项 + 「类型」列显示名）──────────────────────────
+//
+// 设计思想：类型选项以「激活映射」为唯一真源，不扫描字典目录。
+//   一个字典出现在下拉的充要条件 = 配了激活映射（source_doc_type → target_dict），
+//   即"能独立发起 CR 审批并激活落字典"。附属明细字典（供应商银行账户/客户地址/联系人等）
+//   跟随主数据 CR 的明细行一起变更、不单独发单，天然没有映射 → 不出现在下拉，符合业务
+//   语义——"下拉里少了某个字典"多数时候不是缺陷，而是它未开通独立 CR 流程（去
+//   activation-mapper 配一条映射即自动出现，本页零改动）。
+//
+// 两段式取数（类型码与中文名职责分离）：
+//   ① GET /api/mdm/activations → source_doc_type 去重 = 下拉选项 + docType 过滤值。
+//      类型码与后端 CR 表 doc_type 同词表，过滤直接透传（见 load()），前端无需再映射。
+//   ② DCT 定义文件 → dictionaryTables[].dictMeta 建 dictCode→dictName，仅用于把
+//      target_dict 换成中文显示（目录解析与 activation-mapper loadDictCatalog 同源）。
+//      此链路失败只降级显示原码（选项仍在、过滤仍可用），不阻断列表——可用性优先。
 async function loadTypeOptions() {
   state.typeMap = {}; state.typeOptions = []
   const acts = (await apiGet('/api/mdm/activations', state.dbId)) || []
   const dictName = {}
+  // 中文名目录：definitions/list 按 domain（DAM 坐标，见 content()）过滤后取第一个
+  // module=mdm 的 DCT 文件读 config。domain 解析不到时 list 返回空 → dictName 空
+  // → 全部类型降级显示英文码；find 只取第一个文件，多 DCT 文件场景需按 module 精确归属。
   try {
     const listData = await apiGet(`/api/definitions/list?domain=${encodeURIComponent(state.domain)}`, state.dbId)
     const dctItem = ((listData && listData.items) || []).find((it) => it.kind === 'DCT' && (!it.module || it.module === 'mdm'))
@@ -305,6 +328,9 @@ async function loadTypeOptions() {
       })
     }
   } catch (e) { console.warn('[cr-todo] dict catalog fail', e) }
+  // 建类型目录：类型码 = source_doc_type；显示名三级降级 dictName[target_dict] →
+  // target_dict 原码 → source_doc_type 原码，保证任何一环缺数据都有可辨识的兜底。
+  // 同一类型多条映射（create/update 各一条）按 seen 去重，取首条的 target_dict。
   const seen = new Set()
   for (const a of acts) {
     const dt = a && (a.source_doc_type || a.sourceDocType)
@@ -313,6 +339,7 @@ async function loadTypeOptions() {
     const td = (a && (a.target_dict || a.targetDict)) || ''
     state.typeMap[dt] = dictName[td] || td || dt
   }
+  // 按显示名中文 localeCompare 排序（近似拼音序），下拉展示稳定。
   state.typeOptions = [...seen].sort((a, b) => String(state.typeMap[a] || a).localeCompare(String(state.typeMap[b] || b), 'zh-Hans-CN'))
 }
 
@@ -372,6 +399,9 @@ export default {
       state.title = props.title || '单据列表'
       state.aggregate = !state.docType
       state.typeFilter = ''
+      // DAM 坐标（domain/application）：优先 workspace.context（框架按 shellbar 活动域注入，
+      // MDM 菜单挂在 basic 域），菜单 props 兜底，页面不写死。loadTypeOptions 的中文名解析
+      // 依赖 domain（definitions/list 按一层目录名精确匹配）；解析不到不报错，类型显示降级原码。
       state.domain = get('domain') || props.domain || ''
       state.application = get('application') || props.application || ''
       // 聚合模式先取类型目录（渲染筛选下拉/类型列用）；失败降级显示原始类型码，不阻断列表。
