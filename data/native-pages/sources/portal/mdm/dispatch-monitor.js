@@ -329,8 +329,19 @@ function applyStats(host, st) {
   }
 }
 
+// 订阅显示文本：优先订阅名称（后端流水查询 LEFT JOIN md_subscription 连出 sub_name），
+// 无名称/订阅已删时回退 #id；target_sys 一并带上便于区分同名订阅。
+function subText(r) {
+  const id = r.subscription_id ?? r.sub_id ?? ''
+  const name = r.sub_name || ''
+  const sys = r.sub_target_sys || r.target_sys || ''
+  if (name && sys) return `${name}（${sys}）`
+  if (name) return name
+  return id !== '' ? `#${id}` : ''
+}
+
 function decorateDispatch(r) {
-  return { ...r, status_text: statusName(r.status), created_at_text: fmtTime(r.created_at), last_error_text: trunc(r.last_error, 200) }
+  return { ...r, status_text: statusName(r.status), sub_text: subText(r), created_at_text: fmtTime(r.created_at), last_error_text: trunc(r.last_error, 200) }
 }
 function applyDispatch(host, st) {
   const C = cmx(); const root = rootOf(host); if (!root) return
@@ -381,7 +392,7 @@ function applyDead(host, st) {
     body.innerHTML = st.deadRows.length
       ? st.deadRows.map((r, i) => `<tr data-dead="${esc(String(r.id))}">
           <td><ui5-checkbox class="dead-chk" data-id="${esc(String(r.id))}" ${st.deadSel.has(String(r.id)) ? 'checked' : ''}></ui5-checkbox></td>
-          <td class="muted">${esc(String(r.id))}</td><td>${esc(String(r.subscription_id ?? ''))}</td>
+          <td class="muted">${esc(String(r.id))}</td><td>${esc(subText(r))}</td>
           <td>${esc(r.dict_code || '')}</td><td class="muted">${esc(String(r.record_id ?? ''))}</td>
           <td>${esc(String(r.event_seq ?? ''))}</td><td>${esc(String(r.attempts ?? ''))}</td>
           ${r.last_error
@@ -563,7 +574,7 @@ function buildDispatchGrid(host, st) {
   const cm = new C.CmxColumnModel({ datasetId: 'dm-dispatch' })
   cm.setMembers([
     new C.CmxColumn({ id: 'created_at_text', caption: '时间', dataType: 'VARCHAR', width: '150px' }),
-    new C.CmxColumn({ id: 'subscription_id', caption: '订阅', dataType: 'VARCHAR', width: '80px' }),
+    new C.CmxColumn({ id: 'sub_text', caption: '订阅', dataType: 'VARCHAR', width: '150px' }),
     new C.CmxColumn({ id: 'event_seq', caption: '事件seq', dataType: 'VARCHAR', width: '90px' }),
     new C.CmxColumn({ id: 'dict_code', caption: '字典', dataType: 'VARCHAR', width: '110px' }),
     new C.CmxColumn({ id: 'record_id', caption: '记录id', dataType: 'VARCHAR', width: '90px' }),
@@ -722,7 +733,7 @@ function bind(host, st, root) {
     openTextDialog(
       `死信错误 · 投递 #${esc(String(row.id ?? ''))}`,
       String(row.last_error ?? ''),
-      `订阅 ${esc(String(row.subscription_id ?? ''))} · ${esc(row.dict_code || '')} · 记录 ${esc(String(row.record_id ?? ''))} · 事件 seq ${esc(String(row.event_seq ?? ''))} · 已尝试 ${esc(String(row.attempts ?? ''))} 次`,
+      `订阅 ${esc(subText(row))} · ${esc(row.dict_code || '')} · 记录 ${esc(String(row.record_id ?? ''))} · 事件 seq ${esc(String(row.event_seq ?? ''))} · 已尝试 ${esc(String(row.attempts ?? ''))} 次`,
     )
   })
 
