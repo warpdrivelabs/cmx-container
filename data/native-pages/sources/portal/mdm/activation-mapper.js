@@ -73,6 +73,7 @@ async function apiPost(url, payload, dbId) {
 const state = {
   crFields: [], cmFields: [], crLineFields: [], list: [], current: null,
   headerRows: [], headerGroups: [], dictCatalog: [], codeRules: [], lineDictFields: {}, kw: '', groupBy: 'group',
+  page: 1, pageSize: 10,
   docRuleRows: [],
   keyFieldRows: [],
 }
@@ -235,6 +236,13 @@ function styleCss() {
     background:color-mix(in srgb,var(--sapBackgroundColor) 85%, #000 0%); color:var(--sapTextColor); }
   .side-search input:focus { outline:none; border-color:var(--neo-cyan,#00b4d8); }
   .side-list { flex:1 1 auto; min-height:0; overflow-y:auto; display:flex; flex-direction:column; }
+  .side-pager { flex:0 0 auto; display:flex; align-items:center; padding:4px 6px 6px;
+    border-top:1px solid var(--sapList_BorderColor); }
+  .side-pager cmx-pager { flex:1 1 auto; min-width:0; display:flex; }
+  .side-pager cmx-pager::part(root) { width:100%; justify-content:center; gap:0; padding:2px 0; }
+  .side-pager cmx-pager::part(info) { flex:1 1 auto; min-width:0; }
+  .side-pager cmx-pager::part(size),
+  .side-pager cmx-pager::part(suffix) { display:none; }
   .side-item { flex-shrink:0; padding:10px 14px; cursor:pointer; border-left:3px solid transparent;
     border-bottom:1px solid var(--sapList_BorderColor); transition:background .12s; }
   .side-item:hover { background:var(--sapList_Hover_Background); }
@@ -390,6 +398,22 @@ function filteredSideItems() {
     return hay.some((s) => s.includes(kw))
   })
 }
+function normalizeSidePage(options = {}) {
+  const items = filteredSideItems()
+  const totalPages = Math.max(1, Math.ceil(items.length / state.pageSize))
+  const currentCode = state.current && state.current.activation_code
+  const currentIdx = options.focusCurrent && currentCode
+    ? items.findIndex((it) => it.activation_code === currentCode)
+    : -1
+  state.page = currentIdx >= 0
+    ? Math.floor(currentIdx / state.pageSize) + 1
+    : Math.min(Math.max(1, state.page), totalPages)
+  return items
+}
+function pagedSideItems(options = {}) {
+  const items = normalizeSidePage(options)
+  return items.slice((state.page - 1) * state.pageSize, state.page * state.pageSize)
+}
 function sideItemHtml(it) {
   const code = it.activation_code || ''
   const active = state.current && state.current.activation_code === code
@@ -406,11 +430,11 @@ function sideItemHtml(it) {
   </div>`
 }
 function sideListHtml() {
-  const items = filteredSideItems().map(sideItemHtml).join('')
+  const items = pagedSideItems().map(sideItemHtml).join('')
   return items || '<div class="muted" style="padding:12px">暂无映射，点击「＋ 新建」</div>'
 }
 function sideHtml() {
-  const items = filteredSideItems()
+  const items = normalizeSidePage({ focusCurrent: true })
   return `<div class="side-card">
     <div class="side-card-head">
       <ui5-icon name="list"></ui5-icon>
@@ -421,6 +445,9 @@ function sideHtml() {
     </div>
     <div class="side-search"><input type="text" id="amKw" placeholder="搜索字典名称 / 变更类型 / 编码…" value="${esc(state.kw)}"></div>
     <div class="side-list" id="amSideList">${sideListHtml()}</div>
+    <div class="side-pager">
+      <cmx-pager id="amPager" compact page="${state.page}" page-size="${state.pageSize}" total="${items.length}"></cmx-pager>
+    </div>
   </div>`
 }
 
@@ -1239,10 +1266,37 @@ function bindExplorer(root) {
   })
   root.querySelector('#amKw')?.addEventListener('input', (e) => {
     state.kw = e.target.value
-    const list = root.querySelector('#amSideList'); if (!list) return
-    list.innerHTML = sideListHtml() // 只重渲列表项，搜索框保持焦点不动
-    const title = root.querySelector('.side-card-head .title')
-    if (title) title.textContent = `映射（${filteredSideItems().length}/${state.list.length}）`
+    state.page = 1
+    // 只重渲列表体/分页，搜索框保持焦点不动。
+    syncExplorerList()
+  })
+  root.querySelector('#amPager')?.addEventListener('page-change', (e) => {
+    const page = Number(e.detail && e.detail.page)
+    const pageSize = Number(e.detail && e.detail.pageSize)
+    if (!Number.isFinite(page) || page < 1) return
+    if (Number.isFinite(pageSize) && pageSize > 0) state.pageSize = pageSize
+    state.page = page
+    syncExplorerList()
+  })
+}
+
+function updateExplorerList(root) {
+  const list = root.querySelector('#amSideList')
+  if (list) list.innerHTML = sideListHtml()
+  const title = root.querySelector('.side-card-head .title')
+  if (title) title.textContent = `映射（${filteredSideItems().length}/${state.list.length}）`
+  const pager = root.querySelector('#amPager')
+  if (pager) {
+    pager.page = state.page
+    pager.pageSize = state.pageSize
+    pager.total = filteredSideItems().length
+  }
+}
+
+function syncExplorerList() {
+  viewHosts.explorer.forEach((host) => {
+    const root = host.renderRoot || host.shadowRoot
+    if (root) updateExplorerList(root)
   })
 }
 
