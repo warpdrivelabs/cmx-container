@@ -279,7 +279,15 @@
         "mode": "auto",
         "field": "doc_no",
         "ruleCode": "MDM_BILL"
-      }
+      },
+      "uniqueKeys": [
+        {
+          "name": "uk_cv_mdm_apply_docno",
+          "columns": [
+            "doc_no"
+          ]
+        }
+      ]
     },
     {
       "level": "L2",
@@ -475,5 +483,5 @@
       }
     ]
   },
-  "updatedAt": "2026-08-12T08:41:14.480Z"
+  "updatedAt": "2026-08-21T01:03:09.573Z"
 }

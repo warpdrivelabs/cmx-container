@@ -21,6 +21,27 @@ pub(crate) fn table_action_label(change: &Value) -> &'static str {
     }
 }
 
+/// 变更报告中的索引改名提示文案：`addedIndexes` 里带 `renamedFrom` 的条目
+/// （内容一致仅名字不同的系统命名索引，将 DROP 旧名 + CREATE 新名）。
+/// 供部署计划与执行两条 SSE 流以 progress 行直读，明细卡片中另有标记。
+pub(crate) fn rename_hints(change: &Value) -> Vec<String> {
+    change
+        .get("addedIndexes")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|i| {
+                    let from = i.get("renamedFrom")?.as_str()?;
+                    let to = i.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                    Some(format!(
+                        "⚠ 索引改名重建: {from} → {to}（内容未变仅变名，仍执行 DROP+CREATE）"
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// 列类型 → 前端展示的 PG 类型字符串，与建表 DDL 基准（`PostgresDdlDialect::map_column_type`）一致。
 ///
 /// 统一从这里取类型字符串，保证「计划报告」与「实际建表/升级」使用同一套类型映射，
@@ -184,6 +205,8 @@ pub(crate) fn diff_table_to_report(current: &TableDefine, desired: &TableDefine)
                 }
             }
             // 索引变更：AddIndex 用设计期名，DropIndex 用 DB 真实名（均为 IndexDefine）。
+            // RenameIndex：内容一致仅改名的系统命名索引（DROP 旧 + CREATE 新），双侧分别
+            // 带 renamedFrom / renamedTo 提示，前端计划展示「改名自 xxx」。
             // PreservedManualIndex：手工创建的索引（非系统命名且不在定义中），保留不删，
             // 单独成组提示用户「不会被删除，如不需要请手工清理」。
             let mut added_idx = Vec::new();
@@ -193,6 +216,18 @@ pub(crate) fn diff_table_to_report(current: &TableDefine, desired: &TableDefine)
                 match ic {
                     IndexChange::AddIndex(i) => added_idx.push(index_to_json(i)),
                     IndexChange::DropIndex(i) => dropped_idx.push(index_to_json(i)),
+                    IndexChange::RenameIndex { old, new } => {
+                        let mut a = index_to_json(new);
+                        if let Some(obj) = a.as_object_mut() {
+                            obj.insert("renamedFrom".to_string(), json!(old.name));
+                        }
+                        added_idx.push(a);
+                        let mut d = index_to_json(old);
+                        if let Some(obj) = d.as_object_mut() {
+                            obj.insert("renamedTo".to_string(), json!(new.name));
+                        }
+                        dropped_idx.push(d);
+                    }
                     IndexChange::PreservedManualIndex(i) => {
                         let mut v = index_to_json(i);
                         if let Some(obj) = v.as_object_mut() {

@@ -146,6 +146,21 @@ impl PgTableDefineExecutor {
         Ok(())
     }
 
+    /// 轻量探测表是否已存在（information_schema，供建表/升级分流）。
+    /// 查询失败按不存在处理——由后续 create_table/upgrade_table 的真实执行兜底报错。
+    async fn table_exists(&self, table_name: &str, schema: &str) -> bool {
+        let sql = format!(
+            "SELECT 1 FROM information_schema.tables \
+             WHERE table_schema = '{}' AND table_name = '{}' LIMIT 1",
+            schema, table_name
+        );
+        get_default_db_manager()
+            .query_sql(&self.db_id, self.txn_id.as_deref(), &sql, "table_exists")
+            .await
+            .map(|ds| !ds.is_empty())
+            .unwrap_or(false)
+    }
+
     /// 查询 PostgreSQL 中当前表的结构，构建 TableDefine
     ///
     /// 通过查询 information_schema.columns、pg_indexes、pg_description
@@ -420,6 +435,21 @@ impl PgTableDefineExecutor {
 
 #[async_trait]
 impl TableDefineDbExecutor for PgTableDefineExecutor {
+    /// 覆盖 trait 默认实现（"先试建表失败再升级"）：先探测表存在再分流。
+    /// 默认实现对已存在的表会打出注定不执行的 CREATE/COMMENT/INDEX 语句日志（打印在
+    /// 执行之前、CREATE TABLE 即失败），严重误导排障；此处按存在性直接走对应路径。
+    async fn create_or_upgrade_table(&self, define: &TableDefine) -> Result<(), BaseError> {
+        let schema = define
+            .schema
+            .clone()
+            .unwrap_or_else(|| "public".to_string());
+        if self.table_exists(&define.table_name, &schema).await {
+            self.upgrade_table(define).await
+        } else {
+            self.create_table(define).await
+        }
+    }
+
     async fn create_table(&self, define: &TableDefine) -> std::result::Result<(), BaseError> {
         let dialect = PostgresDdlDialect::default();
 

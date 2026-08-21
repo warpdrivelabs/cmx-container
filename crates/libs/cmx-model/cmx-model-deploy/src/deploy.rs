@@ -12,7 +12,7 @@ use cmx_api_types::{Error, Result};
 
 use crate::compile::compile_definition;
 use crate::db_state::db_state;
-use crate::diff_report::{table_action_label, table_change_plan};
+use crate::diff_report::{rename_hints, table_action_label, table_change_plan};
 use crate::init::{ev, InitEvent};
 use crate::ledger::{
     ensure_current_ledger_schema, main_module_key, read_main_module_names, read_meta, table_exists,
@@ -307,6 +307,15 @@ pub async fn deploy_plan_stream(
             results.push(json!({ "module": module, "kind": kind, "status": "failed", "error": e }));
             continue;
         }
+        // 索引改名提示：流式日志直读（变更明细卡片中亦有 renamedFrom/renamedTo 标记）
+        for ch in &changes {
+            for hint in rename_hints(ch) {
+                send(
+                    "progress",
+                    json!({ "message": hint, "module": module, "kind": kind, "table": ch.get("table").and_then(|v| v.as_str()).unwrap_or("") }),
+                );
+            }
+        }
         send(
             "progress",
             json!({
@@ -515,6 +524,13 @@ async fn deploy_with_events(
                     "change": change,
                 }),
             );
+            // 索引改名提示：流式日志直读（变更明细卡片中亦有 renamedFrom/renamedTo 标记）
+            for hint in rename_hints(&change) {
+                send(
+                    "progress",
+                    json!({ "message": hint, "module": module, "kind": kind, "table": def.table_name }),
+                );
+            }
             if let Err(e) = executor.create_or_upgrade_table(def).await {
                 ddl_err = Some(format!("建表 {} 失败: {e}", def.table_name));
                 break;

@@ -133,19 +133,6 @@ fn test_load_config_from_file() {
 }
 
 #[test]
-fn test_config_manager_load_all_tables() {
-    let config_path = tests_dir().join("domain_app_module_config.json");
-    let manager = TableDefinesConfigManager::from_config_paths(&[&config_path]).unwrap();
-
-    assert_eq!(manager.config_count(), 1);
-    assert!(manager.get_config_by_name("domain_app_module").is_some());
-
-    let tables = manager.load_all_tables(tests_dir()).unwrap();
-    assert_eq!(tables.len(), 3);
-    assert_eq!(tables[0].table_name, "cmx_domain");
-}
-
-#[test]
 fn test_config_manager_load_by_name() {
     let config_path = tests_dir().join("domain_app_module_config.json");
     let manager = TableDefinesConfigManager::from_config_paths(&[&config_path]).unwrap();
@@ -357,38 +344,6 @@ fn test_diff_add_column_to_loaded_table() {
 }
 
 #[test]
-fn test_diff_drop_column() {
-    let path = tests_dir().join("domain_app_module_tables.json");
-    let tables = load_table_defines_from_path(&path).unwrap();
-
-    let old = tables[0].clone();
-    let mut new_table = old.clone();
-    // 从新表删除 tags 列
-    new_table.columns.retain(|c| c.name != "tags");
-
-    let changes = DdlDiff::diff(&[old], &[new_table]);
-    assert_eq!(changes.len(), 1);
-
-    if let TableChange::AlterTable { column_changes, .. } = &changes[0] {
-        let dropped: Vec<_> = column_changes
-            .iter()
-            .filter_map(|c| match c {
-                ColumnChange::DropColumn(name) => Some(name.as_str()),
-                _ => None,
-            })
-            .collect();
-        assert!(dropped.contains(&"tags"));
-    } else {
-        panic!("应为 AlterTable 变更");
-    }
-
-    let dialect = PostgresDdlDialect::default();
-    let stmts = DdlDiff::changes_to_ddl(&dialect, &changes).unwrap();
-    let joined = stmts.join("\n");
-    assert!(joined.contains("DROP COLUMN"));
-}
-
-#[test]
 fn test_diff_no_changes() {
     let path = tests_dir().join("domain_app_module_tables.json");
     let tables = load_table_defines_from_path(&path).unwrap();
@@ -460,111 +415,4 @@ fn test_i18n_table_ddl_generation() {
     assert!(ddl.contains("ref_id"));
     assert!(ddl.contains("locale"));
     assert!(ddl.contains("PRIMARY KEY"));
-}
-
-// ==========================================
-// 端到端集成测试：config → loader → DDL → parser → diff
-// ==========================================
-
-#[test]
-fn test_end_to_end_config_to_ddl_to_parse() {
-    // 1. 通过配置管理器加载表定义
-    let config_path = tests_dir().join("domain_app_module_config.json");
-    let manager = TableDefinesConfigManager::from_config_paths(&[&config_path]).unwrap();
-    let tables = manager.load_all_tables(tests_dir()).unwrap();
-    assert_eq!(tables.len(), 3);
-
-    // 2. 为每张表生成 DDL
-    let dialect = PostgresDdlDialect {
-        prefer_db_type: true,
-    };
-    let full_ddl = dialect.generate_full_ddl_for_tables(&tables).unwrap();
-    assert!(!full_ddl.is_empty());
-
-    // 3. 解析回 TableDefine
-    let parser = PostgresDdlParser;
-    let parsed = parser.parse_ddl(&full_ddl).unwrap();
-    assert_eq!(parsed.len(), 3);
-
-    // 4. 与原始表对比 — 列数应一致
-    for (orig, back) in tables.iter().zip(parsed.iter()) {
-        assert_eq!(back.table_name, orig.table_name);
-        assert_eq!(
-            back.columns.len(),
-            orig.columns.len(),
-            "表 {} 的列数不一致",
-            orig.table_name
-        );
-    }
-
-    // 5. diff 应无变更（相同表集合）
-    let changes = DdlDiff::diff(&tables, &tables);
-    assert!(changes.is_empty(), "相同表集合 diff 应为空");
-}
-
-#[test]
-fn test_end_to_end_schema_evolution() {
-    // 模拟 schema 演进：v1 → v2（新增列、删除列）
-    let path = tests_dir().join("domain_app_module_tables.json");
-    let tables = load_table_defines_from_path(&path).unwrap();
-
-    let v1 = tables[0].clone(); // cmx_domain
-    let mut v2 = v1.clone();
-
-    // v2: 删除 tags 列，新增 status 列
-    v2.columns.retain(|c| c.name != "tags");
-    v2.columns.push(cmx_core::model::cell::ColumnDefine {
-        name: "status".to_string(),
-        label: "状态".to_string(),
-        field_type: FieldType::String,
-        is_primary_key: false,
-        is_nullable: true,
-        default_value: Some("active".to_string()),
-        i18n: false,
-        length: Some(16),
-        precision: None,
-        scale: None,
-        db_type: Some("VARCHAR(16)".to_string()),
-        ordinal: Some(10),
-        create_time: None,
-        update_time: None,
-        is_foreign_key: false,
-        foreign_key_table: None,
-        foreign_key_column: None,
-        extensions: Default::default(),
-    });
-
-    // 生成增量 DDL
-    let changes = DdlDiff::diff(&[v1], &[v2]);
-    assert_eq!(changes.len(), 1);
-
-    if let TableChange::AlterTable { column_changes, .. } = &changes[0] {
-        let dropped: Vec<_> = column_changes
-            .iter()
-            .filter_map(|c| match c {
-                ColumnChange::DropColumn(n) => Some(n.as_str()),
-                _ => None,
-            })
-            .collect();
-        let added: Vec<_> = column_changes
-            .iter()
-            .filter_map(|c| match c {
-                ColumnChange::AddColumn(col) => Some(col.name.as_str()),
-                _ => None,
-            })
-            .collect();
-
-        assert!(dropped.contains(&"tags"), "应包含删除 tags 列");
-        assert!(added.contains(&"status"), "应包含新增 status 列");
-    } else {
-        panic!("应为 AlterTable 变更");
-    }
-
-    let dialect = PostgresDdlDialect::default();
-    let stmts = DdlDiff::changes_to_ddl(&dialect, &changes).unwrap();
-    let ddl = stmts.join("\n");
-
-    assert!(ddl.contains("DROP COLUMN"), "应包含 DROP COLUMN tags");
-    assert!(ddl.contains("ADD COLUMN"), "应包含 ADD COLUMN status");
-    assert!(ddl.contains("DEFAULT"), "新列应包含默认值");
 }

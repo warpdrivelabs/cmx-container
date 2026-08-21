@@ -125,7 +125,7 @@ impl CenterClientConfig {
 
         match sub.deserialize::<Self>() {
             Ok(config) => {
-                tracing::info!("center_client 配置加载成功: mode={}", config.mode);
+                // tracing::info!("center_client 配置加载成功: mode={}", config.mode);
                 config
             }
             Err(e) => {
