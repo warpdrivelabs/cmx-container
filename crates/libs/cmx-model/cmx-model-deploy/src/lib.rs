@@ -37,6 +37,7 @@ mod compile;
 mod ledger;
 mod diff_report;
 mod db_state;
+mod checksum;
 mod init;
 mod deploy;
 
@@ -392,11 +393,13 @@ mod tests {
             name: "cf_t_code_key".to_string(),
             columns: vec!["code".to_string()],
             kind: IndexKind::Unique,
+            valid: true,
         }];
         desired.indexes = vec![IndexDefine {
             name: "uk_cf_t_1".to_string(),
             columns: vec!["code".to_string()],
             kind: IndexKind::Unique,
+            valid: true,
         }];
         let report = diff_table_to_report(&current, &desired);
         assert_eq!(

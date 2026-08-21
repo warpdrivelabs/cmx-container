@@ -83,7 +83,9 @@ const state = {
   page: 1,
   pageSize: 50,
   q: '',
-  conds: [],
+  conds: {},          // 字段名 -> 等值（元数据条件下拉写入，见 buildCondFields）
+  condFields: [],     // 条件字段描述 [{ name, caption, dataType, options }]
+  _condsMoreOpen: false, // 条件区「更多筛选」展开态
   treeNodes: {},
   currentParentId: null,
   selectedTreeNodeId: null,
@@ -172,8 +174,11 @@ function styleHtml () {
 .de-filter{flex:0 0 auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;
   background:color-mix(in srgb,var(--neo-cyan) 6%,var(--sapList_Background,#fff));
   border:1px solid color-mix(in srgb,var(--neo-cyan) 22%,transparent);border-radius:6px;font-size:12px}
-.de-cond{display:flex;gap:4px;align-items:center;background:var(--sapField_Background,#fff);
-  border-radius:4px;padding:3px 6px;border:1px solid color-mix(in srgb,var(--neo-cyan) 25%,var(--sapField_BorderColor,#b3b3b3))}
+.de-cond{display:inline-flex;align-items:center;gap:5px;margin:0;flex:0 0 auto}
+.de-cond-cap{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70);white-space:nowrap}
+.de-cond ui5-select{min-width:84px;max-width:150px}
+.de-cond.active .de-cond-cap{color:var(--neo-cyan,#00b4d8);font-weight:600}
+.de-cond.active ui5-select{border-color:color-mix(in srgb,var(--neo-cyan,#00b4d8) 45%,transparent)}
 .de-body{flex:1;display:flex;gap:10px;min-height:0;min-width:0}
 .de-body.flat{flex-direction:column}
 .de-right{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;
@@ -245,9 +250,11 @@ function pageHtml () {
     <ui5-button design="Default" icon="upload" id="btnImport">导入</ui5-button>
   </div>
   <div class="de-filter">
+    <span id="deConds" style="display:contents"></span>
     <ui5-input id="deQ" placeholder="关键字（编码/名称模糊匹配）" style="max-width:240px"></ui5-input>
     <ui5-button design="Transparent" icon="search" id="btnSearch">搜索</ui5-button>
     <ui5-button design="Transparent" icon="clear-all" id="btnClearCond">清空</ui5-button>
+    <ui5-button design="Transparent" id="btnMoreConds" style="display:none"></ui5-button>
   </div>
   <div class="${bodyClass}" id="deBody">
     ${treePart}
@@ -416,13 +423,137 @@ async function loadData (def, dictCode, meta) {
 function buildFiltersFromConds (meta) {
   const f = {}
   const validCols = new Set((meta.columns || []).map((c) => c.name))
-  for (const c of state.conds) {
-    if (!c.col || !validCols.has(c.col)) continue
-    const v = String(c.value || '').trim()
-    if (!v) continue
-    f[c.col] = /^\-?\d+(\.\d+)?$/.test(v) ? Number(v) : v
+  for (const [col, raw] of Object.entries(state.conds)) {
+    if (!col || !validCols.has(col)) continue
+    if (raw == null || String(raw).trim() === '') continue
+    const cf = state.condFields.find((x) => x.name === col)
+    f[col] = cf ? numifyCond(raw, cf.dataType) : raw
   }
   return Object.keys(f).length ? f : undefined
+}
+
+/* ── 元数据驱动条件控件（与 mdm/master-list.js 内联副本保持同步——native page 为
+      Blob URL 模块，页面间无法相对 import 共享代码）。
+      规则：枚举字段（edit.mode=select + enumValues）与字典引用字段（cmx-dict-select + refDict）
+      生成下拉，上限 MAX_COND_FIELDS；值等值过滤（数字列按 dataType 转 Number）。 ── */
+const MAX_COND_FIELDS = 4
+
+function numifyCond (v, dataType) {
+  if (typeof dataType === 'string' && /INT|NUM|DEC|FLOAT|DOUBLE|SERIAL|BOOL|BIT/i.test(dataType)) {
+    const n = Number(v)
+    if (Number.isFinite(n)) return n
+  }
+  return v
+}
+
+// 引用字典选项（值列 = refField||'code'，与 cmx-data-comp init-page-models 的缺省一致）。
+async function loadCondDictOptions (c) {
+  const valueField = c.refField || 'code'
+  const labelField = c.displayField || 'name'
+  const d = await apiPost(`/api/dct/data/search?${qs(state.def, { dict: c.refDict })}`, { page: 1, pageSize: 500 }, state.def.dbId)
+  const rows = (d && d.rows) || []
+  return rows
+    .map((r) => ({ value: String(r[valueField] ?? ''), label: String(r[labelField] ?? r[valueField] ?? '') }))
+    .filter((o) => o.value !== '')
+}
+
+async function buildCondFields () {
+  state.condFields = []
+  const meta = state.meta
+  if (!meta) return
+  const out = []
+  let used = 0 // 已消耗名额 = 已生成 + 被显式否决（filterable:false 占坑不候补，与 master-list 同步）
+  for (const c of (meta.columns || [])) {
+    if (used >= MAX_COND_FIELDS) break
+    const n = c.name || c.id
+    if (!n || DERIVED_HIERARCHY.has(n) || n === meta.parentField || n === meta.pk) continue
+    if (AUDIT_FIELDS.has(n) || SYSTEM_FLAG_FIELDS.has(n) || c.visible === false) continue
+    // filterable 开关（governance 键）：显式 false 一票否决且占坑；true/未填按默认推导
+    if (c.filterable === false) { used++; continue }
+    const mode = (c.edit && c.edit.mode) || ''
+    if (mode === 'select' && Array.isArray(c.enumValues) && c.enumValues.length) {
+      out.push({
+        name: n, dataType: c.dataType, caption: colCaption(c),
+        options: c.enumValues.map((e) => ({ value: String(e.value), label: String(e.label ?? e.value) })),
+      })
+      used++
+    } else if (mode === 'cmx-dict-select' && c.refDict) {
+      let opts = null
+      try { opts = await loadCondDictOptions(c) } catch (_) { opts = null }
+      if (opts && opts.length) {
+        out.push({ name: n, dataType: c.dataType, caption: colCaption(c), options: opts })
+        used++
+      }
+    }
+  }
+  state.condFields = out
+}
+
+// 条件控件：kv 方式（标签 + ui5-select，下拉菜单走 UI5/neo 主题）——与 master-list 同步。
+function condFieldHtml (cf) {
+  const capShort = (cf.caption || '').replace(/[（(].*$/, '').trim() || cf.caption
+  const opts = ['<ui5-option value="" selected>全部</ui5-option>']
+    .concat(cf.options.map((o) => `<ui5-option value="${escAttr(o.value)}">${escHtml(o.label)}</ui5-option>`))
+  return `<label class="de-cond" title="${escAttr(cf.caption)}"><span class="de-cond-cap">${escHtml(capShort)}</span><ui5-select data-cond="${escAttr(cf.name)}">${opts.join('')}</ui5-select></label>`
+}
+
+function renderCondControls (root) {
+  const wrap = root && root.querySelector('#deConds')
+  if (wrap) wrap.innerHTML = state.condFields.map(condFieldHtml).join('')
+  scheduleCondRelayout(root)
+}
+
+/* 溢出条件折叠（与 cmx-filter-bar collapse-overflow 同范式，页面内联副本）：
+   .de-filter 是 flex-wrap 容器，折到第二行的条件控件隐藏 + 「更多筛选(n)」按钮；
+   仅隐藏不移动 DOM，双 rAF 等布局稳定后测量。 */
+function scheduleCondRelayout (root) {
+  requestAnimationFrame(() => requestAnimationFrame(() => relayoutConds(root)))
+}
+
+function relayoutConds (root) {
+  const bar = root && root.querySelector('.de-filter')
+  const more = root && root.querySelector('#btnMoreConds')
+  const wrap = root && root.querySelector('#deConds')
+  if (!bar || !more || !wrap) return
+  // 先全显 + 藏 more，测干净基线
+  wrap.querySelectorAll('.de-cond').forEach((el) => { el.style.display = '' })
+  more.style.display = 'none'
+  // 测/隐以 label.de-cond 为单位（[data-cond] 是内层 ui5-select，只藏控件标签仍占位）
+  const els = Array.from(wrap.querySelectorAll('.de-cond'))
+    .filter((el) => el.getBoundingClientRect().height > 0)
+  // 基准取第一个条件的 top（.de-filter 的 padding 会让首行整体下移，直接比容器误判折行）
+  const base = els.length ? els[0].getBoundingClientRect().top : 0
+  const over = els.filter((el) => el.getBoundingClientRect().top > base + 4)
+  if (state._condsMoreOpen) { more.style.display = ''; more.textContent = '收起 ▴'; return }
+  if (over.length) {
+    over.forEach((el) => { el.style.display = 'none' })
+    more.style.display = ''
+    more.textContent = `更多筛选(${over.length}) ▾`
+  }
+}
+
+function toggleMoreConds (root) {
+  state._condsMoreOpen = !state._condsMoreOpen
+  if (!state._condsMoreOpen) { relayoutConds(root); return }
+  const wrap = root && root.querySelector('#deConds')
+  const more = root && root.querySelector('#btnMoreConds')
+  if (wrap) wrap.querySelectorAll('.de-cond').forEach((el) => { el.style.display = '' })
+  if (more) { more.style.display = ''; more.textContent = '收起 ▴' }
+}
+
+// 搜索占位：编码/名称 + searchable 标记列（governance 键，后端 q 对其模糊匹配）。
+// 与 mdm/master-list.js 的 placeholderOf 规则同步（副本，见文件头说明）。
+function buildSearchPlaceholder () {
+  const meta = state.meta
+  if (!meta) return '关键字（编码/名称模糊匹配）'
+  const parts = ['编码', '名称']
+  for (const c of (meta.columns || [])) {
+    if (parts.length >= 5) break
+    if (c.searchable !== true || c.name === meta.codeField || c.name === meta.labelField) continue
+    const cap = colCaption(c)
+    if (cap && !parts.includes(cap)) parts.push(cap)
+  }
+  return `关键字（${parts.join('/')}模糊匹配）`
 }
 
 /* ─────────────── grid 重建 + 数据填充（切换字典时重建 grid 绕过列缓存） ─────────────── */
@@ -1178,7 +1309,9 @@ async function switchDict (root, dictCode) {
   state.meta = null
   state.page = 1
   state.q = ''
-  state.conds = []
+  state.conds = {}
+  state.condFields = []
+  state._condsMoreOpen = false
   /* 默认"全部"模式：currentParentId=undefined → loadData searchReq 不传 parentId → 后端全量。
      用户主动选"全部根节点"（__root__）则 currentParentId=null（IS NULL），选具体节点则 =<id>。 */
   state.currentParentId = undefined
@@ -1214,6 +1347,12 @@ async function switchDict (root, dictCode) {
   }
   // 强制 grid 重建（新字典新列模型）
   state._lastDictCode = null
+  // 元数据条件控件随字典重建（fail-soft：失败清空，不影响主流程）
+  try { await buildCondFields() } catch (e) { state.condFields = [] }
+  renderCondControls(root)
+  // 搜索占位随字典更新（编码/名称 + searchable 标记列）
+  const qEl = root.querySelector('#deQ')
+  if (qEl) qEl.setAttribute('placeholder', buildSearchPlaceholder())
   // 同步字典切换器 selected 状态
   const sel = root.querySelector('#deDictSelect')
   if (sel) {
@@ -1274,8 +1413,37 @@ function bindPage (root) {
   root.querySelector('#deQ')?.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') search() })
   root.querySelector('#btnClearCond')?.addEventListener('click', () => {
     if (root.querySelector('#deQ')) root.querySelector('#deQ').value = ''
-    state.q = ''; state.page = 1
+    state.q = ''; state.conds = {}; state.page = 1
+    renderCondControls(root)   // 重建控件区恢复「全部」选中
     void reload(root)
+  })
+
+  root.querySelector('#btnMoreConds')?.addEventListener('click', () => toggleMoreConds(root))
+
+  // 容器宽度变化（窗口缩放/分栏）重测条件折叠（与 cmx-filter-bar 的 ResizeObserver 对齐）。
+  // 只看宽度：重测自身改变行高，不滤掉会抖动循环。
+  const deBar = root.querySelector('.de-filter')
+  if (deBar && typeof ResizeObserver !== 'undefined' && !state._condRO) {
+    state._condRO = new ResizeObserver((entries) => {
+      const w = entries[0] && entries[0].contentRect ? entries[0].contentRect.width : 0
+      if (state._condLastW != null && Math.abs(w - state._condLastW) < 1) return
+      state._condLastW = w
+      scheduleCondRelayout(root)
+    })
+    state._condRO.observe(deBar)
+  }
+
+  // 条件下拉 change（委托）：只更新 conds 不即时 reload——维护页可能有未保存的行内编辑
+  // （dirtyMap/newIds），静默刷新会丢编辑；值随「搜索」按钮生效。
+  root.addEventListener('change', (ev) => {
+    const sel = ev.target
+    if (!(sel instanceof Element) || !sel.hasAttribute('data-cond')) return
+    const opt = ev.detail && ev.detail.selectedOption
+    const v = opt ? (opt.getAttribute('value') || '') : ''
+    const lab = sel.closest('.de-cond')
+    if (lab) lab.classList.toggle('active', v !== '')
+    state.conds[sel.getAttribute('data-cond')] = v
+    state.page = 1
   })
 
   // cmx-pager 翻页
@@ -1316,7 +1484,8 @@ export default {
       state.page = 1
       state.pageSize = 50
       state.q = ''
-      state.conds = []
+      state.conds = {}
+      state.condFields = []
       state.treeNodes = {}
       state.currentParentId = null
       state.selectedTreeNodeId = null
@@ -1330,6 +1499,8 @@ export default {
       state.newIds = new Set()
       state.deletedIds = []
       state.baselineMap = {}
+      if (state._condRO) { state._condRO.disconnect(); state._condRO = null }
+      state._condLastW = null
 
       const def = readDef(ctx)
       if (!def) {

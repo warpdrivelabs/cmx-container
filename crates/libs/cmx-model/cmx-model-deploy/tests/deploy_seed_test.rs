@@ -38,6 +38,7 @@ fn mk_index(kind: IndexKind, columns: Vec<&str>) -> IndexDefine {
         name: format!("idx_{}", columns.join("_")),
         columns: columns.iter().map(|s| s.to_string()).collect(),
         kind,
+        valid: true,
     }
 }
 

@@ -570,7 +570,8 @@ fn parse_create_index_stmt(stmt: &str) -> Option<(String, IndexDefine)> {
             name: index_name,
             columns,
             kind,
-        },
+            valid: true,
+},
     ))
 }
 
@@ -810,6 +811,7 @@ mod tests {
                 name: "uk_code".to_string(),
                 columns: vec!["code".to_string()],
                 kind: IndexKind::Unique,
+                valid: true,
             }],
             version: 1,
             create_time: None,

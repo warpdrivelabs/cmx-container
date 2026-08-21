@@ -354,6 +354,9 @@ fn truncate(s: &str, max: usize) -> String {
 
 /// 投递流水分页查询（POST body 过滤：subscriptionId/status/dictCode/eventId/时间范围）。
 ///
+/// LEFT JOIN md_subscription 连出订阅名（`sub_name`）/目标系统（`sub_target_sys`）供监控页
+/// 直显名称而非数字 id；订阅已删除时为 NULL（LEFT JOIN 不丢投递行）。
+///
 /// # Arguments
 ///
 /// * `mm` - 数据库管理器。
@@ -362,7 +365,7 @@ fn truncate(s: &str, max: usize) -> String {
 ///
 /// # Returns
 ///
-/// `(list, total)`，按 created_at DESC。
+/// `(list, total)`，按 created_at DESC；行含 `sub_name` / `sub_target_sys`。
 ///
 /// # Errors
 ///
@@ -375,48 +378,59 @@ pub async fn list_dispatches(
     let mut clauses = vec!["1=1".to_string()];
     let mut params: Vec<DataValue> = Vec::new();
     if let Some(v) = q["subscriptionId"].as_i64() {
-        clauses.push(format!("subscription_id = ${}", params.len() + 1));
+        clauses.push(format!("d.subscription_id = ${}", params.len() + 1));
         params.push(DataValue::Int(v));
     }
     if let Some(s) = q["status"].as_str().filter(|s| !s.is_empty()) {
-        clauses.push(format!("status = ${}", params.len() + 1));
+        clauses.push(format!("d.status = ${}", params.len() + 1));
         params.push(DataValue::String(s.into()));
     }
     if let Some(s) = q["dictCode"].as_str().filter(|s| !s.is_empty()) {
-        clauses.push(format!("dict_code = ${}", params.len() + 1));
+        clauses.push(format!("d.dict_code = ${}", params.len() + 1));
         params.push(DataValue::String(s.into()));
     }
     if let Some(s) = q["eventId"].as_str().filter(|s| !s.is_empty()) {
-        clauses.push(format!("event_id = ${}", params.len() + 1));
+        clauses.push(format!("d.event_id = ${}", params.len() + 1));
         params.push(DataValue::String(s.into()));
     }
     if let Some(s) = q["timeFrom"].as_str().filter(|s| !s.is_empty()) {
-        clauses.push(format!("created_at >= ${}::text::timestamptz", params.len() + 1));
+        clauses.push(format!("d.created_at >= ${}::text::timestamptz", params.len() + 1));
         params.push(DataValue::String(s.into()));
     }
     if let Some(s) = q["timeTo"].as_str().filter(|s| !s.is_empty()) {
-        clauses.push(format!("created_at <= ${}::text::timestamptz", params.len() + 1));
+        clauses.push(format!("d.created_at <= ${}::text::timestamptz", params.len() + 1));
         params.push(DataValue::String(s.into()));
     }
-    query_page(mm, db_id, "md_dispatch_log", &clauses, params, "created_at DESC, id DESC", q).await
+    query_page(
+        mm,
+        db_id,
+        "md_dispatch_log d LEFT JOIN md_subscription s ON s.id = d.subscription_id",
+        "d.*, s.name AS sub_name, s.target_sys AS sub_target_sys",
+        &clauses,
+        params,
+        "d.created_at DESC, d.id DESC",
+        q,
+    )
+    .await
 }
 
-/// 通用分页查询（表全列 + WHERE + ORDER + LIMIT/OFFSET）。
+/// 通用分页查询（FROM 子句可含 JOIN + SELECT 列清单 + WHERE + ORDER + LIMIT/OFFSET）。
 async fn query_page(
     mm: &DatabaseManager,
     db_id: &str,
-    table: &str,
+    from_clause: &str,
+    select_cols: &str,
     clauses: &[String],
     params: Vec<DataValue>,
     order: &str,
     q: &Value,
 ) -> Result<(Vec<Value>, i64), cmx_api_types::Error> {
     let where_sql = clauses.join(" AND ");
-    let cnt_sql = format!("SELECT COUNT(*) AS c FROM {table} WHERE {where_sql}");
+    let cnt_sql = format!("SELECT COUNT(*) AS c FROM {from_clause} WHERE {where_sql}");
     let cds = mm
         .query_sql_with_datavalues(db_id, None, &cnt_sql, params.clone(), "mdm_page_count")
         .await
-        .map_err(|e| api_err_db(&format!("查 {table} 总数失败: {e}")))?;
+        .map_err(|e| api_err_db(&format!("查 {from_clause} 总数失败: {e}")))?;
     let total = cds
         .rows
         .first()
@@ -429,14 +443,14 @@ async fn query_page(
     p2.push(DataValue::Int(ps));
     p2.push(DataValue::Int((pg - 1) * ps));
     let sql = format!(
-        "SELECT * FROM {table} WHERE {where_sql} ORDER BY {order} LIMIT ${} OFFSET ${}",
+        "SELECT {select_cols} FROM {from_clause} WHERE {where_sql} ORDER BY {order} LIMIT ${} OFFSET ${}",
         n + 1,
         n + 2
     );
     let ds = mm
         .query_sql_with_datavalues(db_id, None, &sql, p2, "mdm_page_list")
         .await
-        .map_err(|e| api_err_db(&format!("分页查 {table} 失败: {e}")))?;
+        .map_err(|e| api_err_db(&format!("分页查 {from_clause} 失败: {e}")))?;
     let schema = ds.schema.as_ref();
     Ok((ds.rows.iter().map(|r| r.to_json_value(schema)).collect(), total))
 }

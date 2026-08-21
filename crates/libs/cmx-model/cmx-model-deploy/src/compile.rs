@@ -93,6 +93,155 @@ fn table_caption(t: &Value, fallback: &str) -> String {
         .to_string()
 }
 
+/// SQL 字符串字面量定界：单引号包裹 + 内部单引号翻倍转义。
+fn sql_quote_default(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "''"))
+}
+
+/// 识别"高级表达式"形态的字符串默认值（原样透传，不做类型转换/加引号）：
+/// - 以单引号开头：调用方已自行定界的字面量/复合表达式（如 `'{}'::jsonb`）
+/// - `CURRENT_*` / `NOW()` / `GEN_*` / `UUID_*` / `NEXTVAL(...)`：常见 SQL 函数
+/// - 含 `::` 类型转换
+/// - 形如 `name(...)` 的函数调用：`(` 前必须是纯 SQL 标识符——挡住 `N/A (备用)` 这类
+///   以括号结尾的普通文本（只看"含 ( 且以 ) 结尾"会误判透传导致 DDL 语法错误）
+fn is_sql_default_expr(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if t.starts_with('\'') {
+        return true;
+    }
+    let u = t.to_ascii_uppercase();
+    if u.starts_with("CURRENT_") || u.starts_with("GEN_") || u.starts_with("UUID_") {
+        return true;
+    }
+    if u == "NOW()" || u.starts_with("NOW(") || u.starts_with("NEXTVAL(") {
+        return true;
+    }
+    if t.contains("::") {
+        return true;
+    }
+    if t.contains('(')
+        && t.ends_with(')')
+        && let Some(pos) = t.find('(')
+    {
+        let head = &t[..pos];
+        return !head.is_empty()
+            && head
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && head.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    }
+    false
+}
+
+/// 字段 JSON 的 `defaultValue`（任意 JSON 值）→ 按字段类型规范化的 SQL 默认值表达式。
+///
+/// 设计约定：
+/// - 产出**最终 SQL 表达式**——DDL 层（cmx-metadata `render_default_value`）对以单引号
+///   定界的值原样输出，因此带引号的字面量在本函数内完成定界，避免 DDL 层的内容启发式
+///   误判（如 VARCHAR 列默认值 `"0"` 被裸输出成数字导致 PG 报错）；
+/// - 数值/布尔按类型转裸字面量；字符串/日期/UUID 转 `'...'` 字面量；JSON 转紧凑 `'...'`
+///   文本（PG 对 jsonb 列的字符串字面量默认值可隐式转换，无需显式 `::jsonb`）；
+/// - 字符串值命中 [`is_sql_default_expr`]（`now()` / `'{}'::jsonb` / `nextval(...)` 等）时
+///   原样透传——高级逃生舱，让定义文件能表达任意 SQL 表达式；
+/// - JSON `null` / 与字段类型不匹配的值（如 INT 字段给了 `"abc"`）→ `None`（宽松容错：
+///   warn 不中断编译，与本文件非法字段的处理风格一致）。
+fn normalize_default_value(raw: &Value, ft: &FieldType) -> Option<String> {
+    if raw.is_null() {
+        return None;
+    }
+    let mismatch = |expect: &str| -> Option<String> {
+        warn!(value = %raw, expect, "defaultValue 与字段类型不匹配，忽略该默认值");
+        None
+    };
+    match ft {
+        // 整数：JSON 整数或整数字符串 → 裸数字字面量。小数一律拒绝（warn 容错）：
+        // PG 对整型列的 DEFAULT 1.5 不做 numeric→int 隐式赋值转换，会直接报错
+        // 中断整个部署。
+        FieldType::Int => match raw {
+            Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Some(i.to_string())
+                } else if let Some(f) = n.as_f64() {
+                    // 2.0 / 1e3 等「整值的小数语法表示」转整数；真小数拒绝
+                    if f.is_finite() && f.fract() == 0.0 && f.abs() < 9.0e15 {
+                        Some((f as i64).to_string())
+                    } else {
+                        mismatch("整数")
+                    }
+                } else {
+                    mismatch("整数")
+                }
+            }
+            Value::String(s) => {
+                let t = s.trim();
+                if t.parse::<i64>().is_ok() || t.parse::<u64>().is_ok() {
+                    Some(t.to_string())
+                } else {
+                    mismatch("整数")
+                }
+            }
+            _ => mismatch("整数"),
+        },
+        FieldType::Decimal | FieldType::Float => match raw {
+            Value::Number(n) => Some(n.to_string()),
+            Value::String(s) => {
+                let t = s.trim();
+                if t.parse::<f64>().is_ok() {
+                    Some(t.to_string())
+                } else {
+                    mismatch("数值")
+                }
+            }
+            _ => mismatch("数值"),
+        },
+        FieldType::Bool => match raw {
+            Value::Bool(b) => Some(if *b { "TRUE" } else { "FALSE" }.to_string()),
+            Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+                "true" | "1" | "yes" => Some("TRUE".to_string()),
+                "false" | "0" | "no" => Some("FALSE".to_string()),
+                _ => mismatch("布尔"),
+            },
+            _ => mismatch("布尔"),
+        },
+        // 字符串/长文本/日期/时间戳/UUID：字面量加引号定界；表达式（now() 等）原样
+        FieldType::String | FieldType::Text | FieldType::Date | FieldType::DateTime | FieldType::Uuid => match raw {
+            Value::String(s) => {
+                let t = s.trim();
+                if is_sql_default_expr(t) {
+                    Some(t.to_string())
+                } else {
+                    Some(sql_quote_default(t))
+                }
+            }
+            // 数字/布尔给到字符串型字段：按字符串内容定界（如 status VARCHAR DEFAULT '1'）
+            Value::Number(n) => Some(sql_quote_default(&n.to_string())),
+            Value::Bool(b) => Some(sql_quote_default(if *b { "true" } else { "false" })),
+            _ => mismatch("字符串/日期"),
+        },
+        // JSON：对象/数组 → 紧凑序列化文本；字符串为合法 JSON 文本 → 定界；表达式原样
+        FieldType::Json | FieldType::Array => match raw {
+            Value::Object(_) | Value::Array(_) => Some(sql_quote_default(&raw.to_string())),
+            Value::String(s) => {
+                let t = s.trim();
+                if is_sql_default_expr(t) {
+                    Some(t.to_string())
+                } else if serde_json::from_str::<Value>(t).is_ok() {
+                    Some(sql_quote_default(t))
+                } else {
+                    mismatch("JSON")
+                }
+            }
+            _ => mismatch("JSON"),
+        },
+        // 二进制等无法用 JSON 字面量表达的类型：不支持
+        _ => mismatch("该字段类型"),
+    }
+}
+
 /// 单个字段对象 → ColumnDefine。id_field 命中则标记主键。
 ///
 /// 字段缺失/类型不匹配返回 `None`（由调用方按需跳过），不做失败中断：
@@ -100,6 +249,7 @@ fn table_caption(t: &Value, fallback: &str) -> String {
 /// - `dataType` 缺失 → 默认 `VARCHAR`（与原行为一致，宽松容错）
 /// - `nullable` 缺失 → 默认 `true`
 /// - `fieldLength` / `decimalDigits` 缺失 → 走 VARCHAR 兜底 255 / Decimal 标度 0
+/// - `defaultValue` 与字段类型不匹配 → 忽略默认值（warn），字段本身保留
 ///
 /// 主键判定三路满足其一即视为 PK：
 /// 1. `id_field` 非空且与字段名相等（约定式 PK）
@@ -155,6 +305,13 @@ fn field_to_column(f: &Value, id_field: &str, ordinal: u32) -> Option<ColumnDefi
         _ => (None, None, None),
     };
 
+    // 默认值：defaultValue（兼容下划线 default_value）按字段类型规范化为最终 SQL 表达式；
+    // null / 类型不匹配 → None（宽松容错，warn 不中断编译）。
+    let default_value = f
+        .get("defaultValue")
+        .or_else(|| f.get("default_value"))
+        .and_then(|v| normalize_default_value(v, &ft));
+
     Some(ColumnDefine {
         name,
         label: field_caption(f),
@@ -162,7 +319,7 @@ fn field_to_column(f: &Value, id_field: &str, ordinal: u32) -> Option<ColumnDefi
         is_primary_key: is_pk,
         // PK 列强制 NOT NULL（业务约束：PK 不能为 NULL）
         is_nullable: if is_pk { false } else { nullable },
-        default_value: None,
+        default_value,
         i18n: false,
         length,
         precision,
@@ -178,35 +335,190 @@ fn field_to_column(f: &Value, id_field: &str, ordinal: u32) -> Option<ColumnDefi
     })
 }
 
-/// uniqueKeys = [[col,...], ...] → 唯一索引定义。
+/// 从 JSON 提取非空字符串列名序列（`uniqueKeys` 子数组 / `indexes` 条目的 `columns` 键共用）。
 ///
-/// 定义文件中的 `uniqueKeys` 是数组的数组（每个子数组 = 一组联合唯一约束），本函数
-/// 将其扁平化为 `IndexDefine` 列表。索引名按 `uk_<table>_<i+1>` 规则生成（`i` 是子数组下标），
-/// 这样多次编译同一文件可得到稳定的索引名（PG 端便于识别 + 升级时对齐）。
+/// 非数组 / 全非字符串 / 列名全空 → `None`（调用方跳过该索引，避免建空索引）。
+fn index_columns(v: Option<&Value>) -> Option<Vec<String>> {
+    let cnames: Vec<String> = v?
+        .as_array()?
+        .iter()
+        .filter_map(|c| c.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect();
+    if cnames.is_empty() {
+        None
+    } else {
+        Some(cnames)
+    }
+}
+
+/// 返回列序列中第一个不在合法列集里的列名（索引列存在性校验用）。
+fn first_missing_column<'a>(
+    cnames: &'a [String],
+    valid: &std::collections::HashSet<&str>,
+) -> Option<&'a str> {
+    cnames.iter().map(|c| c.as_str()).find(|c| !valid.contains(c))
+}
+
+/// 表级索引收集：`uniqueKeys`（唯一索引）+ `indexes`（普通索引）→ `IndexDefine` 列表。
 ///
-/// 空数组 / 非数组元素会被跳过（容错）。
-fn unique_indexes(t: &Value, table_name: &str) -> Vec<IndexDefine> {
-    let mut indexes = Vec::new();
+/// 两类键约定：
+/// - `uniqueKeys`: 每个元素为一组联合唯一约束，**双形态**——纯列数组 `[col, ...]`
+///   （存量）或对象 `{ name?, columns: [col, ...] }`（支持自定义名）→ `IndexKind::Unique`；
+///   未提供 `name` 时按列内容哈希自动命名（见 [`auto_index_name`]）；
+/// - `indexes`: `[{ name?, columns: [col, ...] }, ...]` 对象数组 → `IndexKind::Normal`，
+///   `name` 可选、缺省同按列内容哈希自动命名；`columns` 顺序敏感（复合索引最左前缀语义）。
+///
+/// 校验（宽松容错，warn 不中断编译，与本文件非法字段的处理风格一致）：
+/// - **列存在性**：`columns` 参数须是合并 base 字段集之后的最终列集；条目引用不存在的列 →
+///   warn 并跳过整条——悬空引用会让 `CREATE [UNIQUE] INDEX` 直接 SQL 报错阻断整个部署；
+/// - **冗余告警**：普通索引与某条唯一索引列序列完全相同 → warn（仍生成，PG 允许，仅冗余提示）；
+/// - **超长告警**：自定义索引名超过 PG 标识符上限 63 字节 → warn（仍生成；PG 静默截断会导致
+///   每次部署名字对不上，反复 DROP/CREATE）。
+pub(crate) fn collect_indexes(
+    t: &Value,
+    table_name: &str,
+    columns: &[ColumnDefine],
+) -> Vec<IndexDefine> {
+    let valid: std::collections::HashSet<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+    let mut indexes: Vec<IndexDefine> = Vec::new();
+
+    // ── uniqueKeys → 唯一索引 ──
     if let Some(uks) = t.get("uniqueKeys").and_then(|v| v.as_array()) {
-        for (i, uk) in uks.iter().enumerate() {
-            if let Some(cols) = uk.as_array() {
-                // 提取列名（非字符串元素自动跳过）
-                let cnames: Vec<String> = cols
-                    .iter()
-                    .filter_map(|c| c.as_str().map(|s| s.to_string()))
-                    .collect();
-                // 列名全空时跳过（避免建空唯一约束）
-                if !cnames.is_empty() {
-                    indexes.push(IndexDefine {
-                        name: format!("uk_{}_{}", table_name, i + 1),
-                        columns: cnames,
-                        kind: IndexKind::Unique,
-                    });
-                }
+        for uk in uks.iter() {
+            // 双形态：纯列数组（存量）/ { name?, columns } 对象（支持自定义名）。
+            let (custom_name, cols_val) = match uk {
+                Value::Object(_) => (
+                    uk.get("name").and_then(|v| v.as_str()),
+                    uk.get("columns"),
+                ),
+                _ => (None, Some(uk)),
+            };
+            let Some(cnames) = index_columns(cols_val) else { continue };
+            let name = custom_name
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| auto_index_name("uk", table_name, &cnames));
+            if let Some(miss) = first_missing_column(&cnames, &valid) {
+                warn!(table = table_name, index = %name, missing = miss,
+                    "uniqueKeys 引用不存在的列，跳过该唯一索引");
+                continue;
             }
+            if let Some(dup) = indexes.iter().find(|x| x.name == name) {
+                warn!(table = table_name, index = %name, dup_columns = ?dup.columns,
+                    "自动索引名重复（列序列相同或哈希碰撞），跳过重复条目");
+                continue;
+            }
+            warn_long_index_name(&name, table_name);
+            indexes.push(IndexDefine {
+                name,
+                columns: cnames,
+                kind: IndexKind::Unique,
+                valid: true,
+            });
+        }
+    }
+
+    // ── indexes → 普通索引 ──
+    if let Some(idxs) = t.get("indexes").and_then(|v| v.as_array()) {
+        for ix in idxs.iter() {
+            let Some(cnames) = index_columns(ix.get("columns")) else { continue };
+            let name = ix
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| auto_index_name("idx", table_name, &cnames));
+            if let Some(miss) = first_missing_column(&cnames, &valid) {
+                warn!(table = table_name, index = %name, missing = miss,
+                    "indexes 引用不存在的列，跳过该索引");
+                continue;
+            }
+            // 冗余提示：与唯一索引列序列相同（仍生成，仅告警）
+            if indexes.iter().any(|u| u.kind == IndexKind::Unique && u.columns == cnames) {
+                warn!(table = table_name, index = %name,
+                    "普通索引与唯一索引列序列相同，冗余（仍生成）");
+            }
+            // 同名去重（自定义名或自动哈希名与已有条目重名 → CREATE 会撞 already exists）
+            if let Some(dup) = indexes.iter().find(|x| x.name == name) {
+                warn!(table = table_name, index = %name, dup_columns = ?dup.columns,
+                    "索引名与已有条目重复，跳过（PG 索引名 schema 级唯一）");
+                continue;
+            }
+            // 自定义名超长提示（用户可自行改名）；自动名已由 auto_index_name 保证合法。
+            warn_long_index_name(&name, table_name);
+            indexes.push(IndexDefine {
+                name,
+                columns: cnames,
+                kind: IndexKind::Normal,
+                valid: true,
+            });
         }
     }
     indexes
+}
+
+/// 生成自动索引名：`{prefix}_{table}_{hash6}`，哈希取**列序列**（逗号连接）的
+/// FNV-1a 摘要——**不按下标**。列不变则名不变：
+/// - 删除/移动/新增其它条目不影响本条目名字，无「下标前移」漂移；
+/// - 删除条目后，DB 中同名旧索引的内容不再出现在定义里 → diff 正常产出 DROP
+///   清理，不留孤儿索引；
+/// - 确定性：同表同列每次编译产出同名，内省还原与设计期稳定对齐。
+///
+/// 超 PG 标识符上限 63 字节时截断表名，且哈希输入混入完整表名（防跨表截断撞名）：
+/// `{prefix}_{截断表}_{hash6(table:columns)}`。
+///
+/// 一致性：前端（portal-definition-manager `_autoIndexName`）用同一算法展示
+/// 自动名，改本规则须同步前端。
+fn auto_index_name(prefix: &str, table: &str, columns: &[String]) -> String {
+    let cols = columns.join(",");
+    let full = format!("{prefix}_{table}_{:06x}", fnv1a32(&cols) & 0xff_ffff);
+    if full.len() <= 63 {
+        return full;
+    }
+    // 预算：{prefix} + 2 个下划线 + 6 位哈希 ≤ 63（str::len 即 UTF-8 字节数）
+    let t_avail = 63usize.saturating_sub(prefix.len() + 2 + 6);
+    let trunc = truncate_utf8(table, t_avail);
+    let hash_input = format!("{table}:{cols}");
+    format!("{prefix}_{trunc}_{:06x}", fnv1a32(&hash_input) & 0xff_ffff)
+}
+
+/// 按字节预算截断字符串，不切断多字节字符（回退到字符边界）。
+fn truncate_utf8(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+/// FNV-1a 32 位哈希（对字符串的 UTF-8 字节）。前端用 `Math.imul` + `>>> 0`
+/// 实现同算法，两端结果一致。
+fn fnv1a32(s: &str) -> u32 {
+    let mut h: u32 = 2166136261;
+    for b in s.as_bytes() {
+        h ^= u32::from(*b);
+        h = h.wrapping_mul(16777619);
+    }
+    h
+}
+
+/// 自定义索引名超长提示：PG 标识符上限 63 字节（NAMEDATALEN-1），超长会被静默
+/// 截断，造成内省还原的名字与设计期名对不上 → 每次部署反复 DROP/CREATE。
+/// 仅 warn 不阻断（用户可自行缩短名字）。
+fn warn_long_index_name(name: &str, table_name: &str) {
+    // str::len() 即字节数（PG 标识符上限按字节计，中文等非 ASCII 名更易超限）
+    let len = name.len();
+    if len > 63 {
+        warn!(table = table_name, index = %name, bytes = len,
+            "索引名超过 PG 标识符上限 63 字节，将被截断导致部署名不匹配（建议缩短）");
+    }
 }
 
 /// 将一组字段 JSON 数组追加到 columns（去重 + 自增 ordinal）。
@@ -386,7 +698,7 @@ pub(crate) fn compile_dct(doc: &Value, base: &Value) -> Vec<TableDefine> {
             .map(|c| c.name.clone())
             .collect();
 
-        let indexes = unique_indexes(t, &table_name);
+        let indexes = collect_indexes(t, &table_name, &columns);
         out.push(finish_table(
             table_name,
             display,
@@ -462,7 +774,7 @@ fn compile_doc_table(t: &Value, base: &Value) -> Option<TableDefine> {
         display,
         comment,
         primary_keys,
-        unique_indexes(t, &table_name),
+        collect_indexes(t, &table_name, &columns),
         columns,
     ))
 }
@@ -577,7 +889,7 @@ pub(crate) fn compile_rpt(_doc: &Value, base: &Value) -> Vec<TableDefine> {
             .map(|c| c.name.clone())
             .collect();
 
-        let indexes = unique_indexes(t, &table_name);
+        let indexes = collect_indexes(t, &table_name, &columns);
         out.push(finish_table(
             table_name,
             display,
@@ -600,7 +912,7 @@ pub(crate) fn compile_rpt(_doc: &Value, base: &Value) -> Vec<TableDefine> {
 /// （`data/meta/definitions/<domain>/<app>/<module>/<file>`），最终反序列化为 `Value`。
 ///
 /// 错误以 `Error::BadRequest` 抛出（含 file 名便于排查）。
-async fn read_def(domain: &str, app: &str, module: &str, file: &str) -> Result<Value> {
+pub(crate) async fn read_def(domain: &str, app: &str, module: &str, file: &str) -> Result<Value> {
     let r = cmx_model_meta::definitions::store::DefRef {
         domain: Some(domain.to_string()),
         application: Some(app.to_string()),
@@ -698,4 +1010,372 @@ pub(crate) async fn compile_definition(
         _ => compile_dct(&doc, &base),
     };
     Ok((defs, doc))
+}
+
+#[cfg(test)]
+mod default_value_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn norm(v: Value, ft: FieldType) -> Option<String> {
+        normalize_default_value(&v, &ft)
+    }
+
+    #[test]
+    fn int_defaults() {
+        assert_eq!(norm(json!(0), FieldType::Int), Some("0".into()));
+        assert_eq!(norm(json!(-5), FieldType::Int), Some("-5".into()));
+        assert_eq!(norm(json!("100"), FieldType::Int), Some("100".into()));
+        // 类型不匹配 / null → None（宽松容错）
+        assert_eq!(norm(json!("abc"), FieldType::Int), None);
+        assert_eq!(norm(json!(true), FieldType::Int), None);
+        assert_eq!(norm(Value::Null, FieldType::Int), None);
+    }
+
+    #[test]
+    fn int_defaults_reject_fractions() {
+        // 小数一律拒绝：PG 对整型列 DEFAULT 1.5 无 numeric→int 隐式赋值转换，
+        // 放行会直接报错中断整个部署。
+        assert_eq!(norm(json!(1.5), FieldType::Int), None);
+        assert_eq!(norm(json!("1.5"), FieldType::Int), None);
+        assert_eq!(norm(json!(-0.5), FieldType::Int), None);
+        // 「整值的小数语法表示」（2.0 / 1e3，serde_json 走 f64）转整数放行
+        assert_eq!(norm(json!(2.0), FieldType::Int), Some("2".into()));
+        assert_eq!(norm(json!(1e3), FieldType::Int), Some("1000".into()));
+    }
+
+    #[test]
+    fn decimal_defaults() {
+        assert_eq!(norm(json!(1.5), FieldType::Decimal), Some("1.5".into()));
+        assert_eq!(norm(json!("3.14"), FieldType::Float), Some("3.14".into()));
+        assert_eq!(norm(json!("nan_is_not_num"), FieldType::Decimal), None);
+    }
+
+    #[test]
+    fn bool_defaults() {
+        assert_eq!(norm(json!(true), FieldType::Bool), Some("TRUE".into()));
+        assert_eq!(norm(json!(false), FieldType::Bool), Some("FALSE".into()));
+        assert_eq!(norm(json!("1"), FieldType::Bool), Some("TRUE".into()));
+        assert_eq!(norm(json!("No"), FieldType::Bool), Some("FALSE".into()));
+        assert_eq!(norm(json!("off"), FieldType::Bool), None);
+    }
+
+    #[test]
+    fn string_defaults_type_aware() {
+        // 核心场景：字符串型字段的数字/TRUE 样内容必须定界为字符串字面量，
+        // 而不是被 DDL 层内容启发式裸输出成数字/布尔
+        assert_eq!(norm(json!("0"), FieldType::String), Some("'0'".into()));
+        assert_eq!(norm(json!("true"), FieldType::String), Some("'true'".into()));
+        assert_eq!(norm(json!(1), FieldType::String), Some("'1'".into()));
+        // 单引号转义
+        assert_eq!(norm(json!("it's"), FieldType::Text), Some("'it''s'".into()));
+        // 含括号的普通文本也要定界（DDL 层启发式会当函数原样输出导致语法错）
+        assert_eq!(norm(json!("N/A (备用)"), FieldType::String), Some("'N/A (备用)'".into()));
+    }
+
+    #[test]
+    fn date_datetime_defaults() {
+        assert_eq!(norm(json!("2023-01-01"), FieldType::Date), Some("'2023-01-01'".into()));
+        assert_eq!(
+            norm(json!("2023-01-01 10:00:00"), FieldType::DateTime),
+            Some("'2023-01-01 10:00:00'".into())
+        );
+        // 函数表达式原样
+        assert_eq!(norm(json!("now()"), FieldType::DateTime), Some("now()".into()));
+        assert_eq!(
+            norm(json!("CURRENT_TIMESTAMP"), FieldType::DateTime),
+            Some("CURRENT_TIMESTAMP".into())
+        );
+    }
+
+    #[test]
+    fn json_defaults() {
+        assert_eq!(norm(json!({}), FieldType::Json), Some("'{}'".into()));
+        assert_eq!(norm(json!([]), FieldType::Json), Some("'[]'".into()));
+        assert_eq!(norm(json!({"a":1}), FieldType::Json), Some("'{\"a\":1}'".into()));
+        assert_eq!(norm(json!("{}"), FieldType::Json), Some("'{}'".into()));
+        // 已定界复合表达式原样透传
+        assert_eq!(norm(json!("'{}'::jsonb"), FieldType::Json), Some("'{}'::jsonb".into()));
+        // 非 JSON 文本 → None
+        assert_eq!(norm(json!("not json"), FieldType::Json), None);
+    }
+
+    #[test]
+    fn field_to_column_passes_default() {
+        // 端到端：字段 JSON defaultValue → ColumnDefine.default_value（最终 SQL 表达式）
+        let c1 = field_to_column(&json!({ "name": "sort_no", "dataType": "INT", "defaultValue": 0 }), "id", 1)
+            .expect("合法字段");
+        assert_eq!(c1.default_value, Some("0".to_string()));
+
+        let c2 = field_to_column(
+            &json!({ "name": "status", "dataType": "VARCHAR", "fieldLength": 16, "defaultValue": "1" }),
+            "id",
+            2,
+        )
+        .expect("合法字段");
+        assert_eq!(c2.default_value, Some("'1'".to_string()));
+
+        // 兼容下划线键名
+        let c3 = field_to_column(
+            &json!({ "name": "cfg", "dataType": "JSONB", "default_value": {} }),
+            "id",
+            3,
+        )
+        .expect("合法字段");
+        assert_eq!(c3.default_value, Some("'{}'".to_string()));
+
+        // 类型不匹配：默认值被忽略，字段本身保留
+        let c4 = field_to_column(&json!({ "name": "age", "dataType": "INT", "defaultValue": "abc" }), "id", 4)
+            .expect("合法字段");
+        assert_eq!(c4.default_value, None);
+    }
+}
+
+#[cfg(test)]
+mod indexes_tests {
+    use super::*;
+
+    fn col(name: &str) -> ColumnDefine {
+        ColumnDefine {
+            name: name.to_string(),
+            label: name.to_string(),
+            field_type: FieldType::String,
+            is_primary_key: false,
+            is_nullable: true,
+            default_value: None,
+            i18n: false,
+            length: None,
+            precision: None,
+            scale: None,
+            db_type: None,
+            ordinal: None,
+            create_time: None,
+            update_time: None,
+            is_foreign_key: false,
+            foreign_key_table: None,
+            foreign_key_column: None,
+            extensions: Default::default(),
+        }
+    }
+
+    /// 合法列集（模拟合并 base 字段集后的最终列集）
+    fn valid_cols() -> Vec<ColumnDefine> {
+        ["code", "tax_no", "name", "updated_at"]
+            .iter()
+            .map(|n| col(n))
+            .collect()
+    }
+
+    #[test]
+    fn unique_and_normal_collected() {
+        let t = json!({
+            "uniqueKeys": [["code"], ["tax_no", "name"]],
+            "indexes": [
+                { "columns": ["name"] },
+                { "name": "idx_x", "columns": ["code", "updated_at"] }
+            ]
+        });
+        let idxs = collect_indexes(&t, "t1", &valid_cols());
+        assert_eq!(idxs.len(), 4, "两类索引合并: {idxs:?}");
+        // uniqueKeys → Unique，自动名 = uk_<table>_<列序列哈希>（不按下标）
+        assert_eq!(idxs[0].name, "uk_t1_316cf4"); // ["code"]
+        assert_eq!(idxs[0].kind, IndexKind::Unique);
+        assert_eq!(idxs[0].columns, vec!["code".to_string()]);
+        assert_eq!(idxs[1].name, "uk_t1_8a8d1b"); // ["tax_no","name"]
+        assert_eq!(idxs[1].columns, vec!["tax_no".to_string(), "name".to_string()]);
+        // indexes → Normal；name 缺省自动命名，顺序敏感保留
+        assert_eq!(idxs[2].name, "idx_t1_39bde6"); // ["name"]
+        assert_eq!(idxs[2].kind, IndexKind::Normal);
+        assert_eq!(idxs[2].columns, vec!["name".to_string()]);
+        assert_eq!(idxs[3].name, "idx_x");
+        assert_eq!(idxs[3].columns, vec!["code".to_string(), "updated_at".to_string()]);
+    }
+
+    #[test]
+    fn normal_index_name_trimmed() {
+        // name 为空白串 → 视为缺省自动命名
+        let t = json!({ "indexes": [{ "name": "   ", "columns": ["code"] }] });
+        let idxs = collect_indexes(&t, "t1", &valid_cols());
+        assert_eq!(idxs.len(), 1);
+        assert_eq!(idxs[0].name, "idx_t1_316cf4");
+    }
+
+    #[test]
+    fn unique_key_object_form_with_custom_name() {
+        // 对象形态 { name?, columns }：自定义名优先；空名/缺名退回自动命名；与纯数组混用兼容
+        let t = json!({
+            "uniqueKeys": [
+                { "name": "uk_supplier_code", "columns": ["code"] },
+                { "name": "   ", "columns": ["tax_no"] },
+                { "columns": ["name"] },
+                ["updated_at"]
+            ]
+        });
+        let idxs = collect_indexes(&t, "t1", &valid_cols());
+        assert_eq!(idxs.len(), 4);
+        assert_eq!(idxs[0].name, "uk_supplier_code");
+        assert_eq!(idxs[0].kind, IndexKind::Unique);
+        assert_eq!(idxs[1].name, "uk_t1_3f7c44"); // 空白名 → 自动名（tax_no）
+        assert_eq!(idxs[2].name, "uk_t1_39bde6"); // 缺名 → 自动名（name）
+        assert_eq!(idxs[3].name, "uk_t1_4b6560"); // 纯数组存量形态 → 自动名（updated_at）
+    }
+
+    #[test]
+    fn auto_name_stable_regardless_of_position() {
+        // 核心性质：自动名由列内容决定——条目位置变化（前移）名字不变。
+        // 下标命名会在删除中间条目后前移漂移，造成 DB 孤儿索引；哈希命名无此问题。
+        let cols = vec!["tax_no".to_string()];
+        let a = auto_index_name("idx", "t1", &cols);
+        let b = auto_index_name("idx", "t1", &cols);
+        assert_eq!(a, b, "同表同列 → 确定性同名");
+        assert_eq!(a, "idx_t1_3f7c44");
+        // 列序列不同 → 名不同（顺序也参与哈希：join 顺序敏感）
+        assert_ne!(auto_index_name("idx", "t1", &["a".to_string(), "b".to_string()]),
+                   auto_index_name("idx", "t1", &["b".to_string(), "a".to_string()]));
+        // 同列序列 unique 与 normal（冗余并存场景）前缀区分
+        assert_ne!(auto_index_name("uk", "t1", &cols), auto_index_name("idx", "t1", &cols));
+    }
+
+    #[test]
+    fn auto_name_truncated_within_63_bytes() {
+        // 60 字节长表名：idx_<table>_<hash6> 超限 → 截断表名并混入表名哈希
+        let table = "a".repeat(60);
+        let t = json!({ "uniqueKeys": [["code"], ["tax_no"]] });
+        let idxs = collect_indexes(&t, &table, &valid_cols());
+        assert_eq!(idxs.len(), 2);
+        for ix in idxs.iter() {
+            assert!(
+                ix.name.len() <= 63,
+                "自动名必须 ≤63 字节: {} ({})",
+                ix.name,
+                ix.name.len()
+            );
+            assert!(ix.name.starts_with("uk_"), "保留类型前缀: {}", ix.name);
+        }
+        // 确定性：同表两次生成完全一致
+        let again = collect_indexes(&t, &table, &valid_cols());
+        assert_eq!(idxs[0].name, again[0].name);
+        assert_ne!(idxs[0].name, idxs[1].name, "列不同 → 名不同");
+    }
+
+    #[test]
+    fn auto_name_truncation_avoids_cross_table_collision() {
+        // 两个 60 字节表名仅末位不同：截断后共享前缀；超长形态哈希混入完整表名 → 不撞。
+        let t1 = format!("{}x", "a".repeat(59));
+        let t2 = format!("{}y", "a".repeat(59));
+        let cols = vec!["code".to_string()];
+        let n1 = auto_index_name("uk", &t1, &cols);
+        let n2 = auto_index_name("uk", &t2, &cols);
+        assert_ne!(n1, n2, "截断 + 表名哈希须防跨表撞名: {n1} vs {n2}");
+        assert!(n1.len() <= 63 && n2.len() <= 63);
+    }
+
+    #[test]
+    fn duplicate_auto_name_skipped() {
+        // 同表两条相同列序列 → 同名自动索引 → 第二条跳过（CREATE 撞 already exists）
+        let t = json!({ "uniqueKeys": [["code"], ["code"]] });
+        let idxs = collect_indexes(&t, "t1", &valid_cols());
+        assert_eq!(idxs.len(), 1, "重复列序列条目被跳过: {idxs:?}");
+    }
+
+    #[test]
+    fn auto_name_short_table_format() {
+        // 短表名：{prefix}_{table}_{列哈希6}
+        assert_eq!(
+            auto_index_name("uk", "cm_supplier", &["code".to_string()]),
+            "uk_cm_supplier_316cf4"
+        );
+    }
+
+    #[test]
+    fn missing_column_skipped() {
+        // 悬空列引用（unique 与 normal 各一）→ 跳过整条，防 CREATE INDEX SQL 报错阻断部署
+        let t = json!({
+            "uniqueKeys": [["code"], ["ghost"]],
+            "indexes": [{ "columns": ["nope"] }, { "columns": ["name"] }]
+        });
+        let idxs = collect_indexes(&t, "t1", &valid_cols());
+        assert_eq!(idxs.len(), 2, "悬空引用条目被跳过: {idxs:?}");
+        assert!(idxs.iter().all(|i| !i.columns.iter().any(|c| c == "ghost" || c == "nope")));
+    }
+
+    #[test]
+    fn redundant_normal_with_unique_still_generated() {
+        // 普通索引与唯一索引列序列相同 → 冗余告警但仍生成（PG 允许）
+        let t = json!({
+            "uniqueKeys": [["code"]],
+            "indexes": [{ "columns": ["code"] }]
+        });
+        let idxs = collect_indexes(&t, "t1", &valid_cols());
+        assert_eq!(idxs.len(), 2, "冗余仅告警不裁剪: {idxs:?}");
+        assert_eq!(idxs[0].kind, IndexKind::Unique);
+        assert_eq!(idxs[1].kind, IndexKind::Normal);
+    }
+
+    #[test]
+    fn old_file_without_indexes_key_compat() {
+        // 老定义只有 uniqueKeys：正常收集，自动名按列哈希命名
+        let t = json!({ "uniqueKeys": [["code"]] });
+        let idxs = collect_indexes(&t, "t1", &valid_cols());
+        assert_eq!(idxs.len(), 1);
+        assert_eq!(idxs[0].kind, IndexKind::Unique);
+        assert_eq!(idxs[0].name, "uk_t1_316cf4");
+    }
+
+    #[test]
+    fn empty_entries_skipped() {
+        let t = json!({
+            "uniqueKeys": [[], ["code"]],
+            "indexes": [{ "columns": [] }, { "columns": ["tax_no"] }]
+        });
+        let idxs = collect_indexes(&t, "t1", &valid_cols());
+        assert_eq!(idxs.len(), 2, "空列序列条目跳过: {idxs:?}");
+    }
+
+    #[test]
+    fn compile_dct_end_to_end_indexes() {
+        let doc = json!({
+            "dictionaryTables": [{
+                "dictMeta": { "tableName": "cm_test", "idField": "id", "dictName": "测试" },
+                "fields": [
+                    { "name": "id", "dataType": "BIGINT", "isPrimaryKey": 1 },
+                    { "name": "code", "dataType": "VARCHAR" },
+                    { "name": "status", "dataType": "INT" }
+                ],
+                "uniqueKeys": [["code"]],
+                "indexes": [{ "columns": ["status"] }]
+            }]
+        });
+        let base = json!({ "fieldSets": {} });
+        let defs = compile_dct(&doc, &base);
+        assert_eq!(defs.len(), 1);
+        let idxs = &defs[0].indexes;
+        assert_eq!(idxs.len(), 2, "DCT 端到端两类索引: {idxs:?}");
+        assert!(idxs.iter().any(|i| i.kind == IndexKind::Unique && i.columns == vec!["code".to_string()]));
+        assert!(idxs.iter().any(|i| i.kind == IndexKind::Normal && i.columns == vec!["status".to_string()]));
+    }
+
+    #[test]
+    fn compile_doc_with_summary_indexes() {
+        // DOC 主表与汇总表都走 compile_doc_table → indexes/uniqueKeys 同样生效
+        let doc = json!({
+            "voucherTables": [{
+                "tableName": "cv_main",
+                "fields": [{ "name": "id", "dataType": "BIGINT", "isPrimaryKey": 1 }, { "name": "biz_no", "dataType": "VARCHAR" }],
+                "indexes": [{ "columns": ["biz_no"] }],
+                "summaries": [{
+                    "tableName": "cv_sum",
+                    "fields": [{ "name": "id", "dataType": "BIGINT", "isPrimaryKey": 1 }, { "name": "k", "dataType": "VARCHAR" }],
+                    "uniqueKeys": [["k"]]
+                }]
+            }]
+        });
+        let base = json!({ "fieldSets": {} });
+        let defs = compile_doc(&doc, &base);
+        assert_eq!(defs.len(), 2, "主表 + 汇总表: {defs:?}");
+        let main = defs.iter().find(|d| d.table_name == "cv_main").expect("主表");
+        assert!(main.indexes.iter().any(|i| i.kind == IndexKind::Normal && i.columns == vec!["biz_no".to_string()]));
+        let sum = defs.iter().find(|d| d.table_name == "cv_sum").expect("汇总表");
+        assert!(sum.indexes.iter().any(|i| i.kind == IndexKind::Unique && i.columns == vec!["k".to_string()]));
+    }
 }

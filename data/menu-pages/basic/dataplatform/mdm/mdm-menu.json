@@ -767,6 +767,20 @@
                             "icon": "tabler-outline/database-search",
                             "workspace": {
                                 "id": "mdm_activation_mapper",
+                                "explorer": {
+                                    "caption": "映射列表",
+                                    "icon": "tree",
+                                    "views": [
+                                        {
+                                            "id": "mdm-activation-mapper-explorer",
+                                            "tabLabel": "映射",
+                                            "icon": "list",
+                                            "type": "native_pages",
+                                            "native_page": "portal.mdm.activation-mapper",
+                                            "view": "explorer"
+                                        }
+                                    ]
+                                },
                                 "content": {
                                     "caption": "激活映射配置器",
                                     "icon": "tabler-outline/database-search",
@@ -1111,7 +1125,7 @@
                             ]
                         },
                         "content": {
-                            "caption": "段序列",
+                            "caption": "编码规则管理",
                             "icon": "barcode",
                             "views": [
                                 {

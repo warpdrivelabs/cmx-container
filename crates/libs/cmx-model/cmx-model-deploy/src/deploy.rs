@@ -580,7 +580,9 @@ async fn deploy_with_events(
             upsert_module_kind(
                 LedgerCtx { db_id, txn_id: Some(&txn), operator_id, operator_name },
                 ModuleId { domain, app, module, kind },
-                &version.to_string(), created, file, None,
+                &version.to_string(), created, file,
+                // 内容 checksum：版本未变但内容已改时，矩阵靠它检出 drift
+                Some(&crate::checksum::normalized_def_checksum(&src)),
             ).await.map_err(db_err("写模块类型台账失败"))?;
 
             // 4-c 对象台账
@@ -863,7 +865,9 @@ pub(crate) async fn update_history_success(
 /// - `version`：定义版本（字符串形式，DCT 传 "3"；SEED/MENU 无版本概念传 `""`）。
 /// - `table_count`：本模块本 kind 部署的对象数（表数 / 节点数）。
 /// - `def_source`：定义来源（DCT 用 file 名；SEED 用 `'seed/'`；MENU 用 `'menu-pages/'`）。
-/// - `def_checksum`：模块级聚合 SHA256（None 时 COALESCE 保留旧值，DCT 传 `None`）。
+/// - `def_checksum`：内容 checksum（SEED/MENU 用文件聚合 SHA256；DCT/DOC/RPT 用
+///   `checksum::normalized_def_checksum`——剔除顶层 `updatedAt` 的规范化 SHA256，
+///   供矩阵 drift 检测；`None` 时 COALESCE 保留旧值）。
 pub(crate) async fn upsert_module_kind(
     ctx: LedgerCtx<'_>,
     mid: ModuleId<'_>,

@@ -452,16 +452,26 @@ pub(crate) async fn resolve_dict(q: &DctQuery, with_props: bool) -> Result<DictV
     })
 }
 
-/// 解析字典表定义的 uniqueKeys（`[["supplier_id","account_no"]]` 形态）。
+/// 解析字典表定义的 uniqueKeys。
 ///
+/// 每个元素**双形态**：纯列数组（`["supplier_id","account_no"]`，存量）或对象
+/// `{ name?, columns }`（前端唯一键自定义名扩展）——统一取列集合。
 /// 数据源是 `dictionaryTables[i].uniqueKeys`（与 dictMeta 同级的数组），供合并去重推导
 /// 去重键：调用方去掉外键列后剩余字段即为该明细表的去重业务键。缺失或非数组时返回空 Vec。
 fn parse_unique_keys(t: &Value) -> Vec<Vec<String>> {
+    /// 双形态取列：纯数组直接用；对象取 `columns` 键。
+    fn columns_of(grp: &Value) -> Option<&Vec<Value>> {
+        match grp {
+            Value::Array(a) => Some(a),
+            Value::Object(_) => grp.get("columns").and_then(|v| v.as_array()),
+            _ => None,
+        }
+    }
     t.get("uniqueKeys")
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|grp| grp.as_array())
+                .filter_map(columns_of)
                 .map(|grp| {
                     grp.iter()
                         .filter_map(|f| f.as_str().map(|s| s.to_string()))
@@ -578,6 +588,25 @@ mod tests {
                 ]}
             }
         })
+    }
+
+    #[test]
+    fn parse_unique_keys_dual_form() {
+        // 唯一键双形态：纯列数组（存量）与 { name?, columns } 对象（自定义名扩展）统一取列
+        let t = json!({
+            "uniqueKeys": [
+                ["supplier_id", "account_no"],
+                { "name": "uk_bank_code", "columns": ["bank", "code"] },
+                { "columns": ["tax_no"] },
+                { "name": "空列对象被忽略" },
+                "非法形态忽略"
+            ]
+        });
+        let uks = parse_unique_keys(&t);
+        assert_eq!(uks.len(), 3, "纯数组 + 有列对象生效，空列/非法形态跳过");
+        assert_eq!(uks[0], vec!["supplier_id".to_string(), "account_no".to_string()]);
+        assert_eq!(uks[1], vec!["bank".to_string(), "code".to_string()]);
+        assert_eq!(uks[2], vec!["tax_no".to_string()]);
     }
 
     #[test]

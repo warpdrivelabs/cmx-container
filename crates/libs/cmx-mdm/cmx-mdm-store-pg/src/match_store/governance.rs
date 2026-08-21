@@ -64,12 +64,16 @@ pub async fn list_audit(
     ))
 }
 
-/// 事件查询（md_event_log，delta 拉取，分页）。可选 dictCode / since(seq)。
+/// 事件查询（md_event_log，delta 拉取，分页）。可选 dictCode / since(seq) / order。
+///
+/// `order`：`Some("desc")` 按 seq 倒序（监控页最新在前）；缺省/其他值按 seq 正序
+/// （delta 消费端按序拉取的既有契约，保持不变）。
 pub async fn list_events(
     mm: &DatabaseManager,
     db_id: &str,
     dict_code: Option<&str>,
     since: Option<i64>,
+    order: Option<&str>,
     page: i64,
     page_size: i64,
 ) -> Result<(Vec<Value>, i64), cmx_api_types::Error> {
@@ -100,9 +104,14 @@ pub async fn list_events(
     let n = params.len() as i64;
     params.push(DataValue::Int(ps));
     params.push(DataValue::Int(off));
+    let order_sql = if matches!(order, Some(o) if o.eq_ignore_ascii_case("desc")) {
+        "seq DESC"
+    } else {
+        "seq ASC"
+    };
     let sql = format!(
         "SELECT id, seq, dict_code, record_id, event_type, payload, emitted_at \
-         FROM md_event_log WHERE {where_sql} ORDER BY seq ASC \
+         FROM md_event_log WHERE {where_sql} ORDER BY {order_sql} \
          LIMIT ${} OFFSET ${}",
         n + 1,
         n + 2
