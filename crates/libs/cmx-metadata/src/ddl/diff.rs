@@ -23,7 +23,7 @@ use super::DdlDialect;
 use crate::MetadataError;
 use cmx_core::model::cell::{ColumnDefine, FieldType, IndexDefine, TableDefine};
 use std::collections::HashMap;
-use tracing::info;
+use tracing::{info, warn};
 
 /// 列变更类型
 ///
@@ -49,6 +49,7 @@ pub enum ColumnChange {
 /// 描述对索引的变更操作：
 /// - 新增索引
 /// - 删除索引
+/// - 改名重建（内容一致仅名字不同，旧名为系统命名）
 /// - 保留手工索引（不删除，仅报告提示）
 #[derive(Debug, Clone)]
 pub enum IndexChange {
@@ -56,6 +57,15 @@ pub enum IndexChange {
     AddIndex(IndexDefine),
     /// 删除索引（携带旧索引定义，name 为数据库真实索引名，columns/kind 供报告展示）
     DropIndex(IndexDefine),
+    /// 改名重建：内容（列序列+类型）一致仅名字不同，且旧名为系统命名（uk_/idx_ 前缀）。
+    /// 执行为 DROP 旧名 + CREATE 新名，使定义中的新名字生效；DDL 生成时打 warn 提示
+    /// （内容未变仅变名，但索引重建仍有锁表开销）。
+    RenameIndex {
+        /// 旧索引（name 为数据库真实索引名）
+        old: IndexDefine,
+        /// 新索引（name 为定义期名）
+        new: IndexDefine,
+    },
     /// 手工创建的索引（非系统命名前缀且不在当前定义中）：**保留不删**，
     /// 不生成任何 DDL，仅随变更携带供部署计划报告提示（视为 DBA 手工创建）。
     PreservedManualIndex(IndexDefine),
@@ -369,6 +379,12 @@ impl DdlDiff {
     /// DropIndex（定义中有则再 AddIndex，先 DROP 后 CREATE 重建为有效索引），避免
     /// INVALID 索引占名导致 CREATE 撞 `already exists` 中断部署。
     ///
+    /// # 改名重建
+    /// 内容一致（列+类型）但名字不同的索引：旧名为系统命名（`uk_` / `idx_` 前缀）时
+    /// 视为定义期改名 → 产出 [`IndexChange::RenameIndex`]（DROP 旧名 + CREATE 新名），
+    /// 使定义中的新名字生效（DDL 生成时 warn 提示）；旧名非系统前缀（DBA 手工建 /
+    /// PG 自动名 `_key` 等）不重建，旧索引继续服役（手工保护优先）。
+    ///
     /// # 手工索引保护
     /// DB 中多余（定义中无内容匹配）的索引**并非都该删**：DBA 手工创建的索引
     /// （如性能优化临时加的）不在定义里，按「定义即真相」一刀切删除会造成误伤。
@@ -394,6 +410,7 @@ impl DdlDiff {
         let mut changes = Vec::new();
 
         // 新增索引：new 中无任何 old 索引与之内容相等。
+        // （改名重建场景内容相等，在此跳过——RenameIndex 在下方 DROP 循环统一产出，不重复 ADD）
         for new_idx in new_idxs {
             if !old_idxs.iter().any(|o| same_content(o, new_idx)) {
                 changes.push(IndexChange::AddIndex(new_idx.clone()));
@@ -406,8 +423,20 @@ impl DdlDiff {
 
         // 删除索引：old 中无任何 new 索引与之内容相等（携带旧定义，name 为 DB 真实名供 DROP）。
         for old_idx in old_idxs {
-            if new_idxs.iter().any(|n| same_content(n, old_idx)) {
-                continue; // 内容匹配 → 无变更
+            if let Some(n) = new_idxs.iter().find(|n| same_content(n, old_idx)) {
+                // 内容一致：名字也一致 → 真无变更。
+                if n.name == old_idx.name {
+                    continue;
+                }
+                // 名字不同：系统命名（uk_/idx_ 前缀）→ 改名重建，定义中的新名生效；
+                // 非系统前缀（DBA 手工建 / PG 自动名 _key 等）→ 手工保护，旧索引继续服役。
+                if is_system_index_name(&old_idx.name) {
+                    changes.push(IndexChange::RenameIndex {
+                        old: old_idx.clone(),
+                        new: n.clone(),
+                    });
+                }
+                continue;
             }
             let managed = !old_idx.valid // INVALID 自愈优先：占名必撞 CREATE
                 || is_system_index_name(&old_idx.name)
@@ -512,33 +541,47 @@ impl DdlDiff {
                     //    already exists 阻断部署而排在后面的 DROP 本可解冲突。
                     // 索引 DDL 整体位于列变更之后：新索引可引用本次新增的列。
                     for ic in index_changes {
-                        // 删除索引（name 为 DB 真实索引名）
+                        // 删除索引（name 为 DB 真实索引名）；改名重建先释放旧名
                         if let IndexChange::DropIndex(idx) = ic {
                             stmts.push(format!("DROP INDEX IF EXISTS \"{}\";", idx.name));
                         }
+                        if let IndexChange::RenameIndex { old, .. } = ic {
+                            stmts.push(format!("DROP INDEX IF EXISTS \"{}\";", old.name));
+                        }
                     }
                     for ic in index_changes {
-                        // 新增索引
-                        if let IndexChange::AddIndex(idx) = ic {
-                            let qualified = match schema {
-                                Some(s) => format!("\"{}\".\"{}\"", s, table_name),
-                                None => format!("\"{}\"", table_name),
-                            };
-                            let cols = idx
-                                .columns
-                                .iter()
-                                .map(|c| format!("\"{}\"", c))
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            let unique = match idx.kind {
-                                cmx_core::model::cell::IndexKind::Unique => "UNIQUE ",
-                                cmx_core::model::cell::IndexKind::Normal => "",
-                            };
-                            stmts.push(format!(
-                                "CREATE {}INDEX \"{}\" ON {} ({});",
-                                unique, idx.name, qualified, cols
-                            ));
-                        }
+                        // 新增索引；改名重建 CREATE 新名（内容未变仅变名，warn 提示重建开销）
+                        let idx = match ic {
+                            IndexChange::AddIndex(idx) => idx,
+                            IndexChange::RenameIndex { old, new } => {
+                                warn!(
+                                    "索引改名重建: {} → {}（列 [{}]）——内容未变仅名字变更，仍执行 DROP+CREATE",
+                                    old.name,
+                                    new.name,
+                                    new.columns.join(", ")
+                                );
+                                new
+                            }
+                            _ => continue,
+                        };
+                        let qualified = match schema {
+                            Some(s) => format!("\"{}\".\"{}\"", s, table_name),
+                            None => format!("\"{}\"", table_name),
+                        };
+                        let cols = idx
+                            .columns
+                            .iter()
+                            .map(|c| format!("\"{}\"", c))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        let unique = match idx.kind {
+                            cmx_core::model::cell::IndexKind::Unique => "UNIQUE ",
+                            cmx_core::model::cell::IndexKind::Normal => "",
+                        };
+                        stmts.push(format!(
+                            "CREATE {}INDEX \"{}\" ON {} ({});",
+                            unique, idx.name, qualified, cols
+                        ));
                     }
                     // 处理表注释变更
                     if let Some(comment) = comment_change {
@@ -930,6 +973,52 @@ mod tests {
             changes.is_empty(),
             "索引名不同但列+类型相同，不应判变更: {changes:?}"
         );
+    }
+
+    /// 系统命名索引改名（内容一致仅名字不同）：RenameIndex 重建——DROP 旧名 + CREATE
+    /// 新名，定义中的新名生效（DDL 生成时 warn 提示重建开销）。
+    #[test]
+    fn diff_indexes_rename_rebuilds_system_named() {
+        let db_idx = IndexDefine {
+            name: "uk_cv_docno".to_string(),
+            columns: vec!["doc_no".to_string()],
+            kind: IndexKind::Unique,
+            valid: true,
+        };
+        let design_idx = IndexDefine {
+            name: "uk_cv_docno1".to_string(),
+            columns: vec!["doc_no".to_string()], // 列+类型一致，仅名字不同
+            kind: IndexKind::Unique,
+            valid: true,
+        };
+        let old = vec![make_simple_table("cv_t", vec![], vec![db_idx])];
+        let new = vec![make_simple_table("cv_t", vec![], vec![design_idx])];
+        let changes = DdlDiff::diff(&old, &new);
+        assert_eq!(changes.len(), 1, "应产出 1 个 AlterTable: {changes:?}");
+        if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
+            assert_eq!(index_changes.len(), 1, "应只有 RenameIndex: {index_changes:?}");
+            assert!(
+                matches!(
+                    &index_changes[0],
+                    IndexChange::RenameIndex { old, new }
+                        if old.name == "uk_cv_docno" && new.name == "uk_cv_docno1"
+                ),
+                "应为 RenameIndex: {index_changes:?}"
+            );
+            // DDL：先 DROP 旧名再 CREATE 新名
+            let dialect = PostgresDdlDialect::default();
+            let ddl = DdlDiff::changes_to_ddl(&dialect, &changes).unwrap();
+            assert!(
+                ddl.iter().any(|s| s.contains("DROP INDEX IF EXISTS \"uk_cv_docno\"")),
+                "应 DROP 旧名: {ddl:?}"
+            );
+            assert!(
+                ddl.iter().any(|s| s.contains("CREATE UNIQUE INDEX \"uk_cv_docno1\"")),
+                "应 CREATE 新名: {ddl:?}"
+            );
+        } else {
+            panic!("Expected AlterTable");
+        }
     }
 
     /// 索引列真变更：设计期重建新索引（AddIndex）；DB 侧旧索引的处置按命名分档——

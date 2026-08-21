@@ -38,9 +38,9 @@ fn test_parses_items_and_maps_fields() {
     assert_eq!(root1.parent_code, None);
     assert_eq!(root1.visible, 1);
     assert_eq!(root1.open_type, 0);
-    assert!(root1.definition.is_some()); // workspace 透传
+    assert!(root1.definition.is_some()); // workspace 透传（definition 平铺 6 key，workspace 为其一）
     assert_eq!(
-        root1.definition.as_ref().unwrap()["content"]["caption"],
+        root1.definition.as_ref().unwrap()["workspace"]["content"]["caption"],
         "视图1"
     );
 
