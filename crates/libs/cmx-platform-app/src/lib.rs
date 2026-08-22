@@ -77,7 +77,7 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
         .await
         .map_err(|e| Error::ConfigError(format!("基础设施初始化失败: {e}")))?;
     // 服务定位配置快照（补偿 map 键拼写错误静默不挂路由的可见性）+ 服务发现目标订阅预热
-    //（http_url/local 模式下为 no-op，不产生网络行为）。
+    //（无 discovery 定位键或注册中心未启用时为 no-op，不产生网络行为）。
     cmx_plugin::center_client::log_center_client_snapshot();
     cmx_plugin::center_client::warm_proxy_upstreams().await;
     init_crypto();

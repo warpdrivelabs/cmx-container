@@ -1,17 +1,18 @@
-//! 反代目标定位（upstream）——把 `[center_client]` 的服务定位配置解析为可动态解析的目标。
+//! 反代目标定位（upstream）——把 `[center_client.services]` 的服务定位配置解析为可动态解析的目标。
 //!
-//! mode 驱动（沿用 center_client 既有约定，一张配置服务两类消费者）：
-//! - `http_url`：`[center_client.urls].{key}` 手动基址 → [`ProxyUpstream::Static`]
-//! - `http_discovery` / `grpc`：`[center_client.discovery.services].{key}` Nacos 服务名 →
-//!   [`ProxyUpstream::Discovery`]（全局实例缓存 healthy 过滤 + 随机选例；订阅推送 +
-//!   ServiceListSyncer 30s 同步保证新鲜度）
-//! - `local` / 未知值（含遗留 `mock`）：不挂反代（返回 `None` + warn）
+//! **定位 per-key**（每个服务键自带定位方式，可混用）：
+//! - `services.{key}.url`：静态基址 → [`ProxyUpstream::Static`]
+//! - `services.{key}.discovery`：Nacos 服务名 → [`ProxyUpstream::Discovery`]（全局实例缓存
+//!   healthy 过滤 + 随机选例；订阅推送 + ServiceListSyncer 30s 同步保证新鲜度）
+//! - 键未配置、或 url/discovery 均为空：不挂反代（返回 `None` + warn）
+//!
+//! `transport` 字段对反代无效（反代恒走 HTTP 透明转发）；配了 `grpc` 会打 warn 提示。
 //!
 //! 消费方：
 //! - 反向代理（cmx-flow-api / cmx-rpt-api / cmx-rule-api 的 ProxyModule）经 [`proxy_upstream`]
 //!   取目标，按请求调 [`ProxyUpstream::resolve`] 得当前基址；
-//! - 远程导入器（remote_importers）在 http_discovery 模式复用 [`pick_instance_base`] 选例，
-//!   与反代同一套负载均衡语义，避免两份逻辑漂移。
+//! - 远程导入器（remote_importers）在 discovery 定位 + HTTP 传输时复用 [`pick_instance_base`]
+//!   选例，与反代同一套负载均衡语义，避免两份逻辑漂移。
 
 use std::sync::Arc;
 
@@ -23,9 +24,9 @@ use cmx_registry_config::{GlobalServiceInstanceCache, GlobalServiceRegistry, Ser
 /// 反代目标定位：静态基址或 Nacos 服务发现。
 #[derive(Debug, Clone)]
 pub enum ProxyUpstream {
-    /// 手动基址（`[center_client.urls].{key}`，mode = "http_url"）。值为纯基址（无路径）。
+    /// 手动基址（`services.{key}.url`）。值为纯基址（无路径）。
     Static(String),
-    /// Nacos 服务发现（`[center_client.discovery.services].{key}`，mode = "http_discovery" / "grpc"）。
+    /// Nacos 服务发现（`services.{key}.discovery`）。
     Discovery {
         /// Nacos 服务名。
         service: String,
@@ -75,7 +76,7 @@ impl ProxyUpstream {
     }
 }
 
-/// 按 mode 从 `[center_client]` 两张服务定位表解析指定服务键的反代目标。
+/// 从 `[center_client.services]` 解析指定服务键的反代目标（定位 per-key）。
 ///
 /// # Arguments
 ///
@@ -83,47 +84,51 @@ impl ProxyUpstream {
 ///
 /// # Returns
 ///
-/// 配置了该键时返回对应目标（http_url → 静态基址；http_discovery/grpc → 服务发现）；
-/// 未配置、mode 为 `local` 或未知值（含遗留 `mock`）时返回 `None`。
+/// 配置了该键时返回对应目标（`url` → 静态基址；`discovery` → 服务发现）；
+/// 键未配置或 url/discovery 均为空时返回 `None`。
 pub fn proxy_upstream(key: &str) -> Option<ProxyUpstream> {
     upstream_from_config(&CenterClientConfig::load(), key)
 }
 
 /// 纯函数版分派（单测直接构造 [`CenterClientConfig`] 验证矩阵）。
 pub(crate) fn upstream_from_config(cfg: &CenterClientConfig, key: &str) -> Option<ProxyUpstream> {
-    match cfg.mode.as_str() {
-        "http_url" => cfg
-            .urls
-            .get(key)
-            .map(|s| s.trim().trim_end_matches('/').to_string())
-            .filter(|s| !s.is_empty())
-            .map(ProxyUpstream::Static),
-        "http_discovery" | "grpc" => {
-            let service = cfg
-                .discovery
-                .services
-                .get(key)
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())?;
-            Some(ProxyUpstream::Discovery {
-                service,
-                group: cfg
-                    .discovery
-                    .nacos_group
-                    .clone()
-                    .unwrap_or_else(|| "DEFAULT_GROUP".to_string()),
-            })
-        }
-        "local" => None,
-        other => {
-            tracing::warn!(
-                center_client.mode = %other,
-                upstream.key = %key,
-                "center_client.mode 为未知值（含遗留 mock），视同 local：不挂反代"
-            );
-            None
-        }
+    let entry = cfg.services.get(key)?;
+    // 定位优先级：url 静态基址 → discovery 服务名（均空白视同未配）。
+    if let Some(base) = entry
+        .url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return Some(ProxyUpstream::Static(
+            base.trim_end_matches('/').to_string(),
+        ));
     }
+    if let Some(service) = entry
+        .discovery
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if entry.transport.as_deref().map(str::trim) == Some("grpc") {
+            tracing::warn!(
+                service.key = key,
+                "transport=grpc 对反向代理无效（反代恒走 HTTP 透明转发），按 discovery 定位继续"
+            );
+        }
+        return Some(ProxyUpstream::Discovery {
+            service: service.to_string(),
+            group: cfg
+                .nacos_group
+                .clone()
+                .unwrap_or_else(|| "DEFAULT_GROUP".to_string()),
+        });
+    }
+    tracing::warn!(
+        service.key = key,
+        "services.{key} 未配 url/discovery，忽略该键（不挂反代）"
+    );
+    None
 }
 
 /// 经全局实例缓存解析服务发现目标的当前基址。
@@ -176,26 +181,24 @@ pub fn pick_instance_base(instances: &[ServiceInstance]) -> Option<String> {
     Some(format!("http://{}:{port}", instance.ip))
 }
 
-/// 对服务发现模式的目标做订阅预热（首拉实例 + 后续推送更新）。
+/// 对服务发现定位的目标做订阅预热（首拉实例 + 后续推送更新）。
 ///
-/// 门户 `run_platform` 在 `init_infra` 之后调用：对 `[center_client.discovery.services]`
-/// 全部服务名注册 no-op 订阅（触发首拉填充缓存；`registered_listeners` 保证幂等）。
-/// local / http_url 模式、缓存或注册中心未初始化时为 no-op，不产生网络行为。
+/// 门户 `run_platform` 在 `init_infra` 之后调用：对 `[center_client.services]` 里全部
+/// `discovery` 非空的服务名注册 no-op 订阅（触发首拉填充缓存；`registered_listeners`
+/// 保证幂等）。缓存或注册中心未初始化、无 discovery 键时为 no-op，不产生网络行为。
 pub async fn warm_proxy_upstreams() {
     if !GlobalServiceInstanceCache::is_initialized() || !GlobalServiceRegistry::is_initialized() {
         return;
     }
     let cfg = CenterClientConfig::load();
-    let service_names: Vec<String> = match cfg.mode.as_str() {
-        "http_discovery" | "grpc" => cfg
-            .discovery
-            .services
-            .values()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
-        _ => return,
-    };
+    let service_names: Vec<String> = cfg
+        .services
+        .values()
+        .filter_map(|e| e.discovery.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
     if service_names.is_empty() {
         return;
     }
@@ -215,12 +218,25 @@ pub async fn warm_proxy_upstreams() {
 /// 启动时打印服务定位配置快照（补偿 map 键拼写错误静默不挂路由的可见性）。
 pub fn log_center_client_snapshot() {
     let cfg = CenterClientConfig::load();
-    let urls: Vec<&String> = cfg.urls.keys().collect();
-    let services: Vec<&String> = cfg.discovery.services.keys().collect();
+    // 每键一行描述：定位（static url / nacos 服务名）+ 生效传输。
+    let entries: Vec<String> = cfg
+        .services
+        .iter()
+        .map(|(key, entry)| {
+            let locate = if let Some(url) = entry.url.as_deref().filter(|s| !s.trim().is_empty()) {
+                format!("static {url}")
+            } else if let Some(svc) = entry.discovery.as_deref().filter(|s| !s.trim().is_empty()) {
+                format!("nacos {svc}")
+            } else {
+                "(未配定位)".to_string()
+            };
+            format!("{key} = {locate} [transport={}]", cfg.transport_of(key))
+        })
+        .collect();
     tracing::info!(
-        center_client.mode = %cfg.mode,
-        urls.keys = ?urls,
-        discovery.services.keys = ?services,
+        center_client.default_transport = %cfg.default_transport,
+        center_client.nacos_group = ?cfg.nacos_group,
+        services = ?entries,
         "center_client 服务定位配置快照"
     );
 }
@@ -228,22 +244,24 @@ pub fn log_center_client_snapshot() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::center_client::config::CenterDiscoveryConfig;
+    use crate::center_client::config::ServiceEntry;
 
-    fn cfg(mode: &str, urls: &[(&str, &str)], services: &[(&str, &str)]) -> CenterClientConfig {
+    fn entry(url: Option<&str>, discovery: Option<&str>, transport: Option<&str>) -> ServiceEntry {
+        ServiceEntry {
+            url: url.map(str::to_string),
+            discovery: discovery.map(str::to_string),
+            transport: transport.map(str::to_string),
+        }
+    }
+
+    fn cfg(entries: &[(&str, ServiceEntry)]) -> CenterClientConfig {
         CenterClientConfig {
-            mode: mode.to_string(),
-            urls: urls
+            default_transport: "http".to_string(),
+            nacos_group: Some("DEFAULT_GROUP".to_string()),
+            services: entries
                 .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .map(|(k, v)| (k.to_string(), v.clone()))
                 .collect(),
-            discovery: CenterDiscoveryConfig {
-                nacos_group: Some("DEFAULT_GROUP".to_string()),
-                services: services
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .collect(),
-            },
             timeout_ms: 30000,
         }
     }
@@ -266,51 +284,68 @@ mod tests {
         }
     }
 
-    /// mode 分派矩阵：http_url 查 urls 表；http_discovery/grpc 查 services 表；local/未知值不挂。
+    /// per-key 分派矩阵：url → Static；discovery → Discovery；键缺失/两字段空 → None；
+    /// 同一配置内可混用两种定位。
     #[test]
-    fn upstream_dispatch_by_mode() {
-        // http_url：urls 表命中 → Static。
-        let c = cfg("http_url", &[("flow", "http://127.0.0.1:8091")], &[]);
+    fn upstream_dispatch_per_key() {
+        // 静态定位命中 → Static。
+        let c = cfg(&[("flow", entry(Some("http://127.0.0.1:8091"), None, None))]);
         match upstream_from_config(&c, "flow") {
             Some(ProxyUpstream::Static(base)) => assert_eq!(base, "http://127.0.0.1:8091"),
             other => panic!("应解析为 Static，实际 {other:?}"),
         }
-        // http_url：urls 表未配该键 → None（键拼写错误静默不挂，靠启动快照日志兜底）。
+        // 键拼写错误 → None（靠启动快照日志兜底可见性）。
         assert!(upstream_from_config(&c, "report").is_none());
-        // http_discovery：services 表命中 → Discovery。
-        let c = cfg(
-            "http_discovery",
-            &[("flow", "http://127.0.0.1:8091")],
-            &[("flow", "cmx-flow-server")],
-        );
-        match upstream_from_config(&c, "flow") {
+        // discovery 定位命中 → Discovery。
+        let c = cfg(&[("report", entry(None, Some("cmx-rpt-server"), None))]);
+        match upstream_from_config(&c, "report") {
             Some(ProxyUpstream::Discovery { service, group }) => {
-                assert_eq!(service, "cmx-flow-server");
+                assert_eq!(service, "cmx-rpt-server");
                 assert_eq!(group, "DEFAULT_GROUP");
             }
             other => panic!("应解析为 Discovery，实际 {other:?}"),
         }
-        // grpc 与 http_discovery 同走 services 表。
-        let c = cfg("grpc", &[], &[("report", "cmx-rpt-server")]);
-        assert!(upstream_from_config(&c, "report").is_some());
-        // local 与未知值（含遗留 mock）→ None。
-        let c = cfg("local", &[("flow", "http://127.0.0.1:8091")], &[("flow", "x")]);
+        // 混用：同一配置内 flow 静态 + report 服务发现，互不干扰。
+        let c = cfg(&[
+            ("flow", entry(Some("http://127.0.0.1:8091"), None, None)),
+            ("report", entry(None, Some("cmx-rpt-server"), None)),
+        ]);
+        assert!(matches!(
+            upstream_from_config(&c, "flow"),
+            Some(ProxyUpstream::Static(_))
+        ));
+        assert!(matches!(
+            upstream_from_config(&c, "report"),
+            Some(ProxyUpstream::Discovery { .. })
+        ));
+        // url 优先于 discovery（两者都配时）。
+        let c = cfg(&[("flow", entry(Some("http://1.2.3.4:80"), Some("cmx-flow-server"), None))]);
+        assert!(matches!(
+            upstream_from_config(&c, "flow"),
+            Some(ProxyUpstream::Static(_))
+        ));
+        // 空白值视同未配置；两字段均空 → None。
+        let c = cfg(&[("flow", entry(Some("  "), None, None))]);
         assert!(upstream_from_config(&c, "flow").is_none());
-        let c = cfg("mock", &[("flow", "http://127.0.0.1:8091")], &[]);
+        let c = cfg(&[("flow", entry(None, None, Some("grpc")))]);
         assert!(upstream_from_config(&c, "flow").is_none());
-        // 空白值视同未配置。
-        let c = cfg("http_url", &[("flow", "  ")], &[]);
-        assert!(upstream_from_config(&c, "flow").is_none());
+        // nacos_group 缺省 → DEFAULT_GROUP。
+        let mut c = cfg(&[("flow", entry(None, Some("cmx-flow-server"), None))]);
+        c.nacos_group = None;
+        match upstream_from_config(&c, "flow") {
+            Some(ProxyUpstream::Discovery { group, .. }) => assert_eq!(group, "DEFAULT_GROUP"),
+            other => panic!("应解析为 Discovery，实际 {other:?}"),
+        }
     }
 
     /// resolver_fn：Static 固化返回；Discovery 在缓存未初始化时返回 None 而非 panic。
     #[test]
     fn resolver_fn_static_and_safe_discovery() {
-        let c = cfg("http_url", &[("flow", "http://127.0.0.1:8091")], &[]);
+        let c = cfg(&[("flow", entry(Some("http://127.0.0.1:8091"), None, None))]);
         let resolver = upstream_from_config(&c, "flow").expect("应命中").resolver_fn();
         assert_eq!(resolver().as_deref(), Some("http://127.0.0.1:8091"));
 
-        let c = cfg("grpc", &[], &[("flow", "cmx-flow-server")]);
+        let c = cfg(&[("flow", entry(None, Some("cmx-flow-server"), Some("grpc")))]);
         let resolver = upstream_from_config(&c, "flow").expect("应命中").resolver_fn();
         // 测试进程未 init_infra：全局缓存未初始化 → None（不 panic）。
         if GlobalServiceInstanceCache::is_initialized() {
@@ -354,10 +389,10 @@ mod tests {
     /// describe 输出人读目标描述（启动日志用）。
     #[test]
     fn describe_upstream_kinds() {
-        let c = cfg("http_url", &[("flow", "http://127.0.0.1:8091")], &[]);
+        let c = cfg(&[("flow", entry(Some("http://127.0.0.1:8091"), None, None))]);
         let u = upstream_from_config(&c, "flow").expect("应命中");
         assert_eq!(u.describe(), "static http://127.0.0.1:8091");
-        let c = cfg("grpc", &[], &[("flow", "cmx-flow-server")]);
+        let c = cfg(&[("flow", entry(None, Some("cmx-flow-server"), None))]);
         let u = upstream_from_config(&c, "flow").expect("应命中");
         assert_eq!(u.describe(), "nacos cmx-flow-server (DEFAULT_GROUP)");
     }

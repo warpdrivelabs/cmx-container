@@ -45,14 +45,15 @@
 | `DEPLOY__MODE` | String | `mono` | 部署模式：`mono`（单体）/ `micro`（微服务）。详见 [部署模式](#deploy_mode-部署模式) |
 
 > **独立微服务接入说明**（cmx-flow-server / cmx-rpt-server / cmx-rule-server）：
-> 三个服务经 `cmx-service-base::init_infra()` 接入注册中心与配置中心，开关与门户同构
->（主开关 `NACOS_ENABLED`；子开关 `NACOS_NAMING_ENABLED` / `NACOS_CONFIG_ENABLED` 或新前缀
-> `SERVICE_REGISTRY_ENABLED` / `CONFIG_CENTER_ENABLED`），默认全关（纯本地 toml+env，行为与
-> 独立部署前一致）。开启后 **create 阶段强依赖** Nacos 可达（客户端创建失败即中止启动）；
-> register 阶段失败仅 warn 不阻塞。`SERVICE_REGISTRY_NAME` 优先级高于
+> 三个服务经 `cmx-service-base::init_infra()` 接入注册中心与配置中心，开关与门户同构——
+> **推荐新前缀**：`SERVICE_REGISTRY_ENABLED` / `CONFIG_CENTER_ENABLED`（需配
+> `SERVICE_REGISTRY_TYPE=nacos` / `CONFIG_CENTER_TYPE=nacos`，两中心可独立开启；旧前缀
+> `NACOS_ENABLED` 主开关 + `NACOS_NAMING_ENABLED` / `NACOS_CONFIG_ENABLED` 子开关仍兼容），
+> 默认全关（纯本地 toml+env，行为与独立部署前一致）。开启后 **create 阶段强依赖** Nacos 可达
+> （客户端创建失败即中止启动）；register 阶段失败仅 warn 不阻塞。`SERVICE_REGISTRY_NAME` 优先级高于
 > `NACOS_NAMING_SERVICE_NAME`，注册名约定：`cmx-flow-server` / `cmx-rpt-server` / `cmx-rule-server`
->（门户 `[center_client.discovery.services]` 按同名键发现）。配置中心开启后配置优先级为
-> 本地 toml ← 远程配置中心 ← 环境变量（env 最高）。
+>（门户 `[center_client.services]` 的 `{flow,report,rules}.discovery` 按同名键发现）。配置中心开启后
+> 配置优先级为本地 toml ← 远程配置中心 ← 环境变量（env 最高）。
 
 ### Nacos 连接配置
 
@@ -144,16 +145,21 @@ cmx-ai 薄代理连接 OpenCode 的配置，优先级高于 `config.toml` 的 `[
 
 ## 基础服务中心环境变量覆盖
 
-`center_client` 配置节支持通过环境变量覆盖，格式为 `CENTER_CLIENT__<KEY>` 或 `CENTER_CLIENT__<SECTION>__<KEY>`：
+`center_client` 配置节支持通过环境变量覆盖（v2 services 单表形态），格式为
+`CENTER_CLIENT__<KEY>` 或 `CENTER_CLIENT__SERVICES__<KEY>__<FIELD>`：
 
 | 环境变量 | 类型 | 说明 |
 |----------|------|------|
-| `CENTER_CLIENT__MODE` | String | 访问模式 (`mock` / `url` / `discovery`) |
-| `CENTER_CLIENT__TIMEOUT_MS` | Integer | 请求超时时间（毫秒） |
-| `CENTER_CLIENT__URLS__MENU` | String | 门户中心 URL |
-| `CENTER_CLIENT__URLS__PERM` | String | 权限中心 URL |
-| `CENTER_CLIENT__URLS__FORM` | String | 表单中心 URL |
-| `CENTER_CLIENT__URLS__FLOW` | String | 流程中心 URL |
+| `CENTER_CLIENT__DEFAULT_TRANSPORT` | String | 服务间调用全局传输缺省（`http` / `grpc`，默认 `http`；grpc 需启用 `[rpc]` 且对应键配 `discovery`） |
+| `CENTER_CLIENT__NACOS_GROUP` | String | Nacos 分组（discovery 定位的键共用，默认 `DEFAULT_GROUP`） |
+| `CENTER_CLIENT__TIMEOUT_MS` | Integer | 请求超时时间（毫秒，默认 30000） |
+| `CENTER_CLIENT__SERVICES__MENU__URL` | String | 门户中心静态基址（纯基址无路径，需带 scheme；与 `DISCOVERY` 并存时 URL 优先） |
+| `CENTER_CLIENT__SERVICES__MENU__DISCOVERY` | String | 门户中心 Nacos 服务名 |
+| `CENTER_CLIENT__SERVICES__PERM__TRANSPORT` | String | 权限中心传输覆盖（`http` / `grpc`，仅服务间导入调用生效） |
+| `CENTER_CLIENT__SERVICES__FLOW__URL` | String | 流程微服务静态基址（反代目标） |
+
+> 注：`url` 值需带 scheme（如 `http://...`）；纯数字值会被环境变量层解析为整数导致反序列化失败。
+> 旧形态（`CENTER_CLIENT__MODE` / `CENTER_CLIENT__URLS__*`）已废弃，出现时被忽略并打迁移 warn。
 
 ---
 

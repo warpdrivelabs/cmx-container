@@ -702,87 +702,92 @@ is_critical = true
 ## 基础服务中心配置
 
 插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）之间的数据交互配置。
+**服务定位与传输均按服务键独立配置（per-key）**：`[center_client.services]` 单表，每个服务键自带
+定位方式与可选传输覆盖——不同服务键可混用（如 `flow` 静态基址调试、`report` 走 Nacos；
+`menu` 中心 gRPC、`form` 中心 HTTP）。
 
 ### `[center_client]`
 
-#### `mode`
+#### `default_transport`
 
 - **类型**: String (enum)
 - **必需**: 否
-- **默认值**: `"local"`
-- **说明**: 模块资源（表单/菜单/元数据/权限）导入导出的部署模式，**同时决定反向代理（flow/report/rules）的目标定位来源**
-- **可选值**:
-    - `local`（默认，或任意未知值含遗留 `mock`）- **本地模式**，定义导入器直调本地 Service（FormService/MenuService/TableMetadataService/PermissionServiceImpl），无网络开销，适用于单体部署；反代目标不挂（门户无 `/api/flow/*` 等路由）
-    - `grpc` - **远程模式（gRPC）**，经 gRPC 调用专门中心（CmxPluginDataService），需启用 `[rpc]` 并配置 `[center_client.discovery.services]` 的各中心服务名；反代目标经 Nacos 服务发现解析（`discovery.services.{flow,report,rules}`）
-    - `http_url` - **远程模式（HTTP 直连）**，经 HTTP multipart form-data POST 到 `[center_client.urls]` 各基址 + 统一导入端点 `/api/plugin/data/import`；反代目标取 `urls.{flow,report,rules}` 基址
-    - `http_discovery` - **远程模式（HTTP 服务发现）**，经服务发现解析实例地址后走 HTTP，需配置 `[center_client.discovery.services]` 的各中心服务名；反代同 `grpc` 走服务发现
-    - 远程模式下本节点仍可作为接收端（PluginDataImporterImpl 已注入 form/menu 本地导入器）
-
-#### `timeout_ms`
-
-- **类型**: Integer (毫秒)
-- **必需**: 否
-- **默认值**: `30000`
-- **说明**: 各基础服务中心 HTTP 请求的超时时间
-
----
-
-### `[center_client.urls]`
-
-URL 直连模式配置（`mode = "http_url"` 时生效）。**自由键值表**：服务键 → 手动基址——新增微服务只在
-toml 加一行键值，无需改代码。
-
-- **类型**: `HashMap<String, String>`（自由表）
-- **值语义**: **纯基址，不含路径**（统一导入端点 `/api/plugin/data/import` 与反代路径由消费方拼接；值含 `/api/` 时加载告警提示旧写法）
-- **键所有权约定**:
-    - `menu` / `perm` / `form` - 归远程导入器，值 = 门户/能力中心基址
-    - `flow` / `report` / `rules` - 归反向代理，值 = 独立微服务基址（`flow` 亦兼作 http_url 模式流程定义导入的接收方基址）
-- **示例**:
-
-```toml
-[center_client.urls]
-menu   = "http://portal-center:8080"
-flow   = "http://127.0.0.1:8091"
-report = "http://127.0.0.1:8092"
-rules  = "http://127.0.0.1:8094"
-```
-
----
-
-### `[center_client.discovery]`
-
-服务发现模式配置（`mode = "http_discovery"` 或 `"grpc"` 时生效）。通过 Nacos 服务发现获取各中心/
-独立微服务的实例地址。选例规则：healthy 过滤 + 随机负载均衡 + `http_port` 元数据优先（缺省用实例注册端口）。
+- **默认值**: `"http"`
+- **说明**: **服务间调用**（模块资源导入/导出）的全局传输缺省；键级 `transport` 可覆盖。值域
+  `http` / `grpc`，值域外的值回退 `http`（启动时打 warn）
+    - `http`（默认）- HTTP multipart form-data POST 到统一导入端点 `/api/plugin/data/import`，
+      定位用该键的 `url` 静态基址或 `discovery` 服务发现选例
+    - `grpc` - 经 gRPC 调用专门中心（CmxResourceDataService），需启用 `[rpc]` 且走 gRPC 的键
+      **必配 `discovery`** 服务名（gRPC 经全局 RPC 客户端按服务名路由，不支持静态地址直连）
+- **注意**: 传输协议**对反向代理无效**（反代恒 HTTP 透明转发）；给 `flow`/`report`/`rules`
+  配 `transport = "grpc"` 会打 warn 提示
 
 #### `nacos_group`
 
 - **类型**: String
 - **必需**: 否
 - **默认值**: `"DEFAULT_GROUP"`
-- **说明**: Nacos 服务分组
+- **说明**: Nacos 服务分组（所有 `discovery` 定位的服务键共用）
 
-#### `[center_client.discovery.services]`
+#### `timeout_ms`
 
-- **类型**: `HashMap<String, String>`（自由表）
-- **必需**: `mode = "http_discovery"` / `"grpc"` 时按需
-- **说明**: 服务键 → Nacos 服务名。**自由键值表**——新增微服务加一行键值即可，无需改代码；键所有权约定同 `[center_client.urls]`（`menu`/`perm`/`form` 归导入器，`flow`/`report`/`rules` 归反代）
+- **类型**: Integer (毫秒)
+- **必需**: 否
+- **默认值**: `30000`
+- **说明**: 各基础服务中心 HTTP 请求的超时时间（http 传输生效）
+
+---
+
+### `[center_client.services]`
+
+服务键 → 服务描述。**自由键值表**——新增微服务只在 toml 加一行键值，无需改代码。
+
+- **类型**: `HashMap<String, ServiceEntry>`（自由表，值为内联 table）
+- **字段**（每个键的值）:
+    - `url` - 静态基址，**纯基址不含路径**（统一导入端点与反代路径由消费方拼接；值含 `/api/`
+      时加载告警提示旧写法）。与 `discovery` 并存时 **url 优先**——删掉 `url` 即切服务发现选例
+    - `discovery` - Nacos 服务名（选例规则：healthy 过滤 + 随机负载均衡 + `http_port` 元数据
+      优先，缺省用实例注册端口）。`transport = "grpc"` 时必配
+    - `transport` - 该键的传输覆盖（`http` / `grpc`，仅服务间导入调用生效；缺省取全局
+      `default_transport`）
+- **键所有权约定**:
+    - `menu` / `perm` / `form` - 归远程导入器（目标 = 门户/能力中心；任一键存在即启用远程导入器）
+    - `flow` / `report` / `rules` - 归反向代理（目标 = 独立微服务；`flow` 亦兼作 http 传输流程
+      定义导入的接收方）
+    - 全表为空（默认）- 本地模式：导入器直调本地 Service，无网络开销；反代目标不挂
 - **示例**:
 
 ```toml
-[center_client.discovery.services]
-menu   = "cmx-portal-center"
-flow   = "cmx-flow-server"
-report = "cmx-rpt-server"
-rules  = "cmx-rule-server"
+[center_client.services]
+# 静态基址 + 服务发现备用（url 优先生效，删 url 即切 Nacos 选例）
+menu   = { url = "http://portal-center:8080", discovery = "cmx-portal-center" }
+# gRPC 传输（需启用 [rpc]；gRPC 键必须配 discovery，url 无效）
+perm   = { discovery = "cmx-perm-center", transport = "grpc" }
+# 纯服务发现定位（HTTP，缺省传输）
+form   = { discovery = "cmx-form-center" }
+# 反代目标：独立微服务
+flow   = { url = "http://127.0.0.1:8091", discovery = "cmx-flow-server" }
+report = { url = "http://127.0.0.1:8092", discovery = "cmx-rpt-server" }
+rules  = { url = "http://127.0.0.1:8094", discovery = "cmx-rule-server" }
 ```
+
+---
+
+### 旧配置形态（v2 已废弃）
+
+`mode` / `[center_client.urls]` / `[center_client.discovery]`（含 `discovery.services`）三段为
+v1 形态，已被 `[center_client.services]` 单表取代。旧字段出现时**被忽略**（不报错），启动日志打
+迁移 warn。对应关系：`mode = "http_url"` → 各键改配 `url`；`mode = "http_discovery"` / `"grpc"`
+→ 各键改配 `discovery`（grpc 传输另加 `transport = "grpc"` 或全局 `default_transport = "grpc"`）。
 
 ---
 
 ### 环境变量覆盖
 
-`center_client` 配置节支持通过环境变量覆盖，格式为 `CENTER_CLIENT__URLS__<KEY>`（如
-`CENTER_CLIENT__URLS__FLOW`）与 `CENTER_CLIENT__DISCOVERY__SERVICES__<KEY>`；值需带 scheme
-（如 `http://...`，纯数字值会被环境变量层解析为整数导致反序列化失败）。详见
+`center_client` 配置节支持通过环境变量覆盖，格式为 `CENTER_CLIENT__SERVICES__<KEY>__<FIELD>`
+（如 `CENTER_CLIENT__SERVICES__FLOW__URL`、`CENTER_CLIENT__SERVICES__MENU__TRANSPORT`）与
+`CENTER_CLIENT__DEFAULT_TRANSPORT`；`url` 值需带 scheme（如 `http://...`，纯数字值会被环境变量
+层解析为整数导致反序列化失败）。详见
 [ENV_MANUAL.md](ENV_MANUAL.md#基础服务中心环境变量)。
 
 ---

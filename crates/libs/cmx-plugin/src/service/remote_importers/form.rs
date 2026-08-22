@@ -48,7 +48,7 @@ impl FormDefinitionImporter for RemoteFormDefinitionImporter {
             zip_data,
         };
 
-        // 统一发送(按 ctx.config.mode 透明走 gRPC 或 HTTP)
+        // 统一发送(按该键生效 transport 透明走 gRPC 或 HTTP)
         let result = self
             .ctx
             .send(crate::center_client::types::DataCategory::Form, req)

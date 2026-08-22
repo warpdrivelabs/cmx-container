@@ -30,14 +30,14 @@ use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-/// 服务定位键：流程引擎（`[center_client.urls].flow` / `discovery.services.flow`）。
+/// 服务定位键：流程引擎（`[center_client.services].flow`）。
 const FLOW_UPSTREAM_KEY: &str = "flow";
-/// 服务定位键：报表引擎（`[center_client.urls].report` / `discovery.services.report`）。
+/// 服务定位键：报表引擎（`[center_client.services].report`）。
 const REPORT_UPSTREAM_KEY: &str = "report";
-/// 服务定位键：决策规则引擎（`[center_client.urls].rules` / `discovery.services.rules`）。
+/// 服务定位键：决策规则引擎（`[center_client.services].rules`）。
 const RULES_UPSTREAM_KEY: &str = "rules";
 
-/// 解析流程引擎反代目标（mode 驱动，见 `cmx_plugin::center_client::upstream`）。
+/// 解析流程引擎反代目标（per-key 定位，见 `cmx_plugin::center_client::upstream`）。
 ///
 /// 这是「后端一芯双壳」的切换点，对偶于前端一芯三壳：同一 `/api/flow/*` 前缀、同一
 /// ModuleRoutes 契约，配了目标就转发、没配就不挂路由——**前端与其余装配全零改**。
@@ -50,7 +50,7 @@ pub fn flow_is_proxied() -> bool {
     flow_upstream().is_some()
 }
 
-/// 解析报表引擎反代目标（mode 驱动）。
+/// 解析报表引擎反代目标（per-key 定位）。
 ///
 /// 与 [`flow_upstream`] 同构——报表侧的「后端一芯双壳」切换点。报表微服务对外 URL 与平台一致
 /// （`/api/report-design/*` 等，无 `/v1`），配了目标就转发、没配就不挂路由，前端全零改。
@@ -58,7 +58,7 @@ pub(crate) fn report_upstream() -> Option<ProxyUpstream> {
     cmx_plugin::center_client::proxy_upstream(REPORT_UPSTREAM_KEY)
 }
 
-/// 解析决策规则引擎反代目标（mode 驱动）。
+/// 解析决策规则引擎反代目标（per-key 定位）。
 ///
 /// 规则引擎**无进程内嵌壳**（始终独立微服务），故与 flow/report 的差异：没配目标 = 门户不挂
 /// 规则路由，而非回退内嵌。配了目标就转发 `/api/rules/*` + 规则拥有的 native 页，前端全零改。
@@ -69,7 +69,7 @@ pub(crate) fn rules_upstream() -> Option<ProxyUpstream> {
 /// 平台服务依赖拓扑：枚举各已挂载能力当前挂的是「进程内内嵌」还是「反代独立微服务」。
 ///
 /// 供通用监控 [`cmx_web_monitor`] 的拓扑面板/活体探测消费——真实反映路由装配决策，而非猜测。
-/// flow/report/rules 各按 `[center_client]` 服务定位配置（mode 驱动）决定 embedded/proxy；
+/// flow/report/rules 各按 `[center_client.services]` 服务定位配置（per-key）决定 embedded/proxy；
 /// 其余模块均进程内嵌（无反代变体，`proxiable=false` 表示暂未接入独立部署）。这份清单与本文件
 /// 的 `routes()` 装配一一对应。proxy 目标的 `target` 每轮探测时现解析（服务发现模式下跟随
 /// 实例变化；未解析出实例时为 `None`，面板显示为无目标而非误报不可达）。
@@ -161,7 +161,7 @@ fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
             cmx_flow_api::with_flow_page_proxy(router, resolver, api_key)
         }
         None => {
-            tracing::warn!("流程引擎：未配置反代目标（[center_client] mode=local 或 urls/discovery.services 未配 flow 键）→ 门户不挂 /api/flow/* 路由；请启动独立 cmx-flow-server 并配置其地址");
+            tracing::warn!("流程引擎：未配置反代目标（[center_client.services] 未配 flow 键或 url/discovery 均空）→ 门户不挂 /api/flow/* 路由；请启动独立 cmx-flow-server 并配置其地址");
             router
         }
     }
@@ -189,7 +189,7 @@ fn merge_report(router: Router<CmxAppState>) -> Router<CmxAppState> {
             cmx_rpt_api::with_report_page_proxy(router, resolver, api_key)
         }
         None => {
-            tracing::warn!("报表引擎：未配置反代目标（[center_client] mode=local 或 urls/discovery.services 未配 report 键）→ 门户不挂报表路由；请启动独立 cmx-rpt-server 并配置其地址");
+            tracing::warn!("报表引擎：未配置反代目标（[center_client.services] 未配 report 键或 url/discovery 均空）→ 门户不挂报表路由；请启动独立 cmx-rpt-server 并配置其地址");
             router
         }
     }
@@ -220,8 +220,8 @@ fn merge_rules(router: Router<CmxAppState>) -> Router<CmxAppState> {
 /// DocModule、数据字典 DctModule、主数据 MdmModule、异步任务中心 JobModule、模型中心 ModelModule、
 /// 编码引擎 CodeModule）在此合并——cmx-api 不依赖它们，避免循环依赖。
 ///
-/// 流程/报表/规则三引擎均为**独立微服务**：各按 `[center_client]` 的服务定位配置（mode 驱动：
-/// http_url 看 `urls.{key}`、http_discovery/grpc 看 `discovery.services.{key}`）决定——
+/// 流程/报表/规则三引擎均为**独立微服务**：各按 `[center_client.services]` 的服务定位配置（per-key：
+/// `url` 静态基址优先，`discovery` Nacos 选例）决定——
 /// 配了=反代到独立微服务，没配=不挂该模块路由（三者无进程内嵌，编译期均不依赖引擎源码）。
 ///
 /// # Returns
@@ -249,8 +249,8 @@ pub fn routes() -> Router<CmxAppState> {
         .merge(TableMetadataModule.routes())
         .merge(MarketplaceModule.routes())
         .merge(ModulePackageModule.routes());
-    // 报表、流程各按 [center_client.urls].{report,flow} 二选一：配了=反代到独立微服务，没配=进程内嵌。
-    // 规则按 [center_client.urls].rules：配了=反代到独立 cmx-rule-server，没配=不挂（规则无内嵌）。
+    // 报表、流程各按 [center_client.services].{report,flow} 二选一：配了=反代到独立微服务，没配=进程内嵌。
+    // 规则按 [center_client.services].rules：配了=反代到独立 cmx-rule-server，没配=不挂（规则无内嵌）。
     merge_flow(merge_report(merge_rules(base)))
 }
 

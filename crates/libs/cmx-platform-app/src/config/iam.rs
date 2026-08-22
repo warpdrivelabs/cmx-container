@@ -122,16 +122,20 @@ pub async fn init_iam_services(
         .with_menu_importer(receiver_menu_importer.clone()),
     );
 
-    // 根据 center_client.mode 选择 DefinitionImporterBundle 的实现(发送端):
-    // - local(默认): 本地实现(直调 Service,无网络开销)
-    // - grpc / http_url / http_discovery: 远程实现(经 gRPC 或 HTTP 调用专门中心)
+    // 按 center_client.services 是否配置远程导入键(menu/perm/form)选择 DefinitionImporterBundle
+    // 的实现(发送端):
+    // - 未配置(默认): 本地实现(直调 Service,无网络开销)
+    // - 配置任一键: 远程实现(传输 per-key:grpc 键走 gRPC,http 键走 HTTP,见 remote_importers)
     let center_config = cmx_plugin::center_client::CenterClientConfig::load();
-    let is_remote = matches!(
-        center_config.mode.as_str(),
-        "grpc" | "http_url" | "http_discovery"
-    );
+    let is_remote = center_config.has_remote_import_keys();
     let definition_importers: Arc<cmx_traits::resource::DefinitionImporterBundle> = if is_remote {
-        tracing::info!("模块资源导入器: 远程模式({})", center_config.mode);
+        tracing::info!(
+            remote_keys = ?["menu", "perm", "form"]
+                .into_iter()
+                .filter(|k| center_config.services.contains_key(*k))
+                .collect::<Vec<_>>(),
+            "模块资源导入器: 远程模式(per-key 定位+传输)"
+        );
         let remote_ctx = {
             let ctx =
                 cmx_plugin::service::remote_importers::RemoteImporterContext::new(center_config);
@@ -170,7 +174,7 @@ pub async fn init_iam_services(
             ),
         })
     } else {
-        tracing::info!("模块资源导入器: 本地模式({})", center_config.mode);
+        tracing::info!("模块资源导入器: 本地模式(services 未配置 menu/perm/form 键)");
         // 本地模式:发送端复用接收端的 form/menu Local 导入器(同一实例,直调 Service)
         Arc::new(cmx_traits::resource::DefinitionImporterBundle {
             form: receiver_form_importer,
