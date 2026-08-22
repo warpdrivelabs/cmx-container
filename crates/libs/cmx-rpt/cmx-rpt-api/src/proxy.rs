@@ -70,6 +70,8 @@ impl ModuleRoutes for ReportProxyModule {
             .route("/report-source-bindings", any(proxy_handler))
             .route("/report-source-bindings/{*rest}", any(proxy_handler))
             .route("/rpt/{*rest}", any(proxy_handler))
+            // 合并报表:方案/范围/个别数/规则/往来录入 + 运行合并/对账 + 工作底稿/分类账查询。
+            .route("/consol/{*rest}", any(proxy_handler))
             .with_state(proxy)
     }
 
@@ -204,6 +206,7 @@ fn build_response(resp: reqwest::Response) -> Response {
 ///   html  ：`fi.cmxfico.gl.rpt-designer-*`、`fi.cmxfico.gl.rpt-spreadjs-designer-*`
 fn is_report_owned_page(id: &str) -> bool {
     id.starts_with("portal.rpt.")
+        || id.starts_with("portal.consol.")
         || id.starts_with("fi.cmxfico.gl.rpt-designer-")
         || id.starts_with("fi.cmxfico.gl.rpt-spreadjs-designer-")
 }
