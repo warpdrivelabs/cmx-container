@@ -2,12 +2,15 @@
 //!
 //! 把结构化定义序列化为 ZIP 后发送到远程中心,远程接收端解压 → 解析 → 调用 Local 实现入库。
 //!
-//! # 传输方式(由 `center_client.mode` 决定)
+//! # 传输方式(按服务键 per-key,见 `center_client.services.{key}.transport`)
 //!
-//! - `grpc`:经 gRPC(`ResourceDataClient` → `CmxResourceDataService`)传输
-//! - `http_url` / `http_discovery`:经 HTTP multipart form-data 传输(POST 到各中心 `/import` 端点)
+//! - `grpc`:经 gRPC(`ResourceDataClient` → `CmxResourceDataService`)传输,需配 `discovery`
+//!   服务名(gRPC 经全局 RPC 客户端按服务名路由)
+//! - `http`(缺省,取全局 `default_transport`):经 HTTP multipart form-data 传输(POST 到各中心
+//!   `/import` 端点),定位用 `url` 静态基址或 `discovery` 服务发现选例
 //!
-//! 两种传输对 importer 透明:`RemoteImporterContext::send` 内部按 mode 分发,
+//! 不同数据类别(menu/perm/form)可混用传输——两路传输对 importer 透明:
+//! `RemoteImporterContext::send` 内部按该键的生效 transport 分发,
 //! 各 Remote importer 只调 `ctx.send(category, request)`,不感知传输细节。
 //!
 //! 与 Local 实现的关系:调用方(ModuleInstallService)持有 trait 对象,
@@ -26,8 +29,6 @@ pub use permission::RemotePermissionDefinitionImporter;
 pub use table::RemoteTableDefinitionImporter;
 
 use std::time::Duration;
-
-use rand::seq::SliceRandom;
 
 use crate::center_client::config::CenterClientConfig;
 use crate::center_client::types::DataCategory;
@@ -57,12 +58,12 @@ pub struct Credential {
     pub value: String,
 }
 
-/// 远程导入器共享上下文(传输方式 + 服务名/URL 解析配置)。
+/// 远程导入器共享上下文(服务定位配置 + 双传输通道)。
 #[derive(Clone)]
 pub struct RemoteImporterContext {
-    /// 服务中心客户端配置(mode + urls + discovery)
+    /// 服务中心客户端配置(services 单表 + default_transport)
     config: CenterClientConfig,
-    /// HTTP 客户端(http_url/http_discovery 模式使用;grpc 模式不构造)
+    /// HTTP 客户端(transport=http 的键使用;无条件构造——reqwest 惰性连接,grpc-only 场景零开销)
     http_client: Option<reqwest::Client>,
     /// 本服务对外的服务级凭证（cmx_sk_xxx），出站请求统一注入。
     outgoing_credential: Option<Credential>,
@@ -71,24 +72,19 @@ pub struct RemoteImporterContext {
 impl RemoteImporterContext {
     /// 创建远程导入器上下文。
     ///
-    /// 根据 `config.mode` 自动构造所需的传输资源:
-    /// - grpc:不构造 HTTP 客户端(走 cmx_rpc 全局客户端)
-    /// - http_url/http_discovery:构造带超时的 reqwest 客户端
+    /// HTTP 客户端无条件构造(per-key 传输下 http/grpc 键可混存,构造期不预判哪些键走哪路;
+    /// reqwest 连接惰性建立,纯 gRPC 键不产生任何连接开销)。
     pub fn new(config: CenterClientConfig) -> Self {
-        let http_client = if config.mode == "http_url" || config.mode == "http_discovery" {
-            let timeout = Duration::from_millis(config.timeout_ms);
-            Some(
-                reqwest::Client::builder()
-                    .timeout(timeout)
-                    .build()
-                    .unwrap_or_else(|e| {
-                        tracing::error!(error = %e, "构建 reqwest Client 失败,降级默认客户端");
-                        reqwest::Client::new()
-                    }),
-            )
-        } else {
-            None
-        };
+        let timeout = Duration::from_millis(config.timeout_ms);
+        let http_client = Some(
+            reqwest::Client::builder()
+                .timeout(timeout)
+                .build()
+                .unwrap_or_else(|e| {
+                    tracing::error!(error = %e, "构建 reqwest Client 失败,降级默认客户端");
+                    reqwest::Client::new()
+                }),
+        );
         Self {
             config,
             http_client,
@@ -123,21 +119,24 @@ impl RemoteImporterContext {
         req
     }
 
-    /// 解析指定数据类别对应的远程服务名(grpc/http_discovery 模式使用)。
+    /// 解析指定数据类别对应的服务名(discovery 定位 / grpc 传输使用,查 `services.{key}.discovery`)。
     pub fn resolve_service_name(&self, category: DataCategory) -> PluginResult<String> {
         self.config
-            .discovery
-            .get_service_name(category)
-            .map(|s| s.to_string())
+            .services
+            .get(category.as_str())
+            .and_then(|e| e.discovery.as_deref())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
             .ok_or_else(|| {
                 PluginError::CenterData(format!(
-                    "未配置 {} 的远程服务名(center_client.discovery)",
-                    category.center_name()
+                    "未配置 {} 的服务名(center_client.services.{}.discovery)",
+                    category.center_name(),
+                    category.as_str()
                 ))
             })
     }
 
-    /// 统一发送入口:按 `config.mode` 分发到 gRPC 或 HTTP 传输。
+    /// 统一发送入口:按该键的生效 transport(per-key)分发到 gRPC 或 HTTP 传输。
     ///
     /// 各 Remote importer 把结构体打包为 ZIP 后构造 `ResourceDataImportRequest`,
     /// 调本方法发送,不感知传输细节。
@@ -146,16 +145,13 @@ impl RemoteImporterContext {
         category: DataCategory,
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataImportResult> {
-        match self.config.mode.as_str() {
+        match self.config.transport_of(category.as_str()) {
             "grpc" => self.send_via_grpc(category, request).await,
-            "http_url" | "http_discovery" => self.send_via_http(category, request).await,
-            other => Err(PluginError::CenterData(format!(
-                "不支持的 center_client.mode: {other}(远程模式需 grpc/http_url/http_discovery)"
-            ))),
+            _ => self.send_via_http(category, request).await,
         }
     }
 
-    /// 统一查询(导出)入口:按 `config.mode` 分发到 gRPC 或 HTTP 传输。
+    /// 统一查询(导出)入口:按该键的生效 transport(per-key)分发到 gRPC 或 HTTP 传输。
     ///
     /// 各 Remote importer 的 `list_*` 方法调本方法,获取远程中心的 JSON 定义列表,
     /// 再反序列化为结构体返回。
@@ -164,12 +160,9 @@ impl RemoteImporterContext {
         category: DataCategory,
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataListResult> {
-        match self.config.mode.as_str() {
+        match self.config.transport_of(category.as_str()) {
             "grpc" => self.list_via_grpc(category, request).await,
-            "http_url" | "http_discovery" => self.list_via_http(category, request).await,
-            other => Err(PluginError::CenterData(format!(
-                "不支持的 center_client.mode: {other}(远程模式需 grpc/http_url/http_discovery)"
-            ))),
+            _ => self.list_via_http(category, request).await,
         }
     }
 
@@ -181,7 +174,7 @@ impl RemoteImporterContext {
     ) -> PluginResult<ResourceDataListResult> {
         if !cmx_rpc::global::GlobalRpcClient::is_initialized() {
             return Err(PluginError::CenterData(format!(
-                "RPC 未初始化,无法远程导出 {} (center_client.mode=grpc 需启用 [rpc])",
+                "RPC 未初始化,无法远程导出 {} (transport=grpc 需启用 [rpc])",
                 category.center_name()
             )));
         }
@@ -205,9 +198,7 @@ impl RemoteImporterContext {
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataListResult> {
         let http_client = self.http_client.as_ref().ok_or_else(|| {
-            PluginError::CenterData(
-                "HTTP 客户端未初始化(mode 非 http_url/http_discovery)".to_string(),
-            )
+            PluginError::CenterData("HTTP 客户端未初始化".to_string())
         })?;
 
         let url = self.resolve_http_url_for_list(category).await?;
@@ -304,7 +295,7 @@ impl RemoteImporterContext {
     ) -> PluginResult<ResourceDataImportResult> {
         if !cmx_rpc::global::GlobalRpcClient::is_initialized() {
             return Err(PluginError::CenterData(format!(
-                "RPC 未初始化,无法远程导入 {} (center_client.mode=grpc 需启用 [rpc])",
+                "RPC 未初始化,无法远程导入 {} (transport=grpc 需启用 [rpc])",
                 category.center_name()
             )));
         }
@@ -321,19 +312,14 @@ impl RemoteImporterContext {
             })
     }
 
-    /// HTTP 传输:经 multipart form-data POST 到各中心 `/import` 端点。
-    ///
-    /// - `http_url`:从 `config.urls.{category}` 取 URL
-    /// - `http_discovery`:从服务发现解析实例地址
+    /// HTTP 传输:经 multipart form-data POST 到统一导入端点 `/api/plugin/data/import`。
     async fn send_via_http(
         &self,
         category: DataCategory,
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataImportResult> {
         let http_client = self.http_client.as_ref().ok_or_else(|| {
-            PluginError::CenterData(
-                "HTTP 客户端未初始化(mode 非 http_url/http_discovery)".to_string(),
-            )
+            PluginError::CenterData("HTTP 客户端未初始化".to_string())
         })?;
 
         let url = self.resolve_http_url(category).await?;
@@ -388,57 +374,35 @@ impl RemoteImporterContext {
         parse_http_response(&body, category)
     }
 
-    /// 解析 HTTP 端点 URL。
+    /// 解析 HTTP 端点 URL(定位 per-key:该键 url 静态基址或 discovery 服务发现选例)。
     ///
-    /// - `http_url` 模式:直接从 `config.urls.{category}` 取
-    /// - `http_discovery` 模式:从服务发现解析实例地址 + 默认 import 路径
+    /// - `services.{category}.url`:静态基址 + 统一导入端点路径(值不含路径——旧「完整端点」
+    ///   写法会在 config 加载时告警)
+    /// - `services.{category}.discovery`:复用 `center_client::upstream` 的共享选例核
+    ///   (healthy 过滤 + 随机 + `http_port` 元数据优先)解析实例基址,再拼统一端点路径
     async fn resolve_http_url(&self, category: DataCategory) -> PluginResult<String> {
-        if self.config.mode == "http_url" {
-            // 直接取配置的 URL(按 category 字段)
-            let url = match category {
-                DataCategory::Menu => self.config.urls.menu.as_deref(),
-                DataCategory::Perm => self.config.urls.perm.as_deref(),
-                DataCategory::Form => self.config.urls.form.as_deref(),
-                DataCategory::Flow => self.config.urls.flow.as_deref(),
-            };
-            return url.map(|s| s.to_string()).ok_or_else(|| {
-                PluginError::CenterData(format!(
-                    "未配置 {} 的 URL(center_client.urls.{})",
-                    category.center_name(),
-                    category.as_str()
-                ))
-            });
+        let entry = self.config.services.get(category.as_str());
+        // 静态基址优先(该键配了 url)。
+        if let Some(base) = entry
+            .and_then(|e| e.url.as_deref())
+            .map(|s| s.trim().trim_end_matches('/'))
+            .filter(|s| !s.is_empty())
+        {
+            return Ok(format!("{base}{}", category_to_http_import_path(category)));
         }
 
-        // http_discovery:经服务发现解析实例地址
+        // 服务发现定位:经共享选例核解析实例基址(与反代同一套负载均衡语义)。
         let service_name = self.resolve_service_name(category)?;
-        let cache = cmx_registry_config::GlobalServiceInstanceCache::get();
-        let all_instances = cache.get(&service_name).unwrap_or_default();
-        // 优先用健康实例,无健康实例时回退到全部实例
-        let healthy: Vec<_> = all_instances.iter().filter(|i| i.healthy).collect();
-        let pool: Vec<_> = if healthy.is_empty() {
-            all_instances.iter().collect()
-        } else {
-            healthy
-        };
-        if pool.is_empty() {
-            return Err(PluginError::CenterData(format!(
-                "服务发现未找到 {} 的实例 (service={})",
-                category.center_name(),
-                service_name
-            )));
-        }
-        // 随机选一个实例(简单负载均衡)
-        let instance = pool.choose(&mut rand::thread_rng()).ok_or_else(|| {
-            PluginError::CenterData(format!("选择 {} 实例失败", category.center_name()))
-        })?;
-        let port = instance
-            .metadata
-            .get("http_port")
-            .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or(instance.port);
-        let import_path = category_to_http_import_path(category);
-        Ok(format!("http://{}:{port}{import_path}", instance.ip))
+        let base = crate::center_client::upstream::resolve_service_base(&service_name).ok_or_else(
+            || {
+                PluginError::CenterData(format!(
+                    "服务发现未找到 {} 的可用实例 (service={})",
+                    category.center_name(),
+                    service_name
+                ))
+            },
+        )?;
+        Ok(format!("{base}{}", category_to_http_import_path(category)))
     }
 }
 
@@ -490,7 +454,7 @@ fn parse_http_response(
     })
 }
 
-/// 各 category 的 HTTP import 端点路径(http_discovery 模式拼接用)。
+/// 各 category 的 HTTP import 端点路径(http 传输拼接用)。
 ///
 /// 所有类别统一走通用端点 `/api/plugin/data/import`,由接收端按 multipart 的 `category` 字段路由。
 fn category_to_http_import_path(_category: DataCategory) -> &'static str {

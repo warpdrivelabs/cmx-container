@@ -76,6 +76,10 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     init_infra()
         .await
         .map_err(|e| Error::ConfigError(format!("基础设施初始化失败: {e}")))?;
+    // 服务定位配置快照（补偿 map 键拼写错误静默不挂路由的可见性）+ 服务发现目标订阅预热
+    //（无 discovery 定位键或注册中心未启用时为 no-op，不产生网络行为）。
+    cmx_plugin::center_client::log_center_client_snapshot();
+    cmx_plugin::center_client::warm_proxy_upstreams().await;
     init_crypto();
 
     init_cache().await?;
@@ -96,12 +100,12 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     cmx_web_monitor::spawn_topology_prober();
 
     // 流程引擎：**独立微服务**（引擎核 cmx-flow-app 在独立 ws ../cmx-flowengine，由 cmx-flow-server
-    // 承载）。门户不再进程内嵌引擎/poller——只按 [center_client.urls].flow 反代 /api/flow/*（见
-    // routes.rs merge_flow）。故此处不再调 spawn_timer_poller（那条依赖已随壳瘦身移除）。
+    // 承载）。门户不再进程内嵌引擎/poller——只按 [center_client] 的服务定位配置反代 /api/flow/*
+    //（见 routes.rs merge_flow）。故此处不再调 spawn_timer_poller（那条依赖已随壳瘦身移除）。
     if routes::flow_is_proxied() {
         info!("流程引擎：独立微服务模式，本进程不启动内嵌引擎 poller（转发到远程 flow-server）");
     } else {
-        info!("流程引擎：未配置 [center_client.urls].flow → 门户无流程路由；请启动独立 cmx-flow-server 并配置其地址");
+        info!("流程引擎：未配置反代目标（[center_client] mode=local 或未配 flow 键）→ 门户无流程路由；请启动独立 cmx-flow-server 并配置其地址");
     }
 
     init_web_config().map_err(|e| Error::ConfigError(format!("加载 Web 配置失败: {}", e)))?;

@@ -280,49 +280,49 @@ storage_path = "./storage"
 # 基础服务中心配置
 # ============================================
 # 插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）
-# 之间的数据交互配置
-[center_client]
-# 模块资源(表单/菜单/元数据/权限)导入导出的部署模式。
-# - local(默认,或任意非远程值):本地模式,定义导入器直调本地
-#   Service(FormService/MenuService/TableMetadataService/PermissionServiceImpl),
-#   无网络开销,适用于单体部署。
-# - grpc:远程模式,经 gRPC 调用专门中心(CmxPluginDataService),
-#   需启用 [rpc] 并配置 [center_client.discovery] 的各中心服务名。
-# - http_url:远程模式,经 HTTP multipart form-data POST 到 [center_client.urls] 配置的各中心 URL。
-# - http_discovery:远程模式,经服务发现解析实例地址后走 HTTP,
-#   需配置 [center_client.discovery] 的各中心服务名。
+# 之间的数据交互配置。服务定位与传输均 per-key：`[center_client.services]` 单表，
+# 每个服务键自带定位方式（url 静态基址 / discovery Nacos 服务名，url 优先）与
+# 可选传输覆盖（transport = http|grpc，仅服务间导入调用生效，反代恒 HTTP）。
+# - 不配置任何键（默认）：本地模式，定义导入器直调本地
+#   Service(FormService/MenuService/TableMetadataService/PermissionServiceImpl)，
+#   无网络开销，适用于单体部署;反代目标不挂(门户无 /api/flow/* 等路由)。
+# - 配置 menu/perm/form 键：远程导入（http 走 multipart form-data POST 到统一导入端点
+#   /api/plugin/data/import;grpc 走 CmxResourceDataService，需启用 [rpc] 且该键必配 discovery）。
+# - 配置 flow/report/rules 键：挂对应反向代理（定位 url 静态基址或 discovery 服务发现选例：
+#   healthy 过滤 + 按 Nacos weight 加权随机 + http_port 元数据优先）。
 # 远程模式下本节点仍可作为接收端(PluginDataImporterImpl 已注入 form/menu 本地导入器)。
-mode = "local"
-# 请求超时时间（毫秒，可选，默认 30000）
-# 各基础服务中心 HTTP 请求的超时时间（仅 http_url / http_discovery 模式生效）
+[center_client]
+# 服务间调用的全局传输缺省：http（默认）| grpc（需启用 [rpc]，且走 gRPC 的键必配 discovery）。
+# 键级 transport 可覆盖（见 services 表）。值域外的值回退 http（启动时打 warn）。
+default_transport = "http"
+# Nacos 分组（discovery 定位的键共用，可选，默认 DEFAULT_GROUP）
+nacos_group = "DEFAULT_GROUP"
+# 请求超时时间（毫秒，可选，默认 30000；http 传输生效）
 timeout_ms = 30000
 
-# URL 直连模式配置（mode = "http_url" 时生效）
-# 每个中心对应一个独立的 URL 配置项
-# 环境变量覆盖：CENTER_CLIENT__URLS__MENU, CENTER_CLIENT__URLS__PERM 等
-[center_client.urls]
-## 门户中心（菜单数据）URL
-# menu = "http://portal-center:8080/api/plugin/menu/import"
-## 权限中心（权限数据）URL
-# perm = "http://perm-center:8080/api/iam/permissions/import"
-## 表单中心（表单数据）URL
-# form = "http://form-center:8080/api/plugin/form/import"
-## 流程中心（流程定义）URL
-# flow = "http://flow-center:8080/api/plugin/flow/import"
-
-# 服务发现模式配置（mode = "http_discovery" 或 "grpc" 时生效）
-# 通过 Nacos 服务发现获取各中心的实例地址
-# [center_client.discovery]
-## Nacos 分组（可选，默认 DEFAULT_GROUP）
-# nacos_group = "DEFAULT_GROUP"
-## 门户中心服务名
-# menu_service = "cmx-portal-center"
-## 权限中心服务名
-# perm_service = "cmx-perm-center"
-## 表单中心服务名
-# form_service = "cmx-form-center"
-## 流程中心服务名
-# flow_service = "cmx-flow-center"
+# 服务键 → 服务描述（自由键值表，新增微服务加一行键值即可，无需改代码）。字段：
+# - url       = 静态基址（**纯基址，不含路径**——统一导入端点与反代路径由消费方拼接）；
+#               与 discovery 并存时 url 优先，删 url 即切服务发现选例
+# - discovery = Nacos 服务名（transport=grpc 时必配——gRPC 经全局 RPC 客户端按服务名路由）
+# - transport = http|grpc（仅服务间导入调用生效，反向代理恒 HTTP 不受影响；缺省取
+#               default_transport）
+# 键所有权：menu/perm/form 归远程导入器（目标=门户/能力中心），flow/report/rules 归反向代理
+#（目标=独立微服务）。
+# 环境变量覆盖：CENTER_CLIENT__SERVICES__FLOW__URL、CENTER_CLIENT__SERVICES__MENU__TRANSPORT 等
+#（值需带 scheme，纯数字值会被解析为整数）
+[center_client.services]
+## 门户中心（菜单数据）：静态基址 + 服务发现备用（url 优先生效），导入器目标
+# menu = { url = "http://portal-center:8080", discovery = "cmx-portal-center" }
+## 权限中心（权限数据）：gRPC 传输（需启用 [rpc]；gRPC 键必须配 discovery，url 无效）
+# perm = { discovery = "cmx-perm-center", transport = "grpc" }
+## 表单中心（表单数据）：纯服务发现定位（HTTP，缺省传输）
+# form = { discovery = "cmx-form-center" }
+## 流程微服务（反代目标；亦兼作 http 传输流程定义导入的接收方）
+# flow = { url = "http://127.0.0.1:8091", discovery = "cmx-flow-server" }
+## 报表微服务（反代目标）
+# report = { url = "http://127.0.0.1:8092", discovery = "cmx-rpt-server" }
+## 决策规则微服务（反代目标）
+# rules = { url = "http://127.0.0.1:8094", discovery = "cmx-rule-server" }
 
 # ============================================
 # RPC 配置

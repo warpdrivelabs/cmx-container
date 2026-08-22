@@ -1412,10 +1412,7 @@ version = "0.1.12"
 dependencies = [
  "axum",
  "cmx-api-core",
- "cmx-traits",
- "reqwest",
- "serde_json",
- "tracing",
+ "cmx-proxy-core",
 ]
 
 [[package]]
@@ -1899,6 +1896,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-proxy-core"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-traits",
+ "reqwest",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "cmx-registry-config"
 version = "0.1.12"
 dependencies = [
@@ -1975,10 +1983,7 @@ version = "0.1.12"
 dependencies = [
  "axum",
  "cmx-api-core",
- "cmx-traits",
- "reqwest",
- "serde_json",
- "tracing",
+ "cmx-proxy-core",
 ]
 
 [[package]]
@@ -1987,10 +1992,7 @@ version = "0.1.12"
 dependencies = [
  "axum",
  "cmx-api-core",
- "cmx-traits",
- "reqwest",
- "serde_json",
- "tracing",
+ "cmx-proxy-core",
 ]
 
 [[package]]

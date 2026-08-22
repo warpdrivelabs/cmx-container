@@ -2,7 +2,7 @@
 //!
 //! **为什么回环 HTTP 而非进程内直调引擎**：流程引擎是「一芯双壳」（内嵌 = FlowModule 同进程
 //! handlers；反代 = FlowProxyModule 转发独立 flow-server）。回环走本进程统一入口，两种部署
-//! 模式对 MDM 完全透明（`[center_client.urls].flow` 配置切换零改代码）。
+//! 模式对 MDM 完全透明（`[center_client.services].flow` 配置切换零改代码）。
 //!
 //! **成功判据（全方法统一）**：HTTP 2xx **且** 信封 `code == 0`。flow 的业务错误（定义未发布、
 //! 状态不符等）返回 HTTP 200 + `{code:1,msg}`——只看 HTTP 状态码会把失败误判为成功，产生

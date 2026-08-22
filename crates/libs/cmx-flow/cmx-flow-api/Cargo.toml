@@ -10,7 +10,9 @@ authors.workspace = true
 # cmx-flow-server 承载。门户不再进程内嵌引擎，故本 crate **不依赖 cmx-flow-app**（这条跨 workspace
 # path 依赖曾把整个引擎源码拖进门户编译图，改前 `cargo run -p cmx-portal-server` 会连带编译
 # cmx-flowengine 的 .rs）。本 crate 只含反代：FlowProxyModule 把平台 `/api/flow/*` + 流程拥有的
-# native/html 页取页请求透明转发到远程 flow-server（`[center_client.urls].flow`）。前端零改。
+# native/html 页取页请求透明转发到远程 flow-server（[center_client.services] per-key 定位：url
+# 静态基址或 discovery Nacos 选例，经 UpstreamResolver 按请求动态解析）。
+# 前端零改。
 
 [dependencies]
 # API 框架（CmxAppState / routes::traits::ModuleRoutes）。单向依赖 cmx-flow-api → cmx-api。
@@ -19,12 +21,5 @@ cmx-api-core = { workspace = true }
 # Web 框架（Router 类型；路由体由 core 提供）
 axum = { workspace = true }
 
-# —— S6 反代壳（FlowProxyModule：平台→远程 flow-server 转发 + 三层出站鉴权）——
-# 平台服务凭证/委托用户令牌/请求 ID（context_scope 出站透传）
-cmx-traits = { workspace = true }
-# 出站 HTTP（转发到远程 flow-server；流式请求/响应体，SSE 透传）
-reqwest = { workspace = true }
-# 错误信封 JSON（502 等）
-serde_json = { workspace = true }
-# 日志
-tracing = { workspace = true }
+# 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，三反代壳共用）
+cmx-proxy-core = { workspace = true }

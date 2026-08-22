@@ -3,58 +3,47 @@
 //! 「前端一芯三壳」在后端的对偶：`FlowModule`（进程内嵌引擎，`/api/flow/*` 由本进程 handler 处理）
 //! ↔ `FlowProxyModule`（引擎在**远程独立 flow-server**，`/api/flow/*` 透明转发到它）。二者对
 //! web-server 是同一个 `impl ModuleRoutes` 契约、同一段 `/flow/*` 前缀——**前端零改**（浏览器仍
-//! 请求同源 `/api/flow/...`），切换只看 `[center_client.urls].flow` 配没配。
+//! 请求同源 `/api/flow/...`），切换只看 `[center_client]` 的服务定位配置（per-key：`services.flow`
+//! 配 url 静态基址或 discovery Nacos 选例，见
+//! `cmx_plugin::center_client::upstream::proxy_upstream`）。
+//!
+//! 目标经 [`UpstreamResolver`] 按请求动态解析：静态基址固化返回；Nacos 服务发现模式每次从
+//! 全局实例缓存选例（订阅推送 + 30s 同步保新鲜）。无可用实例 → 503（区别于下游不可达的 502）。
+//!
+//! 壳与核的分工：本壳只管**路径重写**（`/flow/{rest}` → `{flow_base}/api/flow/v1/{rest}`，升级到
+//! v1 正式契约）与**页面归属判定**；头卫生（P0：剥客户端可伪造的注入型头/Cookie）、三层出站
+//! 鉴权、超时语义（connect/read 拆分，不设总超时保 SSE 长流）、流式转发、502/503 兜底全在
+//! 转发核 [`cmx_proxy_core::ProxyCore`]（三反代壳共用，一处定义一处修复）。
 //!
 //! 出站鉴权对齐平台既有 `remote_importers::apply_auth_headers` 三层：
 //!   ① `X-API-Key`         —— 平台服务身份（`[service_auth].outgoing_api_key`）
 //!   ② `X-Delegated-User-Token: Bearer <JWT>` —— 当前登录用户原始令牌（on-behalf-of，真实办理人）
 //!   ③ `X-Request-Id`      —— 链路追踪
 //! flow-server 的 S6 认证桥（cmx-flow-app auth）据此：API Key 验服务身份，委托令牌解真实用户+租户。
-//!
-//! 路径映射：`/flow/{rest}`（经 web-server `nest("/api")` → 实际 `/api/flow/{rest}`）转发到
-//! `{flow_base}/api/flow/v1/{rest}`（**升级到 v1 正式契约**）。query 原样透传，body 双向流式。
 
-use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, Uri};
-use axum::response::{IntoResponse, Response};
+use axum::http::Uri;
+use axum::response::Response;
 use axum::routing::any;
 use axum::Router;
 
 use cmx_api_core::CmxAppState;
 use cmx_api_core::routes::traits::ModuleRoutes;
+use cmx_proxy_core::ProxyCore;
 
-/// 反代模块：持远程 flow-server 基址 + 出站服务凭证 + 复用的 HTTP 客户端。
+pub use cmx_proxy_core::UpstreamResolver;
+
+/// 反代模块：持转发核（目标 resolver + 出站凭证 + 连接池）。
 #[derive(Clone)]
 pub struct FlowProxyModule {
-    inner: std::sync::Arc<ProxyState>,
-}
-
-struct ProxyState {
-    /// 远程 flow-server 基址（如 `http://flow-server:8091`），来自 `[center_client.urls].flow`。
-    flow_base: String,
-    /// 平台对外服务凭证（`[service_auth].outgoing_api_key`，注入 X-API-Key）。可空（不注入）。
-    api_key: Option<String>,
-    client: reqwest::Client,
+    inner: std::sync::Arc<ProxyCore>,
 }
 
 impl FlowProxyModule {
-    /// 用远程基址 + 出站 API Key 构建。基址末尾多余 `/` 去掉（拼接时统一补）。
-    pub fn new(flow_base: impl Into<String>, api_key: Option<String>) -> Self {
-        let flow_base = flow_base.into().trim_end_matches('/').to_string();
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .unwrap_or_else(|e| {
-                tracing::error!(error = %e, "FlowProxy 构建 reqwest 客户端失败，退回默认");
-                reqwest::Client::new()
-            });
+    /// 用目标 resolver + 出站 API Key 构建（API 反代与页面反代共享同一转发核/连接池）。
+    pub fn with_resolver(resolver: UpstreamResolver, api_key: Option<String>) -> Self {
         Self {
-            inner: std::sync::Arc::new(ProxyState {
-                flow_base,
-                api_key,
-                client,
-            }),
+            inner: std::sync::Arc::new(ProxyCore::new(resolver, api_key)),
         }
     }
 }
@@ -79,121 +68,30 @@ impl ModuleRoutes for FlowProxyModule {
     }
 }
 
-/// 转发 handler：重写 URL → 注入三层鉴权 → 流式转发请求/响应。
-async fn proxy_handler(State(px): State<std::sync::Arc<ProxyState>>, req: Request) -> Response {
-    let method = req.method().clone();
-    let uri = req.uri().clone();
-    let headers = req.headers().clone();
+/// 转发 handler：动态解析目标基址，经 flow 路径重写（升 v1）后交转发核。
+async fn proxy_handler(State(px): State<std::sync::Arc<ProxyCore>>, req: Request) -> Response {
+    px.forward("流程服务", req, flow_target).await
+}
 
-    // 目标 URL：/api/flow/{rest}（本进程收到的路径，nest /api 已剥到 /flow/rest）→
-    // {flow_base}/api/flow/v1/{rest}。取 uri.path() 里 "/flow/" 之后的部分。
+/// flow 路径重写：`/flow/{rest}`（经 web-server `nest("/api")` → 实际 `/api/flow/{rest}`）→
+/// `{flow_base}/api/flow/v1/{rest}`（**升级到 v1 正式契约**）。query 原样透传。
+fn flow_target(flow_base: &str, uri: &Uri) -> String {
     let path = uri.path();
-    let rest = path.strip_prefix("/flow/").or_else(|| path.strip_prefix("/flow")).unwrap_or("");
+    let rest = path
+        .strip_prefix("/flow/")
+        .or_else(|| path.strip_prefix("/flow"))
+        .unwrap_or("");
     let rest = rest.trim_start_matches('/');
     let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
-    let target = if rest.is_empty() {
-        format!("{}/api/flow/v1{query}", px.flow_base)
+    if rest.is_empty() {
+        format!("{flow_base}/api/flow/v1{query}")
     } else {
-        format!("{}/api/flow/v1/{rest}{query}", px.flow_base)
-    };
-
-    // 请求体 → reqwest stream（双向流式，避免整体缓冲）。
-    let body = req.into_body();
-    let reqwest_body = reqwest::Body::wrap_stream(body.into_data_stream());
-
-    let mut rb = px
-        .client
-        .request(method, &target)
-        .body(reqwest_body);
-
-    // 透传原请求头（除逐跳/host，避免污染）。
-    rb = rb.headers(forward_request_headers(&headers));
-
-    // 三层出站鉴权（对齐 remote_importers::apply_auth_headers）。
-    if let Some(key) = &px.api_key {
-        rb = rb.header("X-API-Key", key);
-    }
-    if let Some(user_jwt) = cmx_traits::auth::context_scope::current_original_token() {
-        rb = rb.header("X-Delegated-User-Token", format!("Bearer {user_jwt}"));
-    }
-    if let Some(rid) = cmx_traits::auth::context_scope::current_request_id() {
-        rb = rb.header("X-Request-Id", rid);
-    }
-
-    match rb.send().await {
-        Ok(resp) => build_response(resp),
-        Err(e) => {
-            tracing::error!(error = %e, %target, "FlowProxy 转发失败");
-            (
-                StatusCode::BAD_GATEWAY,
-                axum::Json(serde_json::json!({
-                    "code": 502,
-                    "msg": format!("流程服务不可达: {e}")
-                })),
-            )
-                .into_response()
-        }
+        format!("{flow_base}/api/flow/v1/{rest}{query}")
     }
 }
-
-/// 逐跳头（RFC 7230 §6.1）+ host：转发时剥掉，由 reqwest/目标自定。
-fn is_hop_by_hop(name: &HeaderName) -> bool {
-    matches!(
-        name.as_str(),
-        "connection"
-            | "keep-alive"
-            | "proxy-authenticate"
-            | "proxy-authorization"
-            | "te"
-            | "trailer"
-            | "transfer-encoding"
-            | "upgrade"
-            | "host"
-            | "content-length"
-    )
-}
-
-/// 过滤请求头供转发（剥逐跳/host/content-length；其余原样，含 Authorization/Accept/Content-Type）。
-fn forward_request_headers(src: &HeaderMap) -> HeaderMap {
-    let mut out = HeaderMap::new();
-    for (k, v) in src.iter() {
-        if is_hop_by_hop(k) {
-            continue;
-        }
-        out.insert(k.clone(), v.clone());
-    }
-    out
-}
-
-/// reqwest 响应 → axum 响应（状态 + 头 + 流式体）。
-fn build_response(resp: reqwest::Response) -> Response {
-    let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let mut headers = HeaderMap::new();
-    for (k, v) in resp.headers().iter() {
-        // 逐跳头不回传；其余（含 content-type、cache-control、ETag、text/event-stream）原样。
-        let name = HeaderName::from_bytes(k.as_ref());
-        let val = HeaderValue::from_bytes(v.as_bytes());
-        if let (Ok(name), Ok(val)) = (name, val) {
-            if is_hop_by_hop(&name) {
-                continue;
-            }
-            headers.insert(name, val);
-        }
-    }
-    // 流式体（SSE /events 也走这条：content-type text/event-stream 保留，逐块透传）。
-    let stream = resp.bytes_stream();
-    let body = Body::from_stream(stream);
-    let mut out = (status, body).into_response();
-    *out.headers_mut() = headers;
-    out
-}
-
-/// 保留 Uri 供未来扩展（当前 target 拼接直接用 path/query）。
-#[allow(dead_code)]
-fn _uri_hint(_u: &Uri) {}
 
 // ============================================================================
-// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 [center_client.urls].flow
+// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 [center_client] 的服务定位配置
 // 把**流程拥有的**页面取页请求反代到独立 cmx-flow-server（它自暴同款字节对齐 API）。
 // ----------------------------------------------------------------------------
 // 与 flow API 反代的差异：页面**不升级 /v1**（flow-server 页面挂在 `/api/native-pages`、
@@ -213,72 +111,48 @@ fn is_flow_owned_page(id: &str) -> bool {
 /// batch/list 不在此拦截（含混合 id，留门户聚合）。
 fn page_id_of(path: &str) -> Option<&str> {
     for pfx in ["/native-pages/", "/html-pages/"] {
-        if let Some(rest) = path.strip_prefix(pfx) {
-            if !rest.is_empty() && rest != "batch" && !rest.contains('/') {
-                return Some(rest);
-            }
+        if let Some(rest) = path.strip_prefix(pfx)
+            && !rest.is_empty()
+            && rest != "batch"
+            && !rest.contains('/')
+        {
+            return Some(rest);
         }
     }
     None
 }
 
-/// 恒等转发到 `{flow_base}/api{path}{query}`（页面反代专用，不升 /v1）。
-async fn forward_page(px: &ProxyState, req: Request) -> Response {
-    let method = req.method().clone();
-    let uri = req.uri().clone();
-    let headers = req.headers().clone();
-    let path = uri.path();
-    let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
-    let target = format!("{}/api{path}{query}", px.flow_base);
-
-    let body = req.into_body();
-    let reqwest_body = reqwest::Body::wrap_stream(body.into_data_stream());
-    let mut rb = px.client.request(method, &target).body(reqwest_body);
-    rb = rb.headers(forward_request_headers(&headers));
-    if let Some(key) = &px.api_key {
-        rb = rb.header("X-API-Key", key);
-    }
-    if let Some(user_jwt) = cmx_traits::auth::context_scope::current_original_token() {
-        rb = rb.header("X-Delegated-User-Token", format!("Bearer {user_jwt}"));
-    }
-    if let Some(rid) = cmx_traits::auth::context_scope::current_request_id() {
-        rb = rb.header("X-Request-Id", rid);
-    }
-    match rb.send().await {
-        Ok(resp) => build_response(resp),
-        Err(e) => {
-            tracing::error!(error = %e, %target, "FlowProxy 页面转发失败");
-            (
-                StatusCode::BAD_GATEWAY,
-                axum::Json(serde_json::json!({ "code": 502, "msg": format!("流程服务不可达: {e}") })),
-            )
-                .into_response()
-        }
-    }
+/// 页面反代转发：恒等转发到 `{flow_base}/api{path}{query}`（页面不升 /v1），交转发核。
+async fn forward_page(px: &ProxyCore, req: Request) -> Response {
+    px.forward("流程服务", req, |flow_base, uri| {
+        let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
+        format!("{flow_base}/api{}{query}", uri.path())
+    })
+    .await
 }
 
 /// 页面反代中间件：流程拥有的单页取页请求 → 转发 flow-server；其余 → 落回门户 handler。
 async fn page_proxy_mw(
-    State(px): State<std::sync::Arc<ProxyState>>,
+    State(px): State<std::sync::Arc<ProxyCore>>,
     req: Request,
     next: axum::middleware::Next,
 ) -> Response {
-    if let Some(id) = page_id_of(req.uri().path()) {
-        if is_flow_owned_page(id) {
-            return forward_page(&px, req).await;
-        }
+    if let Some(id) = page_id_of(req.uri().path())
+        && is_flow_owned_page(id)
+    {
+        return forward_page(&px, req).await;
     }
     next.run(req).await
 }
 
 /// 给 api 路由叠加**流程页面反代**层：流程拥有的 native/html 单页取页请求转发到独立
-/// cmx-flow-server，其余落回门户内嵌 handler。复用 `FlowProxyModule` 的基址 + 凭证 + 客户端。
-/// 平台 `merge_flow` 在 `flow_remote_base()` 非空时调它。
+/// cmx-flow-server，其余落回门户内嵌 handler。复用 `FlowProxyModule` 的目标 resolver +
+/// 出站凭证 + HTTP 客户端（与 API 反代同一连接池）。平台 `merge_flow` 在配置了反代目标时调它。
 pub fn with_flow_page_proxy(
     router: Router<CmxAppState>,
-    flow_base: impl Into<String>,
+    resolver: UpstreamResolver,
     api_key: Option<String>,
 ) -> Router<CmxAppState> {
-    let state = FlowProxyModule::new(flow_base, api_key).inner;
+    let state = FlowProxyModule::with_resolver(resolver, api_key).inner;
     router.layer(axum::middleware::from_fn_with_state(state, page_proxy_mw))
 }
