@@ -1,0 +1,27 @@
+[package]
+name = "cmx-proxy-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 反向代理**转发核**——cmx-flow-api / cmx-rpt-api / cmx-rule-api 三个反代壳的公共实现。
+#
+# 抽取动机：三壳各持一份逐字重复的转发函数族（forward / no_upstream / hop-by-hop 头过滤 /
+# 响应构建 / 三层出站鉴权），P0 修复（超时拆分、出站头卫生、响应头 append、X-Forwarded-*）
+# 需同步改三遍、漏一处即三服务行为分叉。收敛到本 crate 后转发行为一处定义一处修复。
+#
+# 刻意保持**薄依赖**：只依赖 axum + reqwest + cmx-traits（鉴权上下文）+ 日志/JSON，
+# 不依赖 cmx-api-core / cmx-plugin——转发核是 handler 级原语，与路由装配、服务定位配置解耦
+# （目标经 [`UpstreamResolver`] 闭包注入，Static 基址或 Nacos 服务发现由装配层决定）。
+
+[dependencies]
+# Web 框架（Request/Response/HeaderMap/流式 body）
+axum = { workspace = true }
+# 出站 HTTP 客户端（connect/read 超时拆分 + 流式转发）
+reqwest = { workspace = true }
+# 三层出站鉴权上下文（current_original_token / current_request_id）
+cmx-traits = { workspace = true }
+# 502/503 兜底的 JSON 信封
+serde_json = { workspace = true }
+# 转发失败日志
+tracing = { workspace = true }

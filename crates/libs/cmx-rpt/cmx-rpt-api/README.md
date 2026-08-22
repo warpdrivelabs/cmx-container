@@ -12,7 +12,7 @@
 
 `cmx-rpt-api` 是 cmx-container 平台中报表域的 HTTP 反向代理壳。报表中立核 crate 已整体迁至独立 workspace `../cmx-report`，由那边的 `cmx-rpt-server` 作为**独立报表微服务**承载。门户不再进程内嵌报表引擎，本 crate 因此**不依赖 `cmx-rpt-app`**——这条依赖会把报表引擎源码拖进门户编译图，现已彻底切断（门户编译期不碰报表引擎源码），仅保留平台反代层。
 
-「后端一芯双壳」在报表域的形态：`ReportModule`（进程内嵌，本进程 handler 处理）↔ `ReportProxyModule`（引擎在远程 `cmx-rpt-server`，透明转发）。二者对 web-server 是同一个 `ModuleRoutes` 契约、同一批报表前缀——**前端零改**，切换只看 `[center_client]` 的服务定位配置（mode 驱动：http_url 模式看 `urls.report`，http_discovery/grpc 模式看 `discovery.services.report`）。目标经 `UpstreamResolver` 按请求动态解析，无可用实例返回 503。
+「后端一芯双壳」在报表域的形态：`ReportModule`（进程内嵌，本进程 handler 处理）↔ `ReportProxyModule`（引擎在远程 `cmx-rpt-server`，透明转发）。二者对 web-server 是同一个 `ModuleRoutes` 契约、同一批报表前缀——**前端零改**，切换只看 `[center_client]` 的服务定位配置（per-key：`services.report` 配 url 静态基址或 discovery Nacos 选例）。目标经 `UpstreamResolver` 按请求动态解析，无可用实例返回 503。
 
 与 flow 壳的关键差异：报表微服务对外 URL 与平台**完全一致**（无 `/v1` 升级），故转发是**恒等映射** `{report_base}/api{原path}{query}`，不重写任何路径段。本 crate 对外导出两件东西：
 
@@ -29,6 +29,8 @@
 | `X-Delegated-User-Token: Bearer <JWT>` | `cmx_traits::auth::context_scope::current_original_token()` | 当前登录用户原始令牌（on-behalf-of，真实操作人） |
 | `X-Request-Id` | `cmx_traits::auth::context_scope::current_request_id()` | 链路追踪 |
 
+出站前剥除客户端可伪造的同名头与 `Cookie`，再从可信源重新注入（见转发核 `cmx-proxy-core` 的头卫生）。
+
 ---
 
 ## 与其他 crate 的关系
@@ -38,10 +40,8 @@
 | 依赖 | 用途 |
 |------|------|
 | `cmx-api-core` | API 共享骨架层（`CmxAppState` / `routes::traits::ModuleRoutes`），单向依赖避免环 |
-| `cmx-traits` | 三层出站鉴权上下文（`context_scope` 的 original_token / request_id） |
+| `cmx-proxy-core` | 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，三反代壳共用） |
 | `axum` | Web 框架（Router / Request / Response / 中间件） |
-| `reqwest` | 出站 HTTP（转发到远程 cmx-rpt-server，流式请求/响应体，SSE 透传） |
-| `serde_json` / `tracing` | 502 错误信封 JSON / 转发失败日志 |
 
 ### 下游使用方（谁依赖本 crate）
 
@@ -59,12 +59,12 @@
 |------|------|
 | API 反代（恒等映射） | `/report-design`、`/report-source-bindings`（根+子路径）与 `/rpt/{*rest}` 全方法（any）转发到 `{report_base}/api{path}{query}`，query 原样透传 |
 | 页面反代（按 id 归属判定） | `portal.rpt.*`（native）与 `fi.cmxfico.gl.rpt-designer-*`、`fi.cmxfico.gl.rpt-spreadjs-designer-*`（html）命中转发；batch/list 不拦截，未命中 `next.run` 落回门户 handler |
-| 共用转发核 | `proxy_handler`（API 反代）与 `page_proxy_mw`（页面反代）共用同一 `forward()` 转发核（基址/凭证/客户端一份） |
-| 三层出站鉴权 | X-API-Key + X-Delegated-User-Token + X-Request-Id（见上表） |
+| 共用转发核 | `proxy_handler`（API 反代）与 `page_proxy_mw`（页面反代）共用同一 `ProxyCore`（基址 resolver/凭证/客户端一份）；头卫生/超时/流式转发在 `cmx-proxy-core` 一处定义 |
+| 三层出站鉴权 | X-API-Key + X-Delegated-User-Token + X-Request-Id（见上表），注入前剥除客户端伪造值 |
 | 双向流式转发 | 请求体 `reqwest::Body::wrap_stream`、响应体 `Body::from_stream`，不整体缓冲；`text/event-stream` 逐块透传 |
-| 逐跳头剥离 | 剥 RFC 7230 §6.1 逐跳头 + host + content-length，其余请求头（含 Authorization）原样透传 |
+| 逐跳头剥离 + X-Forwarded-* | 剥 RFC 7230 §6.1 逐跳头 + host + content-length，补 `X-Forwarded-For/Proto/Host`，其余请求头（含 Authorization）原样透传 |
 | 502 错误信封 | 远端不可达时返回 `502` + `{ "code": 502, "msg": "报表服务不可达: ..." }` |
-| 客户端复用 | 内置 `reqwest::Client`（30s 超时），构建失败退回默认客户端 |
+| 客户端复用 | 转发核内置 `reqwest::Client`（连接 5s + 读空闲 60s，不设总超时保 SSE 长流），构建失败退回默认客户端 |
 
 ---
 
@@ -115,7 +115,7 @@ use axum::Router;
 use cmx_api_core::CmxAppState;
 use cmx_rpt_api::{ReportProxyModule, with_report_page_proxy};
 
-/// 目标来自 `[center_client]` 服务定位配置（mode 驱动）；未配置（None）则不挂报表路由。
+/// 目标来自 `[center_client]` 服务定位配置（per-key）；未配置（None）则不挂报表路由。
 fn merge_report(router: Router<CmxAppState>, upstream: Option<cmx_plugin::center_client::ProxyUpstream>) -> Router<CmxAppState> {
     match upstream {
         Some(upstream) => {
