@@ -289,7 +289,7 @@ storage_path = "./storage"
 # - 配置 menu/perm/form 键：远程导入（http 走 multipart form-data POST 到统一导入端点
 #   /api/plugin/data/import;grpc 走 CmxResourceDataService，需启用 [rpc] 且该键必配 discovery）。
 # - 配置 flow/report/rules 键：挂对应反向代理（定位 url 静态基址或 discovery 服务发现选例：
-#   healthy 过滤 + 随机负载均衡 + http_port 元数据优先）。
+#   healthy 过滤 + 按 Nacos weight 加权随机 + http_port 元数据优先）。
 # 远程模式下本节点仍可作为接收端(PluginDataImporterImpl 已注入 form/menu 本地导入器)。
 [center_client]
 # 服务间调用的全局传输缺省：http（默认）| grpc（需启用 [rpc]，且走 gRPC 的键必配 discovery）。

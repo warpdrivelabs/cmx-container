@@ -745,9 +745,10 @@ is_critical = true
 - **类型**: `HashMap<String, ServiceEntry>`（自由表，值为内联 table）
 - **字段**（每个键的值）:
     - `url` - 静态基址，**纯基址不含路径**（统一导入端点与反代路径由消费方拼接；值含 `/api/`
-      时加载告警提示旧写法）。与 `discovery` 并存时 **url 优先**——删掉 `url` 即切服务发现选例
-    - `discovery` - Nacos 服务名（选例规则：healthy 过滤 + 随机负载均衡 + `http_port` 元数据
-      优先，缺省用实例注册端口）。`transport = "grpc"` 时必配
+      时加载告警提示旧写法）。与 `discovery` 并存时 **url 优先**（非主备兜底：url 不可达即 502，
+      不会切 discovery，并存时启动打 warn）——删掉 `url` 即切服务发现选例
+    - `discovery` - Nacos 服务名（选例规则：healthy 过滤 + 按 Nacos `weight` 加权随机 +
+      `http_port` 元数据优先，缺省用实例注册端口）。`transport = "grpc"` 时必配
     - `transport` - 该键的传输覆盖（`http` / `grpc`，仅服务间导入调用生效；缺省取全局
       `default_transport`）
 - **键所有权约定**:

@@ -3,7 +3,7 @@
 //! **定位 per-key**（每个服务键自带定位方式，可混用）：
 //! - `services.{key}.url`：静态基址 → [`ProxyUpstream::Static`]
 //! - `services.{key}.discovery`：Nacos 服务名 → [`ProxyUpstream::Discovery`]（全局实例缓存
-//!   healthy 过滤 + 随机选例；订阅推送 + ServiceListSyncer 30s 同步保证新鲜度）
+//!   healthy 过滤 + 按 Nacos weight 加权随机选例；订阅推送 + ServiceListSyncer 30s 同步保证新鲜度）
 //! - 键未配置、或 url/discovery 均为空：不挂反代（返回 `None` + warn）
 //!
 //! `transport` 字段对反代无效（反代恒走 HTTP 透明转发）；配了 `grpc` 会打 warn 提示。
@@ -16,7 +16,8 @@
 
 use std::sync::Arc;
 
-use rand::seq::SliceRandom;
+use rand::distributions::WeightedIndex;
+use rand::prelude::{Distribution, SliceRandom};
 
 use super::config::CenterClientConfig;
 use cmx_registry_config::{GlobalServiceInstanceCache, GlobalServiceRegistry, ServiceInstance};
@@ -100,6 +101,20 @@ pub(crate) fn upstream_from_config(cfg: &CenterClientConfig, key: &str) -> Optio
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
+        // 并存非主备：discovery 完全不生效（Static 不可达时 502，不会兜底切换），
+        // warn 提示避免"配了 discovery 以为走服务发现，实际流量钉在静态基址"的误判。
+        if entry
+            .discovery
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .is_some()
+        {
+            tracing::warn!(
+                service.key = key,
+                "services.{key} 同时配置 url 与 discovery，discovery 被 url 遮蔽（非主备兜底）；需服务发现请删除 url"
+            );
+        }
         return Some(ProxyUpstream::Static(
             base.trim_end_matches('/').to_string(),
         ));
@@ -152,8 +167,10 @@ pub fn resolve_service_base(service: &str) -> Option<String> {
 
 /// 从实例列表选一个可用实例并拼 `http://{ip}:{port}` 基址（反代与导入器共用的选例核）。
 ///
-/// 选例规则：优先 healthy 实例、随机负载均衡；无 healthy 实例时回退全量（容忍 Nacos 心跳
-/// 滞后）。端口取 `metadata["http_port"]`（可覆盖注册端口），缺省用实例注册端口。
+/// 选例规则：优先 healthy 实例、按 Nacos `weight` 加权随机（与 gRPC 路径 volo 加权负载
+/// 均衡语义对齐；权重 clamp 到 `>= 0`，全 0/NaN 时回退均匀随机）；无 healthy 实例时回退
+/// 全量（容忍 Nacos 心跳滞后）。端口取 `metadata["http_port"]`（可覆盖注册端口），缺省用
+/// 实例注册端口。
 ///
 /// # Arguments
 ///
@@ -172,13 +189,22 @@ pub fn pick_instance_base(instances: &[ServiceInstance]) -> Option<String> {
     } else {
         healthy
     };
-    let instance = pool.choose(&mut rand::thread_rng())?;
+    let instance = pick_weighted(&pool)?;
     let port = instance
         .metadata
         .get("http_port")
         .and_then(|p| p.parse::<u16>().ok())
         .unwrap_or(instance.port);
     Some(format!("http://{}:{port}", instance.ip))
+}
+
+/// 池内加权随机选一个实例；全部权重 `<= 0`（或 NaN，经 clamp 归零）时回退均匀随机。
+fn pick_weighted<'a>(pool: &[&'a ServiceInstance]) -> Option<&'a ServiceInstance> {
+    let weights: Vec<f64> = pool.iter().map(|i| i.weight.max(0.0)).collect();
+    match WeightedIndex::new(&weights) {
+        Ok(dist) => pool.get(dist.sample(&mut rand::thread_rng())).copied(),
+        Err(_) => pool.choose(&mut rand::thread_rng()).copied(),
+    }
 }
 
 /// 对服务发现定位的目标做订阅预热（首拉实例 + 后续推送更新）。
@@ -266,7 +292,13 @@ mod tests {
         }
     }
 
-    fn instance(ip: &str, port: u16, healthy: bool, http_port: Option<u16>) -> ServiceInstance {
+    fn instance(
+        ip: &str,
+        port: u16,
+        healthy: bool,
+        http_port: Option<u16>,
+        weight: f64,
+    ) -> ServiceInstance {
         let mut metadata = std::collections::HashMap::new();
         if let Some(p) = http_port {
             metadata.insert("http_port".to_string(), p.to_string());
@@ -277,7 +309,7 @@ mod tests {
             service_name: "cmx-flow-server".to_string(),
             group_name: None,
             cluster_name: None,
-            weight: 1.0,
+            weight,
             metadata,
             healthy,
             ephemeral: true,
@@ -354,15 +386,16 @@ mod tests {
         assert!(resolver().is_none());
     }
 
-    /// 选例核：healthy 优先、http_port 元数据覆盖端口、空列表返回 None、无 healthy 回退全量。
+    /// 选例核：healthy 优先、按 weight 加权随机、http_port 元数据覆盖端口、
+    /// 空列表返回 None、无 healthy 回退全量。
     #[test]
     fn pick_instance_base_rules() {
         assert!(pick_instance_base(&[]).is_none());
 
         // healthy 过滤：唯一 healthy 实例被选中（随机无歧义）。
         let list = vec![
-            instance("10.0.0.1", 8091, false, None),
-            instance("10.0.0.2", 8091, true, None),
+            instance("10.0.0.1", 8091, false, None, 1.0),
+            instance("10.0.0.2", 8091, true, None, 1.0),
         ];
         for _ in 0..10 {
             assert_eq!(
@@ -372,18 +405,54 @@ mod tests {
         }
 
         // http_port 元数据优先于实例注册端口。
-        let list = vec![instance("10.0.0.3", 9090, true, Some(8091))];
+        let list = vec![instance("10.0.0.3", 9090, true, Some(8091), 1.0)];
         assert_eq!(
             pick_instance_base(&list).as_deref(),
             Some("http://10.0.0.3:8091")
         );
 
         // 无 healthy 实例时回退全量（容忍心跳滞后）。
-        let list = vec![instance("10.0.0.4", 8092, false, None)];
+        let list = vec![instance("10.0.0.4", 8092, false, None, 1.0)];
         assert_eq!(
             pick_instance_base(&list).as_deref(),
             Some("http://10.0.0.4:8092")
         );
+    }
+
+    /// 加权随机：高权重实例显著吃掉流量（100:1 时低权重命中期望约 1%）。
+    #[test]
+    fn pick_instance_base_weighted() {
+        let list = vec![
+            instance("10.0.1.1", 8091, true, None, 5.0),
+            instance("10.0.1.2", 8091, true, None, 0.05),
+        ];
+        let low_hits = (0..200)
+            .filter(|_| pick_instance_base(&list).as_deref() == Some("http://10.0.1.2:8091"))
+            .count();
+        // 期望约 2 次；40 是宽松上界（误报概率可忽略），防退化回均匀随机。
+        assert!(
+            low_hits < 40,
+            "低权重实例命中 {low_hits}/200，加权随机未生效"
+        );
+    }
+
+    /// 全 0 权重（WeightedIndex 构造失败）回退均匀随机：每个实例都有机会被选中。
+    #[test]
+    fn pick_instance_base_zero_weight_falls_back_uniform() {
+        let list = vec![
+            instance("10.0.2.1", 8091, true, None, 0.0),
+            instance("10.0.2.2", 8091, true, None, 0.0),
+        ];
+        let mut hit_first = false;
+        let mut hit_second = false;
+        for _ in 0..100 {
+            match pick_instance_base(&list).as_deref() {
+                Some("http://10.0.2.1:8091") => hit_first = true,
+                Some("http://10.0.2.2:8091") => hit_second = true,
+                other => panic!("应选中池内实例，实际 {other:?}"),
+            }
+        }
+        assert!(hit_first && hit_second, "全 0 权重回退均匀随机应覆盖全部实例");
     }
 
     /// describe 输出人读目标描述（启动日志用）。

@@ -147,7 +147,7 @@ use std::sync::{Arc, OnceLock};
 /// ```rust,no_run
 /// use cmx_plugin::{GlobalPluginManager, PluginManagerSettings};
 /// use cmx_database::DatabaseManager;
-/// use cmx_buffer::{CacheManager, LockManager, PubSubOps};
+/// use cmx_buffer::{CacheManager, LockManager, PubSubOps, RedisClient, RedisConfig};
 /// use std::sync::Arc;
 ///
 /// async fn init() {
@@ -163,7 +163,9 @@ use std::sync::{Arc, OnceLock};
 ///     
 ///     // 方式3：注入外部依赖
 ///     let db_manager = Arc::new(DatabaseManager::new(Default::default()));
-///     let cache_manager = Arc::new(CacheManager::new(Default::default()));
+///     let cache_manager = Arc::new(CacheManager::new(
+///         RedisClient::new(RedisConfig::default()).await.unwrap(),
+///     ));
 ///     GlobalPluginManager::initialize_with_deps(
 ///         Default::default(),
 ///         Some(db_manager),
@@ -224,14 +226,16 @@ impl GlobalPluginManager {
     ///
     /// # 示例
     /// ```rust,no_run
-    /// use cmx_plugin::GlobalPluginManager;
-    /// use cmx_database::DatabaseManager;
-    /// use cmx_buffer::CacheManager;
-    /// use std::sync::Arc;
-    ///
-    /// async fn init() {
-    ///     let db = Arc::new(DatabaseManager::new(Default::default()));
-    ///     let cache = Arc::new(CacheManager::new(Default::default()));
+/// use cmx_plugin::GlobalPluginManager;
+/// use cmx_database::DatabaseManager;
+/// use cmx_buffer::{CacheManager, RedisClient, RedisConfig};
+/// use std::sync::Arc;
+///
+/// async fn init() {
+///     let db = Arc::new(DatabaseManager::new(Default::default()));
+///     let cache = Arc::new(CacheManager::new(
+///         RedisClient::new(RedisConfig::default()).await.unwrap(),
+///     ));
     ///     
     ///     GlobalPluginManager::initialize_with_deps(
     ///         Default::default(),
