@@ -124,7 +124,7 @@ cmx-plugin
 │   ├── repository.rs       # 市场数据仓库
 │   ├── service.rs          # 市场服务
 │   └── stats.rs            # 统计服务
-├── center_client/          # 服务中心客户端（精简版：config / packer / types）
+├── center_client/          # 服务中心客户端（精简版：config（map 化服务定位）/ upstream（反代目标解析）/ packer / types）
 ├── common/                 # 通用工具
 │   ├── definition.rs       # 插件定义解析
 │   ├── dependency.rs       # 依赖检查工具

@@ -47,7 +47,7 @@ impl TableDefinitionImporter for RemoteTableDefinitionImporter {
                 .map_err(|e| TraitError::Business(format!("打包表结构定义失败: {e}")))?;
 
         // 表结构归类到 Form 中心传输(元数据登记与表单共用基础设施);
-        // 实际目标服务由配置 discovery.form_service / urls.form 决定,可独立配置为元数据中心。
+        // 实际目标服务由配置 discovery.services.form / urls.form 决定,可独立配置为元数据中心。
         let req = ResourceDataImportRequest {
             category: ResourceDataCategory::Form,
             domain_code: domain_code.to_string(),

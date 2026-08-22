@@ -710,12 +710,12 @@ is_critical = true
 - **类型**: String (enum)
 - **必需**: 否
 - **默认值**: `"local"`
-- **说明**: 模块资源（表单/菜单/元数据/权限）导入导出的部署模式
+- **说明**: 模块资源（表单/菜单/元数据/权限）导入导出的部署模式，**同时决定反向代理（flow/report/rules）的目标定位来源**
 - **可选值**:
-    - `local`（默认，或任意非远程值）- **本地模式**，定义导入器直调本地 Service（FormService/MenuService/TableMetadataService/PermissionServiceImpl），无网络开销，适用于单体部署
-    - `grpc` - **远程模式（gRPC）**，经 gRPC 调用专门中心（CmxPluginDataService），需启用 `[rpc]` 并配置 `[center_client.discovery]` 的各中心服务名
-    - `http_url` - **远程模式（HTTP 直连）**，经 HTTP multipart form-data POST 到 `[center_client.urls]` 配置的各中心 URL
-    - `http_discovery` - **远程模式（HTTP 服务发现）**，经服务发现解析实例地址后走 HTTP，需配置 `[center_client.discovery]` 的各中心服务名
+    - `local`（默认，或任意未知值含遗留 `mock`）- **本地模式**，定义导入器直调本地 Service（FormService/MenuService/TableMetadataService/PermissionServiceImpl），无网络开销，适用于单体部署；反代目标不挂（门户无 `/api/flow/*` 等路由）
+    - `grpc` - **远程模式（gRPC）**，经 gRPC 调用专门中心（CmxPluginDataService），需启用 `[rpc]` 并配置 `[center_client.discovery.services]` 的各中心服务名；反代目标经 Nacos 服务发现解析（`discovery.services.{flow,report,rules}`）
+    - `http_url` - **远程模式（HTTP 直连）**，经 HTTP multipart form-data POST 到 `[center_client.urls]` 各基址 + 统一导入端点 `/api/plugin/data/import`；反代目标取 `urls.{flow,report,rules}` 基址
+    - `http_discovery` - **远程模式（HTTP 服务发现）**，经服务发现解析实例地址后走 HTTP，需配置 `[center_client.discovery.services]` 的各中心服务名；反代同 `grpc` 走服务发现
     - 远程模式下本节点仍可作为接收端（PluginDataImporterImpl 已注入 form/menu 本地导入器）
 
 #### `timeout_ms`
@@ -729,41 +729,30 @@ is_critical = true
 
 ### `[center_client.urls]`
 
-URL 直连模式配置（`mode = "url"` 时生效）。每个中心对应一个独立的 URL 配置项。
+URL 直连模式配置（`mode = "http_url"` 时生效）。**自由键值表**：服务键 → 手动基址——新增微服务只在
+toml 加一行键值，无需改代码。
 
-#### `menu`
+- **类型**: `HashMap<String, String>`（自由表）
+- **值语义**: **纯基址，不含路径**（统一导入端点 `/api/plugin/data/import` 与反代路径由消费方拼接；值含 `/api/` 时加载告警提示旧写法）
+- **键所有权约定**:
+    - `menu` / `perm` / `form` - 归远程导入器，值 = 门户/能力中心基址
+    - `flow` / `report` / `rules` - 归反向代理，值 = 独立微服务基址（`flow` 亦兼作 http_url 模式流程定义导入的接收方基址）
+- **示例**:
 
-- **类型**: String
-- **必需**: `mode = "url"` 时必需
-- **说明**: 门户中心（菜单数据）导入接口 URL
-- **示例**: `"http://portal-center:8080/api/plugin/menu/import"`
-
-#### `perm`
-
-- **类型**: String
-- **必需**: `mode = "url"` 时必需
-- **说明**: 权限中心（权限数据）导入接口 URL
-- **示例**: `"http://perm-center:8080/api/plugin/perm/import"`
-
-#### `form`
-
-- **类型**: String
-- **必需**: `mode = "url"` 时必需
-- **说明**: 表单中心（表单数据）导入接口 URL
-- **示例**: `"http://form-center:8080/api/plugin/form/import"`
-
-#### `flow`
-
-- **类型**: String
-- **必需**: `mode = "url"` 时必需
-- **说明**: 流程中心（流程定义）导入接口 URL
-- **示例**: `"http://flow-center:8080/api/plugin/flow/import"`
+```toml
+[center_client.urls]
+menu   = "http://portal-center:8080"
+flow   = "http://127.0.0.1:8091"
+report = "http://127.0.0.1:8092"
+rules  = "http://127.0.0.1:8094"
+```
 
 ---
 
 ### `[center_client.discovery]`
 
-服务发现模式配置（`mode = "discovery"` 时生效）。通过 Nacos 服务发现获取各中心的实例地址。
+服务发现模式配置（`mode = "http_discovery"` 或 `"grpc"` 时生效）。通过 Nacos 服务发现获取各中心/
+独立微服务的实例地址。选例规则：healthy 过滤 + 随机负载均衡 + `http_port` 元数据优先（缺省用实例注册端口）。
 
 #### `nacos_group`
 
@@ -772,39 +761,29 @@ URL 直连模式配置（`mode = "url"` 时生效）。每个中心对应一个�
 - **默认值**: `"DEFAULT_GROUP"`
 - **说明**: Nacos 服务分组
 
-#### `menu_service`
+#### `[center_client.discovery.services]`
 
-- **类型**: String
-- **必需**: `mode = "discovery"` 时必需
-- **说明**: 门户中心在 Nacos 中注册的服务名
-- **示例**: `"cmx-portal-center"`
+- **类型**: `HashMap<String, String>`（自由表）
+- **必需**: `mode = "http_discovery"` / `"grpc"` 时按需
+- **说明**: 服务键 → Nacos 服务名。**自由键值表**——新增微服务加一行键值即可，无需改代码；键所有权约定同 `[center_client.urls]`（`menu`/`perm`/`form` 归导入器，`flow`/`report`/`rules` 归反代）
+- **示例**:
 
-#### `perm_service`
-
-- **类型**: String
-- **必需**: `mode = "discovery"` 时必需
-- **说明**: 权限中心在 Nacos 中注册的服务名
-- **示例**: `"cmx-perm-center"`
-
-#### `form_service`
-
-- **类型**: String
-- **必需**: `mode = "discovery"` 时必需
-- **说明**: 表单中心在 Nacos 中注册的服务名
-- **示例**: `"cmx-form-center"`
-
-#### `flow_service`
-
-- **类型**: String
-- **必需**: `mode = "discovery"` 时必需
-- **说明**: 流程中心在 Nacos 中注册的服务名
-- **示例**: `"cmx-flow-center"`
+```toml
+[center_client.discovery.services]
+menu   = "cmx-portal-center"
+flow   = "cmx-flow-server"
+report = "cmx-rpt-server"
+rules  = "cmx-rule-server"
+```
 
 ---
 
 ### 环境变量覆盖
 
-`center_client` 配置节支持通过环境变量覆盖，详见 [ENV_MANUAL.md](ENV_MANUAL.md#基础服务中心环境变量)。
+`center_client` 配置节支持通过环境变量覆盖，格式为 `CENTER_CLIENT__URLS__<KEY>`（如
+`CENTER_CLIENT__URLS__FLOW`）与 `CENTER_CLIENT__DISCOVERY__SERVICES__<KEY>`；值需带 scheme
+（如 `http://...`，纯数字值会被环境变量层解析为整数导致反序列化失败）。详见
+[ENV_MANUAL.md](ENV_MANUAL.md#基础服务中心环境变量)。
 
 ---
 

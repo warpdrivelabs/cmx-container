@@ -12,7 +12,7 @@
 
 `cmx-rpt-api` 是 cmx-container 平台中报表域的 HTTP 反向代理壳。报表中立核 crate 已整体迁至独立 workspace `../cmx-report`，由那边的 `cmx-rpt-server` 作为**独立报表微服务**承载。门户不再进程内嵌报表引擎，本 crate 因此**不依赖 `cmx-rpt-app`**——这条依赖会把报表引擎源码拖进门户编译图，现已彻底切断（门户编译期不碰报表引擎源码），仅保留平台反代层。
 
-「后端一芯双壳」在报表域的形态：`ReportModule`（进程内嵌，本进程 handler 处理）↔ `ReportProxyModule`（引擎在远程 `cmx-rpt-server`，透明转发）。二者对 web-server 是同一个 `ModuleRoutes` 契约、同一批报表前缀——**前端零改**，切换只看 `[center_client.urls].report` 配没配。
+「后端一芯双壳」在报表域的形态：`ReportModule`（进程内嵌，本进程 handler 处理）↔ `ReportProxyModule`（引擎在远程 `cmx-rpt-server`，透明转发）。二者对 web-server 是同一个 `ModuleRoutes` 契约、同一批报表前缀——**前端零改**，切换只看 `[center_client]` 的服务定位配置（mode 驱动：http_url 模式看 `urls.report`，http_discovery/grpc 模式看 `discovery.services.report`）。目标经 `UpstreamResolver` 按请求动态解析，无可用实例返回 503。
 
 与 flow 壳的关键差异：报表微服务对外 URL 与平台**完全一致**（无 `/v1` 升级），故转发是**恒等映射** `{report_base}/api{原path}{query}`，不重写任何路径段。本 crate 对外导出两件东西：
 
@@ -99,7 +99,7 @@ impl ModuleRoutes for ReportProxyModule {
 /// 给 api 路由叠加报表页面反代层：报表拥有的 native/html 单页请求转发 cmx-rpt-server。
 pub fn with_report_page_proxy(
     router: Router<CmxAppState>,
-    report_base: impl Into<String>,
+    resolver: UpstreamResolver,
     api_key: Option<String>,
 ) -> Router<CmxAppState>;
 ```
@@ -115,16 +115,18 @@ use axum::Router;
 use cmx_api_core::CmxAppState;
 use cmx_rpt_api::{ReportProxyModule, with_report_page_proxy};
 
-/// 远程基址来自 `[center_client.urls].report`；未配置（None）则不挂报表路由。
-fn merge_report(router: Router<CmxAppState>, report_base: Option<String>) -> Router<CmxAppState> {
-    match report_base {
-        Some(base) => {
+/// 目标来自 `[center_client]` 服务定位配置（mode 驱动）；未配置（None）则不挂报表路由。
+fn merge_report(router: Router<CmxAppState>, upstream: Option<cmx_plugin::center_client::ProxyUpstream>) -> Router<CmxAppState> {
+    match upstream {
+        Some(upstream) => {
             // 出站服务凭证：[service_auth].outgoing_api_key（可空）
             let api_key = load_outgoing_credential();
+            // resolver：Static 固化基址；Discovery 每请求查实例缓存选例（捕获启动期配置快照）
+            let resolver = upstream.resolver_fn();
             // ① merge 反代模块：/api/report-design/* 等三前缀 → {base}/api/report-design/*（恒等）
-            let router = router.merge(ReportProxyModule::new(base.clone(), api_key.clone()).routes());
+            let router = router.merge(ReportProxyModule::with_resolver(resolver.clone(), api_key.clone()).routes());
             // ② 叠加页面反代层：portal.rpt.* / fi.cmxfico.gl.rpt-designer-* 单页请求也转发过去
-            with_report_page_proxy(router, base, api_key)
+            with_report_page_proxy(router, resolver, api_key)
         }
         None => router, // 未配置 → 门户无 /api/report-design/* 路由
     }
@@ -136,8 +138,9 @@ fn merge_report(router: Router<CmxAppState>, report_base: Option<String>) -> Rou
 ```rust
 use cmx_rpt_api::ReportProxyModule;
 
-// 基址末尾多余 `/` 会被 trim；api_key 为 None 时出站不带 X-API-Key 头
-let module = ReportProxyModule::new("http://report-server:8092/", Some("svc-key-001".into()));
+// 静态基址包成 resolver；api_key 为 None 时出站不带 X-API-Key 头
+let resolver: cmx_rpt_api::UpstreamResolver = std::sync::Arc::new(|| Some("http://report-server:8092".into()));
+let module = ReportProxyModule::with_resolver(resolver, Some("svc-key-001".into()));
 
 // ModuleRoutes 契约元信息（与内嵌壳对 web-server 同构）
 assert_eq!(module.module_name(), "report-proxy");

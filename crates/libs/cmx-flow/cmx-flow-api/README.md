@@ -17,7 +17,7 @@
 - `FlowProxyModule`：实现 `cmx-api-core` 的 `ModuleRoutes` 契约，把平台 `/api/flow/*` 透明转发到远程 flow-server。路径映射为 `/flow/{rest}` → `{flow_base}/api/flow/v1/{rest}`（**升级到 v1 正式契约**），query 原样透传，body 双向流式（SSE 逐块透传）。
 - `with_flow_page_proxy`：页面反代中间件层，把**流程拥有的** native/html 单页取页请求（如 `/api/native-pages/portal.flow.todo`）转发到 flow-server（它自暴同款字节对齐 API），其余页请求落回门户内嵌 handler。
 
-是否挂流程路由只看配置 `[center_client.urls].flow` 配没配——配了才挂，**前端零改**（浏览器仍请求同源 `/api/flow/...`）。
+是否挂流程路由只看 `[center_client]` 的服务定位配置（mode 驱动：http_url 模式看 `urls.flow`，http_discovery/grpc 模式看 `discovery.services.flow`）——配了才挂，**前端零改**（浏览器仍请求同源 `/api/flow/...`）。目标经 `UpstreamResolver` 按请求动态解析（静态基址 / Nacos 选例），无可用实例返回 503。
 
 ### 三层出站鉴权
 
@@ -101,7 +101,7 @@ impl ModuleRoutes for FlowProxyModule {
 /// 页面反代层：给 api 路由叠加中间件，流程拥有的 native/html 单页请求转发 flow-server。
 pub fn with_flow_page_proxy(
     router: Router<CmxAppState>,
-    flow_base: impl Into<String>,
+    resolver: UpstreamResolver,
     api_key: Option<String>,
 ) -> Router<CmxAppState>;
 ```
@@ -117,16 +117,18 @@ use axum::Router;
 use cmx_api_core::CmxAppState;
 use cmx_flow_api::{FlowProxyModule, with_flow_page_proxy};
 
-/// 远程基址来自 `[center_client.urls].flow`；未配置（None）则不挂流程路由。
-fn merge_flow(router: Router<CmxAppState>, flow_base: Option<String>) -> Router<CmxAppState> {
-    match flow_base {
-        Some(base) => {
+/// 目标来自 `[center_client]` 服务定位配置（mode 驱动）；未配置（None）则不挂流程路由。
+fn merge_flow(router: Router<CmxAppState>, upstream: Option<cmx_plugin::center_client::ProxyUpstream>) -> Router<CmxAppState> {
+    match upstream {
+        Some(upstream) => {
             // 出站服务凭证：[service_auth].outgoing_api_key（可空）
             let api_key = load_outgoing_credential();
+            // resolver：Static 固化基址；Discovery 每请求查实例缓存选例（捕获启动期配置快照）
+            let resolver = upstream.resolver_fn();
             // ① merge 反代模块：/api/flow/* → {base}/api/flow/v1/*
-            let router = router.merge(FlowProxyModule::new(base.clone(), api_key.clone()).routes());
+            let router = router.merge(FlowProxyModule::with_resolver(resolver.clone(), api_key.clone()).routes());
             // ② 叠加页面反代层：portal.flow.* / fi.cmxfico.gl.flow-* 单页请求也转发过去
-            with_flow_page_proxy(router, base, api_key)
+            with_flow_page_proxy(router, resolver, api_key)
         }
         None => router, // 未配置 → 门户无 /api/flow/* 路由（需启动独立 flow-server 并配置地址）
     }
@@ -138,8 +140,9 @@ fn merge_flow(router: Router<CmxAppState>, flow_base: Option<String>) -> Router<
 ```rust
 use cmx_flow_api::FlowProxyModule;
 
-// 基址末尾多余 `/` 会被 trim；api_key 为 None 时出站不带 X-API-Key 头
-let module = FlowProxyModule::new("http://flow-server:8091/", Some("svc-key-001".into()));
+// 静态基址包成 resolver（基址末尾多余 `/` 会被 trim）；api_key 为 None 时出站不带 X-API-Key 头
+let resolver: cmx_flow_api::UpstreamResolver = std::sync::Arc::new(|| Some("http://flow-server:8091".into()));
+let module = FlowProxyModule::with_resolver(resolver, Some("svc-key-001".into()));
 
 // ModuleRoutes 契约元信息（对 web-server 与内嵌壳同构）
 assert_eq!(module.module_name(), "flow-proxy");

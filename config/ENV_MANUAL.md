@@ -38,11 +38,21 @@
 | `SERVICE_REGISTRY_CLUSTER` | String | `DEFAULT` | 集群名称 |
 | `SERVICE_REGISTRY_WEIGHT` | Float | `1.0` | 实例权重 |
 | `SERVICE_REGISTRY_IP` | String | 自动检测 | 注册使用的 IP 地址 |
-| `SERVICE_REGISTRY_PORT` | Integer | `server.port` 配置值 | 注册使用的端口号 |
+| `SERVICE_REGISTRY_PORT` | Integer | `SERVICE_REGISTRY_PORT` > `NACOS_REGISTER_SERVER_PORT` > `server.port` > `8080` | 注册使用的端口号。**独立微服务（cmx-flow-server / cmx-rpt-server / cmx-rule-server 等）开启注册时必填**——服务 HTTP 端口来自各自前缀 env（`FLOW_PORT` 等）、不写 `server.port`，漏配会注册成 8080 错端口，服务发现反代将打错地址 |
 | `CONFIG_CENTER_TYPE` | String | `mock` | 配置中心类型：`mock` / `nacos` |
 | `CONFIG_CENTER_ENABLED` | Boolean | `false` | 是否启用配置中心 |
 | `APP_ID` | String | `default` | 应用隔离标识（仅 micro 模式生效，详见 [`DEPLOY__MODE`](#deploy_mode-部署模式)） |
 | `DEPLOY__MODE` | String | `mono` | 部署模式：`mono`（单体）/ `micro`（微服务）。详见 [部署模式](#deploy_mode-部署模式) |
+
+> **独立微服务接入说明**（cmx-flow-server / cmx-rpt-server / cmx-rule-server）：
+> 三个服务经 `cmx-service-base::init_infra()` 接入注册中心与配置中心，开关与门户同构
+>（主开关 `NACOS_ENABLED`；子开关 `NACOS_NAMING_ENABLED` / `NACOS_CONFIG_ENABLED` 或新前缀
+> `SERVICE_REGISTRY_ENABLED` / `CONFIG_CENTER_ENABLED`），默认全关（纯本地 toml+env，行为与
+> 独立部署前一致）。开启后 **create 阶段强依赖** Nacos 可达（客户端创建失败即中止启动）；
+> register 阶段失败仅 warn 不阻塞。`SERVICE_REGISTRY_NAME` 优先级高于
+> `NACOS_NAMING_SERVICE_NAME`，注册名约定：`cmx-flow-server` / `cmx-rpt-server` / `cmx-rule-server`
+>（门户 `[center_client.discovery.services]` 按同名键发现）。配置中心开启后配置优先级为
+> 本地 toml ← 远程配置中心 ← 环境变量（env 最高）。
 
 ### Nacos 连接配置
 

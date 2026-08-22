@@ -282,15 +282,18 @@ storage_path = "./storage"
 # 插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）
 # 之间的数据交互配置
 [center_client]
-# 模块资源(表单/菜单/元数据/权限)导入导出的部署模式。
-# - local(默认,或任意非远程值):本地模式,定义导入器直调本地
+# 模块资源(表单/菜单/元数据/权限)导入导出的部署模式,同时决定反向代理
+# (flow/report/rules)的目标定位来源:
+# - local(默认,或任意未知值含遗留 mock):本地模式,定义导入器直调本地
 #   Service(FormService/MenuService/TableMetadataService/PermissionServiceImpl),
-#   无网络开销,适用于单体部署。
+#   无网络开销,适用于单体部署;反代目标不挂(门户无 /api/flow/* 等路由)。
 # - grpc:远程模式,经 gRPC 调用专门中心(CmxPluginDataService),
-#   需启用 [rpc] 并配置 [center_client.discovery] 的各中心服务名。
-# - http_url:远程模式,经 HTTP multipart form-data POST 到 [center_client.urls] 配置的各中心 URL。
+#   需启用 [rpc] 并配置 [center_client.discovery.services] 的各中心服务名;
+#   反代目标经 Nacos 服务发现解析(discovery.services.{flow,report,rules})。
+# - http_url:远程模式,经 HTTP multipart form-data POST 到 [center_client.urls]
+#   各基址 + 统一导入端点 /api/plugin/data/import;反代目标取 urls.{flow,report,rules} 基址。
 # - http_discovery:远程模式,经服务发现解析实例地址后走 HTTP,
-#   需配置 [center_client.discovery] 的各中心服务名。
+#   需配置 [center_client.discovery.services] 的各中心服务名;反代同 grpc 走服务发现。
 # 远程模式下本节点仍可作为接收端(PluginDataImporterImpl 已注入 form/menu 本地导入器)。
 mode = "local"
 # 请求超时时间（毫秒，可选，默认 30000）
@@ -298,31 +301,44 @@ mode = "local"
 timeout_ms = 30000
 
 # URL 直连模式配置（mode = "http_url" 时生效）
-# 每个中心对应一个独立的 URL 配置项
-# 环境变量覆盖：CENTER_CLIENT__URLS__MENU, CENTER_CLIENT__URLS__PERM 等
+# 自由键值表：服务键 → 手动基址（**纯基址，不含路径**——统一导入端点 /api/plugin/data/import
+# 与反代路径由消费方拼接）。键所有权：menu/perm/form 归远程导入器（目标=门户/能力中心），
+# flow/report/rules 归反向代理（目标=独立微服务）。新增微服务加一行键值即可，无需改代码。
+# 环境变量覆盖：CENTER_CLIENT__URLS__FLOW 等（值需带 scheme，纯数字值会被解析为整数）
 [center_client.urls]
-## 门户中心（菜单数据）URL
-# menu = "http://portal-center:8080/api/plugin/menu/import"
-## 权限中心（权限数据）URL
-# perm = "http://perm-center:8080/api/iam/permissions/import"
-## 表单中心（表单数据）URL
-# form = "http://form-center:8080/api/plugin/form/import"
-## 流程中心（流程定义）URL
-# flow = "http://flow-center:8080/api/plugin/flow/import"
+## 门户中心（菜单数据）基址，导入器目标
+# menu = "http://portal-center:8080"
+## 权限中心（权限数据）基址，导入器目标
+# perm = "http://perm-center:8080"
+## 表单中心（表单数据）基址，导入器目标
+# form = "http://form-center:8080"
+## 流程微服务基址（反代目标，亦兼作 http_url 模式流程定义导入的接收方基址）
+# flow = "http://127.0.0.1:8091"
+## 报表微服务基址（反代目标）
+# report = "http://127.0.0.1:8092"
+## 决策规则微服务基址（反代目标）
+# rules = "http://127.0.0.1:8094"
 
 # 服务发现模式配置（mode = "http_discovery" 或 "grpc" 时生效）
-# 通过 Nacos 服务发现获取各中心的实例地址
+# 通过 Nacos 服务发现获取各中心/独立微服务的实例地址；services 为自由键值表——
+# 新增微服务加一行键值即可，无需改代码。键所有权约定同 urls（menu/perm/form 归导入器，
+# flow/report/rules 归反代）。选例规则：healthy 过滤 + 随机负载均衡 + http_port 元数据优先。
 # [center_client.discovery]
-## Nacos 分组（可选，默认 DEFAULT_GROUP）
+## Nacos 分组（默认值 DEFAULT_GROUP，可选）
 # nacos_group = "DEFAULT_GROUP"
-## 门户中心服务名
-# menu_service = "cmx-portal-center"
-## 权限中心服务名
-# perm_service = "cmx-perm-center"
-## 表单中心服务名
-# form_service = "cmx-form-center"
-## 流程中心服务名
-# flow_service = "cmx-flow-center"
+# [center_client.discovery.services]
+## 门户中心服务名（导入器目标）
+# menu = "cmx-portal-center"
+## 权限中心服务名（导入器目标）
+# perm = "cmx-perm-center"
+## 表单中心服务名（导入器目标）
+# form = "cmx-form-center"
+## 流程微服务注册名（反代目标）
+# flow = "cmx-flow-server"
+## 报表微服务注册名（反代目标）
+# report = "cmx-rpt-server"
+## 决策规则微服务注册名（反代目标）
+# rules = "cmx-rule-server"
 
 # ============================================
 # RPC 配置

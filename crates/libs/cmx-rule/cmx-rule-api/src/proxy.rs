@@ -1,10 +1,15 @@
 //! RulesProxyModule —— 平台→独立决策规则微服务的**反向代理壳**（对标 cmx-rpt-api 的 ReportProxyModule）。
 //!
-//! 规则引擎无进程内嵌壳（始终独立微服务）：`[center_client.urls].rules` 非空 → 挂本反代，平台
-//! `/api/rules/*` 透明转发到远程 cmx-rule-server；空 → 平台无规则路由（规则页无法加载）。
+//! 规则引擎无进程内嵌壳（始终独立微服务）：`[center_client]` 的服务定位配置了 `rules` 键 →
+//! 挂本反代，平台 `/api/rules/*` 透明转发到远程 cmx-rule-server；没配 → 平台无规则路由
+//! （规则页无法加载）。mode 驱动：http_url 模式看 `urls.rules`，http_discovery/grpc 模式看
+//! `discovery.services.rules`（见 `cmx_plugin::center_client::upstream::proxy_upstream`）。
 //!
 //! 规则微服务对外 URL 与平台一致（`/api/rules/v1/*`，无路径重写），故转发是恒等映射
 //! `{rules_base}/api{原path}{query}`（与 report 同，不重写路径段）。
+//!
+//! 目标经 [`UpstreamResolver`] 按请求动态解析（静态基址 / Nacos 服务发现选例），
+//! 无可用实例 → 503（区别于下游不可达的 502）。
 //!
 //! 出站鉴权对齐平台既有三层（同 Flow/Report Proxy）：
 //!   ① `X-API-Key`                      —— 平台服务身份（`[service_auth].outgoing_api_key`）
@@ -21,24 +26,29 @@ use axum::Router;
 use cmx_api_core::routes::traits::ModuleRoutes;
 use cmx_api_core::CmxAppState;
 
-/// 反代模块：持远程 cmx-rule-server 基址 + 出站服务凭证 + 复用的 HTTP 客户端。
+/// 反代目标 resolver：每次调用返回当前可用基址（`None` = 无可用实例 → 503）。
+///
+/// 由装配层（cmx-platform-app routes.rs）从 `cmx_plugin::center_client::ProxyUpstream::resolver_fn`
+/// 构造——`Send + Sync` 无状态闭包，`Static` 固化返回基址，`Discovery` 查内存实例缓存。
+pub type UpstreamResolver = std::sync::Arc<dyn Fn() -> Option<String> + Send + Sync>;
+
+/// 反代模块：持目标 resolver + 出站服务凭证 + 复用的 HTTP 客户端。
 #[derive(Clone)]
 pub struct RulesProxyModule {
     inner: std::sync::Arc<ProxyState>,
 }
 
 struct ProxyState {
-    /// 远程规则微服务基址（如 `http://127.0.0.1:8094`），来自 `[center_client.urls].rules`。
-    rules_base: String,
+    /// 目标基址 resolver（静态基址或 Nacos 服务发现）。
+    resolver: UpstreamResolver,
     /// 平台对外服务凭证（`[service_auth].outgoing_api_key`，注入 X-API-Key）。可空。
     api_key: Option<String>,
     client: reqwest::Client,
 }
 
 impl RulesProxyModule {
-    /// 用远程基址 + 出站 API Key 构建。基址末尾多余 `/` 去掉。
-    pub fn new(rules_base: impl Into<String>, api_key: Option<String>) -> Self {
-        let rules_base = rules_base.into().trim_end_matches('/').to_string();
+    /// 用目标 resolver + 出站 API Key 构建（API 反代与页面反代共享同一连接池）。
+    pub fn with_resolver(resolver: UpstreamResolver, api_key: Option<String>) -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
@@ -48,7 +58,7 @@ impl RulesProxyModule {
             });
         Self {
             inner: std::sync::Arc::new(ProxyState {
-                rules_base,
+                resolver,
                 api_key,
                 client,
             }),
@@ -75,14 +85,18 @@ impl ModuleRoutes for RulesProxyModule {
     }
 }
 
-/// 转发 handler：拼目标 URL → 注入三层鉴权 → 流式转发请求/响应。
+/// 转发 handler：解析目标基址 → 拼目标 URL → 注入三层鉴权 → 流式转发请求/响应。
 async fn proxy_handler(State(px): State<std::sync::Arc<ProxyState>>, req: Request) -> Response {
     forward(&px, req).await
 }
 
-/// 复用的转发核：拼 `{rules_base}/api{path}{query}` → 注入三层鉴权 → 流式转发。
+/// 复用的转发核：解析目标基址后拼 `{rules_base}/api{path}{query}` → 注入三层鉴权 → 流式转发。
 /// 被 `proxy_handler`（API 反代）与 `page_proxy_mw`（页面反代）共用。
 async fn forward(px: &ProxyState, req: Request) -> Response {
+    // 目标基址按请求动态解析（服务发现模式实例列表可能变化）。
+    let Some(rules_base) = (px.resolver)() else {
+        return no_upstream("规则服务");
+    };
     let method = req.method().clone();
     let uri = req.uri().clone();
     let headers = req.headers().clone();
@@ -91,7 +105,7 @@ async fn forward(px: &ProxyState, req: Request) -> Response {
     // 规则微服务用同名 URL，故恒等转发到 `{rules_base}/api{path}{query}`。
     let path = uri.path();
     let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
-    let target = format!("{}/api{path}{query}", px.rules_base);
+    let target = format!("{rules_base}/api{path}{query}");
 
     // 请求体 → reqwest stream（双向流式）。
     let body = req.into_body();
@@ -125,6 +139,19 @@ async fn forward(px: &ProxyState, req: Request) -> Response {
                 .into_response()
         }
     }
+}
+
+/// 目标无可用实例时的 503 响应（区别于 502 不可达：服务发现未就绪或实例全部下线）。
+fn no_upstream(svc: &str) -> Response {
+    tracing::error!(service = svc, "反代目标无可用实例（服务发现未就绪或实例全部下线）");
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        axum::Json(serde_json::json!({
+            "code": 503,
+            "msg": format!("{svc}无可用实例（服务发现未就绪或实例全部下线）")
+        })),
+    )
+        .into_response()
 }
 
 /// 逐跳头（RFC 7230 §6.1）+ host：转发时剥掉。
@@ -178,7 +205,7 @@ fn build_response(resp: reqwest::Response) -> Response {
 }
 
 // ============================================================================
-// 页面反代：native 页也「一芯双壳」——门户按 [center_client.urls].rules 把**规则拥有的**页面取页
+// 页面反代：native 页也「一芯双壳」——门户按 [center_client] 的服务定位配置把**规则拥有的**页面取页
 // 请求反代到独立 cmx-rule-server（它自暴同款字节对齐 API）。
 // ----------------------------------------------------------------------------
 // native-pages 是**共享端点**（/api/native-pages/{id}），只有 `portal.rules.*` 属规则，其余是门户
@@ -215,12 +242,13 @@ async fn page_proxy_mw(
 }
 
 /// 给 api 路由叠加**规则页面反代**层：规则拥有的 native 单页取页请求转发到独立 cmx-rule-server，
-/// 其余落回门户内嵌 handler。复用 `RulesProxyModule` 的远程基址 + 出站凭证 + HTTP 客户端。
+/// 其余落回门户内嵌 handler。复用 `RulesProxyModule` 的目标 resolver + 出站凭证 + HTTP 客户端
+/// （与 API 反代同一连接池）。平台 `merge_rules` 在配置了反代目标时调它。
 pub fn with_rules_page_proxy(
     router: Router<CmxAppState>,
-    rules_base: impl Into<String>,
+    resolver: UpstreamResolver,
     api_key: Option<String>,
 ) -> Router<CmxAppState> {
-    let state = RulesProxyModule::new(rules_base, api_key).inner;
+    let state = RulesProxyModule::with_resolver(resolver, api_key).inner;
     router.layer(axum::middleware::from_fn_with_state(state, page_proxy_mw))
 }

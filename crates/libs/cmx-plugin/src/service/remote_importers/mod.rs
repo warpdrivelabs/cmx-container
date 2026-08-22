@@ -27,8 +27,6 @@ pub use table::RemoteTableDefinitionImporter;
 
 use std::time::Duration;
 
-use rand::seq::SliceRandom;
-
 use crate::center_client::config::CenterClientConfig;
 use crate::center_client::types::DataCategory;
 use crate::error::{PluginError, PluginResult};
@@ -123,16 +121,19 @@ impl RemoteImporterContext {
         req
     }
 
-    /// 解析指定数据类别对应的远程服务名(grpc/http_discovery 模式使用)。
+    /// 解析指定数据类别对应的服务名(grpc/http_discovery 模式使用,查 `discovery.services` 自由表)。
     pub fn resolve_service_name(&self, category: DataCategory) -> PluginResult<String> {
         self.config
             .discovery
-            .get_service_name(category)
-            .map(|s| s.to_string())
+            .services
+            .get(category.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
             .ok_or_else(|| {
                 PluginError::CenterData(format!(
-                    "未配置 {} 的远程服务名(center_client.discovery)",
-                    category.center_name()
+                    "未配置 {} 的服务名(center_client.discovery.services.{})",
+                    category.center_name(),
+                    category.as_str()
                 ))
             })
     }
@@ -321,10 +322,10 @@ impl RemoteImporterContext {
             })
     }
 
-    /// HTTP 传输:经 multipart form-data POST 到各中心 `/import` 端点。
+    /// HTTP 传输:经 multipart form-data POST 到统一导入端点 `/api/plugin/data/import`。
     ///
-    /// - `http_url`:从 `config.urls.{category}` 取 URL
-    /// - `http_discovery`:从服务发现解析实例地址
+    /// - `http_url`:基址取 `config.urls.{category}`(纯基址,拼统一端点路径)
+    /// - `http_discovery`:基址经共享选例核从服务发现解析(同上拼路径)
     async fn send_via_http(
         &self,
         category: DataCategory,
@@ -390,55 +391,40 @@ impl RemoteImporterContext {
 
     /// 解析 HTTP 端点 URL。
     ///
-    /// - `http_url` 模式:直接从 `config.urls.{category}` 取
-    /// - `http_discovery` 模式:从服务发现解析实例地址 + 默认 import 路径
+    /// - `http_url` 模式:取 `config.urls.{category}` **基址** + 统一导入端点路径(与 http_discovery
+    ///   对称,urls 值不再携带路径——旧「完整端点」写法会在 config 加载时告警)
+    /// - `http_discovery` 模式:复用 `center_client::upstream` 的共享选例核(healthy 过滤 +
+    ///   随机 + `http_port` 元数据优先)解析实例基址,再拼统一导入端点路径
     async fn resolve_http_url(&self, category: DataCategory) -> PluginResult<String> {
         if self.config.mode == "http_url" {
-            // 直接取配置的 URL(按 category 字段)
-            let url = match category {
-                DataCategory::Menu => self.config.urls.menu.as_deref(),
-                DataCategory::Perm => self.config.urls.perm.as_deref(),
-                DataCategory::Form => self.config.urls.form.as_deref(),
-                DataCategory::Flow => self.config.urls.flow.as_deref(),
-            };
-            return url.map(|s| s.to_string()).ok_or_else(|| {
-                PluginError::CenterData(format!(
-                    "未配置 {} 的 URL(center_client.urls.{})",
-                    category.center_name(),
-                    category.as_str()
-                ))
-            });
+            let base = self
+                .config
+                .urls
+                .get(category.as_str())
+                .map(|s| s.trim().trim_end_matches('/').to_string())
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| {
+                    PluginError::CenterData(format!(
+                        "未配置 {} 的基址(center_client.urls.{})",
+                        category.center_name(),
+                        category.as_str()
+                    ))
+                })?;
+            return Ok(format!("{base}{}", category_to_http_import_path(category)));
         }
 
-        // http_discovery:经服务发现解析实例地址
+        // http_discovery:经共享选例核解析实例基址(与反代同一套负载均衡语义)。
         let service_name = self.resolve_service_name(category)?;
-        let cache = cmx_registry_config::GlobalServiceInstanceCache::get();
-        let all_instances = cache.get(&service_name).unwrap_or_default();
-        // 优先用健康实例,无健康实例时回退到全部实例
-        let healthy: Vec<_> = all_instances.iter().filter(|i| i.healthy).collect();
-        let pool: Vec<_> = if healthy.is_empty() {
-            all_instances.iter().collect()
-        } else {
-            healthy
-        };
-        if pool.is_empty() {
-            return Err(PluginError::CenterData(format!(
-                "服务发现未找到 {} 的实例 (service={})",
-                category.center_name(),
-                service_name
-            )));
-        }
-        // 随机选一个实例(简单负载均衡)
-        let instance = pool.choose(&mut rand::thread_rng()).ok_or_else(|| {
-            PluginError::CenterData(format!("选择 {} 实例失败", category.center_name()))
-        })?;
-        let port = instance
-            .metadata
-            .get("http_port")
-            .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or(instance.port);
-        let import_path = category_to_http_import_path(category);
-        Ok(format!("http://{}:{port}{import_path}", instance.ip))
+        let base = crate::center_client::upstream::resolve_service_base(&service_name).ok_or_else(
+            || {
+                PluginError::CenterData(format!(
+                    "服务发现未找到 {} 的可用实例 (service={})",
+                    category.center_name(),
+                    service_name
+                ))
+            },
+        )?;
+        Ok(format!("{base}{}", category_to_http_import_path(category)))
     }
 }
 

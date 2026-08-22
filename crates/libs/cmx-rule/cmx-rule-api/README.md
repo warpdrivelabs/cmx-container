@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-`cmx-rule-api` 是 cmx-container 平台中决策规则引擎域的 HTTP 反向代理壳。规则引擎整体位于独立 workspace `../cmx-rulesengine`，由那边的 `cmx-rule-server` 作为**独立规则微服务**承载。与 flow/report 不同，规则引擎**没有进程内嵌壳**（始终独立微服务）：`[center_client.urls].rules` 配了才挂本反代，`/api/rules/*` 透明转发到远程 cmx-rule-server；不配则门户无规则路由（规则页无法加载）。
+`cmx-rule-api` 是 cmx-container 平台中决策规则引擎域的 HTTP 反向代理壳。规则引擎整体位于独立 workspace `../cmx-rulesengine`，由那边的 `cmx-rule-server` 作为**独立规则微服务**承载。与 flow/report 不同，规则引擎**没有进程内嵌壳**（始终独立微服务）：`[center_client]` 的服务定位配置了 `rules` 键（mode 驱动：http_url 看 `urls.rules`，http_discovery/grpc 看 `discovery.services.rules`）才挂本反代，`/api/rules/*` 透明转发到远程 cmx-rule-server；不配则门户无规则路由（规则页无法加载）。目标经 `UpstreamResolver` 按请求动态解析，无可用实例返回 503。
 
 规则微服务对外 URL 与平台一致（`/api/rules/v1/*`，无路径重写），故转发是**恒等映射** `{rules_base}/api{原path}{query}`——与 cmx-rpt-api 同构，不重写路径段。本 crate 对外导出两件东西：
 
@@ -97,7 +97,7 @@ impl ModuleRoutes for RulesProxyModule {
 /// 给 api 路由叠加规则页面反代层：规则拥有的 native 单页请求转发 cmx-rule-server。
 pub fn with_rules_page_proxy(
     router: Router<CmxAppState>,
-    rules_base: impl Into<String>,
+    resolver: UpstreamResolver,
     api_key: Option<String>,
 ) -> Router<CmxAppState>;
 ```
@@ -113,16 +113,18 @@ use axum::Router;
 use cmx_api_core::CmxAppState;
 use cmx_rule_api::{RulesProxyModule, with_rules_page_proxy};
 
-/// 远程基址来自 `[center_client.urls].rules`；未配置（None）则不挂规则路由。
-fn merge_rules(router: Router<CmxAppState>, rules_base: Option<String>) -> Router<CmxAppState> {
-    match rules_base {
-        Some(base) => {
+/// 目标来自 `[center_client]` 服务定位配置（mode 驱动）；未配置（None）则不挂规则路由。
+fn merge_rules(router: Router<CmxAppState>, upstream: Option<cmx_plugin::center_client::ProxyUpstream>) -> Router<CmxAppState> {
+    match upstream {
+        Some(upstream) => {
             // 出站服务凭证：[service_auth].outgoing_api_key（可空）
             let api_key = load_outgoing_credential();
+            // resolver：Static 固化基址；Discovery 每请求查实例缓存选例（捕获启动期配置快照）
+            let resolver = upstream.resolver_fn();
             // ① merge 反代模块：/api/rules/v1/* → {base}/api/rules/v1/*（恒等）
-            let router = router.merge(RulesProxyModule::new(base.clone(), api_key.clone()).routes());
+            let router = router.merge(RulesProxyModule::with_resolver(resolver.clone(), api_key.clone()).routes());
             // ② 叠加页面反代层：portal.rules.* native 单页请求也转发过去
-            with_rules_page_proxy(router, base, api_key)
+            with_rules_page_proxy(router, resolver, api_key)
         }
         None => router, // 规则引擎无内嵌壳：不配则门户无 /api/rules/* 路由（规则页无法加载）
     }
@@ -134,8 +136,9 @@ fn merge_rules(router: Router<CmxAppState>, rules_base: Option<String>) -> Route
 ```rust
 use cmx_rule_api::RulesProxyModule;
 
-// 基址末尾多余 `/` 会被 trim；api_key 为 None 时出站不带 X-API-Key 头
-let module = RulesProxyModule::new("http://rule-server:8094", None);
+// 静态基址包成 resolver；api_key 为 None 时出站不带 X-API-Key 头
+let resolver: cmx_rule_api::UpstreamResolver = std::sync::Arc::new(|| Some("http://rule-server:8094".into()));
+let module = RulesProxyModule::with_resolver(resolver, None);
 
 // ModuleRoutes 契约元信息
 assert_eq!(module.module_name(), "rules-proxy");
