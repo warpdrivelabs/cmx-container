@@ -5016,7 +5016,405 @@
      "held"
     ]
    ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "net_investment_hedge",
+    "dictName": "净投资套期",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_net_investment_hedge",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "O1 境外经营净投资套期(某方案某期某合并节点):套期工具有效部分借方正净额,重分类至CTA(OCI)对冲折算差额"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "hedge_instrument_account",
+     "name": "hedge_instrument_account",
+     "caption": {
+      "zh_CN": "套期工具科目(如外币借款)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "effective_amount",
+     "name": "effective_amount",
+     "caption": {
+      "zh_CN": "有效部分(借方正净额)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "goodwill_cgu",
+    "dictName": "商誉减值测试(CGU)",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_goodwill_cgu",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "O2 现金产出单元减值测试(某方案某期某合并节点):账面(含商誉) vs 可收回金额,算出减值先冲商誉,写回cg_goodwill_impair"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点(CGU)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "carrying_amount",
+     "name": "carrying_amount",
+     "caption": {
+      "zh_CN": "账面价值(含分摊商誉)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "recoverable_amount",
+     "name": "recoverable_amount",
+     "caption": {
+      "zh_CN": "可收回金额(公允减处置/使用价值孰高)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "goodwill_carrying",
+     "name": "goodwill_carrying",
+     "caption": {
+      "zh_CN": "商誉账面(减值封顶)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code"
+    ]
+   ]
   }
  ],
- "updatedAt": "2026-08-22T10:30:00.000Z"
+ "updatedAt": "2026-08-23T00:00:00.000Z"
 }
