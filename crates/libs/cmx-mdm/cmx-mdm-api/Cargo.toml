@@ -4,64 +4,21 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
-# 主数据（MDM）模块的 HTTP 层：薄 axum handler + MdmModule(impl cmx_api::ModuleRoutes) 路由表。
-# 依赖 cmx-api 拿 CmxAppState/CmxSvrContext/ApiResp/Result；由 web-server 合并 MdmModule.routes()
-# （cmx-api 不反向依赖本 crate，避免环）。
-# **API 约定**（承接 AGENTS.md §四 第 5 条）：新增接口禁用 Path Variable，id/参数走 query 或 body。
-# M0 仅一个健康检查端点；M1+ 追加 /activations /change-requests/* 等治理端点（均不带 {id} 路径段）。
+# 主数据（MDM）模块的**平台反代薄壳**（对标 cmx-rpt-api / cmx-flow-api / cmx-rule-api 的纯反代形态）。
+#
+# 主数据治理是**独立微服务**：中立核 cmx-mdm-app 在独立 workspace ../cmx-mdm，由那边的
+# cmx-mdm-server 承载。门户不再进程内嵌主数据治理，故本 crate **不依赖 cmx-mdm-app**（这条跨
+# workspace path 依赖会把整个主数据引擎源码拖进门户编译图）。本 crate 只含反代：MdmProxyModule
+# 把平台 `/api/mdm/*` + 主数据拥有的 native 页取页请求透明转发到远程 cmx-mdm-server
+#（`[center_client.services].mdm` per-key 定位：url 静态基址或 discovery Nacos 选例，经
+# UpstreamResolver 按请求动态解析）。前端零改。
 
 [dependencies]
-# 内部依赖 - MDM 中立模型（DTO + ActivationConfig + CodeGenerator）
-cmx-mdm-model = { workspace = true }
-# 内部依赖 - MDM 持久化/服务层（激活器主流程 + 映射配置 CRUD + 错误助手）
-cmx-mdm-store-pg = { workspace = true }
-# 内部依赖 - API 框架（CmxAppState / middleware::CmxSvrContext / ModuleRoutes / ApiResp/Result/Error）
+# 内部依赖 - API 框架（CmxAppState / routes::traits::ModuleRoutes）。单向依赖：cmx-mdm-api → cmx-api-core。
 cmx-api-core = { workspace = true }
-# 内部依赖 - 业务错误码（Violation：校验失败结构化响应）
-cmx-biz = { workspace = true }
-# 内部依赖 - tokio-postgres 并行 DB 层（get_default_pg_db_manager 全局单例）
-cmx-database-pg = { workspace = true }
-# 内部依赖 - DCT 字典解析（dict_meta 取表名/列清单，替代 merge handler 硬编码）
-cmx-dct-store-pg = { workspace = true }
-# 内部依赖 - API 通用类型（ApiResp<T>：响应信封，OpenApi schema 引用）
-cmx-api-types = { workspace = true }
-# OpenAPI 文档生成（handler #[utoipa::path] + Query 结构 IntoParams + MdmApiDoc）
-utoipa = { workspace = true }
-# M7 流程对接：HTTP 客户端（回环调本进程 /api/flow/*，双部署模式透明）
-reqwest = { workspace = true }
-# M7 流程对接：读 [mdm.flow] 配置段 + [service_auth].outgoing_api_key
-cmx-utils = { workspace = true }
-# M7 流程对接：current_original_token（回环转发用户 JWT 作委托令牌）
-cmx-traits = { workspace = true }
-# M7 流程对接：webhook 回调 HMAC-SHA256 验签
-hmac = { workspace = true }
-sha2 = { workspace = true }
-hex = { workspace = true }
 
-# M5 分发：DataValue 参数构造（snapshot 端点手写 SQL）
-cmx-core = { workspace = true }
-# M5 分发：通道注册表（并发只读注册表）
-dashmap = { workspace = true }
-# M5 分发：DistributionChannel trait 的 async 方法（与 model 层同一版本）
-async-trait = { workspace = true }
-# M5 分发：订阅 secret 随机生成（后端兜底）
-rand = { workspace = true }
-# M5 分发：死信/连续失败门户通知（cmx-portal 不反向依赖 cmx-mdm-*，无环）
-cmx-portal = { workspace = true }
-# M5 分发：dispatcher 常驻循环（interval + Notify 唤醒 + spawn 并发投递）
-tokio = { workspace = true }
-# Web 框架（handler 提取器 + Router）
+# Web 框架（Router 类型）
 axum = { workspace = true }
 
-# 请求 DTO 反序列化
-serde = { workspace = true }
-# JSON 载荷
-serde_json = { workspace = true }
-# 日志追踪
-tracing = { workspace = true }
-
-[features]
-default = []
-# M5.3 MQ 通道开关（启用后引入 rdkafka / rocketmq 客户端并编译骨架实现）
-channel-kafka = []
-channel-rocketmq = []
+# 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，反代壳共用）
+cmx-proxy-core = { workspace = true }

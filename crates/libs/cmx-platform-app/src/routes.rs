@@ -21,7 +21,7 @@ use cmx_dct_api::{DctApiDoc, DctModule};
 use cmx_doc_api::{DocApiDoc, DocModule};
 use cmx_flow_api::FlowProxyModule;
 use cmx_job_api::JobModule;
-use cmx_mdm_api::{MdmApiDoc, MdmModule};
+use cmx_mdm_api::MdmProxyModule;
 use cmx_model_api::ModelModule;
 use cmx_plugin::center_client::ProxyUpstream;
 use cmx_rpt_api::ReportProxyModule;
@@ -36,6 +36,8 @@ const FLOW_UPSTREAM_KEY: &str = "flow";
 const REPORT_UPSTREAM_KEY: &str = "report";
 /// 服务定位键：决策规则引擎（`[center_client.services].rules`）。
 const RULES_UPSTREAM_KEY: &str = "rules";
+/// 服务定位键：主数据治理引擎（`[center_client.services].mdm`）。
+const MDM_UPSTREAM_KEY: &str = "mdm";
 
 /// 解析流程引擎反代目标（per-key 定位，见 `cmx_plugin::center_client::upstream`）。
 ///
@@ -64,6 +66,15 @@ pub(crate) fn report_upstream() -> Option<ProxyUpstream> {
 /// 规则路由，而非回退内嵌。配了目标就转发 `/api/rules/*` + 规则拥有的 native 页，前端全零改。
 pub(crate) fn rules_upstream() -> Option<ProxyUpstream> {
     cmx_plugin::center_client::proxy_upstream(RULES_UPSTREAM_KEY)
+}
+
+/// 解析主数据治理引擎反代目标（per-key 定位）。
+///
+/// 主数据治理**无进程内嵌壳**（始终独立微服务，引擎核 cmx-mdm-app 在独立 workspace ../cmx-mdm，
+/// 由 cmx-mdm-server 承载），与 rules 同形：没配目标 = 门户不挂主数据路由。配了目标就转发
+/// `/api/mdm/*` + 主数据拥有的 native 页（`portal.mdm.*`），前端全零改。
+pub(crate) fn mdm_upstream() -> Option<ProxyUpstream> {
+    cmx_plugin::center_client::proxy_upstream(MDM_UPSTREAM_KEY)
 }
 
 /// 平台服务依赖拓扑：枚举各已挂载能力当前挂的是「进程内内嵌」还是「反代独立微服务」。
@@ -128,9 +139,18 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
             proxiable: true,
         });
     }
+    // mdm：独立主数据微服务——配置了目标才挂（proxy），没配则不在拓扑里。
+    if let Some(upstream) = mdm_upstream() {
+        deps.push(cmx_web_monitor::ServiceDep {
+            key: "mdm".into(),
+            label: "主数据治理".into(),
+            mode: "proxy".into(),
+            target: upstream.resolve(),
+            proxiable: true,
+        });
+    }
     deps.push(embedded("doc", "业务单据"));
     deps.push(embedded("dct", "数据字典"));
-    deps.push(embedded("mdm", "主数据"));
     deps.push(embedded("job", "异步任务中心"));
     deps.push(embedded("model", "模型中心"));
     deps.push(embedded("code", "编码引擎"));
@@ -213,16 +233,37 @@ fn merge_rules(router: Router<CmxAppState>) -> Router<CmxAppState> {
     }
 }
 
+/// 按配置产出主数据模块路由：配置了反代目标 → MdmProxyModule（转发到独立 cmx-mdm-server）+
+/// 页面反代（主数据拥有的 `portal.mdm.*` native 页转发到 mdm-server）；没配 → 不挂主数据路由
+/// （主数据无进程内嵌，始终独立微服务）。与 [`merge_rules`] 同构。
+fn merge_mdm(router: Router<CmxAppState>) -> Router<CmxAppState> {
+    match mdm_upstream() {
+        Some(upstream) => {
+            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            tracing::info!(upstream = %upstream.describe(), "主数据治理：独立微服务模式（MdmProxy 转发 /api/mdm/* + 页面反代 native）");
+            let resolver = upstream.resolver_fn();
+            let router = router.merge(
+                MdmProxyModule::with_resolver(resolver.clone(), api_key.clone()).routes(),
+            );
+            cmx_mdm_api::with_mdm_page_proxy(router, resolver, api_key)
+        }
+        None => {
+            tracing::warn!("主数据治理：未配置反代目标（[center_client.services] 未配 mdm 键或 url/discovery 均空）→ 门户不挂 /api/mdm/* 路由；请启动独立 cmx-mdm-server 并配置其地址");
+            router
+        }
+    }
+}
+
 /// 配置所有 API 路由
 ///
 /// 直接调用 cmx-api 的统一路由注册，返回配置好的 Axum Router。
-/// 外部模块路由（报表 ReportProxyModule、流程 FlowProxyModule、规则 RulesProxyModule、业务单据
-/// DocModule、数据字典 DctModule、主数据 MdmModule、异步任务中心 JobModule、模型中心 ModelModule、
-/// 编码引擎 CodeModule）在此合并——cmx-api 不依赖它们，避免循环依赖。
+/// 外部模块路由（流程 FlowProxyModule、报表 ReportProxyModule、规则 RulesProxyModule、主数据
+/// MdmProxyModule、业务单据 DocModule、数据字典 DctModule、异步任务中心 JobModule、模型中心
+/// ModelModule、编码引擎 CodeModule）在此合并——cmx-api 不依赖它们，避免循环依赖。
 ///
-/// 流程/报表/规则三引擎均为**独立微服务**：各按 `[center_client.services]` 的服务定位配置（per-key：
-/// `url` 静态基址优先，`discovery` Nacos 选例）决定——
-/// 配了=反代到独立微服务，没配=不挂该模块路由（三者无进程内嵌，编译期均不依赖引擎源码）。
+/// 流程/报表/规则/主数据四引擎均为**独立微服务**：各按 `[center_client.services]` 的服务定位配置
+/// （per-key：`url` 静态基址优先，`discovery` Nacos 选例）决定——
+/// 配了=反代到独立微服务，没配=不挂该模块路由（四者无进程内嵌，编译期均不依赖引擎源码）。
 ///
 /// # Returns
 ///
@@ -233,7 +274,6 @@ pub fn routes() -> Router<CmxAppState> {
         .merge(IamModule.routes())
         .merge(DocModule.routes())
         .merge(DctModule.routes())
-        .merge(MdmModule.routes())
         .merge(JobModule.routes())
         .merge(ModelModule.routes())
         .merge(CodeModule.routes())
@@ -249,9 +289,9 @@ pub fn routes() -> Router<CmxAppState> {
         .merge(TableMetadataModule.routes())
         .merge(MarketplaceModule.routes())
         .merge(ModulePackageModule.routes());
-    // 报表、流程各按 [center_client.services].{report,flow} 二选一：配了=反代到独立微服务，没配=进程内嵌。
-    // 规则按 [center_client.services].rules：配了=反代到独立 cmx-rule-server，没配=不挂（规则无内嵌）。
-    merge_flow(merge_report(merge_rules(base)))
+    // 报表/流程/规则/主数据各按 [center_client.services].{report,flow,rules,mdm} 定位：
+    // 配了=反代到独立微服务，没配=不挂（四者均无进程内嵌）。
+    merge_mdm(merge_flow(merge_report(merge_rules(base))))
 }
 
 /// 获取 Swagger 文档路由
@@ -274,7 +314,6 @@ fn merged_openapi() -> utoipa::openapi::OpenApi {
     doc.merge(IamApiDoc::openapi());
     doc.merge(DctApiDoc::openapi());
     doc.merge(DocApiDoc::openapi());
-    doc.merge(MdmApiDoc::openapi());
     doc.merge(PortalApiDoc::openapi());
     doc
 }
