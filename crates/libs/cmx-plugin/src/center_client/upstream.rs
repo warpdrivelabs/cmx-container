@@ -112,7 +112,7 @@ pub(crate) fn upstream_from_config(cfg: &CenterClientConfig, key: &str) -> Optio
         {
             tracing::warn!(
                 service.key = key,
-                "services.{key} 同时配置 url 与 discovery，discovery 被 url 遮蔽（非主备兜底）；需服务发现请删除 url"
+                // "services.{key} 同时配置 url 与 discovery，discovery 被 url 遮蔽（非主备兜底）；需服务发现请删除 url"
             );
         }
         return Some(ProxyUpstream::Static(

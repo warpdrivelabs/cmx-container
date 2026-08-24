@@ -86,6 +86,10 @@ impl ChassisConfig {
 }
 
 /// toml 反序列化壳（全可选，只覆盖出现的字段）。
+///
+/// 框架级字段支持两种形态（**统一目标形态是 `[server]` 段**，与门户 dev.toml 一致）：
+///   - 新：`[server] host/port/log_dir/log_level/graceful_timeout_secs`（推荐，全平台统一）；
+///   - 旧：顶层散字段（历史格式，向后兼容）。两者并存时 **`[server]` 段优先**。
 #[derive(Debug, Default, Deserialize)]
 struct TomlConfig {
     host: Option<String>,
@@ -93,10 +97,24 @@ struct TomlConfig {
     log_dir: Option<String>,
     log_level: Option<String>,
     graceful_timeout_secs: Option<u64>,
+    server: Option<ServerToml>,
+}
+
+/// `[server]` 段（与门户 dev.toml 同段名同字段；graceful 亦认门户历史键名
+/// `graceful_shutdown_timeout_secs`，serde alias 兼容）。
+#[derive(Debug, Default, Deserialize)]
+struct ServerToml {
+    host: Option<String>,
+    port: Option<u16>,
+    log_dir: Option<String>,
+    log_level: Option<String>,
+    #[serde(alias = "graceful_shutdown_timeout_secs")]
+    graceful_timeout_secs: Option<u64>,
 }
 
 impl TomlConfig {
     fn apply_onto(self, cfg: &mut ChassisConfig) {
+        // 旧格式：顶层散字段（先应用，[server] 段存在时覆盖之）。
         if let Some(v) = self.host {
             cfg.host = v;
         }
@@ -112,10 +130,62 @@ impl TomlConfig {
         if let Some(v) = self.graceful_timeout_secs {
             cfg.graceful_timeout_secs = v;
         }
+        // 新格式：[server] 段（统一目标形态，优先于顶层散字段）。
+        if let Some(s) = self.server {
+            if let Some(v) = s.host {
+                cfg.host = v;
+            }
+            if let Some(v) = s.port {
+                cfg.port = v;
+            }
+            if let Some(v) = s.log_dir {
+                cfg.log_dir = v;
+            }
+            if let Some(v) = s.log_level {
+                cfg.log_level = v;
+            }
+            if let Some(v) = s.graceful_timeout_secs {
+                cfg.graceful_timeout_secs = v;
+            }
+        }
     }
 }
 
 /// 读非空环境变量。
 fn env_opt(var: &str) -> Option<String> {
     std::env::var(var).ok().filter(|s| !s.trim().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `[server]` 段优先于顶层散字段；门户历史键 `graceful_shutdown_timeout_secs` 亦认。
+    #[test]
+    fn server_section_overrides_top_level_and_accepts_portal_alias() {
+        let text = r#"
+port = 9999
+log_level = "debug"
+
+[server]
+port = 8093
+log_level = "info,cmx_access=off"
+graceful_shutdown_timeout_secs = 20
+"#;
+        let t: TomlConfig = toml::from_str(text).unwrap();
+        let mut cfg = ChassisConfig::defaults("test");
+        t.apply_onto(&mut cfg);
+        assert_eq!(cfg.port, 8093);
+        assert_eq!(cfg.log_level, "info,cmx_access=off");
+        assert_eq!(cfg.graceful_timeout_secs, 20);
+    }
+
+    /// 旧格式（顶层散字段、无 [server] 段）照常生效（向后兼容）。
+    #[test]
+    fn top_level_fallback_still_works() {
+        let t: TomlConfig = toml::from_str("port = 8091").unwrap();
+        let mut cfg = ChassisConfig::defaults("test");
+        t.apply_onto(&mut cfg);
+        assert_eq!(cfg.port, 8091);
+    }
 }

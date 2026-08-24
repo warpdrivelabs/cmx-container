@@ -1,7 +1,9 @@
 //! 请求遥测中间件 + 客户端连接聚合（从 flow-app::observe 上提，通用化）。
 //!
 //! 采集「谁（身份/IP）、用什么（协议/UA）、调了什么（方法/路径/参数）、结果如何（状态/耗时/字节）」
-//! 进进程级环形缓冲（cap 500）+ 原子计数。身份读取经 [`crate::identity`] 注入钩子（各服务不同）。
+//! 进进程级环形缓冲（cap 500）+ 原子计数，**并同步输出一行式访问日志**（target `cmx_access`，
+//! 级别按状态分级 5xx=error/4xx=warn/其余=info；`[server].log_level = "info,cmx_access=off"` 关闭）。
+//! 身份读取经 [`crate::identity`] 注入钩子（各服务不同）。
 //! SSE 活跃连接由 [`sse_connect`]/[`sse_disconnect`] 计数。全进程内内存，零 DB。
 
 use std::collections::VecDeque;
@@ -192,6 +194,40 @@ pub async fn observe(req: Request, next: Next) -> Response {
         latency_ms,
         resp_bytes,
     };
+
+    // —— 访问日志（一行式 access log，与环形缓冲同源同字段）——
+    // 独立 target `cmx_access`：走 chassis EnvFilter 可按服务独立开关——toml 的
+    // `[server].log_level` 写 "info,cmx_access=off" 即关闭（RUST_LOG 同语法，优先级更高）。
+    // 级别按状态分级：5xx → error、4xx → warn、2xx/3xx → info。
+    let qs = if rec.query.is_empty() { String::new() } else { format!("?{}", rec.query) };
+    let msg = format!(
+        "#{} {} {}{qs} -> {} {}ms",
+        rec.seq, rec.method, rec.path, rec.status, rec.latency_ms
+    );
+    let user_s = rec.user.clone().unwrap_or_else(|| "-".into());
+    match rec.status {
+        s if s >= 500 => tracing::error!(
+            target: "cmx_access",
+            message = %msg,
+            auth = %rec.auth, user = %user_s, tenant = %rec.tenant,
+            ip = %rec.client_ip, via_proxy = rec.via_proxy,
+            bytes = rec.resp_bytes, request_id = ?rec.request_id
+        ),
+        s if s >= 400 => tracing::warn!(
+            target: "cmx_access",
+            message = %msg,
+            auth = %rec.auth, user = %user_s, tenant = %rec.tenant,
+            ip = %rec.client_ip, via_proxy = rec.via_proxy,
+            bytes = rec.resp_bytes, request_id = ?rec.request_id
+        ),
+        _ => tracing::info!(
+            target: "cmx_access",
+            message = %msg,
+            auth = %rec.auth, user = %user_s, tenant = %rec.tenant,
+            ip = %rec.client_ip, via_proxy = rec.via_proxy,
+            bytes = rec.resp_bytes, request_id = ?rec.request_id
+        ),
+    }
 
     if let Ok(mut ring) = m.ring.lock() {
         if ring.len() >= RING_CAP {
