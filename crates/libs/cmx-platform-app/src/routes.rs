@@ -78,8 +78,9 @@ pub(crate) fn model_upstream() -> Option<ProxyUpstream> {
 
 /// 解析主数据中心反代目标（per-key 定位）。
 ///
-/// 与模型中心同构：**保留进程内嵌兜底**（MdmModule 仍在 cmx-container，编译期保留，作平滑迁移期回退）。
-/// 配了 `[center_client.services].mdm` = 反代到独立 cmx-mdm-server（:8095）；没配 = 门户进程内嵌。
+/// 主数据已抽独立微服务 cmx-mdm（:8095），容器内引擎源码已退役，**无进程内嵌兜底**
+///（与 flow/report/rules/model 同构）：配了 `[center_client.services].mdm` = 反代到独立
+/// cmx-mdm-server；没配 = 门户不挂 `/api/mdm/*` 路由。
 pub(crate) fn mdm_upstream() -> Option<ProxyUpstream> {
     cmx_plugin::center_client::proxy_upstream(MDM_UPSTREAM_KEY)
 }
@@ -147,7 +148,7 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
         });
     }
     // 模型中心四能力（doc/dct/model/code）按 [center_client.services].model 决定 embedded/proxy；
-    // 配了 = 四者都反代到独立 cmx-model-server，没配 = 四者进程内嵌。MdmModule 恒内嵌（另案抽 cmx-mdm）。
+    // 配了 = 四者都反代到独立 cmx-model-server，没配 = 四者进程内嵌。
     match model_upstream() {
         Some(upstream) => {
             let target = upstream.resolve();
@@ -173,16 +174,16 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
             deps.push(embedded("code", "编码引擎"));
         }
     }
-    // 主数据按 [center_client.services].mdm 决定 embedded/proxy。
-    match mdm_upstream() {
-        Some(upstream) => deps.push(cmx_web_monitor::ServiceDep {
+    // 主数据：独立主数据微服务——配置了目标才挂（proxy），没配则不在拓扑里（与 merge_mdm
+    // 「没配不挂 /api/mdm/* 路由」一致；引擎源码已退役，无进程内嵌形态）。
+    if let Some(upstream) = mdm_upstream() {
+        deps.push(cmx_web_monitor::ServiceDep {
             key: "mdm".into(),
             label: "主数据".into(),
             mode: "proxy".into(),
             target: upstream.resolve(),
             proxiable: true,
-        }),
-        None => deps.push(embedded("mdm", "主数据")),
+        });
     }
     deps.push(embedded("job", "异步任务中心"));
     deps
@@ -348,8 +349,8 @@ pub fn routes() -> Router<CmxAppState> {
     // 规则按 [center_client.services].rules：配了=反代到独立 cmx-rule-server，没配=不挂（规则无内嵌）。
     // 模型中心按 [center_client.services].model：配了=反代到独立 cmx-model-server，没配=进程内嵌
     // （Dct/Doc/Model/Code 四模块，见 merge_model 的 None 分支——故已从 base 移出）。
-    // 主数据按 [center_client.services].mdm：配了=反代到独立 cmx-mdm-server，没配=进程内嵌
-    // （MdmModule，见 merge_mdm 的 None 分支——故已从 base 移出）。
+    // 主数据按 [center_client.services].mdm：配了=反代到独立 cmx-mdm-server，没配=不挂
+    // /api/mdm/* 路由（无进程内嵌，见 merge_mdm 的 None 分支——故已从 base 移出）。
     merge_mdm(merge_model(merge_flow(merge_report(merge_rules(base)))))
 }
 
