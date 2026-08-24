@@ -1704,19 +1704,66 @@ IAM 路由权限映射配置（可选）。配置 API 路由到权限码的映�
 
 ---
 
-## 门户配置
+## 框架级配置（chassis `[server]` 段）
 
-### `[portal]`
+所有 CMX 主应用（门户 :8080 与 flow/report/rules/mdm/model 引擎微服务）的框架级配置统一走 toml 的 `[server]` 段，由 `cmx-web-chassis::ChassisConfig` 读取：
 
-门户数据根目录、前端托管路径、页面加载缓存配置。
+| 键 | 类型 | 默认 | 说明 |
+|----|------|------|------|
+| `host` | String | `0.0.0.0` | 监听地址 |
+| `port` | Integer | `8080`（各引擎 toml 自配 8091~8095） | 监听端口 |
+| `log_dir` | String | `logs` | 日志目录 |
+| `log_level` | String | `info` | 默认日志级别（RUST_LOG 未设时用） |
+| `graceful_timeout_secs` | Integer | `10` | 优雅关闭最长等待秒数 |
 
-#### `data_root`
+env 覆盖与 ConfigManager 的 `__` 约定**同名**：`SERVER__HOST` / `SERVER__PORT` / `SERVER__LOG_DIR` / `SERVER__LOG_LEVEL` / `SERVER__GRACEFUL_TIMEOUT_SECS`（`SERVER__PORT` → `server.port`）。chassis 在 ConfigManager 初始化前直读同名变量（门户日志初始化时序），ConfigManager 就绪后其 env 层把同一变量合并到同一键——注册中心等 `get_string("server.port")` 消费方与实际监听端口永远一致。toml 路径统一由 `CONFIG_FILE` 指定。旧顶层散字段（含 `graceful_shutdown_timeout_secs`）已废弃不生效。
+
+> ⚠️ 多服务共存同一环境（如同一 shell 导出 env）时 `SERVER__PORT` 会同时命中多个服务——单独改某服务端口请改其 toml 的 `[server]` 段。
+
+## 引擎微服务配置对照（flow / report / rules / mdm / model）
+
+引擎微服务的业务配置与门户**共用同一份 toml 制度**，但有三点差异：
+
+| 配置域 | 门户（平台） | 引擎微服务 |
+|--------|--------------|------------|
+| 框架级 | `[server]` 段（同左，env `SERVER__*`） | 同左，完全一致 |
+| 数据源 | `[[databases]]`（BaseConfig） | 同左，完全一致；**缺段启动失败**（无内置 URL 兜底），db_id 须与引擎常量一致（flow：`fico-db`+`primary`；report：`fico-db`；rules：`rule_pg`；mdm/model：`primary`+`fico-db`） |
+| 认证 | `[auth.jwt]` 平台语义（secret/algorithm/expire 等） | `[auth]` 扁平段（`mode` / `jwt_alg` / `jwt_secret` / `jwt_public_key` / `jwt_tenant_claim` / `jwt_roles_claim` / `api_keys` / `tenancy`），ConfigManager 直读 |
+| 页面/内容资产 | `[assets]` 段（见下） | 同左（引擎只配 `ui_native_dir` / `ui_html_dir`） |
+
+> ⚠️ **env 一字之差警示**：引擎 `[auth]` 扁平段的 env 覆盖是 `AUTH__JWT_SECRET`（两段下划线→`auth.jwt_secret`）；平台 `[auth.jwt]` 的 env 覆盖是 `AUTH__JWT__SECRET`（三段→`auth.jwt.secret`）。二者语义不同（引擎验签密钥 vs 平台签发密钥），写错不报错、只不生效，排查时先数下划线。
+>
+> 另注：ConfigManager env 层开启值解析，纯数字的 env 值会被解析为标量再强转字符串（密钥类值不受影响，纯数字密钥请加非数字字符）。
+
+## 页面/内容资产配置
+
+### `[assets]`
+
+页面/内容资产统一段：内容根、引擎页面投递目录、门户前端托管路径、页面加载缓存。env 覆盖走 ConfigManager `__` 分隔约定：`ASSETS__ROOT` / `ASSETS__UI_NATIVE_DIR` / `ASSETS__WEB_PORTAL_DIST` / `ASSETS__PAGE_CACHE_ENABLED` 等（段名 + `__` + 键名大写）。
+
+#### `root`
 
 - **类型**: String
 - **必需**: 否
 - **默认值**: `./data`
-- **说明**: 门户数据根目录（相对进程工作目录）。存放 `menu-pages` / `html-pages` / `native-pages` / `dict` / `meta` 等 JSON 资源。支持环境变量 `CMX_PORTAL_DATA_ROOT` 覆盖；缺省回退 `./data`。
+- **说明**: 内容根目录（相对进程工作目录），仅消费方配置（门户、model）。存放 `menu-pages` / `html-pages` / `native-pages` / `dict` / `meta` 等 JSON 资源。支持环境变量 `ASSETS__ROOT` 覆盖；缺省回退 `./data`。
 - **示例**: `./data`
+
+#### `ui_native_dir`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `web/ui-native`
+- **说明**: 引擎自持 native 页面投递目录（五引擎 flow/report/rules/mdm/model 的 native-pages 只读投递；相对各引擎 cwd）。env 覆盖 `ASSETS__UI_NATIVE_DIR`。
+- **示例**: `web/ui-native`
+
+#### `ui_html_dir`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `web/ui-html`
+- **说明**: 引擎自持 html 页面投递目录（同上，html-pages 只读投递）。env 覆盖 `ASSETS__UI_HTML_DIR`。
+- **示例**: `web/ui-html`
 
 #### `web_portal_dist`
 

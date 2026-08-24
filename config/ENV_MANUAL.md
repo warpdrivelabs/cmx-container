@@ -38,7 +38,7 @@
 | `SERVICE_REGISTRY_CLUSTER` | String | `DEFAULT` | 集群名称 |
 | `SERVICE_REGISTRY_WEIGHT` | Float | `1.0` | 实例权重 |
 | `SERVICE_REGISTRY_IP` | String | 自动检测 | 注册使用的 IP 地址 |
-| `SERVICE_REGISTRY_PORT` | Integer | `SERVICE_REGISTRY_PORT` > `NACOS_REGISTER_SERVER_PORT` > `server.port` > `8080` | 注册使用的端口号。**独立微服务（cmx-flow-server / cmx-rpt-server / cmx-rule-server 等）开启注册时必填**——服务 HTTP 端口来自各自前缀 env（`FLOW_PORT` 等）、不写 `server.port`，漏配会注册成 8080 错端口，服务发现反代将打错地址 |
+| `SERVICE_REGISTRY_PORT` | Integer | `SERVICE_REGISTRY_PORT` > `NACOS_REGISTER_SERVER_PORT` > `server.port` > `8080` | 注册使用的端口号。**独立微服务（cmx-flow-server / cmx-rpt-server / cmx-rule-server 等）开启注册时必填**——服务 HTTP 端口来自 toml `[server]` 段（或 `SERVER__PORT` env，其经 ConfigManager env 层自动并入 `server.port`）、不写注册中心的 `server.port`，漏配会注册成 8080 错端口，服务发现反代将打错地址 |
 | `CONFIG_CENTER_TYPE` | String | `mock` | 配置中心类型：`mock` / `nacos` |
 | `CONFIG_CENTER_ENABLED` | Boolean | `false` | 是否启用配置中心 |
 | `APP_ID` | String | `default` | 应用隔离标识（仅 micro 模式生效，详见 [`DEPLOY__MODE`](#deploy_mode-部署模式)） |
@@ -160,6 +160,47 @@ cmx-ai 薄代理连接 OpenCode 的配置，优先级高于 `config.toml` 的 `[
 
 > 注：`url` 值需带 scheme（如 `http://...`）；纯数字值会被环境变量层解析为整数导致反序列化失败。
 > 旧形态（`CENTER_CLIENT__MODE` / `CENTER_CLIENT__URLS__*`）已废弃，出现时被忽略并打迁移 warn。
+
+---
+
+## 框架级环境变量（SERVER__* 族，与 ConfigManager `__` 约定同名）
+
+对应各服务 toml 的 `[server]` 段（`cmx-web-chassis::ChassisConfig` 读取）。命名与 ConfigManager 的 `__` 约定**同名**（`SERVER__PORT` → `server.port`）：chassis 在 ConfigManager 初始化前直读同名变量（门户日志初始化的时序要求），ConfigManager 就绪后其 env 层把同一变量合并到同一键——注册中心等 `get_string("server.port")` 消费方与实际监听端口永远一致。旧的每服务前缀（FLOW_/RPT_/RULE_/MDM_/MODEL_）与统一前缀 `CMX_*` 均已废弃：
+
+| 环境变量 | 类型 | 说明 |
+|----------|------|------|
+| `SERVER__HOST` | String | 监听地址（默认 `0.0.0.0`；`[server].host` 覆盖） |
+| `SERVER__PORT` | Integer | 监听端口（默认 `8080`；各引擎 toml 自配 8091~8095；`[server].port` 覆盖） |
+| `SERVER__LOG_DIR` | String | 日志目录（默认 `logs`；`[server].log_dir` 覆盖） |
+| `SERVER__LOG_LEVEL` | String | 默认日志级别（RUST_LOG 未设时用，默认 `info`；`[server].log_level` 覆盖） |
+| `SERVER__GRACEFUL_TIMEOUT_SECS` | Integer | 优雅关闭最长等待秒数（默认 `10`；`[server].graceful_timeout_secs` 覆盖；旧名 `CMX_GRACEFUL_SHUTDOWN_TIMEOUT_SECS` / `{PREFIX}_GRACEFUL_SECS` 已废弃） |
+
+> ⚠️ 多服务共存同一环境（同一 shell / 共享 env 的编排）时这些变量会同时命中多个服务；需单独改某服务时请改其 toml 的 `[server]` 段。
+
+---
+
+## 页面/内容资产环境变量（ASSETS__* 族）
+
+对应 toml 的 `[assets]` 段（ConfigManager `__` 分隔约定，段名 + `__` + 键名大写）：
+
+| 环境变量 | 消费方 | 说明 |
+|----------|--------|------|
+| `ASSETS__ROOT` | 门户 / model | 内容根（jsonstore：页面/元数据/字典/菜单 JSON；默认 `./data`） |
+| `ASSETS__UI_NATIVE_DIR` | 五引擎 | native 页面投递目录（默认 `web/ui-native`） |
+| `ASSETS__UI_HTML_DIR` | 五引擎 | html 页面投递目录（默认 `web/ui-html`） |
+| `ASSETS__WEB_PORTAL_DIST` / `ASSETS__WEB_HTML_DIST` / `ASSETS__WEB_SHARED_DIST` | 门户 | 同源托管的前端 dist 目录 |
+| `ASSETS__PAGE_CACHE_ENABLED` / `ASSETS__PAGE_CACHE_TTL_SECS` / `ASSETS__PAGE_CACHE_MAX_ENTRIES` | 门户 | 页面 moka L1 缓存开关/TTL/容量 |
+
+> 旧名 `CMX_PORTAL_DATA_ROOT`、各引擎 `{PREFIX}_UI_DIR` / `{PREFIX}_UI_HTML_DIR` 已废弃。
+
+---
+
+## 引擎认证环境变量（AUTH__* 族，flow / rules 等）
+
+对应引擎微服务 toml 的 `[auth]` 扁平段（ConfigManager 直读）：`AUTH__MODE` / `AUTH__JWT_ALG` / `AUTH__JWT_SECRET` / `AUTH__JWT_PUBLIC_KEY` / `AUTH__JWT_TENANT_CLAIM` / `AUTH__JWT_ROLES_CLAIM` / `AUTH__API_KEYS` / `AUTH__TENANCY`。
+
+> ⚠️ **一字之差警示**：`AUTH__JWT_SECRET`（引擎 `[auth]` 扁平段 → `auth.jwt_secret`）与平台 `[auth.jwt]` 段的 `AUTH__JWT__SECRET`（→ `auth.jwt.secret`）是**两个不同配置**。写错不报错、只是不生效，排查时先数下划线。
+> 旧名 `FLOW_AUTH_MODE` / `FLOW_JWT_*` / `FLOW_API_KEYS` / `RULE_AUTH_MODE` 等 env 注入链已废弃（数据源同理：`FLOW_PG_URL` / `IAM_PG_URL` / `RPT_PG_URL` / `RULE_PG_URL` 已废弃，统一 `[[databases]]` 段且缺段启动失败）。
 
 ---
 

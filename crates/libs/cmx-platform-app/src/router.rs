@@ -93,14 +93,14 @@ fn mount_local_storage_routes(mut router: Router) -> Router {
 ///
 /// `/portal` → CMXPortalManager/dist（base=/portal/），`/html` → CMXHTMLDesigner/dist
 /// （base=/html/），`/shared` → cmx-ui5-runtime/dist（前端 `import("/shared/assets/...")` 动态加载）。
-/// 路径由配置 `portal.web_portal_dist` / `web_html_dist` / `web_shared_dist` 给出；未配置则跳过
-/// （开发走 vite 代理）。`spa=true` 未命中文件回退到 index.html（支持 history 路由）；
-/// `/shared` 是纯静态（spa=false），缺文件即 404，绝不回退到某 index.html。
+/// 路径由配置 `assets.web_portal_dist` / `assets.web_html_dist` / `assets.web_shared_dist`
+/// （统一 `[assets]` 段）给出；未配置则跳过（开发走 vite 代理）。`spa=true` 未命中文件回退到
+/// index.html（支持 history 路由）；`/shared` 是纯静态（spa=false），缺文件即 404，绝不回退到某 index.html。
 fn mount_frontend_dists(mut router: Router) -> Router {
     for (key, prefix, spa) in [
-        ("portal.web_portal_dist", "/portal", true),
-        ("portal.web_html_dist", "/html", true),
-        ("portal.web_shared_dist", "/shared", false),
+        ("assets.web_portal_dist", "/portal", true),
+        ("assets.web_html_dist", "/html", true),
+        ("assets.web_shared_dist", "/shared", false),
     ] {
         let dist = ConfigManager::global().get_string(key).unwrap_or_default();
         let dist = dist.trim();

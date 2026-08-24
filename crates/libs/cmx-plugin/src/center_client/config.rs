@@ -93,20 +93,10 @@ impl CenterClientConfig {
             }
         };
 
-        // 先中转 toml::Value：检测旧配置形态（mode/urls/discovery，已被忽略），避免静默丢配置。
-        match sub.deserialize::<toml::Value>() {
-            Ok(raw) => {
-                warn_legacy_shape(&raw);
-                match CenterClientConfig::deserialize(raw) {
-                    Ok(config) => {
-                        warn_misplaced_values(&config);
-                        config
-                    }
-                    Err(e) => {
-                        tracing::warn!("加载 center_client 配置失败: {e}，使用默认（空 services）");
-                        Self::default()
-                    }
-                }
+        match sub.deserialize::<CenterClientConfig>() {
+            Ok(config) => {
+                warn_misplaced_values(&config);
+                config
             }
             Err(e) => {
                 tracing::warn!("加载 center_client 配置失败: {e}，使用默认（空 services）");
@@ -143,21 +133,6 @@ impl CenterClientConfig {
         ["menu", "perm", "form"]
             .iter()
             .any(|k| self.services.contains_key(*k))
-    }
-}
-
-/// 对旧版配置形态（mode / urls / discovery 三段，v2 已废弃）打 warn，避免静默丢配置。
-fn warn_legacy_shape(raw: &toml::Value) {
-    let legacy_keys: Vec<&str> = ["mode", "urls", "discovery"]
-        .into_iter()
-        .filter(|k| raw.get(*k).is_some())
-        .collect();
-    if !legacy_keys.is_empty() {
-        tracing::warn!(
-            legacy_keys = ?legacy_keys,
-            "检测到旧版 center_client 配置形态（mode/urls/discovery），已被忽略——\
-             请迁移到 [center_client.services] 单表（per-key 定位+传输），见 config_template.toml"
-        );
     }
 }
 
@@ -256,29 +231,6 @@ mod tests {
         assert!(cfg.nacos_group.is_none());
         assert!(cfg.services.is_empty());
         assert_eq!(cfg.timeout_ms, 30000);
-    }
-
-    /// 旧版字段（mode/urls/discovery）出现在 toml 里不报错且被忽略（load 时另有迁移 warn）。
-    #[test]
-    fn legacy_fields_are_ignored() {
-        let toml_text = r#"
-            mode = "http_url"
-            [urls]
-            flow = "http://127.0.0.1:8091"
-            [discovery]
-            nacos_group = "DEFAULT_GROUP"
-            [discovery.services]
-            menu = "cmx-portal-local"
-            [services]
-            flow = { url = "http://127.0.0.1:8092" }
-        "#;
-        let cfg: CenterClientConfig = toml::from_str(toml_text).expect("应反序列化成功");
-        // services 表生效；旧 urls 值不混入。
-        assert_eq!(
-            cfg.services.get("flow").and_then(|e| e.url.as_deref()),
-            Some("http://127.0.0.1:8092")
-        );
-        assert!(cfg.services.get("menu").is_none());
     }
 
     /// transport_of 覆盖链：键级覆盖全局；空白/未知值回退 http。

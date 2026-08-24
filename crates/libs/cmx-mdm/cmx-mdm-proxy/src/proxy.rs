@@ -1,8 +1,9 @@
 //! MdmProxyModule —— 平台→独立主数据微服务的**反向代理壳**（对标 cmx-model-proxy 的 ModelProxyModule）。
 //!
-//! 「后端一芯双壳」：进程内嵌（`/api/mdm/*` 由 cmx-container 内的 MdmModule handler 处理）↔
-//! MdmProxyModule（引擎在**远程独立 cmx-mdm-server**，同前缀透明转发）。二者对 web-server 是同一
-//! `/mdm` 前缀——**前端零改**，切换只看 `[center_client.services].mdm`。恒等映射 `{mdm_base}/api{path}{query}`。
+//! 「后端一芯双壳」：进程内嵌壳已随引擎抽取退役（MdmModule 源码不在 cmx-container），现存唯一
+//! 形态 = MdmProxyModule（引擎在**远程独立 cmx-mdm-server**，`/api/mdm/*` 同前缀透明转发）。
+//! 对 web-server 是同一 `/mdm` 前缀——**前端零改**，切换只看 `[center_client.services].mdm`。
+//! 恒等映射 `{mdm_base}/api{path}{query}`。
 //!
 //! 壳与核分工：本壳只管恒等路径映射与页面归属判定；头卫生/三层出站鉴权/超时/流式/502-503 兜底全在
 //! 转发核 [`cmx_proxy_core::ProxyCore`]（各反代壳共用）。

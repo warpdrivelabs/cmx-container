@@ -9,14 +9,14 @@ authors.workspace = true
 # 从 cmx-portal 下沉而来以打破「cmx-portal → cmx-form/cmx-model → 基础设施」的循环依赖。
 
 [features]
-# 向下游 crate 的单元测试暴露 util::test_data_root_lock()（串行化改 CMX_PORTAL_DATA_ROOT 的测试）。
+# 向下游 crate 的单元测试暴露 util::test_data_root_lock()（串行化改 ASSETS__ROOT 的测试）。
 # 仅由下游 crate 的 [dev-dependencies] 启用，正常构建不进入产物。
 testing = []
 
 [dependencies]
 # 内部依赖 - API 通用类型（PortalError → cmx_api_types::Error 映射）
 cmx-api-types = { workspace = true }
-# 内部依赖 - 工具库（ConfigManager 读取 portal.data_root）
+# 内部依赖 - 工具库（ConfigManager 读取 assets.root）
 cmx-utils = { workspace = true }
 
 # 异步运行时（tokio::fs 文件读写 + 并发锁）

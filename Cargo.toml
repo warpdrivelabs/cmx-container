@@ -187,9 +187,6 @@ cmx-job-api = { path = "crates/libs/cmx-job/cmx-job-api", version = "0.1.12", re
 # 内部依赖 - 数据字典（DCT）中立模型（DictView/SQL 构造/DTO，DB-free）
 # 内部依赖 - 数据字典（DCT）PG 持久化/服务层（cf_* 表直读/写 + 校验/铸号 + ZmcDataSet 零拷贝）
 # 内部依赖 - 数据字典（DCT）HTTP 层（薄 handler + DctModule 路由，web-server 合并，避免 cmx-api⇄cmx-dct 环）
-# 内部依赖 - 主数据（MDM）中立模型（LifecycleStatus/DTO，DB-free；激活器/匹配逻辑 M1/M3 填充）
-# 内部依赖 - 主数据（MDM）PG 持久化/服务层（激活映射/cm_* 写入闸口/CR 读取，M1 填充）
-# 内部依赖 - 主数据（MDM）HTTP 层（薄 handler + MdmModule 路由，web-server 合并，避免 cmx-api⇄cmx-mdm 环）
 # 内部依赖 - 主数据（MDM）平台反代薄壳（MdmProxyModule，proxy-only；反代到独立 cmx-mdm-server）
 cmx-mdm-proxy = { path = "crates/libs/cmx-mdm/cmx-mdm-proxy", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 后端主从协调器（前端 CmxMasterSlave 的 Rust 对等物；近叶子，doc/dct 服务 impl 其 HierService）

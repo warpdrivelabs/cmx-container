@@ -62,14 +62,13 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     dotenvy::dotenv().ok();
 
     // 分层日志初始化下沉到通用骨架 cmx-web-chassis（控制台 CompactFormatter + 滚动文件 JSON），
-    // 与 flow-server / report-server / mdm-server 完全一致。日志目录 logs、文件名 cmx-server.log
-    // （沿用原值，行为不变）。_guard 必须持有到 main 结束，确保文件日志后台线程 flush。
-    let log_cfg = cmx_web_chassis::ChassisConfig {
-        log_dir: "logs".to_string(),
-        log_file: "cmx-server.log".to_string(),
-        log_level: "info".to_string(),
-        ..cmx_web_chassis::ChassisConfig::defaults("cmx-server")
-    };
+    // 与 flow-server / report-server / mdm-server 完全一致。框架级配置走 chassis 统一装配：
+    // 读 CONFIG_FILE toml 的 [server] 段 + SERVER__* 环境变量覆盖（默认值 logs/cmx-server.log/info，
+    // 与历史硬编码逐项相等，行为不变）。注意须在 init_infra（ConfigManager）之前且二者不可互换
+    // ——ConfigManager::initialize 不可重入，而日志先于基础设施装配才有启动期日志；代价是
+    // Nacos 远程配置无法影响启动期日志级别（已知局限）。
+    // _guard 必须持有到 main 结束，确保文件日志后台线程 flush。
+    let log_cfg = cmx_web_chassis::ChassisConfig::load("cmx-server", "portal-server.toml");
     let _guard = cmx_web_chassis::init_tracing(&log_cfg);
 
     // ── 基础设施（顺序敏感：审计依赖数据源、IAM 依赖审计、系统身份在 finalize 之前）──
@@ -213,7 +212,7 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     info!("   监听地址：{}:{}", server_host, actual_port);
     info!("   (配置端口：{})", server_port);
     info!("   静态文件目录：{}", web_config.web_folder);
-    info!("   日志目录：{}", "logs");
+    info!("   日志目录：{}", log_cfg.log_dir);
     if let Some(port) = grpc_port {
         info!("   gRPC 端口：{}", port);
     }
@@ -260,20 +259,16 @@ fn web_identity() -> Option<cmx_web_monitor::Identity> {
     })
 }
 
-/// 优雅关闭超时（秒）。优先级：`CMX_GRACEFUL_SHUTDOWN_TIMEOUT_SECS` 环境变量 >
-/// `server.graceful_shutdown_timeout_secs` 配置 > 默认 10s。0 视为无效回退默认。
+/// 优雅关闭超时（秒）。`server.graceful_timeout_secs` 配置（[server] 段，与各引擎同键名）
+/// > 默认 10s。env 覆盖 `SERVER__GRACEFUL_TIMEOUT_SECS` 经 ConfigManager env 层自动合并到
+/// 同一键（`__` 约定），无需另设直读分支。0 视为无效回退默认。
 fn graceful_shutdown_timeout() -> Duration {
     const DEFAULT_SECS: u64 = 10;
 
-    let secs = std::env::var("CMX_GRACEFUL_SHUTDOWN_TIMEOUT_SECS")
+    let secs = ConfigManager::global()
+        .get_int("server.graceful_timeout_secs")
         .ok()
-        .and_then(|raw| raw.trim().parse::<u64>().ok())
-        .or_else(|| {
-            ConfigManager::global()
-                .get_int("server.graceful_shutdown_timeout_secs")
-                .ok()
-                .and_then(|value| u64::try_from(value).ok())
-        })
+        .and_then(|value| u64::try_from(value).ok())
         .filter(|secs| *secs > 0)
         .unwrap_or(DEFAULT_SECS);
 

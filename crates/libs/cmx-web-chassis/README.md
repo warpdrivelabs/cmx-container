@@ -23,7 +23,7 @@
 7. **绑定 + banner**：打印启动信息框与渐变字符画（非终端降级纯文本）；
 8. **serve + 优雅关闭**：SIGINT/SIGTERM 触发，等待活动连接，超时（`graceful_timeout_secs`，默认 10s）兜底继续退出。
 
-配置三级装配（`ChassisConfig::load`）：toml 路径 `CONFIG_FILE` → `{PREFIX}_CONFIG` → 内置默认 → 环境变量 `{PREFIX}_HOST/_PORT/_LOG_DIR/_LOG_LEVEL/_GRACEFUL_SECS` 覆盖（优先级最高）。chassis 只管这些**框架级**配置；服务专属配置（DB URL 等）由各服务自己读。
+配置装配（`ChassisConfig::load`）：toml 只认 `[server]` 段（路径由 `CONFIG_FILE` 指定 → 内置默认文件名）→ 环境变量 `SERVER__HOST/_PORT/_LOG_DIR/_LOG_LEVEL/_GRACEFUL_TIMEOUT_SECS` 覆盖（优先级最高；**命名与 ConfigManager 的 `__` 约定同名**，`SERVER__PORT` → `server.port`，故 env 覆盖对注册中心等 ConfigManager 消费方同样生效）。chassis 不依赖 ConfigManager（门户路径 load 早于其初始化，且骨架保持零平台依赖），直读同名变量保证两条读取链同值。chassis 只管这些**框架级**配置；服务专属配置（数据源/认证/页面资产等）由各服务自己经 ConfigManager 读同一份 toml。
 
 依赖方向上，chassis 依赖 `cmx-web-monitor`（默认启用的技术监控），而 monitor **不依赖** chassis——无环。
 
@@ -143,10 +143,10 @@ use cmx_web_chassis::{run, BannerSpec, ChassisConfig, ServiceSpec};
 
 #[tokio::main]
 async fn main() -> cmx_web_chassis::Result<()> {
-    // 配置三级装配：flow-server.toml 兜底，FLOW_PORT 等环境变量覆盖
-    let mut cfg = ChassisConfig::load("flow", "FLOW", "flow-server.toml");
+    // 配置装配：flow-server.toml 的 [server] 段 + SERVER__* 环境变量覆盖（与 ConfigManager `__` 约定同名）
+    let mut cfg = ChassisConfig::load("flow", "flow-server.toml");
     // 默认端口避让：未显式配置且仍是 8080 时改用服务专属端口
-    if std::env::var("FLOW_PORT").is_err() && cfg.port == 8080 {
+    if std::env::var("SERVER__PORT").is_err() && cfg.port == 8080 {
         cfg.port = 8091;
     }
 
@@ -186,14 +186,15 @@ cmx_web_chassis::serve_with_shutdown(listener, app, cfg.graceful_timeout_secs).a
 ### 场景三：环境变量覆盖配置（部署常用）
 
 ```text
-# ChassisConfig::load("flow", "FLOW", ...) 的优先级（高→低）：
-#   1. FLOW_PORT=8095            ← 环境变量覆盖（部署/编排注入）
-#   2. CONFIG_FILE=/etc/cmx.toml ← 统一配置文件（全服务同名约定，优先于前缀变量）
-#      FLOW_CONFIG=flow.toml     ← 向后兼容的前缀形式
+# ChassisConfig::load("flow", "flow-server.toml") 的优先级（高→低）：
+#   1. SERVER__PORT=8095         ← 环境变量覆盖（部署/编排注入；与 ConfigManager `__` 约定
+#                                   同名，注册中心读 server.port 也吃此覆盖；多服务共环境时
+#                                   单独改端口请用各自 toml 的 [server] 段）
+#   2. CONFIG_FILE=/etc/cmx.toml ← 统一配置文件（全服务同名约定），只认其 [server] 段
 #   3. flow-server.toml          ← 内置默认（随工作目录）
 #   4. defaults("flow")          ← 兜底：0.0.0.0:8080 / logs/flow.log / info / 10s
 #
-# 同理可用：FLOW_HOST / FLOW_LOG_DIR / FLOW_LOG_LEVEL / FLOW_GRACEFUL_SECS
+# 同理可用：SERVER__HOST / SERVER__LOG_DIR / SERVER__LOG_LEVEL / SERVER__GRACEFUL_TIMEOUT_SECS
 ```
 
 ---

@@ -20,7 +20,7 @@
 
 设计要点：
 
-- **不落库**：全部 JSON 文件存储，数据根经 `cmx_jsonstore::config` 三级解析（`portal.data_root` → `CMX_PORTAL_DATA_ROOT` → `./data`）。
+- **不落库**：全部 JSON 文件存储，数据根经 `cmx_jsonstore::config` 三级解析（toml `[assets]` 段 `assets.root` → `ASSETS__ROOT` → `./data`）。
 - **版本化/兼容性**：form 页保存即写带时间戳的新版本文件（历史版本留存）；html 页读优先 v2 分片、回退 v1 列表，写双写保证 list 立即可见。
 - **命名空间**：html/native 页 id 为点分 `domain.app.module.page`（2-4 段），源文件按命名空间分层存放；无点的旧式 id 归 `_legacy` 域。
 - **rev 内容锚点**：native/html 页响应带 `rev`（xxhash64 → 16 hex，读时现算"方案2"），作 HTTP ETag 与前端 IndexedDB 缓存校验锚点；配合 batch 端点的 `clientRevs` 差异同步协议，前端只拉内容有变的页面。
@@ -41,7 +41,7 @@
 | `serde` / `serde_json` | 入参/出参与 JSON 文档序列化 |
 | `chrono` | form 页版本文件名时间戳（`chrono::Local::now`，与 Node 一致） |
 
-dev-dependencies：`cmx-jsonstore`（启用 `testing` feature，串行化改 `CMX_PORTAL_DATA_ROOT` 的测试）+ `tempfile`（临时数据根）。
+dev-dependencies：`cmx-jsonstore`（启用 `testing` feature，串行化改 `ASSETS__ROOT` 的测试）+ `tempfile`（临时数据根）。
 
 ### 下游使用方（谁依赖本 crate）
 

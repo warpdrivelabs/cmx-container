@@ -9,7 +9,7 @@
 //! #[tokio::main]
 //! async fn main() -> cmx_web_chassis::Result<()> {
 //!     let router = my_module::routes::<()>();               // Router<()>
-//!     let spec = ServiceSpec::new("flow", ChassisConfig::load("flow", "FLOW", "flow-server.toml"))
+//!     let spec = ServiceSpec::new("flow", ChassisConfig::load("flow", "flow-server.toml"))
 //!         .router(router)
 //!         .state(())
 //!         .init("datasources", |_| Box::pin(async { register_dbs().await; Ok(()) }))

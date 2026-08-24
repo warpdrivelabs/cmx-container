@@ -55,7 +55,7 @@ pub fn write_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
-/// 测试专用：串行化「修改进程级 `CMX_PORTAL_DATA_ROOT` 环境变量」的单元测试。
+/// 测试专用：串行化「修改进程级 `ASSETS__ROOT` 环境变量」的单元测试。
 ///
 /// `cargo test` 默认并行跑用例，而 `data_root()` 读的是进程级环境变量；多个测试同时
 /// `set_var` 会相互污染。需要切换数据根的测试统一锁此 `std::sync::Mutex`（同步锁，

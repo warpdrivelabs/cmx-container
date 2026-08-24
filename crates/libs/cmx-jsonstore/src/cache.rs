@@ -39,9 +39,9 @@ enum CacheEntry {
 
 /// 进程级共享 L1 缓存：`PathBuf → CacheEntry`。
 ///
-/// - `time_to_live` 由 `portal.page_cache_ttl_secs` 配置（缺省 30s）；不用 `time_to_idle`，避免热 key
+/// - `time_to_live` 由 `assets.page_cache_ttl_secs` 配置（缺省 30s）；不用 `time_to_idle`，避免热 key
 ///   内存膨胀（与 cmx-auth `blacklist.rs` 同一考量）。
-/// - `max_capacity` 由 `portal.page_cache_max_entries` 配置（缺省 4096 条）：索引文件数量有限
+/// - `max_capacity` 由 `assets.page_cache_max_entries` 配置（缺省 4096 条）：索引文件数量有限
 ///   （域分片 + v1 list + native index ≈ 数十），页面源文件按热点页缓存；超出由 moka LRU 淘汰。
 /// - 容量按条目数估，不做精确 weigher：缓存对象多为 KB 级，条数上限已足够约束内存。
 ///
@@ -49,10 +49,10 @@ enum CacheEntry {
 /// （与 `cache_enabled()` 的运行时热读不同——重建 moka 实例代价大且会丢缓存，不值得）。
 static L1: LazyLock<Cache<PathBuf, CacheEntry>> = LazyLock::new(|| {
     let ttl_secs = cmx_utils::ConfigManager::try_global()
-        .map(|cfg| cfg.get_as_or("portal.page_cache_ttl_secs", 30u64))
+        .map(|cfg| cfg.get_as_or("assets.page_cache_ttl_secs", 30u64))
         .unwrap_or(30);
     let max_entries = cmx_utils::ConfigManager::try_global()
-        .map(|cfg| cfg.get_as_or("portal.page_cache_max_entries", 4_096u64))
+        .map(|cfg| cfg.get_as_or("assets.page_cache_max_entries", 4_096u64))
         .unwrap_or(4_096);
     Cache::builder()
         .time_to_live(Duration::from_secs(ttl_secs))
@@ -60,7 +60,7 @@ static L1: LazyLock<Cache<PathBuf, CacheEntry>> = LazyLock::new(|| {
         .build()
 });
 
-/// 读取页面缓存总开关：`portal.page_cache_enabled`，缺省 `false`（默认关闭，等价加缓存前行为）。
+/// 读取页面缓存总开关：`assets.page_cache_enabled`，缺省 `false`（默认关闭，等价加缓存前行为）。
 ///
 /// 仅控制 **moka L1 进程内缓存**（省磁盘 I/O）：
 /// 关闭时 [`cached_read_text`] / [`cached_read_json`] 直接穿透读盘、不回填；
@@ -78,7 +78,7 @@ pub fn cache_enabled() -> bool {
         }
     }
     cmx_utils::ConfigManager::try_global()
-        .map(|cfg| cfg.get_as_or("portal.page_cache_enabled", false))
+        .map(|cfg| cfg.get_as_or("assets.page_cache_enabled", false))
         .unwrap_or(false)
 }
 
