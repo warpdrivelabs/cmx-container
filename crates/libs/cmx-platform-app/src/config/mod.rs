@@ -5,7 +5,6 @@
 pub mod audit;
 pub mod auth;
 pub mod cache;
-pub mod code;
 pub mod datasource;
 pub mod iam;
 pub mod jobs;
@@ -23,7 +22,6 @@ pub use cmx_utils::config::DeployMode;
 pub use audit::build_audit_logger;
 pub use auth::{init_auth_service, init_system_identity};
 pub use cache::init_cache;
-pub use code::init_code_engine;
 pub use iam::{finalize_iam_state, init_iam_services, run_permission_check};
 pub use jobs::init_job_center;
 pub use migration::init_database_migrations;

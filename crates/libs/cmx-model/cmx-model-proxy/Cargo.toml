@@ -1,0 +1,24 @@
+[package]
+name = "cmx-model-proxy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 模型中心的**平台反代薄壳**（对标 cmx-rpt-api / cmx-rule-api / cmx-flow-api 的纯反代形态）。
+#
+# 模型中心已抽为**独立微服务**：中立核 cmx-model-app 在独立 workspace ../cmx-model，由那边的
+# cmx-model-server（:8093）承载。门户经服务定位配置 `[center_client.services].model` 决定：
+# 配了 = 反代到独立微服务（本壳）；没配 = 门户回退**进程内嵌**（原 Dct/Doc/Model/Code 模块仍在
+# cmx-container，编译期保留，作平滑迁移期的兜底）。本 crate 只含反代：ModelProxyModule 把模型中心
+# API（/dct、/dict、/doc、/model、/definitions、/flexible-combination、/code）+ 模型中心拥有的
+# native/html 页取页请求透明转发到远程 cmx-model-server。前端零改。
+
+[dependencies]
+# 内部依赖 - API 共享骨架层（CmxAppState / routes::traits::ModuleRoutes）。单向依赖：cmx-model-proxy → cmx-api-core。
+cmx-api-core = { workspace = true }
+
+# Web 框架（Router 类型）
+axum = { workspace = true }
+
+# 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，四反代壳共用）
+cmx-proxy-core = { workspace = true }

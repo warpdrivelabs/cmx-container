@@ -1,0 +1,17 @@
+[package]
+name = "cmx-mdm-proxy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 主数据（MDM）的**平台反代薄壳**（对标 cmx-model-proxy / cmx-rpt-api 的纯反代形态）。
+#
+# MDM 已抽为**独立微服务**：中立核 cmx-mdm-app 在独立 workspace ../cmx-mdm，由 cmx-mdm-server（:8095）
+# 承载。门户经 `[center_client.services].mdm` 决定：配了 = 反代到独立微服务（本壳）；没配 = 门户回退
+# **进程内嵌**（原 MdmModule 仍在 cmx-container，作平滑迁移期兜底）。本 crate 只含反代：MdmProxyModule
+# 把 `/api/mdm/*` + `portal.mdm.*` native 页取页请求透明转发到远程 cmx-mdm-server。前端零改。
+
+[dependencies]
+cmx-api-core = { workspace = true }
+axum = { workspace = true }
+cmx-proxy-core = { workspace = true }
