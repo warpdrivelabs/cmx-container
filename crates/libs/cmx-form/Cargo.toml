@@ -11,12 +11,23 @@ authors.workspace = true
 # 内部依赖 - 共享基础设施（config / error / fsutil / cache / util，再导出）
 cmx-jsonstore = { workspace = true }
 
+# 内部依赖 - 平台统一响应信封（serve 成功体 ApiResp + 默认错误映射 Error）
+cmx-api-types = { workspace = true }
+# 内部依赖 - [assets] 段目录解析（serve 配置兜底）
+cmx-utils = { workspace = true }
+
+# Web 框架（serve 只读投递路由）
+axum = { workspace = true }
 # 异步运行时（tokio::fs 文件读写 + tokio::spawn 异步回填 rev）
 tokio = { workspace = true }
 # 序列化框架
 serde = { workspace = true }
 # JSON 序列化/反序列化
 serde_json = { workspace = true }
+# 结构化日志（serve 索引/分片降级告警）
+tracing = { workspace = true }
+# 错误派生（serve PageServeError）
+thiserror = { workspace = true }
 # 时间处理（form 版本时间戳 chrono::Local::now）
 chrono = { workspace = true, features = ["serde"] }
 
