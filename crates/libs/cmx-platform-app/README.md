@@ -124,7 +124,7 @@ cmx-platform-app
 /// 平台服务入口：装配并运行平台聚合服务（src/lib.rs）
 pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()>;
 
-/// 优雅关闭超时（秒）：env CMX_GRACEFUL_SHUTDOWN_TIMEOUT_SECS > 配置 > 默认 10s
+/// 优雅关闭超时（秒）：toml [server].graceful_timeout_secs > 默认 10s（env 覆盖 SERVER__GRACEFUL_TIMEOUT_SECS 经 ConfigManager env 层自动生效）
 fn graceful_shutdown_timeout() -> Duration; // 私有
 ```
 

@@ -14,7 +14,7 @@
 
 六个模块各司其职：
 
-- **config**：数据根三级解析（`portal.data_root` 配置 → `CMX_PORTAL_DATA_ROOT` 环境变量 → `./data` 兜底），不做存在性校验——文件缺失在具体读写时再报 `NotFound`。
+- **config**：数据根三级解析（`assets.root` 配置（toml `[assets]` 段）→ `ASSETS__ROOT` 环境变量 → `./data` 兜底），不做存在性校验——文件缺失在具体读写时再报 `NotFound`。
 - **error**：`PortalError`（NotFound/BadRequest/Json/Io/Business）+ `PortalResult<T>`，并 `impl From<PortalError> for cmx_api_types::Error`——上层 HTTP handler 可直接 `?` 传播。
 - **fsutil**：JSON/文本的**原子读写**——同目录临时文件（`<name>.tmp.<pid>.<nanos>`）+ fsync + rename，POSIX 原子替换；自动创建父目录；pretty 格式与 Node 后端落盘格式一致（便于 diff）。
 - **cache**：进程内 moka L1 缓存（页面源码/索引文件）+ 内容版本锚点 `rev`（xxhash64 → 16 hex 小写）。
@@ -24,7 +24,7 @@
 两个关键设计：
 
 1. **rev = xxhash64(source bytes) 截断 16 hex**：非密码学哈希，但 CMX 页面缓存属"非安全上下文"（服务端算、内部作者编辑、无对抗方、碰撞后果轻微=一次刷新即修）。rev 同时作 HTTP ETag 值与前端 IndexedDB 缓存校验锚点。
-2. **缓存开关与 TTL 的生效语义不同**：`cache_enabled()`（`portal.page_cache_enabled`，**缺省 false**）是运行时热读，改配置即生效；moka 实例的 TTL（`portal.page_cache_ttl_secs` 缺省 30s）与容量（`portal.page_cache_max_entries` 缺省 4096）在 `LazyLock` 首次访问时固定，**改配置需重启**（重建实例代价大且丢缓存，不值得）。
+2. **缓存开关与 TTL 的生效语义不同**：`cache_enabled()`（`assets.page_cache_enabled`，**缺省 false**）是运行时热读，改配置即生效；moka 实例的 TTL（`assets.page_cache_ttl_secs` 缺省 30s）与容量（`assets.page_cache_max_entries` 缺省 4096）在 `LazyLock` 首次访问时固定，**改配置需重启**（重建实例代价大且丢缓存，不值得）。
 
 ---
 
@@ -35,7 +35,7 @@
 | 依赖 | 用途 |
 |------|------|
 | `cmx-api-types` | `PortalError → cmx_api_types::Error` 映射（handler `?` 传播的关键） |
-| `cmx-utils` | `ConfigManager` 读取 `portal.data_root` / `portal.page_cache_*` 配置 |
+| `cmx-utils` | `ConfigManager` 读取 `assets.root` / `assets.page_cache_*` 配置 |
 | `tokio` | 异步文件读写（tokio::fs）与并发锁 |
 | `serde` / `serde_json` | JSON 文档序列化/反序列化 |
 | `thiserror` | `PortalError` 错误派生 |
@@ -57,7 +57,7 @@
 
 | 功能 | 说明 |
 |------|------|
-| 数据根解析 | `data_root()`：配置 `portal.data_root` → 环境变量 `CMX_PORTAL_DATA_ROOT` → `./data`；`data_path(segments)` 在根下拼路径 |
+| 数据根解析 | `data_root()`：配置 `assets.root`（toml `[assets]` 段）→ 环境变量 `ASSETS__ROOT` → `./data`；`data_path(segments)` 在根下拼路径 |
 | 原子写 | `write_json_atomic`（可选 pretty）/ `write_text_atomic`：同目录临时文件 + fsync + rename，读侧永不看到半截文件 |
 | 容错读 | `read_json<T>`（缺失→`NotFound`）/ `read_json_opt`（缺失→`None`）/ `read_text_opt`——「首次运行尚无数据」是正常态 |
 | 统一错误 | `PortalError` 五类变体 + HTTP 状态映射语义（404/400/500）；`From<PortalError> for cmx_api_types::Error` |
@@ -68,7 +68,7 @@
 | ID 校验 | `is_safe_id`（`[a-zA-Z0-9._-]{1,128}`）/ `is_safe_segment`（不含点）/ `is_safe_json_file` / `validate_id` |
 | 路径防穿越 | `resolve_within(base, rel)`：去前导 `/` 与 `data/` 前缀、逐段拼接、拒绝 `..`/根/盘符 |
 | 全局写锁 | `write_lock()`：单把进程级 tokio Mutex，串行化「文件 JSON 低频写」，实现简单不会死锁；热点可再拆细粒度 |
-| 测试基建 | `#[cfg(any(test, feature = "testing"))] test_data_root_lock()`：串行化改 `CMX_PORTAL_DATA_ROOT` 的跨 crate 测试 |
+| 测试基建 | `#[cfg(any(test, feature = "testing"))] test_data_root_lock()`：串行化改 `ASSETS__ROOT` 的跨 crate 测试 |
 
 ---
 
@@ -93,7 +93,7 @@ cmx-jsonstore
 
 ```rust
 // src/config.rs
-pub fn data_root() -> PathBuf;                       // portal.data_root → CMX_PORTAL_DATA_ROOT → ./data
+pub fn data_root() -> PathBuf;                       // assets.root → ASSETS__ROOT → ./data
 pub fn data_path<I, S>(segments: I) -> PathBuf
 where I: IntoIterator<Item = S>, S: AsRef<Path>;     // data_path(["form-pages", "pages-list.json"])
 
@@ -111,7 +111,7 @@ pub async fn write_text_atomic(path: &Path, text: &str) -> PortalResult<()>;
 
 // src/cache.rs
 pub const REV_LEN: usize = 16;
-pub fn cache_enabled() -> bool;                      // portal.page_cache_enabled，缺省 false（运行时热读）
+pub fn cache_enabled() -> bool;                      // assets.page_cache_enabled，缺省 false（运行时热读）
 pub fn content_rev(bytes: &[u8]) -> String;          // xxhash64 → 16 hex 小写
 pub async fn cached_read_text(path: &Path) -> PortalResult<Option<String>>;
 pub async fn cached_read_json(path: &Path) -> PortalResult<Option<serde_json::Value>>;
@@ -202,4 +202,4 @@ assert!(resolve_within(&base, "../../etc/passwd").is_err());
 
 | Feature | 说明 |
 |---------|------|
-| `testing` | 向下游 crate 的**单元测试**暴露 `util::test_data_root_lock()`——串行化会改写 `CMX_PORTAL_DATA_ROOT` 环境变量的跨 crate 测试，避免数据根互踩。仅由下游 `[dev-dependencies]` 启用（如 `cmx-jsonstore = { workspace = true, features = ["testing"] }`），正常构建不进入产物。 |
+| `testing` | 向下游 crate 的**单元测试**暴露 `util::test_data_root_lock()`——串行化会改写 `ASSETS__ROOT` 环境变量的跨 crate 测试，避免数据根互踩。仅由下游 `[dev-dependencies]` 启用（如 `cmx-jsonstore = { workspace = true, features = ["testing"] }`），正常构建不进入产物。 |

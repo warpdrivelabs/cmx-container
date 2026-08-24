@@ -8,7 +8,7 @@ CMXPortalManager / CMXHTMLDesigner 的 Node.js 后端已全量迁移到 cmx-cont
 - **统一后端**：`cmx-container` web-server（默认 `:8080`），业务在 `crates/libs/cmx-portal`，
   HTTP 在 `crates/libs/cmx-api/src/handlers/portal/`。
 - **数据根**：`cmx-container/data/`（由 `dev-local.toml` 的 `[portal] data_root = "./data"` 指定；
-  亦可用环境变量 `CMX_PORTAL_DATA_ROOT` 覆盖）。Portal 的 6.5M JSON 数据 + Designer 6 个独有页面
+  亦可用环境变量 `ASSETS__ROOT` 覆盖（toml `[assets]` 段 `root`））。Portal 的 6.5M JSON 数据 + Designer 6 个独有页面
   + activities/portal + 两个 flat 菜单 + portal-overview 节点已全部并入。
 - **认证**：所有 `/api/**` 业务端点受 `mw_auth` 保护；前端登录页 `login.html` + `lib/auth.js`
   + `api-client.js` 的全局 fetch 拦截器（自动带 Bearer token + 401 跳登录）。

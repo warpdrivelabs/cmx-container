@@ -1,7 +1,7 @@
 //! cmx-jsonstore —— 通用 JSON 文件存储基础设施（原 cmx-portal-base，被 form/model-meta/biz/portal 共用）。
 //!
 //! 从 `cmx-portal` 下沉而来，承载被 `cmx-portal` / `cmx-form` / `cmx-model` 共用的：
-//! - [`config`]  —— 数据根目录解析（`portal.data_root` / `CMX_PORTAL_DATA_ROOT` / `./data`）。
+//! - [`config`]  —— 数据根目录解析（`assets.root` / `ASSETS__ROOT` / `./data`）。
 //! - [`error`]   —— 统一错误 [`PortalError`] 及 `impl From<PortalError> for cmx_api_types::Error`。
 //! - [`fsutil`]  —— JSON 文件原子读写（临时文件 + rename）。
 //! - [`cache`]   —— 页面源码/索引 L1 缓存（moka）+ 内容版本锚点 `rev`（xxhash64）。

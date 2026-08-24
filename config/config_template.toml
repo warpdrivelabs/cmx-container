@@ -14,6 +14,12 @@ host = "0.0.0.0"
 # 监听端口（可选，默认 8080）
 # 设置服务器监听的 TCP 端口号
 port = 8080
+# 日志目录（可选，默认 logs；环境变量覆盖 SERVER__LOG_DIR）
+# log_dir = "logs"
+# 日志级别（可选，默认 info；环境变量覆盖 SERVER__LOG_LEVEL）
+# log_level = "info"
+# 优雅关闭最长等待秒数（可选，默认 10；环境变量覆盖 SERVER__GRACEFUL_TIMEOUT_SECS）
+# graceful_timeout_secs = 10
 ## Nacos 注册 IP（可选，留空则自动获取本机 IP），用于服务注册到 Nacos 时的 IP 地址
 # ip = "192.168.1.100"
 
@@ -666,12 +672,12 @@ failure_mode = "FailClose"
 # description = "内部服务 API Key"
 
 # ============================================
-# 门户配置
+# 页面/内容资产（统一 [assets] 段）
 # ============================================
-[portal]
-# 门户数据根目录（相对进程工作目录）。存放 menu-pages / html-pages / native-pages / dict / meta 等 JSON 资源。
-# 也可用环境变量 CMX_PORTAL_DATA_ROOT 覆盖；缺省回退 ./data。
-data_root = "./data"
+# 内容根目录（相对进程工作目录）。存放 menu-pages / html-pages / native-pages / dict / meta 等 JSON 资源。
+# 也可用环境变量 ASSETS__ROOT 覆盖；缺省回退 ./data。
+[assets]
+root = "./data"
 # 同源托管的前端生产构建产物目录（npm run build 产物）。留空 = 不托管（开发期走 vite dev server）。
 web_portal_dist = ""
 # HTML 设计器生产构建产物目录。留空 = 不托管。

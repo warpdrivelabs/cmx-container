@@ -34,7 +34,7 @@ SHARED_DIST="$ROOT_DIR/packages/cmx-ui5-runtime/dist"   # UI5 runtime, served at
 BIN="$CMX_DIR/target/release/web-server"
 LOG_FILE="$CMX_DIR/logs/deploy-server.log"
 PID_FILE="$CMX_DIR/.deploy-server.pid"
-PORT="${CMX_PORT:-8080}"
+PORT="${SERVER__PORT:-8080}"
 
 DO_FRONTEND=1
 DO_BACKEND=1
