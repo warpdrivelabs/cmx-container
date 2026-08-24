@@ -29,10 +29,8 @@ cmx-common-api = { workspace = true }
 cmx-rpt-api = { workspace = true }
 cmx-rule-api = { workspace = true }
 cmx-flow-api = { workspace = true }
-cmx-doc-api = { workspace = true }
-cmx-dct-api = { workspace = true }
-cmx-mdm-api = { workspace = true }
-cmx-code-api = { workspace = true }
+cmx-model-proxy = { workspace = true }
+cmx-mdm-proxy = { workspace = true }
 cmx-storage-api = { workspace = true }
 cmx-ai-api = { workspace = true }
 cmx-biz-api = { workspace = true }
@@ -46,7 +44,6 @@ cmx-job-core = { workspace = true }
 cmx-job-store-pg = { workspace = true }
 cmx-job-api = { workspace = true }
 # 内部依赖 - 模型中心 HTTP 层
-cmx-model-api = { workspace = true }
 # 内部依赖 - 审计/认证/IAM/业务/缓存/插件/AI/运行时
 cmx-audit = { workspace = true }
 cmx-auth = { workspace = true }

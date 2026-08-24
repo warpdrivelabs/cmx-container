@@ -323,6 +323,10 @@ timeout_ms = 30000
 # report = { url = "http://127.0.0.1:8092", discovery = "cmx-rpt-server" }
 ## 决策规则微服务（反代目标）
 # rules = { url = "http://127.0.0.1:8094", discovery = "cmx-rule-server" }
+## 模型中心微服务（反代目标；配了=反代到独立 cmx-model-server，没配=门户进程内嵌 Dct/Doc/Model/Code）
+# model = { url = "http://127.0.0.1:8093", discovery = "cmx-model-server" }
+## 主数据微服务（反代目标；配了=反代到独立 cmx-mdm-server，没配=门户进程内嵌 MdmModule）
+# mdm = { url = "http://127.0.0.1:8095", discovery = "cmx-mdm-server" }
 
 # ============================================
 # RPC 配置

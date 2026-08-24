@@ -12,20 +12,17 @@ use cmx_biz_api::{
     ApplicationModule, BizApiDoc, DomainModule, FormModule, MenuModule, ModuleCrudModule,
     SysDatasourceModule,
 };
-use cmx_code_api::CodeModule;
 use cmx_plugin_api::{
     MarketplaceModule, ModulePackageModule, PluginApiDoc, PluginModule, TableMetadataModule,
 };
 use cmx_iam_api::{AuthModule, IamApiDoc, IamModule};
-use cmx_dct_api::{DctApiDoc, DctModule};
-use cmx_doc_api::{DocApiDoc, DocModule};
 use cmx_flow_api::FlowProxyModule;
 use cmx_job_api::JobModule;
-use cmx_mdm_api::{MdmApiDoc, MdmModule};
-use cmx_model_api::ModelModule;
 use cmx_plugin::center_client::ProxyUpstream;
 use cmx_rpt_api::ReportProxyModule;
 use cmx_rule_api::RulesProxyModule;
+use cmx_model_proxy::ModelProxyModule;
+use cmx_mdm_proxy::MdmProxyModule;
 use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -36,6 +33,10 @@ const FLOW_UPSTREAM_KEY: &str = "flow";
 const REPORT_UPSTREAM_KEY: &str = "report";
 /// 服务定位键：决策规则引擎（`[center_client.services].rules`）。
 const RULES_UPSTREAM_KEY: &str = "rules";
+/// 服务定位键：模型中心（`[center_client.services].model`）。
+const MODEL_UPSTREAM_KEY: &str = "model";
+/// 服务定位键：主数据中心（`[center_client.services].mdm`）。
+const MDM_UPSTREAM_KEY: &str = "mdm";
 
 /// 解析流程引擎反代目标（per-key 定位，见 `cmx_plugin::center_client::upstream`）。
 ///
@@ -64,6 +65,23 @@ pub(crate) fn report_upstream() -> Option<ProxyUpstream> {
 /// 规则路由，而非回退内嵌。配了目标就转发 `/api/rules/*` + 规则拥有的 native 页，前端全零改。
 pub(crate) fn rules_upstream() -> Option<ProxyUpstream> {
     cmx_plugin::center_client::proxy_upstream(RULES_UPSTREAM_KEY)
+}
+
+/// 解析模型中心反代目标（per-key 定位）。
+///
+/// 与 flow/report 的差异：模型中心**保留进程内嵌兜底**（Dct/Doc/Model/Code 模块仍在 cmx-container，
+/// 编译期保留，作平滑迁移期回退）。配了 `[center_client.services].model` = 反代到独立 cmx-model-server；
+/// 没配 = 门户进程内嵌（现行为不变）。这是「后端一芯双壳」在模型中心的切换点。
+pub(crate) fn model_upstream() -> Option<ProxyUpstream> {
+    cmx_plugin::center_client::proxy_upstream(MODEL_UPSTREAM_KEY)
+}
+
+/// 解析主数据中心反代目标（per-key 定位）。
+///
+/// 与模型中心同构：**保留进程内嵌兜底**（MdmModule 仍在 cmx-container，编译期保留，作平滑迁移期回退）。
+/// 配了 `[center_client.services].mdm` = 反代到独立 cmx-mdm-server（:8095）；没配 = 门户进程内嵌。
+pub(crate) fn mdm_upstream() -> Option<ProxyUpstream> {
+    cmx_plugin::center_client::proxy_upstream(MDM_UPSTREAM_KEY)
 }
 
 /// 平台服务依赖拓扑：枚举各已挂载能力当前挂的是「进程内内嵌」还是「反代独立微服务」。
@@ -128,12 +146,45 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
             proxiable: true,
         });
     }
-    deps.push(embedded("doc", "业务单据"));
-    deps.push(embedded("dct", "数据字典"));
-    deps.push(embedded("mdm", "主数据"));
+    // 模型中心四能力（doc/dct/model/code）按 [center_client.services].model 决定 embedded/proxy；
+    // 配了 = 四者都反代到独立 cmx-model-server，没配 = 四者进程内嵌。MdmModule 恒内嵌（另案抽 cmx-mdm）。
+    match model_upstream() {
+        Some(upstream) => {
+            let target = upstream.resolve();
+            for (key, label) in [
+                ("doc", "业务单据"),
+                ("dct", "数据字典"),
+                ("model", "模型中心"),
+                ("code", "编码引擎"),
+            ] {
+                deps.push(cmx_web_monitor::ServiceDep {
+                    key: key.into(),
+                    label: label.into(),
+                    mode: "proxy".into(),
+                    target: target.clone(),
+                    proxiable: true,
+                });
+            }
+        }
+        None => {
+            deps.push(embedded("doc", "业务单据"));
+            deps.push(embedded("dct", "数据字典"));
+            deps.push(embedded("model", "模型中心"));
+            deps.push(embedded("code", "编码引擎"));
+        }
+    }
+    // 主数据按 [center_client.services].mdm 决定 embedded/proxy。
+    match mdm_upstream() {
+        Some(upstream) => deps.push(cmx_web_monitor::ServiceDep {
+            key: "mdm".into(),
+            label: "主数据".into(),
+            mode: "proxy".into(),
+            target: upstream.resolve(),
+            proxiable: true,
+        }),
+        None => deps.push(embedded("mdm", "主数据")),
+    }
     deps.push(embedded("job", "异步任务中心"));
-    deps.push(embedded("model", "模型中心"));
-    deps.push(embedded("code", "编码引擎"));
     deps
 }
 
@@ -213,7 +264,56 @@ fn merge_rules(router: Router<CmxAppState>) -> Router<CmxAppState> {
     }
 }
 
-/// 配置所有 API 路由
+/// 按配置产出模型中心路由：配置了反代目标 → ModelProxyModule（转发 `/api/{dct,dict,doc,model,
+/// definitions,flexible-combination,code}/*`）+ 页面反代（模型中心拥有的 native/html 单页取页请求
+/// 转发到 cmx-model-server）；没配 → 不挂模型中心路由。
+///
+/// 模型中心已抽独立微服务 cmx-model（:8093），容器内引擎源码已退役，**无进程内嵌兜底**（与
+/// flow/report/rules 同构）。前端零改：浏览器请求同源 `/api/dct/*` 等，切换只看
+/// `[center_client.services].model`。
+///
+/// ⚠ MDM（主数据）不在此列——见 [`merge_mdm`]（另一独立微服务 cmx-mdm）。
+fn merge_model(router: Router<CmxAppState>) -> Router<CmxAppState> {
+    match model_upstream() {
+        Some(upstream) => {
+            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            tracing::info!(upstream = %upstream.describe(), "模型中心：独立微服务模式（ModelProxy 转发 /api/{{dct,dict,doc,model,definitions,flexible-combination,code}}/* + 页面反代 native/html）");
+            let resolver = upstream.resolver_fn();
+            let router = router.merge(
+                ModelProxyModule::with_resolver(resolver.clone(), api_key.clone()).routes(),
+            );
+            cmx_model_proxy::with_model_page_proxy(router, resolver, api_key)
+        }
+        None => {
+            tracing::warn!("模型中心：未配置反代目标（[center_client.services] 未配 model 键或 url/discovery 均空）→ 门户不挂模型中心路由（/api/dct、/api/doc、/api/model、/api/code 等）；请启动独立 cmx-model-server 并配置其地址");
+            router
+        }
+    }
+}
+
+/// 按配置产出主数据路由：配置了反代目标 → MdmProxyModule（转发 `/api/mdm/*`）+ 页面反代（MDM 拥有的
+/// `portal.mdm.*` native 页转发到 cmx-mdm-server）；没配 → 不挂主数据路由。
+///
+/// 主数据已抽独立微服务 cmx-mdm（:8095），容器内引擎源码已退役，**无进程内嵌兜底**（与
+/// flow/report/rules/model 同构）。前端零改：浏览器请求同源 `/api/mdm/*`，切换只看
+/// `[center_client.services].mdm`。
+fn merge_mdm(router: Router<CmxAppState>) -> Router<CmxAppState> {
+    match mdm_upstream() {
+        Some(upstream) => {
+            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            tracing::info!(upstream = %upstream.describe(), "主数据中心：独立微服务模式（MdmProxy 转发 /api/mdm/* + 页面反代 native）");
+            let resolver = upstream.resolver_fn();
+            let router = router.merge(
+                MdmProxyModule::with_resolver(resolver.clone(), api_key.clone()).routes(),
+            );
+            cmx_mdm_proxy::with_mdm_page_proxy(router, resolver, api_key)
+        }
+        None => {
+            tracing::warn!("主数据中心：未配置反代目标（[center_client.services] 未配 mdm 键或 url/discovery 均空）→ 门户不挂 /api/mdm/* 路由；请启动独立 cmx-mdm-server 并配置其地址");
+            router
+        }
+    }
+}
 ///
 /// 直接调用 cmx-api 的统一路由注册，返回配置好的 Axum Router。
 /// 外部模块路由（报表 ReportProxyModule、流程 FlowProxyModule、规则 RulesProxyModule、业务单据
@@ -231,12 +331,7 @@ pub fn routes() -> Router<CmxAppState> {
     let base = api_routes()
         .merge(AuthModule.routes())
         .merge(IamModule.routes())
-        .merge(DocModule.routes())
-        .merge(DctModule.routes())
-        .merge(MdmModule.routes())
         .merge(JobModule.routes())
-        .merge(ModelModule.routes())
-        .merge(CodeModule.routes())
         .merge(StorageModule.routes())
         .merge(AiModule.routes())
         .merge(DomainModule.routes())
@@ -251,7 +346,11 @@ pub fn routes() -> Router<CmxAppState> {
         .merge(ModulePackageModule.routes());
     // 报表、流程各按 [center_client.services].{report,flow} 二选一：配了=反代到独立微服务，没配=进程内嵌。
     // 规则按 [center_client.services].rules：配了=反代到独立 cmx-rule-server，没配=不挂（规则无内嵌）。
-    merge_flow(merge_report(merge_rules(base)))
+    // 模型中心按 [center_client.services].model：配了=反代到独立 cmx-model-server，没配=进程内嵌
+    // （Dct/Doc/Model/Code 四模块，见 merge_model 的 None 分支——故已从 base 移出）。
+    // 主数据按 [center_client.services].mdm：配了=反代到独立 cmx-mdm-server，没配=进程内嵌
+    // （MdmModule，见 merge_mdm 的 None 分支——故已从 base 移出）。
+    merge_mdm(merge_model(merge_flow(merge_report(merge_rules(base)))))
 }
 
 /// 获取 Swagger 文档路由
@@ -272,9 +371,8 @@ fn merged_openapi() -> utoipa::openapi::OpenApi {
     doc.merge(BizApiDoc::openapi());
     doc.merge(PluginApiDoc::openapi());
     doc.merge(IamApiDoc::openapi());
-    doc.merge(DctApiDoc::openapi());
-    doc.merge(DocApiDoc::openapi());
-    doc.merge(MdmApiDoc::openapi());
+    // 模型中心（DCT/DOC）与主数据（MDM）的 OpenAPI 切片随引擎迁至独立微服务
+    // （cmx-model-server / cmx-mdm-server 各自暴露 /openapi.json），门户主文档不再合并。
     doc.merge(PortalApiDoc::openapi());
     doc
 }

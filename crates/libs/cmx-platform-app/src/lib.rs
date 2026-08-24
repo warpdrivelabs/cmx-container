@@ -16,7 +16,7 @@ use config::web_config;
 use crate::app_state::build_app_state;
 use crate::config::{
     build_audit_logger, build_function_invoker, finalize_iam_state, init_auth_service, init_cache,
-    init_code_engine, init_datasources, init_iam_services, init_job_center, init_runtime,
+    init_datasources, init_iam_services, init_job_center, init_runtime,
     init_system_identity, init_web_config, run_permission_check,
 };
 // 基础设施改由公用包 cmx-service-base 提供：
@@ -128,8 +128,8 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
         .await
         .map_err(|e| Error::ServiceInit(format!("服务调用器初始化失败: {e}")))?;
 
-    // 编码引擎全局注入（供 DCT/DOC 钩子调用，未注入则钩子跳过=现状零影响）。
-    init_code_engine();
+    // 编码引擎全局注入随模型中心迁至独立微服务 cmx-model-server（DCT/DOC 落库在那里发生，由它
+    // 自注入 GlobalCodeMinter）。门户已退役内嵌 DCT/DOC，故此处不再注入编码引擎。
 
     // ── IAM + 认证（审计→IAM→认证→系统身份→finalize→权限校验）──
     // 审计日志器依赖 DatabaseManager，必须在 init_datasources 之后。
@@ -186,11 +186,8 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     // 异步任务中心（M3 分布式态）：PG 持久化 + 终态告警 + claim/heartbeat/reaper 三循环。
     init_job_center().await;
 
-    // M5 主数据分发引擎：注册通道（webhook）+ 按配置拉起 Dispatcher 循环
-    // （[mdm.distribution].enabled=false 时仅注册通道不 spawn，端点仍可用）。
-    if let Err(e) = cmx_mdm_api::distribution::start_distribution() {
-        tracing::error!(target: "cmx_mdm::distribution", error = %e, "分发引擎启动失败");
-    }
+    // 主数据分发引擎随 MDM 引擎迁至独立微服务 cmx-mdm-server（它在自身启动钩子里拉起 Dispatcher
+    // 循环）。门户已退役内嵌 MDM，故此处不再启动分发引擎。
 
     // ── 路由 + 监听 + 服务 ──
     let routes_all = build_router(app_state, web_config);
