@@ -32,7 +32,7 @@ cargo clippy -- -W clippy::all | findstr /V "too_many_arguments unused_variables
 
 ### 2. 生成修复计划文档
 
-在 `.trae/documents/` 目录下创建 `修改计划-YYYY-MM-DD.md`：
+在 `documents/` 目录下创建 `修改计划-YYYY-MM-DD.md`：
 
 ```markdown
 # Clippy 警告修复计划 - YYYY-MM-DD
@@ -93,7 +93,7 @@ cargo clippy -- -W clippy::all | findstr /V "too_many_arguments unused_variables
 
 ### 4. 生成修复报告文档
 
-在 `.trae/documents/` 目录下创建 `修复报告-YYYY-MM-DD.md`：
+在 `documents/` 目录下创建 `修复报告-YYYY-MM-DD.md`：
 
 ```markdown
 # Clippy 警告修复报告 - YYYY-MM-DD
@@ -247,7 +247,7 @@ fn unused_but_kept() {}
 
 | 文件 | 用途 |
 |------|------|
-| `.trae/documents/` | 存放修复计划报告文档 |
+| `documents/` | 存放修复计划报告文档 |
 | `Cargo.toml` | 项目配置 |
 
 ## 注意事项

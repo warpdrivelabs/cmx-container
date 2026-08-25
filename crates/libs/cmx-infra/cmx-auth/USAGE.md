@@ -4,8 +4,8 @@
 >
 > 关联文档：
 > - 配置项字典：[config/CONFIG_MANUAL.md#认证配置](../../../config/CONFIG_MANUAL.md)
-> - 架构设计：[.trae/documents/20260615_cmx-auth_企业级统一认证模块架构方案.md](../../documents/20260615_cmx-auth_企业级统一认证模块架构方案.md)
-> - 第三方 OAuth2 对接：[.trae/documents/20260615_cmx-auth_第三方OAuth2Provider对接方案.md](../../documents/20260615_cmx-auth_第三方OAuth2Provider对接方案.md)
+> - 架构设计：[documents/20260615_cmx-auth_企业级统一认证模块架构方案.md](../../documents/20260615_cmx-auth_企业级统一认证模块架构方案.md)
+> - 第三方 OAuth2 对接：[documents/20260615_cmx-auth_第三方OAuth2Provider对接方案.md](../../documents/20260615_cmx-auth_第三方OAuth2Provider对接方案.md)
 
 ***
 
@@ -1385,7 +1385,7 @@ cmx-auth 涉及 6 张表（schema 均为 `public`）。
 - `cmx_user`（1）—（N）`cmx_auth_api_key`（可选）
 - `cmx_auth_client`（独立，无外键关联）
 
-详细 DDL 参见架构方案 [§4.4 数据库表结构设计](.trae/documents/20260615_cmx-auth_企业级统一认证模块架构方案.md)。
+详细 DDL 参见架构方案 [§4.4 数据库表结构设计](documents/20260615_cmx-auth_企业级统一认证模块架构方案.md)。
 
 ***
 
@@ -1903,8 +1903,8 @@ Grafana 面板推荐指标：
 
 ## 附录 B：相关文档
 
-- **架构方案**：[.trae/documents/20260615_cmx-auth_企业级统一认证模块架构方案.md](../../documents/20260615_cmx-auth_企业级统一认证模块架构方案.md)
-- **第三方 OAuth2 对接方案**：[.trae/documents/20260615_cmx-auth_第三方OAuth2Provider对接方案.md](../../documents/20260615_cmx-auth_第三方OAuth2Provider对接方案.md)
+- **架构方案**：[documents/20260615_cmx-auth_企业级统一认证模块架构方案.md](../../documents/20260615_cmx-auth_企业级统一认证模块架构方案.md)
+- **第三方 OAuth2 对接方案**：[documents/20260615_cmx-auth_第三方OAuth2Provider对接方案.md](../../documents/20260615_cmx-auth_第三方OAuth2Provider对接方案.md)
 - **配置项字典**：[config/CONFIG_MANUAL.md](../../../config/CONFIG_MANUAL.md)
 - **配置模板**：[config/config_template.toml](../../../config/config_template.toml)
 - **环境变量**：[config/.env.template](../../../config/.env.template)

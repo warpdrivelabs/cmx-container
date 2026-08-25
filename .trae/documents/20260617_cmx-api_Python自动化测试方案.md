@@ -323,7 +323,7 @@ pytest test_iam_role.py::test_role_tree -v
 │ 2. 运行测试：pytest -v --html=report.html               │
 ├─────────────────────────────────────────────────────────┤
 │ 3. 收集结果：解析 pytest 输出 + report.html              │
-│    将失败接口写入：.trae/documents/e2e_issues_report.md   │
+│    将失败接口写入：documents/e2e_issues_report.md   │
 ├─────────────────────────────────────────────────────────┤
 │ 4. 修复源码：定位 handler/service 层，最小化修改          │
 ├─────────────────────────────────────────────────────────┤
@@ -354,7 +354,7 @@ pytest test_iam_role.py::test_role_tree -v
 2. **服务可达**：`curl http://127.0.0.1:8080/api/auth/health` 返回 healthy
 3. **单模块测试**：`pytest e2e_tests/test_auth_basic.py -v` 全绿
 4. **全量测试**：`pytest e2e_tests/ -v --html=report.html` 全绿
-5. **报告产出**：`.trae/documents/e2e_issues_report.md` 标记「全部已解决」
+5. **报告产出**：`documents/e2e_issues_report.md` 标记「全部已解决」
 6. **回归**：修复后重跑全量，确认无回归
 
 ---

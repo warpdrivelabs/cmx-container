@@ -27,7 +27,7 @@
 
 ## 输出产物
 
-在 `/media/yqs/工作/rustspace/cmx/cmx-container/.trae/documents/` 下创建文档：
+在 `/media/yqs/工作/rustspace/cmx/cmx-container/documents/` 下创建文档：
 
 **文件名**: `2026-05-24-cmx-plugin跨实例通知机制分析.md`
 
