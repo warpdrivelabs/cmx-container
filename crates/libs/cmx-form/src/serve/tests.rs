@@ -31,6 +31,7 @@ impl From<PageServeError> for LegacyStyleError {
         match e {
             PageServeError::BadRequest(m) => Self::Business(m),
             PageServeError::NotFound(m) => Self::NotFound(m),
+            PageServeError::Io(m) => Self::Business(m),
         }
     }
 }

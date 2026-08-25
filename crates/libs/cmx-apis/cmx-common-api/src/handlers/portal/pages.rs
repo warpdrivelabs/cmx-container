@@ -125,6 +125,51 @@ async fn fetch_remote_batch(
 use serde_json::Value;
 use serde_json::json;
 
+/// 远程保存（F3-save）：`POST {base}/api/html-pages` 整包转发属主引擎。
+///
+/// body 原样透传（属主引擎侧 upsert）；成功返回其 `data` 节点（写后的行）。
+async fn forward_remote_save(
+    key: &str,
+    body: &Value,
+    fwd: &HeaderMap,
+) -> Result<serde_json::Value> {
+    let base = cmx_plugin::center_client::proxy_upstream(key)
+        .and_then(|u| u.resolve())
+        .ok_or_else(|| {
+            cmx_api_types::Error::business_error(format!("服务 {key} 未配置或不可达"))
+        })?;
+    let url = format!("{base}/api/html-pages");
+    let cli = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| cmx_api_types::Error::internal_error(format!("HTTP 客户端构建失败: {e}")))?;
+    let mut req = cli.post(&url).json(body);
+    for (k, v) in fwd.iter() {
+        req = req.header(k, v);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| cmx_api_types::Error::business_error(format!("请求 {url}: {e}")))?;
+    if !resp.status().is_success() {
+        return Err(cmx_api_types::Error::business_error(format!(
+            "服务 {key} HTTP {}",
+            resp.status()
+        )));
+    }
+    let val: Value = resp
+        .json()
+        .await
+        .map_err(|e| cmx_api_types::Error::business_error(format!("响应解析失败: {e}")))?;
+    match val.get("code").and_then(|c| c.as_u64()) {
+        Some(0) => Ok(val.get("data").cloned().unwrap_or(Value::Null)),
+        _ => Err(cmx_api_types::Error::business_error(format!(
+            "服务 {key} 业务错误: {}",
+            val.get("msg").and_then(|m| m.as_str()).unwrap_or("未知")
+        ))),
+    }
+}
+
 /// 三段合并累积器（pages / revs / errors，native 与 html 同形态）。
 #[derive(Default)]
 struct MergedBatch {
@@ -553,7 +598,9 @@ pub async fn list_html_pages(
 
 /// 保存 HTML 页面。
 ///
-/// `POST /api/html-pages` —— upsert（新建 / 更新，写源文件 + 列表双写）。body：
+/// `POST /api/html-pages` —— upsert（新建 / 更新）。**F3-save**：id 命中属主路由表
+/// （`portal.model.*` → model 等）时整包反代属主引擎落盘（业务域页真源在各服务
+/// assets 工作区）；其余落门户本地数据根。body：
 ///
 /// ```json
 /// {
@@ -561,9 +608,9 @@ pub async fn list_html_pages(
 ///   "name": "页面名称",
 ///   "details": "页面描述",
 ///   "html": "HTML 源码（必填）",
-///   "domain": "缺省由 id 命名空间推导",
-///   "app": "缺省由 id 命名空间推导",
-///   "module": "缺省由 id 命名空间推导",
+///   "domain": "缺省由 id 命名空间推导（属主引擎侧三级回退：显式 > 既有行 > id 推导）",
+///   "app": "同上",
+///   "module": "同上",
 ///   "doc": "绑定的单据模块编码 moduleCode（可选）"
 /// }
 /// ```
@@ -578,8 +625,22 @@ pub async fn list_html_pages(
 )]
 pub async fn save_html_page(
     CmxSvrContext(_c): CmxSvrContext,
-    Json(input): Json<cmx_portal::pages::html::HtmlPageInput>,
+    headers: HeaderMap,
+    Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
+    // F3-save：id 归属属主引擎 → 整包反代（body 原样透传，避免重序列化丢字段）
+    let id = body
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if let Some(key) = owner_service_of(&id) {
+        let saved = forward_remote_save(key, &body, &forward_headers(&headers)).await?;
+        return Ok(Json(ApiResp::ok(saved)));
+    }
+    let input: cmx_portal::pages::html::HtmlPageInput = serde_json::from_value(body)
+        .map_err(|e| cmx_api_types::Error::bad_request(format!("保存入参非法: {e}")))?;
     Ok(Json(ApiResp::ok(
         cmx_portal::pages::html::save_html_page(input).await?,
     )))
