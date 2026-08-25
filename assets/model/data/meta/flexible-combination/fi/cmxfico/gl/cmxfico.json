@@ -8,7 +8,7 @@
   "module": "gl",
   "title": "会计凭证",
   "anchorDimensions": [],
-  "description": "最小化弹性组合：按 L3 总账科目 ID 直接匹配，展示不同的 L4 辅助核算字段",
+  "description": "多字段集多绑定案例：字段集0=cv_aux_line（辅助核算维度）→ 页面 auxModel；fieldTabs=cv_acc_line（金额信息）→ 页面 amountModel；同一 FC 实例按表路由，点分录行两张网格同时换列",
   "status": "draft",
   "tags": [],
   "dimensions": {
@@ -84,7 +84,7 @@
       },
       "panel": "cv_acc_line",
       "detail": {
-        "table": "cv_acc_line",
+        "table": "cv_aux_line",
         "pick": [
           {
             "ref": "cv_aux_line.customer_id",
@@ -97,57 +97,67 @@
                 "required": true
               }
             }
-          },
-          {
-            "ref": "cv_acc_line.item_text",
-            "over": {
-              "caption": {
-                "zh_CN": "摘要"
-              }
-            }
-          },
-          {
-            "ref": "cv_acc_line.entered_dr",
-            "over": {
-              "caption": {
-                "zh_CN": "金额"
-              },
-              "display": {
-                "decimalDigits": 2,
-                "thousandSeparator": true
-              }
-            }
-          },
-          {
-            "ref": "cv_acc_line.local_dr"
-          },
-          {
-            "ref": "cv_acc_line.local_cr"
-          },
-          {
-            "ref": "cv_acc_line.group_dr"
-          },
-          {
-            "ref": "cv_acc_line.group_cr"
           }
         ],
+        "fields": [],
         "groups": [
           {
             "caption": "辅助核算",
             "members": [
               "customer_id"
             ]
-          },
-          {
-            "caption": "金额信息",
-            "members": [
-              "item_text",
-              "entered_dr"
-            ]
           }
         ],
-        "fieldTabs": [],
-        "fields": []
+        "fieldTabs": [
+          {
+            "id": "ftab_amount",
+            "table": "cv_acc_line",
+            "pick": [
+              {
+                "ref": "cv_acc_line.item_text",
+                "over": {
+                  "caption": {
+                    "zh_CN": "摘要"
+                  }
+                }
+              },
+              {
+                "ref": "cv_acc_line.entered_dr",
+                "over": {
+                  "caption": {
+                    "zh_CN": "金额"
+                  },
+                  "display": {
+                    "decimalDigits": 2,
+                    "thousandSeparator": true
+                  }
+                }
+              },
+              {
+                "ref": "cv_acc_line.local_dr"
+              },
+              {
+                "ref": "cv_acc_line.local_cr"
+              },
+              {
+                "ref": "cv_acc_line.group_dr"
+              },
+              {
+                "ref": "cv_acc_line.group_cr"
+              }
+            ],
+            "fields": [],
+            "groups": [
+              {
+                "caption": "金额信息",
+                "members": [
+                  "item_text",
+                  "entered_dr"
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -170,7 +180,7 @@
       },
       "panel": "cv_acc_line",
       "detail": {
-        "table": "cv_acc_line",
+        "table": "cv_aux_line",
         "pick": [
           {
             "ref": "cv_aux_line.supplier_id",
@@ -194,28 +204,9 @@
                 "mode": "cmx-dict-select"
               }
             }
-          },
-          {
-            "ref": "cv_acc_line.item_text",
-            "over": {
-              "caption": {
-                "zh_CN": "摘要"
-              }
-            }
-          },
-          {
-            "ref": "cv_acc_line.entered_dr",
-            "over": {
-              "caption": {
-                "zh_CN": "金额"
-              },
-              "display": {
-                "decimalDigits": 2,
-                "thousandSeparator": true
-              }
-            }
           }
         ],
+        "fields": [],
         "groups": [
           {
             "caption": "辅助核算",
@@ -223,16 +214,46 @@
               "supplier_id",
               "cost_center_id"
             ]
-          },
-          {
-            "caption": "金额信息",
-            "members": [
-              "item_text",
-              "entered_dr"
-            ]
           }
         ],
-        "fields": []
+        "fieldTabs": [
+          {
+            "id": "ftab_amount",
+            "table": "cv_acc_line",
+            "pick": [
+              {
+                "ref": "cv_acc_line.item_text",
+                "over": {
+                  "caption": {
+                    "zh_CN": "摘要"
+                  }
+                }
+              },
+              {
+                "ref": "cv_acc_line.entered_dr",
+                "over": {
+                  "caption": {
+                    "zh_CN": "金额"
+                  },
+                  "display": {
+                    "decimalDigits": 2,
+                    "thousandSeparator": true
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "groups": [
+              {
+                "caption": "金额信息",
+                "members": [
+                  "item_text",
+                  "entered_dr"
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -251,7 +272,7 @@
       },
       "panel": "cv_acc_line",
       "detail": {
-        "table": "cv_acc_line",
+        "table": "cv_aux_line",
         "pick": [
           {
             "ref": "cv_aux_line.house_bank_id",
@@ -264,44 +285,55 @@
                 "required": true
               }
             }
-          },
-          {
-            "ref": "cv_acc_line.item_text",
-            "over": {
-              "caption": {
-                "zh_CN": "摘要"
-              }
-            }
-          },
-          {
-            "ref": "cv_acc_line.entered_dr",
-            "over": {
-              "caption": {
-                "zh_CN": "金额"
-              },
-              "display": {
-                "decimalDigits": 2,
-                "thousandSeparator": true
-              }
-            }
           }
         ],
+        "fields": [],
         "groups": [
           {
             "caption": "辅助核算",
             "members": [
               "house_bank_id"
             ]
-          },
-          {
-            "caption": "金额信息",
-            "members": [
-              "item_text",
-              "entered_dr"
-            ]
           }
         ],
-        "fields": []
+        "fieldTabs": [
+          {
+            "id": "ftab_amount",
+            "table": "cv_acc_line",
+            "pick": [
+              {
+                "ref": "cv_acc_line.item_text",
+                "over": {
+                  "caption": {
+                    "zh_CN": "摘要"
+                  }
+                }
+              },
+              {
+                "ref": "cv_acc_line.entered_dr",
+                "over": {
+                  "caption": {
+                    "zh_CN": "金额"
+                  },
+                  "display": {
+                    "decimalDigits": 2,
+                    "thousandSeparator": true
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "groups": [
+              {
+                "caption": "金额信息",
+                "members": [
+                  "item_text",
+                  "entered_dr"
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -324,7 +356,7 @@
       },
       "panel": "cv_acc_line",
       "detail": {
-        "table": "cv_acc_line",
+        "table": "cv_aux_line",
         "pick": [
           {
             "ref": "cv_aux_line.cost_center_id",
@@ -336,69 +368,70 @@
                 "mode": "cmx-dict-select"
               }
             }
-          },
-          {
-            "ref": "cv_acc_line.item_text",
-            "over": {
-              "caption": {
-                "zh_CN": "摘要"
-              }
-            }
-          },
-          {
-            "ref": "cv_acc_line.entered_dr",
-            "over": {
-              "caption": {
-                "zh_CN": "金额"
-              },
-              "display": {
-                "decimalDigits": 2,
-                "thousandSeparator": true
-              }
-            }
-          },
-          {
-            "ref": "cv_acc_line.entered_dr"
-          },
-          {
-            "ref": "cv_acc_line.entered_cr"
-          },
-          {
-            "ref": "cv_acc_line.local_dr"
-          },
-          {
-            "ref": "cv_acc_line.local_cr"
-          },
-          {
-            "ref": "cv_acc_line.group_dr"
-          },
-          {
-            "ref": "cv_acc_line.group_cr"
           }
         ],
+        "fields": [],
         "groups": [
           {
             "caption": "辅助核算",
             "members": [
-              "cost_center_id",
+              "cost_center_id"
+            ]
+          }
+        ],
+        "fieldTabs": [
+          {
+            "id": "ftab_amount",
+            "table": "cv_acc_line",
+            "pick": [
               {
-                "caption": "子分组",
+                "ref": "cv_acc_line.item_text",
+                "over": {
+                  "caption": {
+                    "zh_CN": "摘要"
+                  }
+                }
+              },
+              {
+                "ref": "cv_acc_line.entered_dr",
+                "over": {
+                  "caption": {
+                    "zh_CN": "金额"
+                  },
+                  "display": {
+                    "decimalDigits": 2,
+                    "thousandSeparator": true
+                  }
+                }
+              },
+              {
+                "ref": "cv_acc_line.entered_cr"
+              },
+              {
+                "ref": "cv_acc_line.local_dr"
+              },
+              {
+                "ref": "cv_acc_line.local_cr"
+              },
+              {
+                "ref": "cv_acc_line.group_dr"
+              },
+              {
+                "ref": "cv_acc_line.group_cr"
+              }
+            ],
+            "fields": [],
+            "groups": [
+              {
+                "caption": "金额信息",
                 "members": [
-                  "group_dr",
+                  "item_text",
                   "entered_dr"
                 ]
               }
             ]
-          },
-          {
-            "caption": "金额信息",
-            "members": [
-              "item_text",
-              "entered_dr"
-            ]
           }
-        ],
-        "fields": []
+        ]
       }
     },
     {
@@ -415,39 +448,47 @@
       },
       "panel": "cv_acc_line",
       "detail": {
-        "table": "cv_acc_line",
-        "pick": [
+        "table": "cv_aux_line",
+        "pick": [],
+        "fields": [],
+        "fieldTabs": [
           {
-            "ref": "cv_acc_line.item_text",
-            "over": {
-              "caption": {
-                "zh_CN": "摘要"
-              }
-            }
-          },
-          {
-            "ref": "cv_acc_line.entered_dr",
-            "over": {
-              "caption": {
-                "zh_CN": "金额"
+            "id": "ftab_amount",
+            "table": "cv_acc_line",
+            "pick": [
+              {
+                "ref": "cv_acc_line.item_text",
+                "over": {
+                  "caption": {
+                    "zh_CN": "摘要"
+                  }
+                }
               },
-              "display": {
-                "decimalDigits": 2,
-                "thousandSeparator": true
+              {
+                "ref": "cv_acc_line.entered_dr",
+                "over": {
+                  "caption": {
+                    "zh_CN": "金额"
+                  },
+                  "display": {
+                    "decimalDigits": 2,
+                    "thousandSeparator": true
+                  }
+                }
               }
-            }
-          }
-        ],
-        "groups": [
-          {
-            "caption": "金额信息",
-            "members": [
-              "item_text",
-              "entered_dr"
+            ],
+            "fields": [],
+            "groups": [
+              {
+                "caption": "金额信息",
+                "members": [
+                  "item_text",
+                  "entered_dr"
+                ]
+              }
             ]
           }
-        ],
-        "fields": []
+        ]
       }
     }
   ],
