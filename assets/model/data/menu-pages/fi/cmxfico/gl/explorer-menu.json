@@ -1,14 +1,6 @@
 {
   "version": 1,
   "items": [
-    {
-      "id": "gl",
-      "name": "gl",
-      "caption": "总账",
-      "permissionId": null,
-      "icon": "tabler-filled/home",
-      "expanded": true,
-      "children": [
         {
           "id": "gl-grp-voucher",
           "name": "voucher",
@@ -2087,7 +2079,7 @@
             }
           ]
         }
-      ]
-    }
+
+
   ]
 }
