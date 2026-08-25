@@ -1,0 +1,10 @@
+{
+  "id": "n_7495471723061022720",
+  "center": "message",
+  "title": "主数据分发死信：supplier → erp-test",
+  "body": "事件 test-ord-3 投递耗尽重试进入死信：HTTP 500: {\"error\":\"simulated downstream failure\"}",
+  "level": "error",
+  "link": "",
+  "read": false,
+  "createdAt": 1787059717908
+}

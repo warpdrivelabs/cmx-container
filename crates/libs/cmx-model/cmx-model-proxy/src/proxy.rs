@@ -98,26 +98,13 @@ fn model_target(model_base: &str, uri: &Uri) -> String {
 // 改用**中间件按 id 归属判定**：命中模型中心拥有的 id → 转发；未命中 → next.run 落回门户内嵌 handler。
 // ============================================================================
 
-/// 判定一个前端页 id 是否属模型中心（与 cmx-model/web 的清单一致）：
-///   native：`portal.definition.*`、`definition.*`、`portal.dct.*`、`portal.doc.*`、
-///           `portal.datasource.cluster`、`portal.dam.*`、`demo.dict-base.*`、`demo.doc-base.*`
-///   html  ：`fi.cmxfico.gl.dict*`（三套工作台 dictflat/dicttree/dictcls + dictrel/dictws +
-///           dict-editor-demo/dict-grid-meta 等）、`fi.cmxfico.gl.dct-*`、`fi.cmxfico.gl.meta-model-*`
-/// **不含** `portal.mdm.*`（MDM 仍内嵌，另案抽 cmx-mdm）与门户自有页（job/help/notify/system 等）。
+/// 判定一个前端页 id 是否属模型中心（资产归属治理后唯一前缀，与
+/// `assets/model/web` 清单一致）：
+///   native + html 统一为 `portal.model.*`（如 portal.model.definition.base-dct、
+///   portal.model.gl.dictcls-explorer）。
+/// **不含** `portal.mdm.*`（已独立 cmx-mdm）与门户自有页（job/help/notify/system/demo/_legacy）。
 fn is_model_owned_page(id: &str) -> bool {
-    // native
-    id.starts_with("portal.definition.")
-        || id.starts_with("definition.")
-        || id.starts_with("portal.dct.")
-        || id.starts_with("portal.doc.")
-        || id == "portal.datasource.cluster"
-        || id.starts_with("portal.dam.")
-        || id.starts_with("demo.dict-base.")
-        || id.starts_with("demo.doc-base.")
-        // html（模型中心拥有的字典/单据定义工作台）
-        || id.starts_with("fi.cmxfico.gl.dict")
-        || id.starts_with("fi.cmxfico.gl.dct-")
-        || id.starts_with("fi.cmxfico.gl.meta-model-")
+    id.starts_with("portal.model.")
 }
 
 /// 从 path 提取页面 id：`/native-pages/{id}` 或 `/html-pages/{id}`（已剥 `/api`）。

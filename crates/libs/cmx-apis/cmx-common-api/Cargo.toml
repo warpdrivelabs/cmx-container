@@ -97,6 +97,8 @@ rmp = { workspace = true }
 zip = { workspace = true }
 # URL 编码
 percent-encoding = { workspace = true }
+# HTTP 客户端（batch 页面聚合分发到属主引擎）
+reqwest = { workspace = true }
 # 字节处理
 bytes = { workspace = true }
 # 正则表达式（白名单通配符匹配）

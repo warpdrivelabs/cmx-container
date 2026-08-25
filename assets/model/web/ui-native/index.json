@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "pages": [
+    {
+      "id": "portal.model.datasource.cluster",
+      "name": "集群数据源浏览",
+      "details": "native_pages 三区只读功能：explorer DAM 下拉 + 数据库列表(cmx-ignite-list) + 属性(cmx-ui5-form)；content 三视图(数据字典/业务单据/弹性组合)按档案+版本只读展示；property 只读详情",
+      "sourceType": "js",
+      "relPath": "portal/datasource/cluster-datasource.js"
+    },
+    {
+      "id": "portal.model.definition.base-dct",
+      "name": "字典基础元数据",
+      "details": "native_pages 方式实现的字典基础元数据页面",
+      "sourceType": "js",
+      "relPath": "portal/definition/base-dct.js"
+    },
+    {
+      "id": "portal.model.definition.base-dct-native",
+      "name": "字典基础元数据(native_pages)",
+      "details": "native_pages 独立实现的字典基础元数据功能",
+      "sourceType": "js",
+      "relPath": "definition/base-dct-native.js"
+    },
+    {
+      "id": "portal.model.dam.registry-center",
+      "name": "DAM 注册管理中心",
+      "details": "Domain / Application / Module 注册主数据管理中心",
+      "sourceType": "js",
+      "relPath": "portal/dam/registry-center.js"
+    },
+    {
+      "id": "portal.model.gl.voucher-native",
+      "name": "会计凭证（native_pages）",
+      "details": "cmx-fico 总账凭证四层主从（凭证批→凭证头→科目行→辅助行），基于 /api/doc/* + fico-db 装载/回存",
+      "sourceType": "js",
+      "relPath": "fi/cmxfico/voucher-native.js"
+    },
+    {
+      "id": "portal.model.gl.voucher-native-bin",
+      "name": "会计凭证（native_pages · tokio 二进制）",
+      "details": "第四套实现：同四层主从凭证表，装载走 /api/doc/data/tokio-zmc-msgpack（tokio-postgres + ZmcDataSet → 列式二进制 msgpack，零拷贝）",
+      "sourceType": "js",
+      "relPath": "fi/cmxfico/voucher-native-bin.js"
+    },
+    {
+      "id": "portal.model.gl.voucher-native-zmcjson",
+      "name": "会计凭证（native_pages · Zmc零拷贝→JSON）",
+      "details": "第五套实现：同四层主从凭证表，ZmcDataSet 零拷贝装载但纯 JSON 出口，装载走 /api/doc/data/tokio-zmc-json（tokio + ZmcDataSet → JSON，前端无需 msgpack 解码）",
+      "sourceType": "js",
+      "relPath": "fi/cmxfico/voucher-native-zmcjson.js"
+    },
+    {
+      "id": "portal.model.doc.doc-loader",
+      "name": "通用业务单据加载页（元数据驱动）",
+      "details": "纯通用：层数 N/各层列/主从关系全来自 /api/doc/meta，动态渲染 N 个 grid。会计凭证只是一组 props（domain/application/module/file + apiPath/binary 选数据通道）。零业务假设，换任何 L1..LN 单据定义即可用。",
+      "sourceType": "js",
+      "relPath": "portal/doc/doc-loader.js"
+    },
+    {
+      "id": "portal.model.doc.doc-service-test",
+      "name": "业务单据加载服务·全能力自检（native_pages）",
+      "details": "诊断页：逐项调用后端全部能力（/meta、5 装载端点、POST 富查询、子层下推、keyset 游标、/children 懒下钻、tokio-zmc-stream 真流式），展示 PASS/FAIL 清单。元数据驱动、零业务假设。",
+      "sourceType": "js",
+      "relPath": "portal/doc/doc-service-test.js"
+    },
+    {
+      "id": "portal.model.dct.data-editor",
+      "name": "通用字典数据维护",
+      "details": "元数据驱动：根据 dictCode 加载 DictView，支持平级/树形字典的查询/搜索/分页/新增/编辑/删除，changeset 显式保存。审计列只读显示，派生层级列隐藏。",
+      "sourceType": "js",
+      "relPath": "portal/dct/data-editor.js"
+    }
+  ]
+}
