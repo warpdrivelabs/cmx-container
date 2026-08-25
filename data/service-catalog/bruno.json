@@ -1,9 +1,0 @@
-{
-  "version": "1",
-  "name": "CMX Service Catalog",
-  "type": "collection",
-  "ignore": [
-    "node_modules",
-    ".git"
-  ]
-}
