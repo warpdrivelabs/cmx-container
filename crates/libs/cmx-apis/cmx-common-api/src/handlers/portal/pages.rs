@@ -6,8 +6,267 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
+use std::collections::BTreeMap;
+
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
+
+/// 页面 id → 属主服务键（`None` = 门户本地数据根）。
+///
+/// 前缀表与各引擎 F3 反代谓词一一对应
+/// （cmx-model-proxy / cmx-mdm-proxy / flow-rpt-rule api proxy），新增属主时两处同步。
+fn owner_service_of(id: &str) -> Option<&'static str> {
+    if id.starts_with("portal.mdm.") {
+        Some("mdm")
+    } else if id.starts_with("portal.flow.") || id.starts_with("fi.cmxfico.gl.flow-") {
+        Some("flow")
+    } else if id.starts_with("portal.rules.") {
+        Some("rules")
+    } else if id.starts_with("portal.rpt.")
+        || id.starts_with("portal.consol.")
+        || id.starts_with("fi.cmxfico.gl.rpt-designer-")
+        || id.starts_with("fi.cmxfico.gl.rpt-spreadjs-designer-")
+    {
+        Some("report")
+    } else if id.starts_with("portal.model.") {
+        Some("model")
+    } else {
+        None
+    }
+}
+
+/// 委托身份头（引擎侧 HS256 验签语义，门户/引擎共享 jwt_secret，可安全透传）。
+const DELEGATED_HEADER: &str = "x-delegated-user-token";
+
+/// 平台出站服务凭证：`[service_auth].outgoing_api_key`（与 F3 反代注入同一来源；
+/// 引擎 auth mw 命中 `X-API-Key` 即认服务身份）。
+fn outgoing_api_key() -> Option<String> {
+    cmx_utils::ConfigManager::try_global()
+        .and_then(|cm| cm.get_string("service_auth.outgoing_api_key").ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// 构造发往属主引擎的请求头：服务身份 X-API-Key（出站凭证，缺省回退透传调用方的）
+/// + 委托用户令牌。**不透传** `Authorization`（门户会话 Bearer 引擎不认，401 根因）。
+fn forward_headers(headers: &HeaderMap) -> HeaderMap {
+    let mut h = HeaderMap::new();
+    match outgoing_api_key() {
+        Some(key) => {
+            h.insert(
+                axum::http::HeaderName::from_static("x-api-key"),
+                axum::http::HeaderValue::from_str(&key)
+                    .expect("outgoing_api_key 含非法头字符"),
+            );
+        }
+        None => {
+            if let Some(v) = headers.get("x-api-key") {
+                h.insert(axum::http::HeaderName::from_static("x-api-key"), v.clone());
+            }
+        }
+    }
+    if let Some(v) = headers.get(DELEGATED_HEADER)
+        && let Ok(name) = axum::http::HeaderName::try_from(DELEGATED_HEADER)
+    {
+        h.insert(name, v.clone());
+    }
+    h
+}
+
+/// 从 batch 请求体提取 id 列表（兼容 `{ids:[...]}` / 顶层数组）。
+fn batch_ids(body: &serde_json::Value) -> Vec<String> {
+    let src = body
+        .get("ids")
+        .and_then(|v| v.as_array())
+        .or_else(|| body.as_array());
+    src.map(|a| {
+        a.iter()
+            .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
+            .filter(|s| !s.is_empty())
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+/// 远程批量取页：`POST {base}/api/{kind}-pages/batch`。成功返回 data 节点；失败返回摘要。
+async fn fetch_remote_batch(
+    kind: &str,
+    key: &str,
+    ids: &[String],
+    fwd: &HeaderMap,
+) -> std::result::Result<serde_json::Value, String> {
+    let base = cmx_plugin::center_client::proxy_upstream(key)
+        .and_then(|u| u.resolve())
+        .ok_or_else(|| format!("服务 {key} 未配置或不可达"))?;
+    let url = format!("{base}/api/{kind}-pages/batch");
+    let cli = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut req = cli.post(&url).json(&json!({ "ids": ids }));
+    for (k, v) in fwd.iter() {
+        req = req.header(k, v);
+    }
+    let resp = req.send().await.map_err(|e| format!("请求 {url}: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("服务 {key} HTTP {}", resp.status()));
+    }
+    let val: serde_json::Value =
+        resp.json().await.map_err(|e| format!("响应解析失败: {e}"))?;
+    match val.get("code").and_then(|c| c.as_u64()) {
+        Some(0) => Ok(val.get("data").cloned().unwrap_or(serde_json::Value::Null)),
+        _ => Err(format!(
+            "服务 {key} 业务错误: {}",
+            val.get("msg").and_then(|m| m.as_str()).unwrap_or("未知")
+        )),
+    }
+}
+
+use serde_json::Value;
+use serde_json::json;
+
+/// 三段合并累积器（pages / revs / errors，native 与 html 同形态）。
+#[derive(Default)]
+struct MergedBatch {
+    pages: Vec<Value>,
+    revs: serde_json::Map<String, Value>,
+    errors: Vec<Value>,
+}
+
+impl MergedBatch {
+    /// 吸收门户本地结果（get_*_pages_by_ids 的输出）。
+    fn absorb_local(&mut self, v: Value) {
+        if let Some(a) = v.get("pages").and_then(|x| x.as_array()) {
+            self.pages.extend(a.iter().cloned());
+        }
+        if let Some(m) = v.get("revs").and_then(|x| x.as_object()) {
+            self.revs.extend(m.iter().map(|(k, v)| (k.clone(), v.clone())));
+        }
+        if let Some(a) = v.get("errors").and_then(|x| x.as_array()) {
+            self.errors.extend(a.iter().cloned());
+        }
+    }
+
+    /// 吸收引擎 native batch 结果（{items:[NativePageFull]}）。
+    fn absorb_native_items(&mut self, ids: &[String], v: Value) {
+        let items = v.get("items").and_then(|x| x.as_array()).cloned().unwrap_or_default();
+        for it in items {
+            if let (Some(id), Some(rev)) = (
+                it.get("id").and_then(|x| x.as_str()),
+                it.get("rev").and_then(|x| x.as_str()),
+            ) {
+                self.revs.insert(id.to_string(), json!(rev));
+            }
+            self.pages.push(it);
+        }
+        // 引擎未回的 id 视为不存在
+        let got: Vec<&str> = self
+            .pages
+            .iter()
+            .filter_map(|p| p.get("id").and_then(|x| x.as_str()))
+            .collect();
+        for id in ids {
+            if !got.contains(&id.as_str()) {
+                self.errors.push(json!({ "id": id, "error": "不存在" }));
+            }
+        }
+    }
+
+    /// 吸收引擎 html batch 结果（{pages,revs,errors} 同构直并）。
+    fn absorb_remote(&mut self, ids: &[String], v: Value) {
+        self.absorb_local(v);
+        let got: Vec<&str> = self
+            .pages
+            .iter()
+            .filter_map(|p| p.get("id").and_then(|x| x.as_str()))
+            .collect();
+        for id in ids {
+            if !got.contains(&id.as_str())
+                && !self.errors.iter().any(|e| e.get("id").and_then(|x| x.as_str()) == Some(id.as_str()))
+            {
+                self.errors.push(json!({ "id": id, "error": "不存在" }));
+            }
+        }
+    }
+
+    fn absorb_group_error(&mut self, key: &str, ids: &[String], msg: &str) {
+        for id in ids {
+            self.errors
+                .push(json!({ "id": id, "error": format!("服务 {key} 不可用: {msg}") }));
+        }
+    }
+
+    fn into_value(self) -> Value {
+        json!({
+            "pages": self.pages,
+            "revs": Value::Object(self.revs),
+            "errors": self.errors,
+        })
+    }
+}
+
+/// batch 聚合分发核心：按 id 归属拆分 → 本地读 + 并行反代属主服务 → 合并三段。
+async fn batch_pages_fanout(
+    kind: &'static str,
+    headers: &HeaderMap,
+    body: &Value,
+) -> Result<Json<ApiResp<Value>>> {
+    let ids = batch_ids(body);
+    if ids.is_empty() {
+        return Ok(Json(ApiResp::ok(json!({
+            "pages": [], "revs": {}, "errors": [],
+        }))));
+    }
+
+    // 按属主分组（保持请求顺序）
+    let mut groups: BTreeMap<&'static str, Vec<String>> = BTreeMap::new();
+    let mut local_ids = Vec::new();
+    for id in &ids {
+        match owner_service_of(id) {
+            Some(k) => groups.entry(k).or_default().push(id.clone()),
+            None => local_ids.push(id.clone()),
+        }
+    }
+
+    let mut merged = MergedBatch::default();
+    let fwd = forward_headers(headers);
+
+    // 本地组
+    if !local_ids.is_empty() {
+        let mut lb = json!({ "ids": local_ids });
+        if let Some(cr) = body.get("clientRevs") {
+            lb["clientRevs"] = cr.clone();
+        }
+        let v = match kind {
+            "native" => cmx_portal::pages::native::get_native_pages_by_ids(&lb).await?,
+            _ => cmx_portal::pages::html::get_html_pages_by_ids(&lb).await?,
+        };
+        merged.absorb_local(v);
+    }
+
+    // 远程组并发
+    let mut tasks = tokio::task::JoinSet::new();
+    for (key, gids) in groups {
+        let kind = kind.to_string();
+        let fwd = fwd.clone();
+        tasks.spawn(async move { (key, gids.clone(), fetch_remote_batch(&kind, key, &gids, &fwd).await) });
+    }
+    while let Some(res) = tasks.join_next().await {
+        match res {
+            Ok((_key, gids, Ok(v))) => {
+                if kind == "native" {
+                    merged.absorb_native_items(&gids, v);
+                } else {
+                    merged.absorb_remote(&gids, v);
+                }
+            }
+            Ok((key, gids, Err(msg))) => merged.absorb_group_error(key, &gids, &msg),
+            Err(e) => merged.errors.push(json!({ "error": format!("聚合任务失败: {e}") })),
+        }
+    }
+
+    Ok(Json(ApiResp::ok(merged.into_value())))
+}
 
 /// `Cache-Control`：private + no-cache（每次 revalidate，但只在 rev 变了才传 body）。
 const PAGE_CACHE_CONTROL: &str = "private, no-cache";
@@ -230,11 +489,10 @@ pub async fn save_native_page(
 )]
 pub async fn batch_native_pages(
     CmxSvrContext(_c): CmxSvrContext,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(
-        cmx_portal::pages::native::get_native_pages_by_ids(&body).await?,
-    )))
+    batch_pages_fanout("native", &headers, &body).await
 }
 
 /// 取单个原生页面。
@@ -342,11 +600,10 @@ pub async fn save_html_page(
 )]
 pub async fn batch_html_pages(
     CmxSvrContext(_c): CmxSvrContext,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(
-        cmx_portal::pages::html::get_html_pages_by_ids(&body).await?,
-    )))
+    batch_pages_fanout("html", &headers, &body).await
 }
 
 /// 取单个 HTML 页面。

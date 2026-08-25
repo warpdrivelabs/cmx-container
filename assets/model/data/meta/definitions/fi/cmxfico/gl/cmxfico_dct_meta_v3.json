@@ -1,0 +1,4561 @@
+{
+  "moduleMeta": {
+    "metaName": "cmx-fico 会计凭证数据字典元数据",
+    "metaKind": "DCT",
+    "moduleCode": "FICO",
+    "moduleName": "cmx-fico 总账",
+    "version": 3,
+    "versionName": "",
+    "designStyle": "separate-dictionary-tables",
+    "isDefault": true,
+    "remark": "cmx-fico 自研总账模块,数据字典完整参考 SAP 会计凭证字典(32个):客户端/组织架构/科目体系/凭证控制/币种期间/税/往来/CO对象。通用列引用 base_dct_meta_v1.json。"
+  },
+  "baseDctMetaRef": {
+    "file": "base_dct_meta_v1.json",
+    "version": 1,
+    "fieldSets": [
+      "dictionaryCommonFields",
+      "dictionaryHierarchyFields",
+      "dictionaryAuditFields",
+      "dictionaryEffectiveFields",
+      "dictionaryDisableFields",
+      "dictionarySystemFields"
+    ],
+    "remark": "复用 base_dct_meta_v1.json fieldSet"
+  },
+  "dictionaryTableConventions": {
+    "remark": "参考 SAP 字典;辅助核算行用其中主数据(成本中心/利润中心/客商/订单/WBS)+附加字典(段/业务范围/功能范围/税码)作维度。"
+  },
+  "dictionaryTables": [
+    {
+      "dictMeta": {
+        "dictCode": "client",
+        "dictName": "客户端",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_client",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "SAP Client/MANDT,跨组织数据隔离维度",
+        "codeLength": 3,
+        "codeRule": {
+          "mode": "auto",
+          "field": "code",
+          "ruleCode": "CLINENT_RULE"
+        }
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "logical_system",
+          "name": "logical_system",
+          "caption": {
+            "zh_CN": "逻辑系统"
+          },
+          "fieldLength": 20,
+          "physicalField": "LOGSYS",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "system_id",
+          "name": "system_id",
+          "caption": {
+            "zh_CN": "SAP系统标识"
+          },
+          "fieldLength": 10,
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "client_role",
+          "name": "client_role",
+          "caption": {
+            "zh_CN": "客户端角色"
+          },
+          "fieldLength": 20,
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[0-9]{1,3}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "company",
+        "dictName": "公司(合并主体)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_company",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "集团合并主体",
+        "codeLength": 6
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "country",
+          "id": "country_code",
+          "name": "country_code",
+          "caption": {
+            "zh_CN": "国家"
+          },
+          "refField": "code",
+          "displayField": "name",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择国家",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "公司货币"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择公司货币",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "trading_partner_id",
+          "name": "trading_partner_id",
+          "caption": {
+            "zh_CN": "贸易伙伴"
+          },
+          "refDict": "company",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "VBUND",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择贸易伙伴",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "cons_method",
+          "name": "cons_method",
+          "caption": {
+            "zh_CN": "合并方法"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,6}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ],
+      "fieldSetOrder": [
+        "dictionaryCommonFields",
+        "own",
+        "dictionaryAuditFields",
+        "dictionaryEffectiveFields",
+        "dictionaryDisableFields"
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "comp_unit",
+        "dictName": "公司代码(核算主体)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_comp_unit",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "独立记账与出表主体",
+        "codeLength": 6
+      },
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "company",
+          "refField": "code",
+          "displayField": "name",
+          "id": "company_id",
+          "name": "company_id",
+          "caption": {
+            "zh_CN": "所属公司"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择所属公司",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "country",
+          "id": "country_code",
+          "name": "country_code",
+          "caption": {
+            "zh_CN": "国家"
+          },
+          "refField": "code",
+          "displayField": "name",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择国家",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "本位币"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择本位币",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "coa_id",
+          "name": "coa_id",
+          "caption": {
+            "zh_CN": "科目表"
+          },
+          "refDict": "coa",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KTOPL",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择科目表",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "ctrl_area_id",
+          "name": "ctrl_area_id",
+          "caption": {
+            "zh_CN": "成本控制范围"
+          },
+          "refDict": "ctrl_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KOKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择成本控制范围",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "vat_reg_no",
+          "name": "vat_reg_no",
+          "caption": {
+            "zh_CN": "增值税登记号"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "fy_variant_code",
+          "name": "fy_variant_code",
+          "caption": {
+            "zh_CN": "会计年度变式"
+          },
+          "refDict": "fy_variant",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PERIV",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择会计年度变式",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "credit_control_area",
+          "name": "credit_control_area",
+          "caption": {
+            "zh_CN": "信贷控制范围"
+          },
+          "physicalField": "KKBER",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,6}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "bus_area",
+        "dictName": "业务范围",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_bus_area",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "跨公司代码报表段",
+        "codeLength": 4
+      },
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,4}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "func_area",
+        "dictName": "功能范围",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_func_area",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "成本性态法职能分类",
+        "codeLength": 16
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "function_category",
+          "name": "function_category",
+          "caption": {
+            "zh_CN": "功能范围类别"
+          },
+          "physicalField": "FKBER_LONG",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,16}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "segment",
+        "dictName": "段",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_segment",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "分部报告维度",
+        "codeLength": 10
+      },
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "responsible_profit_center_id",
+          "name": "responsible_profit_center_id",
+          "caption": {
+            "zh_CN": "责任利润中心"
+          },
+          "refDict": "profit_ctr",
+          "refField": "code",
+          "displayField": "name",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择责任利润中心",
+            "showClear": true
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,10}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "ctrl_area",
+        "dictName": "成本控制范围",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_ctrl_area",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "CO 顶层",
+        "codeLength": 4
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "控制范围货币"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择控制范围货币",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "coa_id",
+          "name": "coa_id",
+          "caption": {
+            "zh_CN": "科目表"
+          },
+          "refDict": "coa",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KTOPL",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择科目表",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "fy_variant_code",
+          "name": "fy_variant_code",
+          "caption": {
+            "zh_CN": "会计年度变式"
+          },
+          "refDict": "fy_variant",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PERIV",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择会计年度变式",
+            "showClear": true,
+            "idCol": "code"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,4}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "profit_ctr",
+        "dictName": "利润中心",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_profit_ctr",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "盈亏责任中心",
+        "codeLength": 10
+      },
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "segment",
+          "refField": "code",
+          "displayField": "name",
+          "id": "segment_id",
+          "name": "segment_id",
+          "caption": {
+            "zh_CN": "归属段"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "hierarchical": true,
+            "dictTitle": "选择归属段",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "manager",
+          "name": "manager",
+          "caption": {
+            "zh_CN": "负责人"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "ctrl_area_id",
+          "name": "ctrl_area_id",
+          "caption": {
+            "zh_CN": "成本控制范围"
+          },
+          "refDict": "ctrl_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KOKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择成本控制范围",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "standard_hierarchy",
+          "name": "standard_hierarchy",
+          "caption": {
+            "zh_CN": "标准层次"
+          },
+          "physicalField": "KHINR",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,10}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "cost_center",
+        "dictName": "成本中心",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_cost_center",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "花费责任中心",
+        "codeLength": 10
+      },
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "profit_ctr",
+          "refField": "code",
+          "displayField": "name",
+          "id": "profit_ctr_id",
+          "name": "profit_ctr_id",
+          "caption": {
+            "zh_CN": "所属利润中心"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择所属利润中心",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "manager",
+          "name": "manager",
+          "caption": {
+            "zh_CN": "负责人"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "ctrl_area_id",
+          "name": "ctrl_area_id",
+          "caption": {
+            "zh_CN": "成本控制范围"
+          },
+          "refDict": "ctrl_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KOKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择成本控制范围",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "func_area_id",
+          "name": "func_area_id",
+          "caption": {
+            "zh_CN": "功能范围"
+          },
+          "refDict": "func_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "FKBER",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择功能范围",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "bus_area_id",
+          "name": "bus_area_id",
+          "caption": {
+            "zh_CN": "业务范围"
+          },
+          "refDict": "bus_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "GSBER",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择业务范围",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "cost_center_category",
+          "name": "cost_center_category",
+          "caption": {
+            "zh_CN": "成本中心类别"
+          },
+          "physicalField": "KOSAR",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,10}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "coa",
+        "dictName": "会计科目表",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_coa",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "科目编码命名空间",
+        "codeLength": 4
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "coa_type",
+          "name": "coa_type",
+          "caption": {
+            "zh_CN": "类型"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,4}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "gl_account",
+        "dictName": "总账科目",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "cf_gl_account",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "凭证行核心维度",
+        "codeLength": 10
+      },
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "coa",
+          "refField": "code",
+          "displayField": "name",
+          "id": "coa_id",
+          "name": "coa_id",
+          "caption": {
+            "zh_CN": "科目表"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择科目表",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "acct_group",
+          "refField": "code",
+          "displayField": "name",
+          "id": "acct_group_code",
+          "name": "acct_group_code",
+          "caption": {
+            "zh_CN": "科目组"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择科目组",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "account_type",
+          "refField": "code",
+          "displayField": "name",
+          "id": "account_type_code",
+          "name": "account_type_code",
+          "caption": {
+            "zh_CN": "账户类型"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择账户类型",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "pl_bs_flag",
+          "name": "pl_bs_flag",
+          "caption": {
+            "zh_CN": "损益/资产负债"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "open_item_mgmt",
+          "name": "open_item_mgmt",
+          "caption": {
+            "zh_CN": "未清管理"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "account_currency_code",
+          "name": "account_currency_code",
+          "caption": {
+            "zh_CN": "科目货币"
+          },
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择科目货币",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "fld_stat_grp_code",
+          "name": "fld_stat_grp_code",
+          "caption": {
+            "zh_CN": "字段状态组"
+          },
+          "refDict": "fld_stat_grp",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "FSTAG",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择字段状态组",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "reconciliation_account_type_code",
+          "name": "reconciliation_account_type_code",
+          "caption": {
+            "zh_CN": "统驭科目类型"
+          },
+          "refDict": "account_type",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "MITKZ",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择统驭科目类型",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_category",
+          "name": "tax_category",
+          "caption": {
+            "zh_CN": "税类别"
+          },
+          "physicalField": "MWSKZ",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "line_item_display",
+          "name": "line_item_display",
+          "caption": {
+            "zh_CN": "行项目显示"
+          },
+          "physicalField": "XKRES",
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "sort_key",
+          "name": "sort_key",
+          "caption": {
+            "zh_CN": "排序码"
+          },
+          "physicalField": "ZUAWA",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "post_automatically_only",
+          "name": "post_automatically_only",
+          "caption": {
+            "zh_CN": "仅自动记账"
+          },
+          "physicalField": "XINTB",
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "planning_level",
+          "name": "planning_level",
+          "caption": {
+            "zh_CN": "资金管理计划层次"
+          },
+          "physicalField": "FDLEV",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[0-9]{1,10}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "acct_group",
+        "dictName": "科目组",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_acct_group",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "科目编号区间",
+        "codeLength": 4
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "from_account",
+          "name": "from_account",
+          "caption": {
+            "zh_CN": "从"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "to_account",
+          "name": "to_account",
+          "caption": {
+            "zh_CN": "到"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,4}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "account_type",
+        "dictName": "账户类型",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_account_type",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "S/D/K/A/M",
+        "codeLength": 1
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z]$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "fs_version",
+        "dictName": "财务报表版本",
+        "dictKind": "GROUP",
+        "selfHierarchy": true,
+        "tableName": "cf_fs_version",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "报表上卷结构",
+        "codeLength": 7
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "fs_item_type",
+          "name": "fs_item_type",
+          "caption": {
+            "zh_CN": "报表项类型"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,7}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "doc_type",
+        "dictName": "凭证类型",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_doc_type",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "SA/KR/DR/AB",
+        "codeLength": 2
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "number_range_code",
+          "name": "number_range_code",
+          "caption": {
+            "zh_CN": "编号范围"
+          },
+          "refDict": "number_range",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "NUMKR",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择编号范围",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "reverse_doc_type_code",
+          "name": "reverse_doc_type_code",
+          "caption": {
+            "zh_CN": "冲销凭证类型"
+          },
+          "refDict": "doc_type",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "STBLG_TYPE",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择冲销凭证类型",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "allowed_account_types",
+          "name": "allowed_account_types",
+          "caption": {
+            "zh_CN": "允许账户类型"
+          },
+          "physicalField": "KOARS",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "negative_posting_allowed",
+          "name": "negative_posting_allowed",
+          "caption": {
+            "zh_CN": "允许负数记账"
+          },
+          "physicalField": "XNEGP",
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "cross_company_allowed",
+          "name": "cross_company_allowed",
+          "caption": {
+            "zh_CN": "允许跨公司代码"
+          },
+          "physicalField": "XGSUB",
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,2}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "posting_key",
+        "dictName": "记账码",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_posting_key",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "40/50/01/31",
+        "codeLength": 2
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "dc_indicator",
+          "refField": "code",
+          "displayField": "name",
+          "id": "debit_credit_code",
+          "name": "debit_credit_code",
+          "caption": {
+            "zh_CN": "借贷标志"
+          },
+          "physicalField": "SHKZG",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择借贷标志",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "account_type",
+          "refField": "code",
+          "displayField": "name",
+          "id": "account_type_code",
+          "name": "account_type_code",
+          "caption": {
+            "zh_CN": "账户类型"
+          },
+          "physicalField": "KOART",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择账户类型",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "fld_stat_grp_code",
+          "name": "fld_stat_grp_code",
+          "caption": {
+            "zh_CN": "字段状态组"
+          },
+          "refDict": "fld_stat_grp",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "FSTAG",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择字段状态组",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "special_gl_allowed",
+          "name": "special_gl_allowed",
+          "caption": {
+            "zh_CN": "允许特别总账"
+          },
+          "physicalField": "XSONU",
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[0-9]{1,2}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "dc_indicator",
+        "dictName": "借贷标志",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_dc_indicator",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "S借/H贷",
+        "codeLength": 1
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[SH]$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "spl_gl_ind",
+        "dictName": "特别总账标识",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_spl_gl_ind",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "A预付/F预收/W票据",
+        "codeLength": 1
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "special_gl_type",
+          "name": "special_gl_type",
+          "caption": {
+            "zh_CN": "类型"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "account_type_code",
+          "name": "account_type_code",
+          "caption": {
+            "zh_CN": "账户类型"
+          },
+          "refDict": "account_type",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KOART",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择账户类型",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "reconciliation_account_id",
+          "name": "reconciliation_account_id",
+          "caption": {
+            "zh_CN": "统驭科目"
+          },
+          "refDict": "gl_account",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "AKONT",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择统驭科目",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "special_gl_account_id",
+          "name": "special_gl_account_id",
+          "caption": {
+            "zh_CN": "特别总账科目"
+          },
+          "refDict": "gl_account",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "HKONT",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择特别总账科目",
+            "showClear": true
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9]$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "fld_stat_grp",
+        "dictName": "字段状态组",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_fld_stat_grp",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "字段必填控制",
+        "codeLength": 4
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "field_status_variant",
+          "name": "field_status_variant",
+          "caption": {
+            "zh_CN": "字段状态变式"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "required_fields",
+          "name": "required_fields",
+          "caption": {
+            "zh_CN": "必输字段清单"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "optional_fields",
+          "name": "optional_fields",
+          "caption": {
+            "zh_CN": "可输字段清单"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "suppressed_fields",
+          "name": "suppressed_fields",
+          "caption": {
+            "zh_CN": "隐藏字段清单"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,4}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "currency",
+        "dictName": "货币",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_currency",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "ISO 币种",
+        "codeLength": 5
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "symbol",
+          "name": "symbol",
+          "caption": {
+            "zh_CN": "符号"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "decimals",
+          "name": "decimals",
+          "caption": {
+            "zh_CN": "小数位"
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z]{1,5}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "fx_rate_type",
+        "dictName": "汇率类型",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_fx_rate_type",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "M/B/G",
+        "codeLength": 4
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,4}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "fy_variant",
+        "dictName": "会计年度变式",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_fy_variant",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "K4 等",
+        "codeLength": 2
+      },
+      "fields": [
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "posting_periods",
+          "name": "posting_periods",
+          "caption": {
+            "zh_CN": "正常期间数"
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "special_periods",
+          "name": "special_periods",
+          "caption": {
+            "zh_CN": "特别期间数"
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,2}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "fisc_period",
+        "dictName": "会计期间",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_fisc_period",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "年→期",
+        "codeLength": 7
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": false,
+          "dimType": "dimension",
+          "id": "fiscal_year",
+          "name": "fiscal_year",
+          "caption": {
+            "zh_CN": "会计年度"
+          },
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": true,
+          "align": "left"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "period_no",
+          "name": "period_no",
+          "caption": {
+            "zh_CN": "期间号"
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "period_end_date",
+          "name": "period_end_date",
+          "caption": {
+            "zh_CN": "期间截止日"
+          },
+          "edit": {
+            "mode": "cmx-date-input"
+          },
+          "display": {
+            "mode": "text",
+            "format": "date:YYYY-MM-DD",
+            "align": "center"
+          },
+          "width": "130px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "special_period",
+          "name": "special_period",
+          "caption": {
+            "zh_CN": "是否特别期"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "posting_allowed",
+          "name": "posting_allowed",
+          "caption": {
+            "zh_CN": "允许记账"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[0-9]{4}(-[0-9]{1,2})?$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "ledger",
+        "dictName": "分类账",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_ledger",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "并行会计 0L/CN",
+        "codeLength": 2
+      },
+      "fields": [
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "leading_ledger",
+          "name": "leading_ledger",
+          "caption": {
+            "zh_CN": "主分类账"
+          },
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "acct_princ_code",
+          "name": "acct_princ_code",
+          "caption": {
+            "zh_CN": "会计准则"
+          },
+          "refDict": "acct_princ",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "ACCPRINC",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择会计准则",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "ledger_type",
+          "name": "ledger_type",
+          "caption": {
+            "zh_CN": "分类账类型"
+          },
+          "physicalField": "RLDNR_TYPE",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "extension_ledger_code",
+          "name": "extension_ledger_code",
+          "caption": {
+            "zh_CN": "扩展分类账"
+          },
+          "refDict": "ledger",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "EXT_LEDGER",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择扩展分类账",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "分类账货币"
+          },
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "WAERS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择分类账货币",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9]{1,2}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "tax_code",
+        "dictName": "税码",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_tax_code",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "进/销项税",
+        "codeLength": 2
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_type",
+          "name": "tax_type",
+          "caption": {
+            "zh_CN": "税种"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 7,
+          "intDigits": 5,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_rate",
+          "name": "tax_rate",
+          "caption": {
+            "zh_CN": "税率"
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": false,
+            "align": "right",
+            "negativeColor": true
+          },
+          "width": "110px",
+          "required": false,
+          "align": "right"
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "target_tax_account_id",
+          "name": "target_tax_account_id",
+          "caption": {
+            "zh_CN": "税额科目"
+          },
+          "refDict": "gl_account",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "HKONT",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择税额科目",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "input_output",
+          "name": "input_output",
+          "caption": {
+            "zh_CN": "进项/销项税标识"
+          },
+          "physicalField": "MWART",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "country_code",
+          "name": "country_code",
+          "caption": {
+            "zh_CN": "国家"
+          },
+          "refDict": "country",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "LAND1",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择国家",
+            "showClear": true,
+            "idCol": "code"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9]{1,2}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "pay_terms",
+        "dictName": "付款条件",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_pay_terms",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "账期折扣",
+        "codeLength": 4
+      },
+      "fields": [
+        {
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "net_due_days",
+          "name": "net_due_days",
+          "caption": {
+            "zh_CN": "净额到期天数"
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 5,
+          "intDigits": 3,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "discount_pct_1",
+          "name": "discount_pct_1",
+          "caption": {
+            "zh_CN": "折扣率1"
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": false,
+            "align": "right",
+            "negativeColor": true
+          },
+          "width": "110px",
+          "required": false,
+          "align": "right"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "discount_days_1",
+          "name": "discount_days_1",
+          "caption": {
+            "zh_CN": "第一现金折扣天数"
+          },
+          "physicalField": "ZTAG1",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "discount_days_2",
+          "name": "discount_days_2",
+          "caption": {
+            "zh_CN": "第二现金折扣天数"
+          },
+          "physicalField": "ZTAG2",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 18,
+          "intDigits": 15,
+          "decimalDigits": 3,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "discount_pct_2",
+          "name": "discount_pct_2",
+          "caption": {
+            "zh_CN": "第二现金折扣率"
+          },
+          "physicalField": "ZPRZ2",
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 3,
+            "thousandSeparator": false,
+            "align": "right",
+            "negativeColor": true
+          },
+          "width": "110px",
+          "required": false,
+          "align": "right"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "baseline_date_rule",
+          "name": "baseline_date_rule",
+          "caption": {
+            "zh_CN": "基准日期规则"
+          },
+          "physicalField": "ZFBDT_RULE",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,4}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "pay_method",
+        "dictName": "付款方式",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_pay_method",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "转账/支票/汇票",
+        "codeLength": 1
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "payment_type",
+          "name": "payment_type",
+          "caption": {
+            "zh_CN": "类型"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "country_code",
+          "name": "country_code",
+          "caption": {
+            "zh_CN": "国家"
+          },
+          "refDict": "country",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "LAND1",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择国家",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "bank_transfer",
+          "name": "bank_transfer",
+          "caption": {
+            "zh_CN": "银行转账"
+          },
+          "physicalField": "BANK_TRANSFER",
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "check_payment",
+          "name": "check_payment",
+          "caption": {
+            "zh_CN": "支票付款"
+          },
+          "physicalField": "CHECK_PAYMENT",
+          "display": {
+            "mode": "text",
+            "align": "center"
+          },
+          "width": "90px",
+          "required": false,
+          "align": "center"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9]$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "bus_partner",
+        "dictName": "业务伙伴(客户/供应商)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_bus_partner",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "客商统一",
+        "codeLength": 10
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "bp_role",
+          "name": "bp_role",
+          "caption": {
+            "zh_CN": "角色(客户/供应商)"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "gl_account",
+          "refField": "code",
+          "displayField": "name",
+          "id": "recon_account_id",
+          "name": "recon_account_id",
+          "caption": {
+            "zh_CN": "统驭科目"
+          },
+          "physicalField": "AKONT",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择统驭科目",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "country",
+          "id": "country_code",
+          "name": "country_code",
+          "caption": {
+            "zh_CN": "国家"
+          },
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "LAND1",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择国家",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "pay_terms",
+          "id": "pay_terms_code",
+          "name": "pay_terms_code",
+          "caption": {
+            "zh_CN": "默认付款条件"
+          },
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "ZTERM",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择默认付款条件",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "customer_no",
+          "name": "customer_no",
+          "caption": {
+            "zh_CN": "客户编号"
+          },
+          "physicalField": "KUNNR",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "vendor_no",
+          "name": "vendor_no",
+          "caption": {
+            "zh_CN": "供应商编号"
+          },
+          "physicalField": "LIFNR",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "pay_method_code",
+          "name": "pay_method_code",
+          "caption": {
+            "zh_CN": "付款方式"
+          },
+          "refDict": "pay_method",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "ZLSCH",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择付款方式",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "partner_company_id",
+          "name": "partner_company_id",
+          "caption": {
+            "zh_CN": "贸易伙伴"
+          },
+          "refDict": "company",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "VBUND",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择贸易伙伴",
+            "showClear": true
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,10}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "house_bank",
+        "dictName": "开户行/银行",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_house_bank",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "付款收款账户",
+        "codeLength": 5
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "country",
+          "id": "bank_country_code",
+          "name": "bank_country_code",
+          "caption": {
+            "zh_CN": "银行国家"
+          },
+          "refField": "code",
+          "displayField": "name",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择银行国家",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "account_no",
+          "name": "account_no",
+          "caption": {
+            "zh_CN": "银行账号"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "账户币种"
+          },
+          "physicalField": "WAERS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择账户币种",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "gl_account",
+          "refField": "code",
+          "displayField": "name",
+          "id": "gl_account_id",
+          "name": "gl_account_id",
+          "caption": {
+            "zh_CN": "对应总账科目"
+          },
+          "physicalField": "HKONT",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择对应总账科目",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "bank_key",
+          "name": "bank_key",
+          "caption": {
+            "zh_CN": "银行代码"
+          },
+          "physicalField": "BANKL",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "house_bank_key",
+          "name": "house_bank_key",
+          "caption": {
+            "zh_CN": "开户行标识"
+          },
+          "physicalField": "HBKID",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "bank_account_id",
+          "name": "bank_account_id",
+          "caption": {
+            "zh_CN": "银行账户标识"
+          },
+          "physicalField": "HKTID",
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,5}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "int_order",
+        "dictName": "内部订单",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_int_order",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "归集临时性费用",
+        "codeLength": 12
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "order_type",
+          "name": "order_type",
+          "caption": {
+            "zh_CN": "订单类型"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "cost_center",
+          "refField": "code",
+          "displayField": "name",
+          "id": "responsible_cc_id",
+          "name": "responsible_cc_id",
+          "caption": {
+            "zh_CN": "责任成本中心"
+          },
+          "physicalField": "KOSTV",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择责任成本中心",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "ctrl_area_id",
+          "name": "ctrl_area_id",
+          "caption": {
+            "zh_CN": "成本控制范围"
+          },
+          "refDict": "ctrl_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KOKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择成本控制范围",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "profit_ctr_id",
+          "name": "profit_ctr_id",
+          "caption": {
+            "zh_CN": "利润中心"
+          },
+          "refDict": "profit_ctr",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PRCTR",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择利润中心",
+            "showClear": true
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,12}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "wbs_element",
+        "dictName": "WBS元素(项目)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cf_wbs_element",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "项目分解",
+        "codeLength": 24
+      },
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "cost_center",
+          "refField": "code",
+          "displayField": "name",
+          "id": "responsible_cc_id",
+          "name": "responsible_cc_id",
+          "caption": {
+            "zh_CN": "责任成本中心"
+          },
+          "physicalField": "KOSTV",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择责任成本中心",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "project_id",
+          "name": "project_id",
+          "caption": {
+            "zh_CN": "项目定义"
+          },
+          "physicalField": "PSPID",
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择公司代码",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "profit_ctr_id",
+          "name": "profit_ctr_id",
+          "caption": {
+            "zh_CN": "利润中心"
+          },
+          "refDict": "profit_ctr",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PRCTR",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择利润中心",
+            "showClear": true
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,24}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "country",
+        "dictName": "国家",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_country",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "ISO 国家",
+        "codeLength": 3
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "本国货币"
+          },
+          "physicalField": "WAERS",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择本国货币",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "iso_code_2",
+          "name": "iso_code_2",
+          "caption": {
+            "zh_CN": "ISO二位国家码"
+          },
+          "physicalField": "INTCA",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "iso_code_3",
+          "name": "iso_code_3",
+          "caption": {
+            "zh_CN": "ISO三位国家码"
+          },
+          "physicalField": "INTCA3",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z]{1,3}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "number_range",
+        "dictName": "凭证号码范围",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_number_range",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "SAP FI 凭证类型对应的号码范围(T003-NUMKR/NRIV)。",
+        "codeLength": 2
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "range_from",
+          "name": "range_from",
+          "caption": {
+            "zh_CN": "号码起始"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "range_to",
+          "name": "range_to",
+          "caption": {
+            "zh_CN": "号码结束"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "external_numbering",
+          "name": "external_numbering",
+          "caption": {
+            "zh_CN": "外部给号标识"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,2}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "acct_princ",
+        "dictName": "会计原则",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cf_acct_princ",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "SAP 新总账/分类账会计原则。",
+        "codeLength": 4
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "gaap_type",
+          "name": "gaap_type",
+          "caption": {
+            "zh_CN": "准则类型"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "country_code",
+          "name": "country_code",
+          "caption": {
+            "zh_CN": "国家"
+          },
+          "fieldLength": "LAND1",
+          "refDict": "country",
+          "refField": "code",
+          "displayField": "name",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "grid",
+            "dictTitle": "选择国家",
+            "showClear": true,
+            "idCol": "code"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonNoIDFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,4}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "cons_org",
+        "dictName": "合并组织机构",
+        "dictKind": "GROUP",
+        "selfHierarchy": true,
+        "tableName": "cf_cons_org",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "集团合并组织机构层级:集团→分部→合并单元;分组字典,自分级。",
+        "codeLength": 12
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "org_type",
+          "name": "org_type",
+          "caption": {
+            "zh_CN": "组织类型"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "对应公司代码"
+          },
+          "refDict": "comp_unit",
+          "refField": "id",
+          "displayField": "name",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择对应公司代码",
+            "showClear": true
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "cons_method",
+          "name": "cons_method",
+          "caption": {
+            "zh_CN": "合并方法"
+          },
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left"
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 9,
+          "intDigits": 5,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "ownership_pct",
+          "name": "ownership_pct",
+          "caption": {
+            "zh_CN": "持股比例%"
+          },
+          "edit": {
+            "mode": "cmx-number-input"
+          },
+          "display": {
+            "mode": "number",
+            "decimalDigits": 2,
+            "thousandSeparator": false,
+            "align": "right",
+            "negativeColor": true
+          },
+          "width": "110px",
+          "required": false,
+          "align": "right"
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.-]{1,12}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    }
+  ],
+  "updatedAt": "2026-08-06T05:31:33.954Z"
+}

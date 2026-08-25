@@ -1,0 +1,5281 @@
+{
+  "moduleMeta": {
+    "moduleCode": "REPORT",
+    "moduleName": "报表",
+    "metaKind": "DCT",
+    "metaName": "报表数据字典元数据",
+    "version": 1,
+    "versionName": "初始版本",
+    "isDefault": true,
+    "designStyle": "separate-dictionary-tables",
+    "remark": "会计核算(cmxfico)报表(report)模块 RPT 报表数据字典：报表字典/报表版本定义/报表子表定义/报表区域定义/报表行字典/报表列字典/报表合并组织架构字典/会计日历字典/报表格式定义；分类字典(报表类别/编报期间类型)、枚举字典(编制口径/金额单位)；元素分类字典、数据元素字典(引用元素分类字典)；单元格数据元素映射表、报表单元格数据表。所有字典字段全部本表定义，不引用 base_dct_meta_v1.json 基础字段集。"
+  },
+  "_comment": "========== RPT 报表数据字典注册表（每类字典独立建表，全部字段本表定义、无 *FieldSet 引用） ==========",
+  "dictionaryTableConventions": {
+    "remark": "本文件所有 dictionaryTables 均不声明 baseFieldSet/hierarchyFieldSet/auditFieldSet 等引用键，字典基础列(id/code/name/sort_no/status)、层级列(parent_id/full_path/level_no/is_leaf)、审计列(create_by/create_time/update_by/update_time)全部在各表 fields 内平铺定义，物理表名以 cr_ 前缀。"
+  },
+  "dictionaryTables": [
+    {
+      "dictMeta": {
+        "dictCode": "consol_org",
+        "dictName": "报表合并组织架构字典",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "cr_consol_org",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "合并报表组织架构：按合并方案维护集团-子集团-法人的股权层级树(自分级)，登记持股/表决权比例、合并方法、合并币种与抵消标志"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "组织节点主键"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "组织编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "组织名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "consol_scheme",
+          "name": "consol_scheme",
+          "caption": {
+            "zh_CN": "合并方案编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "org_type",
+          "name": "org_type",
+          "caption": {
+            "zh_CN": "组织类型(group集团/subgroup子集团/entity法人/branch分支)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "parent_id",
+          "name": "parent_id",
+          "caption": {
+            "zh_CN": "上级组织ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "full_path",
+          "name": "full_path",
+          "caption": {
+            "zh_CN": "物化路径(.分隔)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": false
+        },
+        {
+          "id": "level_no",
+          "name": "level_no",
+          "caption": {
+            "zh_CN": "层级深度(1~N)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "is_leaf",
+          "name": "is_leaf",
+          "caption": {
+            "zh_CN": "是否末级(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "entity_code",
+          "name": "entity_code",
+          "caption": {
+            "zh_CN": "对应核算实体编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true
+        },
+        {
+          "id": "consol_method",
+          "name": "consol_method",
+          "caption": {
+            "zh_CN": "合并方法(full完全合并/equity权益法/proportion比例合并/cost成本法)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "ownership_pct",
+          "name": "ownership_pct",
+          "caption": {
+            "zh_CN": "持股比例(%)"
+          },
+          "dataType": "DECIMAL",
+          "fieldLength": 9,
+          "intDigits": 5,
+          "decimalDigits": 4,
+          "nullable": true
+        },
+        {
+          "id": "voting_pct",
+          "name": "voting_pct",
+          "caption": {
+            "zh_CN": "表决权比例(%)"
+          },
+          "dataType": "DECIMAL",
+          "fieldLength": 9,
+          "intDigits": 5,
+          "decimalDigits": 4,
+          "nullable": true
+        },
+        {
+          "id": "consol_currency",
+          "name": "consol_currency",
+          "caption": {
+            "zh_CN": "合并币种"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": true
+        },
+        {
+          "id": "is_parent",
+          "name": "is_parent",
+          "caption": {
+            "zh_CN": "是否母公司(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "offset_flag",
+          "name": "offset_flag",
+          "caption": {
+            "zh_CN": "是否参与内部抵消(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_.-]{2,40}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "consol_scheme",
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "acct_calendar",
+        "dictName": "会计日历字典",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "cr_acct_calendar",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_code",
+        "remark": "会计日历/期间字典：按会计年度→会计期间的自分级结构维护每个期间的起止日期、所属季度、期间类型(正常/调整/年结)与开关闭状态，供报表编报选期"
+      },
+      "fields": [
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "期间编码(如2026/2026-06)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "期间名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "calendar_type",
+          "name": "calendar_type",
+          "caption": {
+            "zh_CN": "日历类型(standard标准公历/fiscal财年/period13十三期)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "fiscal_year",
+          "name": "fiscal_year",
+          "caption": {
+            "zh_CN": "会计年度"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": false
+        },
+        {
+          "id": "period_no",
+          "name": "period_no",
+          "caption": {
+            "zh_CN": "期间号(1~12/13,年度行为0)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "parent_code",
+          "name": "parent_code",
+          "caption": {
+            "zh_CN": "上级期间编码(年度节点)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true
+        },
+        {
+          "id": "full_path",
+          "name": "full_path",
+          "caption": {
+            "zh_CN": "物化路径(.分隔)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": false
+        },
+        {
+          "id": "level_no",
+          "name": "level_no",
+          "caption": {
+            "zh_CN": "层级深度(1年度/2期间)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "is_leaf",
+          "name": "is_leaf",
+          "caption": {
+            "zh_CN": "是否末级(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "period_type",
+          "name": "period_type",
+          "caption": {
+            "zh_CN": "期间类型(normal正常/adjust调整期/year_begin年初/year_end年结)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "start_date",
+          "name": "start_date",
+          "caption": {
+            "zh_CN": "期间起始日"
+          },
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true
+        },
+        {
+          "id": "end_date",
+          "name": "end_date",
+          "caption": {
+            "zh_CN": "期间结束日"
+          },
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true
+        },
+        {
+          "id": "quarter",
+          "name": "quarter",
+          "caption": {
+            "zh_CN": "所属季度(1~4)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "period_status",
+          "name": "period_status",
+          "caption": {
+            "zh_CN": "期间状态(open打开/closed关闭/locked锁定)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": false
+        },
+        {
+          "id": "is_year_end",
+          "name": "is_year_end",
+          "caption": {
+            "zh_CN": "是否年结期(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "days",
+          "name": "days",
+          "caption": {
+            "zh_CN": "期间天数"
+          },
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[0-9]{4}(-[0-9]{2})?$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "calendar_type",
+          "fiscal_year",
+          "period_no"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_list",
+        "dictName": "报表字典",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_report_list",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "报表主档：登记每张财务报表(资产负债表/利润表/现金流量表/自定义报表)的基础属性、类别、编制口径与所用格式模板"
+      },
+      "fields": [
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "报表编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "报表名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "report_type",
+          "name": "report_type",
+          "caption": {
+            "zh_CN": "报表类型(BS资产负债表/PL利润表/CF现金流量表/EQ权益变动表/CUSTOM自定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": false
+        },
+        {
+          "id": "report_category",
+          "name": "report_category",
+          "caption": {
+            "zh_CN": "报表类别(statutory法定/management管理/internal内部/tax税务)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true
+        },
+        {
+          "id": "format_code",
+          "name": "format_code",
+          "caption": {
+            "zh_CN": "所用报表格式编码(指向报表格式定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true
+        },
+        {
+          "id": "period_type",
+          "name": "period_type",
+          "caption": {
+            "zh_CN": "编报期间类型(month月报/quarter季报/year年报/halfyear半年报)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "报表币种"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": true
+        },
+        {
+          "id": "amount_unit",
+          "name": "amount_unit",
+          "caption": {
+            "zh_CN": "金额单位(yuan元/kyuan千元/wyuan万元)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "entity_scope",
+          "name": "entity_scope",
+          "caption": {
+            "zh_CN": "编制口径(single单体/consol合并/combined汇总)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "template_version",
+          "name": "template_version",
+          "caption": {
+            "zh_CN": "模板版本号"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "data_source",
+          "name": "data_source",
+          "caption": {
+            "zh_CN": "取数来源(gl_balance总账余额/voucher凭证/manual手工)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true
+        },
+        {
+          "id": "is_statutory",
+          "name": "is_statutory",
+          "caption": {
+            "zh_CN": "是否法定报表(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_]{2,32}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_version",
+        "dictName": "报表版本定义",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_report_version",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "报表版本定义：一张报表的模板结构按版本管理(如V1/V2/2026A)，子表/区域/行/列定义均挂在具体版本下；版本有草稿-发布-停用-归档生命周期，同报表同一时刻至多一个当前生效版本，新版本可由源版本复制派生"
+      },
+      "fields": [
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "版本编码(如V1/V2/2026A)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "版本名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "所属报表编码(指向报表字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "version_no",
+          "name": "version_no",
+          "caption": {
+            "zh_CN": "版本序号(同报表内递增)"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "version_status",
+          "name": "version_status",
+          "caption": {
+            "zh_CN": "版本状态(draft设计中/published已发布/deprecated已停用/archived已归档)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "is_current",
+          "name": "is_current",
+          "caption": {
+            "zh_CN": "是否当前生效版本(1是0否,同报表至多一个)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "base_version_code",
+          "name": "base_version_code",
+          "caption": {
+            "zh_CN": "源版本编码(由哪个版本复制派生)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true
+        },
+        {
+          "id": "effective_from",
+          "name": "effective_from",
+          "caption": {
+            "zh_CN": "生效日期"
+          },
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true
+        },
+        {
+          "id": "effective_to",
+          "name": "effective_to",
+          "caption": {
+            "zh_CN": "失效日期"
+          },
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true
+        },
+        {
+          "id": "change_summary",
+          "name": "change_summary",
+          "caption": {
+            "zh_CN": "版本变更说明"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "publish_time",
+          "name": "publish_time",
+          "caption": {
+            "zh_CN": "发布时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        },
+        {
+          "id": "publish_by",
+          "name": "publish_by",
+          "caption": {
+            "zh_CN": "发布人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_.-]{1,32}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "report_code",
+          "code"
+        ],
+        [
+          "report_code",
+          "version_no"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_fmt",
+        "dictName": "报表格式定义",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_report_fmt",
+        "remark": "报表格式定义：存储某个版本报表的 Excel 兼容格式数据，doc_content 列以 BLOB(BYTEA) 保存整簿版式(单元格/合并/样式/公式等)；按(报表,版本)唯一。不含具体期间/组织的编制实例信息"
+      },
+      "fields": [
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "所属报表编码(指向报表清单report_list)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": {
+            "zh_CN": "报表版本编码(指向报表版本定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "doc_content",
+          "name": "doc_content",
+          "caption": {
+            "zh_CN": "格式数据(某版本报表的Excel兼容整簿版式,BLOB/BYTEA)"
+          },
+          "dataType": "BLOB",
+          "nullable": true
+        },
+        {
+          "id": "doc_format",
+          "name": "doc_format",
+          "caption": {
+            "zh_CN": "格式类型(xlsx/xls/xlsm)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "mime_type",
+          "name": "mime_type",
+          "caption": {
+            "zh_CN": "MIME类型(如application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "file_size",
+          "name": "file_size",
+          "caption": {
+            "zh_CN": "格式数据字节大小"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "content_hash",
+          "name": "content_hash",
+          "caption": {
+            "zh_CN": "内容校验哈希(SHA-256,防篡改/去重)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "storage_type",
+          "name": "storage_type",
+          "caption": {
+            "zh_CN": "存储方式(db内联/oss对象存储/fs文件系统)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "external_uri",
+          "name": "external_uri",
+          "caption": {
+            "zh_CN": "外部存储地址(storage_type非db时的对象URI)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_.-]{2,64}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "report_code",
+          "version_code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_sheet",
+        "dictName": "报表子表定义",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_report_sheet",
+        "remark": "报表子表(工作表/Sheet)定义：一张报表可含多个子表(主表/附注/明细schedule)，逐子表声明其页签、类型、排序及行列规模/表头冻结/纸张字体等版式属性，隶属于报表字典"
+      },
+      "fields": [
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "所属报表编码(指向报表字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": {
+            "zh_CN": "报表版本编码(指向报表版本定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "sheet_index",
+          "name": "sheet_index",
+          "caption": {
+            "zh_CN": "子表序号(页签顺序,从1起)"
+          },
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          },
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "子表名称/页签名"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "sheet_type",
+          "name": "sheet_type",
+          "caption": {
+            "zh_CN": "子表类型(main主表/notes附注/schedule明细表/cover封面)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "tab_color",
+          "name": "tab_color",
+          "caption": {
+            "zh_CN": "页签颜色(#RRGGBB)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "row_count",
+          "name": "row_count",
+          "caption": {
+            "zh_CN": "总行数"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "col_count",
+          "name": "col_count",
+          "caption": {
+            "zh_CN": "总列数"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "header_rows",
+          "name": "header_rows",
+          "caption": {
+            "zh_CN": "表头行数"
+          },
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "fixed_rows",
+          "name": "fixed_rows",
+          "caption": {
+            "zh_CN": "冻结行数"
+          },
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "fixed_cols",
+          "name": "fixed_cols",
+          "caption": {
+            "zh_CN": "冻结列数"
+          },
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "paper_size",
+          "name": "paper_size",
+          "caption": {
+            "zh_CN": "纸张大小(A4/A3/A5/Letter)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "orientation",
+          "name": "orientation",
+          "caption": {
+            "zh_CN": "打印方向(portrait纵向/landscape横向)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 12,
+          "nullable": true
+        },
+        {
+          "id": "font_family",
+          "name": "font_family",
+          "caption": {
+            "zh_CN": "默认字体"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true
+        },
+        {
+          "id": "font_size",
+          "name": "font_size",
+          "caption": {
+            "zh_CN": "默认字号(pt)"
+          },
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "show_gridline",
+          "name": "show_gridline",
+          "caption": {
+            "zh_CN": "是否显示网格线(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "is_hidden",
+          "name": "is_hidden",
+          "caption": {
+            "zh_CN": "是否隐藏页签(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "title_style",
+          "name": "title_style",
+          "caption": {
+            "zh_CN": "标题样式(JSON:字体/字号/对齐/颜色)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "header_style",
+          "name": "header_style",
+          "caption": {
+            "zh_CN": "表头样式(JSON)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_.-]{2,40}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "report_code",
+          "version_code",
+          "sheet_index"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_region",
+        "dictName": "报表区域定义",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_report_region",
+        "idField": "region_code",
+        "codeField": "region_code",
+        "labelField": "region_name",
+        "remark": "报表区域定义：把一个子表(Sheet)划分为若干矩形区域(表头/标题/数据区/合计区/附注/筛选区)，以(报表,版本,子表sheet,区域)四元为联合主键；行列定义通过 region_code 归属到具体区域。区域以起止行列/A1坐标界定其边界"
+      },
+      "fields": [
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "所属报表编码(联合主键1,指向报表字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": {
+            "zh_CN": "报表版本编码(联合主键2,指向报表版本定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "sheet_code",
+          "name": "sheet_code",
+          "caption": {
+            "zh_CN": "所属子表编码(联合主键3,指向报表子表定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "region_code",
+          "name": "region_code",
+          "caption": {
+            "zh_CN": "区域编码(联合主键4)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "region_name",
+          "name": "region_name",
+          "caption": {
+            "zh_CN": "区域名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "region_type",
+          "name": "region_type",
+          "caption": {
+            "zh_CN": "区域类型(header表头/title标题/data数据区/total合计区/notes附注/filter筛选区)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "start_row",
+          "name": "start_row",
+          "caption": {
+            "zh_CN": "起始行号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "start_col",
+          "name": "start_col",
+          "caption": {
+            "zh_CN": "起始列号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "end_row",
+          "name": "end_row",
+          "caption": {
+            "zh_CN": "结束行号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "end_col",
+          "name": "end_col",
+          "caption": {
+            "zh_CN": "结束列号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "start_cell",
+          "name": "start_cell",
+          "caption": {
+            "zh_CN": "起始单元格(A1坐标,如A1)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "end_cell",
+          "name": "end_cell",
+          "caption": {
+            "zh_CN": "结束单元格(A1坐标,如F12)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "row_span",
+          "name": "row_span",
+          "caption": {
+            "zh_CN": "占用行数"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "col_span",
+          "name": "col_span",
+          "caption": {
+            "zh_CN": "占用列数"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "direction",
+          "name": "direction",
+          "caption": {
+            "zh_CN": "展开方向(vertical纵向逐行/horizontal横向逐列)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 12,
+          "nullable": true
+        },
+        {
+          "id": "is_repeatable",
+          "name": "is_repeatable",
+          "caption": {
+            "zh_CN": "是否可重复展开(明细区随数据增长,1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "data_source",
+          "name": "data_source",
+          "caption": {
+            "zh_CN": "数据源/数据集绑定(数据区取数用)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "is_merged",
+          "name": "is_merged",
+          "caption": {
+            "zh_CN": "区域内是否合并单元格(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "freeze_flag",
+          "name": "freeze_flag",
+          "caption": {
+            "zh_CN": "是否冻结该区域(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "bg_color",
+          "name": "bg_color",
+          "caption": {
+            "zh_CN": "背景色(#RRGGBB)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "border_style",
+          "name": "border_style",
+          "caption": {
+            "zh_CN": "边框样式(如 thin/medium/double)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true
+        },
+        {
+          "id": "style",
+          "name": "style",
+          "caption": {
+            "zh_CN": "区域样式(JSON:字体/对齐/底纹等)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "region_code",
+        "pattern": "^[A-Z0-9_.-]{1,40}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": []
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_row",
+        "dictName": "报表行字典",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "cr_report_row",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "报表行定义：逐行声明报表项目(行次/项目名称/取数公式/科目范围/余额方向)，自分级支持小计-合计的父子归集与缩进层次"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "行主键"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "行编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "行项目名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "所属报表编码(指向报表字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": {
+            "zh_CN": "报表版本编码(指向报表版本定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "sheet_code",
+          "name": "sheet_code",
+          "caption": {
+            "zh_CN": "所属子表编码(指向报表子表定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "region_code",
+          "name": "region_code",
+          "caption": {
+            "zh_CN": "所属区域编码(指向报表区域定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "row_no",
+          "name": "row_no",
+          "caption": {
+            "zh_CN": "行号(物理行序)"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "line_no",
+          "name": "line_no",
+          "caption": {
+            "zh_CN": "行次(法定报表行次号)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "row_type",
+          "name": "row_type",
+          "caption": {
+            "zh_CN": "行类型(data数据/subtotal小计/total合计/title标题/blank空行)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "parent_id",
+          "name": "parent_id",
+          "caption": {
+            "zh_CN": "上级行ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "full_path",
+          "name": "full_path",
+          "caption": {
+            "zh_CN": "物化路径(.分隔)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": false
+        },
+        {
+          "id": "level_no",
+          "name": "level_no",
+          "caption": {
+            "zh_CN": "层级深度(1~N)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "is_leaf",
+          "name": "is_leaf",
+          "caption": {
+            "zh_CN": "是否末级(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "formula",
+          "name": "formula",
+          "caption": {
+            "zh_CN": "取数公式(QM/QC/SUM等)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "account_range",
+          "name": "account_range",
+          "caption": {
+            "zh_CN": "科目范围(逗号/区间表达式)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "balance_dir",
+          "name": "balance_dir",
+          "caption": {
+            "zh_CN": "取数方向(D借/C贷/N净额)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true
+        },
+        {
+          "id": "indent",
+          "name": "indent",
+          "caption": {
+            "zh_CN": "缩进级别"
+          },
+          "dataType": "INT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "is_bold",
+          "name": "is_bold",
+          "caption": {
+            "zh_CN": "是否加粗(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_.-]{2,40}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "report_code",
+          "version_code",
+          "sheet_code",
+          "region_code",
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_col",
+        "dictName": "报表列字典",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "cr_report_col",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "报表列定义：声明报表各数据列(本期/年初/上年同期/预算/计算列)的列标、期间偏移、数据类型、列宽小数位与列公式；自分级支持多级列头(列分组表头)的父子归集与跨列合并"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "列主键"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "列编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "列名称/列标题"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "所属报表编码(指向报表字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": {
+            "zh_CN": "报表版本编码(指向报表版本定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "sheet_code",
+          "name": "sheet_code",
+          "caption": {
+            "zh_CN": "所属子表编码(指向报表子表定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "region_code",
+          "name": "region_code",
+          "caption": {
+            "zh_CN": "所属区域编码(指向报表区域定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "col_no",
+          "name": "col_no",
+          "caption": {
+            "zh_CN": "列号(物理列序)"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "col_letter",
+          "name": "col_letter",
+          "caption": {
+            "zh_CN": "列标(A/B/C…)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": true
+        },
+        {
+          "id": "col_type",
+          "name": "col_type",
+          "caption": {
+            "zh_CN": "列类型(period本期/year_begin年初/last_year上年同期/budget预算/calc计算/text文本)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "parent_id",
+          "name": "parent_id",
+          "caption": {
+            "zh_CN": "上级列ID(多级列头)"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "full_path",
+          "name": "full_path",
+          "caption": {
+            "zh_CN": "物化路径(.分隔)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": false
+        },
+        {
+          "id": "level_no",
+          "name": "level_no",
+          "caption": {
+            "zh_CN": "层级深度(1~N)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "is_leaf",
+          "name": "is_leaf",
+          "caption": {
+            "zh_CN": "是否末级(1数据列0分组表头)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "value_type",
+          "name": "value_type",
+          "caption": {
+            "zh_CN": "取值类型(amount金额/qty数量/rate比率/text文本)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "period_offset",
+          "name": "period_offset",
+          "caption": {
+            "zh_CN": "期间偏移(0本期/-1上期/-12上年同期)"
+          },
+          "dataType": "INT",
+          "fieldLength": 4,
+          "intDigits": 4,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "width",
+          "name": "width",
+          "caption": {
+            "zh_CN": "列宽(px)"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "decimals",
+          "name": "decimals",
+          "caption": {
+            "zh_CN": "小数位数"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "align",
+          "name": "align",
+          "caption": {
+            "zh_CN": "对齐方式(left左/center中/right右)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": true
+        },
+        {
+          "id": "formula",
+          "name": "formula",
+          "caption": {
+            "zh_CN": "列公式(计算列取数/列间运算)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "is_hidden",
+          "name": "is_hidden",
+          "caption": {
+            "zh_CN": "是否隐藏(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Z0-9_.-]{1,40}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "report_code",
+          "version_code",
+          "sheet_code",
+          "region_code",
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_category",
+        "dictName": "报表类别",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cr_report_category",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "报表类别取值字典：法定(statutory)/管理(management)/内部(internal)/税务(tax)等；供报表字典 report_category 归类"
+      },
+      "fields": [
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "取值编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "取值名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,32}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": []
+    },
+    {
+      "dictMeta": {
+        "dictCode": "period_type",
+        "dictName": "编报期间类型",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cr_period_type",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "编报期间类型取值字典：月报(month)/季报(quarter)/半年报(halfyear)/年报(year)等；供报表字典 period_type 选择"
+      },
+      "fields": [
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "取值编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "取值名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,32}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": []
+    },
+    {
+      "dictMeta": {
+        "dictCode": "entity_scope",
+        "dictName": "编制口径",
+        "dictKind": "ENUM",
+        "selfHierarchy": false,
+        "tableName": "cr_entity_scope",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "编制口径枚举字典：单体(single)/合并(consol)/汇总(combined)；供报表字典及报表文档 entity_scope 取值"
+      },
+      "fields": [
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "取值编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "取值名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,32}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": []
+    },
+    {
+      "dictMeta": {
+        "dictCode": "amount_unit",
+        "dictName": "金额单位",
+        "dictKind": "ENUM",
+        "selfHierarchy": false,
+        "tableName": "cr_amount_unit",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "金额单位枚举字典：元(yuan)/千元(kyuan)/万元(wyuan)/百万元(myuan)；供报表字典 amount_unit 取值"
+      },
+      "fields": [
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "取值编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "取值名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,32}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": []
+    },
+    {
+      "dictMeta": {
+        "dictCode": "element_category",
+        "dictName": "元素分类字典",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cr_element_category",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "元素分类字典：对数据元素做业务归类(金额类/数量类/比率类/文本类/日期类等)；供数据元素字典 category_code 归类"
+      },
+      "fields": [
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "分类编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "分类名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,32}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": []
+    },
+    {
+      "dictMeta": {
+        "dictCode": "data_element",
+        "dictName": "数据元素字典",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "cr_data_element",
+        "idField": "code",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "数据元素字典：报表/单元格可引用的标准数据元素(如货币资金/营业收入/资产合计等),统一元素编码、名称、数据类型与口径;category_code 引用元素分类字典"
+      },
+      "fields": [
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "元素编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "元素名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "category_code",
+          "name": "category_code",
+          "caption": {
+            "zh_CN": "元素分类编码(引用元素分类字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "element_category",
+          "refField": "code",
+          "displayField": "name",
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "data_type",
+          "name": "data_type",
+          "caption": {
+            "zh_CN": "数据类型(amount金额/qty数量/rate比率/text文本/date日期)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "unit",
+          "name": "unit",
+          "caption": {
+            "zh_CN": "计量单位(元/股/%/件等)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true
+        },
+        {
+          "id": "decimals",
+          "name": "decimals",
+          "caption": {
+            "zh_CN": "小数位数"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "value_source",
+          "name": "value_source",
+          "caption": {
+            "zh_CN": "取值来源(gl总账/manual手工/calc计算)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "formula_type",
+          "name": "formula_type",
+          "caption": {
+            "zh_CN": "公式类型(none无/calc计算公式/agg汇总/ref引用/custom自定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "calc_formula",
+          "name": "calc_formula",
+          "caption": {
+            "zh_CN": "计算公式(如 元素间加减/QM取数/SUM汇总等表达式)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "check_formula",
+          "name": "check_formula",
+          "caption": {
+            "zh_CN": "校验公式(数据合法性/勾稽校验表达式,如 assets==liab+equity)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,40}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": []
+    },
+    {
+      "dictMeta": {
+        "dictCode": "cell_element_map",
+        "dictName": "单元格数据元素映射表",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_cell_element_map",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "报表单元格与数据元素的映射(设计态)：声明报表某版本某子表某区域内的某行×某列这一单元格,取哪个数据元素的值;含取数/计算/校验公式覆盖与单元格格式"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "映射主键"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "映射编码"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "映射名称/单元格说明"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "报表编码(指向报表清单report_list)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": {
+            "zh_CN": "报表版本编码(指向报表版本定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "sheet_code",
+          "name": "sheet_code",
+          "caption": {
+            "zh_CN": "子表编码(指向报表子表定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "region_code",
+          "name": "region_code",
+          "caption": {
+            "zh_CN": "区域编码(指向报表区域定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "row_id",
+          "name": "row_id",
+          "caption": {
+            "zh_CN": "行ID(指向报表行字典cr_report_row.id)"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "col_id",
+          "name": "col_id",
+          "caption": {
+            "zh_CN": "列ID(指向报表列字典cr_report_col.id)"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "cell_ref",
+          "name": "cell_ref",
+          "caption": {
+            "zh_CN": "单元格坐标(A1样式,如C5,冗余便于定位)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "element_code",
+          "name": "element_code",
+          "caption": {
+            "zh_CN": "数据元素编码(指向数据元素字典cr_data_element.code)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "data_element",
+          "refField": "code",
+          "displayField": "name",
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "value_type",
+          "name": "value_type",
+          "caption": {
+            "zh_CN": "值类型(amount金额/qty数量/rate比率/text文本/date日期)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "data_source",
+          "name": "data_source",
+          "caption": {
+            "zh_CN": "取数来源覆盖(gl总账/manual手工/calc计算,缺省随元素)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "calc_formula",
+          "name": "calc_formula",
+          "caption": {
+            "zh_CN": "计算公式覆盖(缺省用元素上的公式)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "check_formula",
+          "name": "check_formula",
+          "caption": {
+            "zh_CN": "校验公式覆盖"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true
+        },
+        {
+          "id": "is_editable",
+          "name": "is_editable",
+          "caption": {
+            "zh_CN": "是否允许手工录入(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "number_format",
+          "name": "number_format",
+          "caption": {
+            "zh_CN": "数字格式(如 #,##0.00)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "report_code",
+          "version_code",
+          "sheet_code",
+          "region_code",
+          "row_id",
+          "col_id"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "cell_data",
+        "dictName": "报表单元格数据表",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_cell_data",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "报表单元格数据(运行态)：某组织某期间下,某报表某版本某子表某区域内某行×某列这一单元格的实际取值;同时存字符型与数值型数据,记录取数状态与计算时间"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "单元格数据主键"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "数据编码/幂等键"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "单元格说明"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "org_code",
+          "name": "org_code",
+          "caption": {
+            "zh_CN": "组织/核算主体编码(合并报表指向合并组织架构)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "period_code",
+          "name": "period_code",
+          "caption": {
+            "zh_CN": "会计期间编码(指向会计日历字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "报表编码(指向报表清单report_list)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": {
+            "zh_CN": "报表版本编码(指向报表版本定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "sheet_code",
+          "name": "sheet_code",
+          "caption": {
+            "zh_CN": "子表编码(指向报表子表定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "region_code",
+          "name": "region_code",
+          "caption": {
+            "zh_CN": "区域编码(指向报表区域定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "row_id",
+          "name": "row_id",
+          "caption": {
+            "zh_CN": "行ID(指向报表行字典cr_report_row.id)"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "col_id",
+          "name": "col_id",
+          "caption": {
+            "zh_CN": "列ID(指向报表列字典cr_report_col.id)"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "cell_ref",
+          "name": "cell_ref",
+          "caption": {
+            "zh_CN": "单元格坐标(A1样式,如C5)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "element_code",
+          "name": "element_code",
+          "caption": {
+            "zh_CN": "数据元素编码(指向数据元素字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "data_element",
+          "refField": "code",
+          "displayField": "name"
+        },
+        {
+          "id": "value_type",
+          "name": "value_type",
+          "caption": {
+            "zh_CN": "值类型(amount金额/qty数量/rate比率/text文本/date日期)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "text_value",
+          "name": "text_value",
+          "caption": {
+            "zh_CN": "字符型数据(文本/日期字符串等)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 1024,
+          "nullable": true
+        },
+        {
+          "id": "num_value",
+          "name": "num_value",
+          "caption": {
+            "zh_CN": "数值型数据"
+          },
+          "dataType": "DECIMAL",
+          "fieldLength": 28,
+          "intDigits": 22,
+          "decimalDigits": 6,
+          "nullable": true
+        },
+        {
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "币种"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": true
+        },
+        {
+          "id": "amount_unit",
+          "name": "amount_unit",
+          "caption": {
+            "zh_CN": "金额单位(元/千元/万元,指向金额单位字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true
+        },
+        {
+          "id": "data_status",
+          "name": "data_status",
+          "caption": {
+            "zh_CN": "取数状态(pending待取/computed已算/manual手工/error异常/locked锁定)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "is_manual",
+          "name": "is_manual",
+          "caption": {
+            "zh_CN": "是否手工覆盖(1是0否)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "compute_time",
+          "name": "compute_time",
+          "caption": {
+            "zh_CN": "取数/计算时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "auto",
+        "field": "code"
+      },
+      "uniqueKeys": [
+        [
+          "org_code",
+          "period_code",
+          "report_code",
+          "version_code",
+          "sheet_code",
+          "region_code",
+          "row_id",
+          "col_id"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_float_row",
+        "dictName": "报表浮动行数据表",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_report_float_row",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "label",
+        "remark": "报表浮动行数据(运行态):某组织某期间下,浮动区按数据源展开/用户增删改的明细行;整行自包含(cells JSONB存各列值/公式),支持按 parent_dim_key 分级归集小计合计;取数初始化 is_manual=0,手工维护 is_manual=1"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "浮动明细主键"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "数据编码/幂等键"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "说明"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "报表编码(指向报表清单report_list)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": {
+            "zh_CN": "报表版本编码(指向报表版本定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "sheet_code",
+          "name": "sheet_code",
+          "caption": {
+            "zh_CN": "子表编码(指向报表子表定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "region_code",
+          "name": "region_code",
+          "caption": {
+            "zh_CN": "区域编码(指向报表区域定义,须 is_repeatable=1 浮动区)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "org_code",
+          "name": "org_code",
+          "caption": {
+            "zh_CN": "组织/核算主体编码(合并报表指向合并组织架构)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "period_code",
+          "name": "period_code",
+          "caption": {
+            "zh_CN": "会计期间编码(指向会计日历字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "dim_key",
+          "name": "dim_key",
+          "caption": {
+            "zh_CN": "维度键路径(k=v;k=v,如 region=华东;cust_code=C001)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "label",
+          "name": "label",
+          "caption": {
+            "zh_CN": "显示标签(行标题/列头)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "parent_dim_key",
+          "name": "parent_dim_key",
+          "caption": {
+            "zh_CN": "上级维度键(分级浮动分组用,顶层为空)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "row_type",
+          "name": "row_type",
+          "caption": {
+            "zh_CN": "行类型(detail明细/subtotal小计/total合计)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "level_no",
+          "name": "level_no",
+          "caption": {
+            "zh_CN": "层级深度(1~N,分级浮动)"
+          },
+          "dataType": "SMALLINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "seq",
+          "name": "seq",
+          "caption": {
+            "zh_CN": "展开序(组内序)"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "cells",
+          "name": "cells",
+          "caption": {
+            "zh_CN": "各列/各行值或公式(JSONB,整行/列自包含;存储态显式值覆盖模板公式)"
+          },
+          "dataType": "JSONB",
+          "nullable": true
+        },
+        {
+          "id": "is_manual",
+          "name": "is_manual",
+          "caption": {
+            "zh_CN": "是否手工(1手工/0取数种子;重取数默认不覆盖手工)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "source_tag",
+          "name": "source_tag",
+          "caption": {
+            "zh_CN": "取数初始化来源标记(如 flist:ar_cust)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "auto",
+        "field": "code"
+      },
+      "uniqueKeys": [
+        [
+          "report_code",
+          "version_code",
+          "sheet_code",
+          "region_code",
+          "org_code",
+          "period_code",
+          "dim_key"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_float_col",
+        "dictName": "报表浮动列数据表",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_report_float_col",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "label",
+        "remark": "报表浮动列数据(运行态):某组织某期间下,浮动区按数据源横向展开/用户增删改的明细列(如按月铺列);整列自包含(cells JSONB按行号存该列各行值/公式);取数初始化 is_manual=0,手工维护 is_manual=1"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "浮动明细主键"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "数据编码/幂等键"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "说明"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": {
+            "zh_CN": "报表编码(指向报表清单report_list)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": {
+            "zh_CN": "报表版本编码(指向报表版本定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "sheet_code",
+          "name": "sheet_code",
+          "caption": {
+            "zh_CN": "子表编码(指向报表子表定义)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "region_code",
+          "name": "region_code",
+          "caption": {
+            "zh_CN": "区域编码(指向报表区域定义,须 is_repeatable=1 浮动区)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "org_code",
+          "name": "org_code",
+          "caption": {
+            "zh_CN": "组织/核算主体编码(合并报表指向合并组织架构)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "period_code",
+          "name": "period_code",
+          "caption": {
+            "zh_CN": "会计期间编码(指向会计日历字典)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "dim_key",
+          "name": "dim_key",
+          "caption": {
+            "zh_CN": "维度键路径(k=v;k=v,如 region=华东;cust_code=C001)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "label",
+          "name": "label",
+          "caption": {
+            "zh_CN": "显示标签(行标题/列头)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "parent_dim_key",
+          "name": "parent_dim_key",
+          "caption": {
+            "zh_CN": "上级维度键(分级浮动分组用,顶层为空)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "col_type",
+          "name": "col_type",
+          "caption": {
+            "zh_CN": "列类型(data数据列)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false
+        },
+        {
+          "id": "level_no",
+          "name": "level_no",
+          "caption": {
+            "zh_CN": "层级深度(1~N,分级浮动)"
+          },
+          "dataType": "SMALLINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false
+        },
+        {
+          "id": "seq",
+          "name": "seq",
+          "caption": {
+            "zh_CN": "展开序(组内序)"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "cells",
+          "name": "cells",
+          "caption": {
+            "zh_CN": "各列/各行值或公式(JSONB,整行/列自包含;存储态显式值覆盖模板公式)"
+          },
+          "dataType": "JSONB",
+          "nullable": true
+        },
+        {
+          "id": "is_manual",
+          "name": "is_manual",
+          "caption": {
+            "zh_CN": "是否手工(1手工/0取数种子;重取数默认不覆盖手工)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "source_tag",
+          "name": "source_tag",
+          "caption": {
+            "zh_CN": "取数初始化来源标记(如 flist:ar_cust)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "auto",
+        "field": "code"
+      },
+      "uniqueKeys": [
+        [
+          "report_code",
+          "version_code",
+          "sheet_code",
+          "region_code",
+          "org_code",
+          "period_code",
+          "dim_key"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_source_binding",
+        "dictName": "报表取数路由绑定",
+        "dictKind": "NORMAL",
+        "selfHierarchy": false,
+        "tableName": "cr_report_source_binding",
+        "idField": "id",
+        "codeField": "source_key",
+        "labelField": "target_ref",
+        "remark": "报表取数路由绑定表（治理面）：单据类型(source_key) + 组织(org_id，NULL=该类型默认兜底) → 物理目标(target_kind:db_id|service + target_ref)。运行时报表取数据据此把逻辑单据类型路由到具体库/服务；照 cmx-flow 子流程组织路由(cmx_flow_subflow_binding)范式。本次仅注册（CRUD），三层继承解析与 scatter-gather 后续接入。"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "绑定ID"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "isPrimaryKey": 1,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "source_key",
+          "name": "source_key",
+          "caption": {
+            "zh_CN": "单据类型逻辑名"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "org_id",
+          "name": "org_id",
+          "caption": {
+            "zh_CN": "组织(空=默认兜底)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "target_kind",
+          "name": "target_kind",
+          "caption": {
+            "zh_CN": "目标类型(db_id|service)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "target_ref",
+          "name": "target_ref",
+          "caption": {
+            "zh_CN": "目标句柄(数据源/服务名)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "transport",
+          "name": "transport",
+          "caption": {
+            "zh_CN": "传输方式(local|http|grpc|remote_pg)"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "priority",
+          "name": "priority",
+          "caption": {
+            "zh_CN": "优先级(同级多命中裁决)"
+          },
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "id": "enabled",
+          "name": "enabled",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "edit": {
+            "mode": "checkbox"
+          }
+        },
+        {
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        },
+        {
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": true
+        },
+        {
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "source_key"
+      },
+      "uniqueKeys": []
+    },
+    {
+      "dictMeta": {
+        "dictCode": "report_op_log",
+        "dictName": "报表协同操作日志表",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cr_report_op_log",
+        "idField": "id",
+        "codeField": "client_op_id",
+        "labelField": "name",
+        "remark": "报表协同编辑B档操作日志(设计态):每条语义操作(setCellFormula/bindElement/insertRow等)按seq顺序追加;seq在咨询锁内MAX+1保证串行;client_op_id幂等去重;结构操作(insertRow等)平移地址并发从严;打开重放+编辑追平按seq增量拉取"
+      },
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "caption": { "zh_CN": "日志主键" },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "nullable": false,
+          "isPrimaryKey": 1
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": { "zh_CN": "操作摘要(op_type + target)" },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "report_code",
+          "name": "report_code",
+          "caption": { "zh_CN": "报表编码(指向报表清单report_list)" },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "version_code",
+          "name": "version_code",
+          "caption": { "zh_CN": "报表版本编码" },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "seq",
+          "name": "seq",
+          "caption": { "zh_CN": "操作序号(报表+版本内单调递增,咨询锁内MAX+1)" },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false
+        },
+        {
+          "id": "op_type",
+          "name": "op_type",
+          "caption": { "zh_CN": "操作类型(setCellFormula/bindElement/insertRow等)" },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false
+        },
+        {
+          "id": "target",
+          "name": "target",
+          "caption": { "zh_CN": "目标对象规范地址(sheet!cell 或 row:sheet:at)" },
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true
+        },
+        {
+          "id": "payload",
+          "name": "payload",
+          "caption": { "zh_CN": "操作载荷(JSON字符串:公式/元素码/count等)" },
+          "dataType": "TEXT",
+          "nullable": true
+        },
+        {
+          "id": "base_seq",
+          "name": "base_seq",
+          "caption": { "zh_CN": "客户端提交时的基准seq(冲突判定)" },
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true
+        },
+        {
+          "id": "client_op_id",
+          "name": "client_op_id",
+          "caption": { "zh_CN": "客户端操作id(幂等去重键)" },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "conflict_flag",
+          "name": "conflict_flag",
+          "caption": { "zh_CN": "冲突标志(0无/1同格后写覆盖)" },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "nullable": true
+        },
+        {
+          "id": "prev_value",
+          "name": "prev_value",
+          "caption": { "zh_CN": "冲突时被覆盖的前值快照(JSON字符串)" },
+          "dataType": "TEXT",
+          "nullable": true
+        },
+        {
+          "id": "actor_id",
+          "name": "actor_id",
+          "caption": { "zh_CN": "操作人id" },
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true
+        },
+        {
+          "id": "actor_name",
+          "name": "actor_name",
+          "caption": { "zh_CN": "操作人名" },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": true
+        },
+        {
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": { "zh_CN": "排序号" },
+          "dataType": "INT",
+          "fieldLength": 11,
+          "nullable": true
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "caption": { "zh_CN": "状态(1有效)" },
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "nullable": true
+        },
+        {
+          "id": "create_time",
+          "name": "create_time",
+          "caption": { "zh_CN": "创建时间" },
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false
+        }
+      ],
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "client_op_id"
+      },
+      "uniqueKeys": [
+        {
+          "code": "uk_cr_report_op_log_seq",
+          "name": "报表版本内seq唯一",
+          "fields": ["report_code", "version_code", "seq"]
+        }
+      ]
+    }
+  ],
+  "updatedAt": "2026-07-24T08:00:00.000Z"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "n_7495479187771043840",
+  "center": "message",
+  "title": "主数据分发死信：supplier → crm-test",
+  "body": "事件 test-evt-0001 投递耗尽重试进入死信：HTTP 404（不可重试类错误，请检查订阅配置）: {\"error\":\"no such endpoint\"}",
+  "level": "error",
+  "link": "",
+  "read": false,
+  "createdAt": 1787061497633
+}

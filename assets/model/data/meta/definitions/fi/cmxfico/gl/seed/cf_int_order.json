@@ -1,0 +1,53 @@
+[
+  {
+    "id": 1,
+    "code": "10000001",
+    "name": "2026年市场推广专项订单",
+    "sort_no": 1,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 0,
+    "order_type": "MARKETING",
+    "responsible_cc_id": 10001200,
+    "ctrl_area_id": 1000,
+    "comp_unit_id": 1000,
+    "profit_ctr_id": 1100
+  },
+  {
+    "id": 2,
+    "code": "10000002",
+    "name": "ERP实施资本化订单",
+    "sort_no": 2,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 0,
+    "order_type": "CAPEX",
+    "responsible_cc_id": 10001000,
+    "ctrl_area_id": 1000,
+    "comp_unit_id": 1000,
+    "profit_ctr_id": 1000
+  },
+  {
+    "id": 3,
+    "code": "20000001",
+    "name": "苏州工厂设备大修订单",
+    "sort_no": 3,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 0,
+    "order_type": "MAINTENANCE",
+    "responsible_cc_id": 20002000,
+    "ctrl_area_id": 1000,
+    "comp_unit_id": 2000,
+    "profit_ctr_id": 2000
+  }
+]

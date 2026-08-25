@@ -1,0 +1,36 @@
+[
+  {
+    "code": "0L",
+    "name": "主分类账(记账本位币)",
+    "sort_no": 1,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "leading_ledger": 1,
+    "acct_princ_code": "CNAS",
+    "ledger_type": "LEADING",
+    "extension_ledger_code": null,
+    "currency_code": "CNY",
+    "comp_unit_id": 1000
+  },
+  {
+    "code": "CN",
+    "name": "集团合并分类账(集团货币)",
+    "sort_no": 2,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "leading_ledger": 0,
+    "acct_princ_code": "IFRS",
+    "ledger_type": "NON_LEADING",
+    "extension_ledger_code": null,
+    "currency_code": "CNY",
+    "comp_unit_id": 1000
+  }
+]

@@ -1,0 +1,5420 @@
+{
+ "dctMeta": {
+  "moduleCode": "consol",
+  "moduleName": "合并报表",
+  "metaKind": "DCT",
+  "metaName": "合并报表数据字典",
+  "version": 1,
+  "versionName": "v1",
+  "isDefault": true,
+  "designStyle": "table"
+ },
+ "_comment": "========== 合并报表数据字典注册表(cg_*,元数据驱动建表,不在程序创建) ==========",
+ "dictionaryTableConventions": {
+  "remark": "本文件所有 dictionaryTables 字段全在各表 fields 平铺定义,物理表名以 cg_ 前缀;由模型中心 /api/model/deploy 建到 fico-db"
+ },
+ "dictionaryTables": [
+  {
+   "dictMeta": {
+    "dictCode": "consol_scheme",
+    "dictName": "合并方案",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_consol_scheme",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "合并方案:一套(准则+集团币+合并分类账+资本抵销科目配置);法定/管理/IFRS 并行,方案是所有 cg_* 顶层隔离维度"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "方案主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "方案代码"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "standard",
+     "name": "standard",
+     "caption": {
+      "zh_CN": "会计准则(CAS/IFRS)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": true
+    },
+    {
+     "id": "group_currency",
+     "name": "group_currency",
+     "caption": {
+      "zh_CN": "集团报告币种"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 8,
+     "nullable": true
+    },
+    {
+     "id": "ledger",
+     "name": "ledger",
+     "caption": {
+      "zh_CN": "合并分类账代号"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": true
+    },
+    {
+     "id": "investment_account",
+     "name": "investment_account",
+     "caption": {
+      "zh_CN": "长期股权投资科目(资本抵销)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "goodwill_account",
+     "name": "goodwill_account",
+     "caption": {
+      "zh_CN": "商誉/合并价差科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "nci_account",
+     "name": "nci_account",
+     "caption": {
+      "zh_CN": "少数股东权益科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "minority_pl_account",
+     "name": "minority_pl_account",
+     "caption": {
+      "zh_CN": "少数股东损益科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "cta_account",
+     "name": "cta_account",
+     "caption": {
+      "zh_CN": "外币报表折算差额科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "capital_reserve_account",
+     "name": "capital_reserve_account",
+     "caption": {
+      "zh_CN": "资本公积科目(同一控制下差额)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "group_account",
+    "dictName": "集团科目表",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_group_account",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "集团统一科目表:合并采用的标准科目(code/name/account_type),决定 NCI 归属/报表分类/展示符号"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "科目主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "account_code",
+     "name": "account_code",
+     "caption": {
+      "zh_CN": "集团科目代码"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "account_type",
+     "name": "account_type",
+     "caption": {
+      "zh_CN": "科目性质(asset/liability/equity/income/expense/nci)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": false
+    },
+    {
+     "id": "parent_code",
+     "name": "parent_code",
+     "caption": {
+      "zh_CN": "上级科目(科目层级)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "is_equity",
+     "name": "is_equity",
+     "caption": {
+      "zh_CN": "是否权益类(资本抵销/NCI 用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": true,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "account_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "entity_balance",
+    "dictName": "主体个别试算表",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_entity_balance",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "个别报表数据(采集态):某方案某期某主体某集团科目的借方正净额;合并的输入,可由 ga_balance 导入或直接录入"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "余额主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "entity_code",
+     "name": "entity_code",
+     "caption": {
+      "zh_CN": "法人主体代码"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "account_code",
+     "name": "account_code",
+     "caption": {
+      "zh_CN": "集团科目代码"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "amount",
+     "name": "amount",
+     "caption": {
+      "zh_CN": "借方正净额"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "entity_code",
+     "account_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "coa_mapping",
+    "dictName": "科目映射(地方→集团)",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_coa_mapping",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "地方科目→集团科目映射(1:1/N:1/1:N + 符号翻转);采集时归一异构科目"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "映射主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "entity_code",
+     "name": "entity_code",
+     "caption": {
+      "zh_CN": "主体(空=通用)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "local_account",
+     "name": "local_account",
+     "caption": {
+      "zh_CN": "地方科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "group_account",
+     "name": "group_account",
+     "caption": {
+      "zh_CN": "集团科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "sign",
+     "name": "sign",
+     "caption": {
+      "zh_CN": "符号(1同向/-1反向)"
+     },
+     "dataType": "INT",
+     "fieldLength": 2,
+     "intDigits": 2,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "entity_code",
+     "local_account"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "fx_rate",
+    "dictName": "汇率表",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_fx_rate",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "汇率表:某期(from_ccy→to_ccy)按类型(closing期末/average平均/historical历史)的汇率;外币折算用"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "from_ccy",
+     "name": "from_ccy",
+     "caption": {
+      "zh_CN": "源币种"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 8,
+     "nullable": false
+    },
+    {
+     "id": "to_ccy",
+     "name": "to_ccy",
+     "caption": {
+      "zh_CN": "目标币种"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 8,
+     "nullable": false
+    },
+    {
+     "id": "rate_type",
+     "name": "rate_type",
+     "caption": {
+      "zh_CN": "汇率类型(closing/average/historical)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": false
+    },
+    {
+     "id": "rate",
+     "name": "rate",
+     "caption": {
+      "zh_CN": "汇率"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "修改人"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "from_ccy",
+     "to_ccy",
+     "rate_type"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "scope",
+    "dictName": "合并范围",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_scope",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "合并范围(方案×期间×主体):层级+方法+持股+投资额;承接 cr_consol_org 但按方案期间快照"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "范围主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "org_code",
+     "name": "org_code",
+     "caption": {
+      "zh_CN": "组织/合并节点代码"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "org_name",
+     "name": "org_name",
+     "caption": {
+      "zh_CN": "组织名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true
+    },
+    {
+     "id": "parent_code",
+     "name": "parent_code",
+     "caption": {
+      "zh_CN": "上级合并节点"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "consol_method",
+     "name": "consol_method",
+     "caption": {
+      "zh_CN": "合并方法(full/equity/proportional/cost)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": false
+    },
+    {
+     "id": "ownership_pct",
+     "name": "ownership_pct",
+     "caption": {
+      "zh_CN": "母公司持股比例(0~1)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "is_leaf",
+     "name": "is_leaf",
+     "caption": {
+      "zh_CN": "是否叶子主体(持有个别数)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "level_no",
+     "name": "level_no",
+     "caption": {
+      "zh_CN": "层级深度"
+     },
+     "dataType": "SMALLINT",
+     "fieldLength": 2,
+     "intDigits": 2,
+     "decimalDigits": 0,
+     "nullable": false
+    },
+    {
+     "id": "investment_amount",
+     "name": "investment_amount",
+     "caption": {
+      "zh_CN": "母对本主体长期股权投资额"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "currency",
+     "name": "currency",
+     "caption": {
+      "zh_CN": "主体功能币种(≠集团币则折算)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 8,
+     "nullable": true
+    },
+    {
+     "id": "first_time",
+     "name": "first_time",
+     "caption": {
+      "zh_CN": "首次纳入合并"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": true,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "disposal",
+     "name": "disposal",
+     "caption": {
+      "zh_CN": "本期处置"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": true,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "under_common_control",
+     "name": "under_common_control",
+     "caption": {
+      "zh_CN": "同一控制下企业合并(权益结合法)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": true,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "org_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "elim_rule",
+    "dictName": "抵销规则",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_elim_rule",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "抵销规则:每类抵销(debt/sales/capital 等)的借贷科目 + 启用 + 顺序;规则驱动生成抵销分录"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "规则主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "rule_code",
+     "name": "rule_code",
+     "caption": {
+      "zh_CN": "规则代码"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "elim_type",
+     "name": "elim_type",
+     "caption": {
+      "zh_CN": "抵销类型(debt/sales/capital/dividend/inventory_profit/…)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": false
+    },
+    {
+     "id": "dr_account",
+     "name": "dr_account",
+     "caption": {
+      "zh_CN": "借方科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "cr_account",
+     "name": "cr_account",
+     "caption": {
+      "zh_CN": "贷方科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "enabled",
+     "name": "enabled",
+     "caption": {
+      "zh_CN": "启用"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "remark",
+     "name": "remark",
+     "caption": {
+      "zh_CN": "说明"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "rule_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "ic_match",
+    "dictName": "内部往来匹配",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_ic_match",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "内部往来/交易对账结果:某方案某期(A,B)按类型的匹配额(自然口径);抵销引擎输入"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "匹配主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "entity_a",
+     "name": "entity_a",
+     "caption": {
+      "zh_CN": "主体A(应收/销售方)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "entity_b",
+     "name": "entity_b",
+     "caption": {
+      "zh_CN": "主体B(应付/采购方)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "ic_type",
+     "name": "ic_type",
+     "caption": {
+      "zh_CN": "往来类型(debt/sales)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": false
+    },
+    {
+     "id": "amount",
+     "name": "amount",
+     "caption": {
+      "zh_CN": "匹配额(自然口径,正)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "recon_status",
+     "name": "recon_status",
+     "caption": {
+      "zh_CN": "对账状态(matched/diff)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "entity_a",
+     "entity_b",
+     "ic_type"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "elim_journal",
+    "dictName": "合并分类账(抵销凭证)",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_elim_journal",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "合并分类账:每笔抵销/调整是一张凭证的一行(借贷+往来+期初结转+来源规则);落在合并节点,可审计可红冲"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "分录主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点(哪级产生)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "doc_no",
+     "name": "doc_no",
+     "caption": {
+      "zh_CN": "凭证号"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "line_no",
+     "name": "line_no",
+     "caption": {
+      "zh_CN": "行号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false
+    },
+    {
+     "id": "elim_type",
+     "name": "elim_type",
+     "caption": {
+      "zh_CN": "抵销类型"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": false
+    },
+    {
+     "id": "account_code",
+     "name": "account_code",
+     "caption": {
+      "zh_CN": "科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "dr",
+     "name": "dr",
+     "caption": {
+      "zh_CN": "借方额"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "cr",
+     "name": "cr",
+     "caption": {
+      "zh_CN": "贷方额"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "partner",
+     "name": "partner",
+     "caption": {
+      "zh_CN": "往来对手"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "is_opening",
+     "name": "is_opening",
+     "caption": {
+      "zh_CN": "是否期初结转"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": true,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "is_manual",
+     "name": "is_manual",
+     "caption": {
+      "zh_CN": "是否手工凭证"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": true,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "source_rule",
+     "name": "source_rule",
+     "caption": {
+      "zh_CN": "来源规则代码"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code",
+     "doc_no",
+     "line_no"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "consol_data",
+    "dictName": "合并结果数据",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_consol_data",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "合并结果(工作底稿落库):某方案某期某合并节点某科目的四栏 individual/adjust/elim/consolidated(借方正);出表取数源"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "结果主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "account_code",
+     "name": "account_code",
+     "caption": {
+      "zh_CN": "集团科目"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "individual",
+     "name": "individual",
+     "caption": {
+      "zh_CN": "个别合计(借方正)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "adjust",
+     "name": "adjust",
+     "caption": {
+      "zh_CN": "调整"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "elim",
+     "name": "elim",
+     "caption": {
+      "zh_CN": "抵销"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "consolidated",
+     "name": "consolidated",
+     "caption": {
+      "zh_CN": "合并数"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code",
+     "account_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "interim_profit",
+    "dictName": "存货未实现内部利润",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_interim_profit",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "存货中未实现内部销售利润(期初/期末,自然口径正);C6 抵销+期初结转引擎输入"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "匹配主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "seller",
+     "name": "seller",
+     "caption": {
+      "zh_CN": "卖方(利润产生方)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "buyer",
+     "name": "buyer",
+     "caption": {
+      "zh_CN": "买方(期末持货方)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "opening_profit",
+     "name": "opening_profit",
+     "caption": {
+      "zh_CN": "期初存货未实现利润(上期结转)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "ending_profit",
+     "name": "ending_profit",
+     "caption": {
+      "zh_CN": "期末存货未实现利润(本期新增)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "seller",
+     "buyer"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "ic_declaration",
+    "dictName": "内部往来申报",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_ic_declaration",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "各主体申报的内部往来两侧头寸;C4 对账引擎输入"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "匹配主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "entity_code",
+     "name": "entity_code",
+     "caption": {
+      "zh_CN": "申报主体"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "partner_code",
+     "name": "partner_code",
+     "caption": {
+      "zh_CN": "交易对手"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "ic_type",
+     "name": "ic_type",
+     "caption": {
+      "zh_CN": "往来类型(debt/sales)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": false
+    },
+    {
+     "id": "direction",
+     "name": "direction",
+     "caption": {
+      "zh_CN": "方向(receivable/payable/revenue/cost)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": false
+    },
+    {
+     "id": "amount",
+     "name": "amount",
+     "caption": {
+      "zh_CN": "申报金额(自然口径,正)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "entity_code",
+     "partner_code",
+     "ic_type",
+     "direction"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "ic_recon",
+    "dictName": "内部往来对账结果",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_ic_recon",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "双边对账输出:匹配额+差异+状态;差异工作台展示 & 抵销输入"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "匹配主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "entity_a",
+     "name": "entity_a",
+     "caption": {
+      "zh_CN": "债权/收入方"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "entity_b",
+     "name": "entity_b",
+     "caption": {
+      "zh_CN": "债务/成本方"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "ic_type",
+     "name": "ic_type",
+     "caption": {
+      "zh_CN": "往来类型"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": false
+    },
+    {
+     "id": "a_amount",
+     "name": "a_amount",
+     "caption": {
+      "zh_CN": "A侧申报合计"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "b_amount",
+     "name": "b_amount",
+     "caption": {
+      "zh_CN": "B侧申报合计"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "matched",
+     "name": "matched",
+     "caption": {
+      "zh_CN": "匹配额min(A,B)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "diff",
+     "name": "diff",
+     "caption": {
+      "zh_CN": "差异A-B"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "recon_status",
+     "name": "recon_status",
+     "caption": {
+      "zh_CN": "对账状态(matched/diff/one_sided)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": false
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "entity_a",
+     "entity_b",
+     "ic_type"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "goodwill_impair",
+    "dictName": "商誉减值",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_goodwill_impair",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "合并商誉计提减值输入(某方案某期某合并节点);C6 减值引擎输入"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "匹配主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点(商誉所在)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "amount",
+     "name": "amount",
+     "caption": {
+      "zh_CN": "本期减值额(自然口径,正)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": false
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "scope_change",
+    "dictName": "合并范围变动",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_scope_change",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "两期合并范围对比结果(CAS33/IFRS10附注):新纳入/处置/持股变动/方法变更"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "匹配主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "本期"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "prev_period",
+     "name": "prev_period",
+     "caption": {
+      "zh_CN": "上期"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "org_code",
+     "name": "org_code",
+     "caption": {
+      "zh_CN": "主体"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "org_name",
+     "name": "org_name",
+     "caption": {
+      "zh_CN": "主体名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true
+    },
+    {
+     "id": "change_type",
+     "name": "change_type",
+     "caption": {
+      "zh_CN": "变动类型(first_time/disposal/ownership_up/ownership_down/method_change/unchanged)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": false
+    },
+    {
+     "id": "curr_method",
+     "name": "curr_method",
+     "caption": {
+      "zh_CN": "本期方法"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": true
+    },
+    {
+     "id": "prev_method",
+     "name": "prev_method",
+     "caption": {
+      "zh_CN": "上期方法"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": true
+    },
+    {
+     "id": "curr_ownership",
+     "name": "curr_ownership",
+     "caption": {
+      "zh_CN": "本期持股"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "prev_ownership",
+     "name": "prev_ownership",
+     "caption": {
+      "zh_CN": "上期持股"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "org_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "cash_flow_item",
+    "dictName": "现金流量项目流水",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_cash_flow_item",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "现金流量项目流水(某方案某期某主体某现金流量项目):活动分类+流入/流出+借方正净额(流入+/流出−);内部现金流标记供合并抵销;node_code=''为主体原始流水/=N为合并节点聚合;CCF出表取数源"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点(''=主体原始流水;=N合并聚合结果)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "entity_code",
+     "name": "entity_code",
+     "caption": {
+      "zh_CN": "申报主体(合并聚合结果为空)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "activity",
+     "name": "activity",
+     "caption": {
+      "zh_CN": "活动分类(operating/investing/financing)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": false
+    },
+    {
+     "id": "item_code",
+     "name": "item_code",
+     "caption": {
+      "zh_CN": "现金流量项目码(如CF01销售商品收到现金)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "item_name",
+     "name": "item_name",
+     "caption": {
+      "zh_CN": "现金流量项目名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true
+    },
+    {
+     "id": "inflow",
+     "name": "inflow",
+     "caption": {
+      "zh_CN": "流入(自然口径,正)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "outflow",
+     "name": "outflow",
+     "caption": {
+      "zh_CN": "流出(自然口径,正)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "amount",
+     "name": "amount",
+     "caption": {
+      "zh_CN": "借方正净额(流入+/流出−)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "is_intercompany",
+     "name": "is_intercompany",
+     "caption": {
+      "zh_CN": "内部现金流(合并抵销用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": true,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "counterparty",
+     "name": "counterparty",
+     "caption": {
+      "zh_CN": "内部对手方"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code",
+     "entity_code",
+     "item_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "equity_change",
+    "dictName": "权益变动流水",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_equity_change",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "权益变动流水(某方案某期某主体某权益项目某变动类型):借方正净额;归母/少数股东归属;node_code=''为主体原始流水/=N为合并节点聚合;CSE所有者权益变动表出表取数源"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点(''=主体原始流水;=N合并聚合结果)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "entity_code",
+     "name": "entity_code",
+     "caption": {
+      "zh_CN": "申报主体(合并聚合结果为空)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "equity_item",
+     "name": "equity_item",
+     "caption": {
+      "zh_CN": "权益项目(实收资本/资本公积/盈余公积/未分配利润/其他综合收益/少数股东权益)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": false
+    },
+    {
+     "id": "change_type",
+     "name": "change_type",
+     "caption": {
+      "zh_CN": "变动类型(opening/comprehensive_income/owner_contribution/profit_distribution/other/closing)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 32,
+     "nullable": false
+    },
+    {
+     "id": "column_code",
+     "name": "column_code",
+     "caption": {
+      "zh_CN": "权益变动表列码(EC01…)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": true
+    },
+    {
+     "id": "amount",
+     "name": "amount",
+     "caption": {
+      "zh_CN": "借方正净额"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "attributable",
+     "name": "attributable",
+     "caption": {
+      "zh_CN": "归属(parent归母/nci少数股东)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code",
+     "entity_code",
+     "equity_item",
+     "change_type"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "close_run",
+    "dictName": "合并关账运行",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_close_run",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "关账运行头(某方案某期一次关账):状态机 draft/collecting/reconciling/consolidating/reviewing/closed/reopened;对接cmx-flow时回填flow_instance_id"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "run_code",
+     "name": "run_code",
+     "caption": {
+      "zh_CN": "关账运行码(幂等)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "run_status",
+     "name": "run_status",
+     "caption": {
+      "zh_CN": "关账状态(draft/collecting/reconciling/consolidating/reviewing/closed/reopened)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 24,
+     "nullable": false
+    },
+    {
+     "id": "current_step",
+     "name": "current_step",
+     "caption": {
+      "zh_CN": "当前步骤(collect/reconcile/consolidate/review/statements)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 24,
+     "nullable": true
+    },
+    {
+     "id": "flow_instance_id",
+     "name": "flow_instance_id",
+     "caption": {
+      "zh_CN": "cmx-flow流程实例ID(对接flow时回填)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "started_at",
+     "name": "started_at",
+     "caption": {
+      "zh_CN": "发起时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    },
+    {
+     "id": "closed_at",
+     "name": "closed_at",
+     "caption": {
+      "zh_CN": "关账完成时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "close_step",
+    "dictName": "合并关账步骤审计",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_close_step",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "关账步骤审计(一次关账的每一步):step_code+step_status(pending/running/done/failed)+result_json;可追溯可回退"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "run_code",
+     "name": "run_code",
+     "caption": {
+      "zh_CN": "关账运行码"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "step_code",
+     "name": "step_code",
+     "caption": {
+      "zh_CN": "步骤码(collect/reconcile/consolidate/review/statements)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 24,
+     "nullable": false
+    },
+    {
+     "id": "step_status",
+     "name": "step_status",
+     "caption": {
+      "zh_CN": "步骤状态(pending/running/done/failed)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": false
+    },
+    {
+     "id": "result_json",
+     "name": "result_json",
+     "caption": {
+      "zh_CN": "步骤结果(JSON字符串)"
+     },
+     "dataType": "TEXT",
+     "nullable": true
+    },
+    {
+     "id": "operator",
+     "name": "operator",
+     "caption": {
+      "zh_CN": "操作人"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": true
+    },
+    {
+     "id": "ts",
+     "name": "ts",
+     "caption": {
+      "zh_CN": "步骤时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "run_code",
+     "step_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "step_txn",
+    "dictName": "分步取得/处置交易",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_step_txn",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "L2 分步取得/处置交易(某方案某期某合并节点):txn_type=step_acq(原持股公允重估)/disposal(处置);借方正下生成投资收益或资本公积调整"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点(交易所在)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "txn_type",
+     "name": "txn_type",
+     "caption": {
+      "zh_CN": "交易类型(step_acq/disposal)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 16,
+     "nullable": false
+    },
+    {
+     "id": "loses_control",
+     "name": "loses_control",
+     "caption": {
+      "zh_CN": "处置是否丧失控制(disposal 时:1丧失/0权益交易)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": true,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "prev_carrying",
+     "name": "prev_carrying",
+     "caption": {
+      "zh_CN": "原持股账面价值(step_acq)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "prev_fair_value",
+     "name": "prev_fair_value",
+     "caption": {
+      "zh_CN": "原持股购买日公允价值(step_acq)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "proceeds",
+     "name": "proceeds",
+     "caption": {
+      "zh_CN": "处置对价(disposal)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "disposed_share",
+     "name": "disposed_share",
+     "caption": {
+      "zh_CN": "所处置净资产份额账面(disposal 权益交易)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "retained_fair_value",
+     "name": "retained_fair_value",
+     "caption": {
+      "zh_CN": "剩余股权公允(disposal 丧失控制)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "net_assets_share",
+     "name": "net_assets_share",
+     "caption": {
+      "zh_CN": "原享有净资产份额(disposal 丧失控制)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code",
+     "txn_type"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "fa_profit",
+    "dictName": "固定资产内部交易未实现利润",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_fa_profit",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "L3 固定资产内部交易未实现利润(卖方/买方/原值利润/折旧年限/已用年限);合并层抵原值利润+逐期折旧转回,LCA 抵销"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "seller",
+     "name": "seller",
+     "caption": {
+      "zh_CN": "卖方(利润产生方)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "buyer",
+     "name": "buyer",
+     "caption": {
+      "zh_CN": "买方(计提折旧方)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "unrealized",
+     "name": "unrealized",
+     "caption": {
+      "zh_CN": "原值中未实现利润(自然口径,正)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "dep_years",
+     "name": "dep_years",
+     "caption": {
+      "zh_CN": "折旧总年限"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "elapsed_years",
+     "name": "elapsed_years",
+     "caption": {
+      "zh_CN": "已使用年限(含本期)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "seller",
+     "buyer"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "shareholding",
+    "dictName": "持股关系(交叉持股)",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_shareholding",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "L6 主体间直接持股关系(holder→held 直接持股比例);is_parent=1 标记母公司持股。矩阵法求有效持股(交叉/环持收敛)"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "holder",
+     "name": "holder",
+     "caption": {
+      "zh_CN": "持股方"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "held",
+     "name": "held",
+     "caption": {
+      "zh_CN": "被持股方"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "pct",
+     "name": "pct",
+     "caption": {
+      "zh_CN": "直接持股比例(0~1)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "is_parent",
+     "name": "is_parent",
+     "caption": {
+      "zh_CN": "母公司持股(1=母对该主体直接持股)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": true,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "holder",
+     "held"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "net_investment_hedge",
+    "dictName": "净投资套期",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_net_investment_hedge",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "O1 境外经营净投资套期(某方案某期某合并节点):套期工具有效部分借方正净额,重分类至CTA(OCI)对冲折算差额"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "hedge_instrument_account",
+     "name": "hedge_instrument_account",
+     "caption": {
+      "zh_CN": "套期工具科目(如外币借款)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "effective_amount",
+     "name": "effective_amount",
+     "caption": {
+      "zh_CN": "有效部分(借方正净额)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code"
+    ]
+   ]
+  },
+  {
+   "dictMeta": {
+    "dictCode": "goodwill_cgu",
+    "dictName": "商誉减值测试(CGU)",
+    "dictKind": "BUSINESS",
+    "selfHierarchy": false,
+    "tableName": "cg_goodwill_cgu",
+    "idField": "id",
+    "codeField": "code",
+    "labelField": "name",
+    "remark": "O2 现金产出单元减值测试(某方案某期某合并节点):账面(含商誉) vs 可收回金额,算出减值先冲商誉,写回cg_goodwill_impair"
+   },
+   "fields": [
+    {
+     "id": "id",
+     "name": "id",
+     "caption": {
+      "zh_CN": "主键"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": false,
+     "isPrimaryKey": 1
+    },
+    {
+     "id": "code",
+     "name": "code",
+     "caption": {
+      "zh_CN": "编码/幂等键"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 128,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "name",
+     "name": "name",
+     "caption": {
+      "zh_CN": "名称"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 256,
+     "nullable": true,
+     "edit": {
+      "mode": "input"
+     }
+    },
+    {
+     "id": "scheme_code",
+     "name": "scheme_code",
+     "caption": {
+      "zh_CN": "所属方案"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "period_code",
+     "name": "period_code",
+     "caption": {
+      "zh_CN": "会计期间"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "node_code",
+     "name": "node_code",
+     "caption": {
+      "zh_CN": "合并节点(CGU)"
+     },
+     "dataType": "VARCHAR",
+     "fieldLength": 64,
+     "nullable": false
+    },
+    {
+     "id": "carrying_amount",
+     "name": "carrying_amount",
+     "caption": {
+      "zh_CN": "账面价值(含分摊商誉)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "recoverable_amount",
+     "name": "recoverable_amount",
+     "caption": {
+      "zh_CN": "可收回金额(公允减处置/使用价值孰高)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "goodwill_carrying",
+     "name": "goodwill_carrying",
+     "caption": {
+      "zh_CN": "商誉账面(减值封顶)"
+     },
+     "dataType": "DECIMAL",
+     "fieldLength": 28,
+     "intDigits": 22,
+     "decimalDigits": 6,
+     "nullable": true
+    },
+    {
+     "id": "sort_no",
+     "name": "sort_no",
+     "caption": {
+      "zh_CN": "排序号"
+     },
+     "dataType": "INT",
+     "fieldLength": 6,
+     "intDigits": 6,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "number"
+     }
+    },
+    {
+     "id": "status",
+     "name": "status",
+     "caption": {
+      "zh_CN": "启用状态(1启用0停用)"
+     },
+     "dataType": "TINYINT",
+     "fieldLength": 1,
+     "intDigits": 1,
+     "decimalDigits": 0,
+     "nullable": false,
+     "edit": {
+      "mode": "checkbox"
+     }
+    },
+    {
+     "id": "create_by",
+     "name": "create_by",
+     "caption": {
+      "zh_CN": "创建人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "create_time",
+     "name": "create_time",
+     "caption": {
+      "zh_CN": "创建时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": false
+    },
+    {
+     "id": "update_by",
+     "name": "update_by",
+     "caption": {
+      "zh_CN": "最后修改人ID"
+     },
+     "dataType": "BIGINT",
+     "fieldLength": 20,
+     "intDigits": 20,
+     "decimalDigits": 0,
+     "nullable": true
+    },
+    {
+     "id": "update_time",
+     "name": "update_time",
+     "caption": {
+      "zh_CN": "最后修改时间"
+     },
+     "dataType": "DATETIME",
+     "fieldLength": 19,
+     "nullable": true
+    }
+   ],
+   "permissionScope": "global",
+   "codeRule": {
+    "mode": "auto",
+    "field": "code"
+   },
+   "uniqueKeys": [
+    [
+     "scheme_code",
+     "period_code",
+     "node_code"
+    ]
+   ]
+  }
+ ],
+ "updatedAt": "2026-08-23T00:00:00.000Z"
+}

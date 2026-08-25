@@ -1,0 +1,61 @@
+{
+  "version": "2026.08.19",
+  "pages": [
+    {
+      "id": "portal.flow.design-workbench",
+      "name": "流程设计工作台",
+      "details": "native_pages 四区流程设计工作台：explorer 流程定义列表、content bpmn-js 画布+工具条、property 选中节点属性；后端 /api/flow/* 由 cmx-flow-api 提供，引擎在 web-server 内单例运行。",
+      "sourceType": "js",
+      "relPath": "flow/design-workbench.js"
+    },
+    {
+      "id": "portal.flow.todo-center",
+      "name": "待办中心",
+      "details": "native_pages 四区待办中心（F3）：explorer 待办分类（我的待办/待认领/我发起的/抄送我的/我已办）、content 待办列表卡片、property 流程轨迹+意见历史；数据源 /api/flow/tasks/my。点「办理」经 openWorkNode 打开 portal.flow.task-form。",
+      "sourceType": "js",
+      "relPath": "flow/todo-center.js"
+    },
+    {
+      "id": "portal.flow.task-form",
+      "name": "任务表单宿主",
+      "details": "native_pages 任务办理表单（F3，由待办中心动态打开、不进菜单）：content 业务单据审阅区+审批意见区+同意/驳回，property 流程轨迹；办结走 /api/flow/tasks/{id}/complete，成功广播 cmx-flow-task-done 让待办中心刷新。",
+      "sourceType": "js",
+      "relPath": "flow/task-form.js"
+    },
+    {
+      "id": "portal.flow.identity-workbench",
+      "name": "身份管理工作台",
+      "details": "native_pages 四区身份管理工作台（P0-c，仅 FLOW_IDENTITY_MODE=local 有意义）：explorer 组织/角色/岗位/用户四类切换+列表、content 记录编辑表单（新增/保存/删除）、property 字段说明+关系型审批提示+身份模式徽标；数据源 /api/flow/identity/*，落 fid_* 表。external 模式只读。",
+      "sourceType": "js",
+      "relPath": "flow/identity-workbench.js"
+    },
+    {
+      "id": "portal.flow.ops-console",
+      "name": "流程运维台",
+      "details": "native_pages 四区流程实例运维台（H4）：explorer 实例列表(异常高亮)、content 详情(令牌位置/任务/变量)+干预工具条(重试异常/改变量/取消)、property 异常明细+流转台账+变量历史(含引擎派生 decision/subflow)。数据源 /api/flow/instances/*，消费 H2 incident；content 经 /api/flow/v1/events(SSE) 实时刷新令牌位置。",
+      "sourceType": "js",
+      "relPath": "flow/ops-console.js"
+    },
+    {
+      "id": "portal.flow.decision-viewer",
+      "name": "决策表查看器",
+      "details": "native_pages 三区决策表只读查看器（Next②）：explorer 已落库决策表列表(命中策略/规则数)、content 决策表网格(输入列|输出列 逐行规则+命中策略徽标)、property 内联试算(facts JSON→命中规则高亮+输出)。数据源 /api/flow/decisions(列表/{key}/evaluate)；编辑归 cmx-rulesengine，此为流程侧运维视图。",
+      "sourceType": "js",
+      "relPath": "flow/decision-viewer.js"
+    },
+    {
+      "id": "portal.flow.decision-designer",
+      "name": "决策表设计器",
+      "details": "native_pages 三区决策表可编辑设计器：explorer 决策表列表+新建、content 可编辑网格(命中策略 FIRST/COLLECT + 输入/输出列动态增删 + 规则行；条件格 expr.rs DSL + fx 向导/校验，输出格 JSON 值)、property 试算(facts→evaluate 命中高亮)+删除。保存 POST /api/flow/decisions(落库+热注册，400 带校验诊断)；数据源 /decisions(列表/{key}/evaluate/delete)、/conditions(functions/validate)。",
+      "sourceType": "js",
+      "relPath": "flow/decision-designer.js"
+    },
+    {
+      "id": "portal.flow.form-binding-admin",
+      "name": "表单注册表管理",
+      "details": "native_pages 四区表单注册表管理工作台（002 债务落地）：explorer kind 筛选+关键字过滤+绑定卡片列表（内置/console=none 角标）、content 编辑表单（字段按 kind 联动、formKey 编辑态禁改）、property 字段说明+消费方/seed 复位警示；数据源 /api/flow/forms（列表/upsert/delete）。",
+      "sourceType": "js",
+      "relPath": "flow/form-binding-admin.js"
+    }
+  ]
+}

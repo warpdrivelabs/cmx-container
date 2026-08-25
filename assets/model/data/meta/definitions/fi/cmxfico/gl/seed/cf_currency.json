@@ -1,0 +1,67 @@
+[
+  {
+    "code": "CNY",
+    "name": "人民币",
+    "sort_no": 1,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "symbol": "¥",
+    "decimals": 2
+  },
+  {
+    "code": "USD",
+    "name": "美元",
+    "sort_no": 2,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "symbol": "$",
+    "decimals": 2
+  },
+  {
+    "code": "EUR",
+    "name": "欧元",
+    "sort_no": 3,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "symbol": "€",
+    "decimals": 2
+  },
+  {
+    "code": "HKD",
+    "name": "港元",
+    "sort_no": 4,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "symbol": "HK$",
+    "decimals": 2
+  },
+  {
+    "code": "JPY",
+    "name": "日元",
+    "sort_no": 5,
+    "status": 1,
+    "create_by": null,
+    "create_time": "2026-01-01 00:00:00",
+    "update_by": null,
+    "update_time": null,
+    "is_system": 1,
+    "symbol": "¥",
+    "decimals": 0
+  }
+]

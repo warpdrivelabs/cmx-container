@@ -1,0 +1,462 @@
+{
+  "version": 1,
+  "versionName": "",
+  "isDefault": true,
+  "scenario": "cmxfico",
+  "domain": "fi",
+  "app": "cmxfico",
+  "module": "gl",
+  "title": "会计凭证",
+  "anchorDimensions": [],
+  "description": "最小化弹性组合：按 L3 总账科目 ID 直接匹配，展示不同的 L4 辅助核算字段",
+  "status": "draft",
+  "tags": [],
+  "dimensions": {
+    "gl_account": {
+      "name": "总账科目",
+      "attributes": [
+        "item_name",
+        "item_code"
+      ],
+      "dict": {
+        "dictId": "gl_account",
+        "dictCode": "gl_account",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": "parent_id",
+        "hierarchical": true,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择总账科目",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    }
+  },
+  "rules": [
+    {
+      "id": "fi-receivable",
+      "caption": "应收账款",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "gl_account_id"
+        ],
+        "match": {
+          "gl_account": "2000013"
+        }
+      },
+      "panel": "cv_acc_line",
+      "detail": {
+        "table": "cv_acc_line",
+        "pick": [
+          {
+            "ref": "cv_aux_line.customer_id",
+            "over": {
+              "caption": {
+                "zh_CN": "客户"
+              },
+              "edit": {
+                "mode": "cmx-dict-select",
+                "required": true
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.item_text",
+            "over": {
+              "caption": {
+                "zh_CN": "摘要"
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.entered_dr",
+            "over": {
+              "caption": {
+                "zh_CN": "金额"
+              },
+              "display": {
+                "decimalDigits": 2,
+                "thousandSeparator": true
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.local_dr"
+          },
+          {
+            "ref": "cv_acc_line.local_cr"
+          },
+          {
+            "ref": "cv_acc_line.group_dr"
+          },
+          {
+            "ref": "cv_acc_line.group_cr"
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算",
+            "members": [
+              "customer_id"
+            ]
+          },
+          {
+            "caption": "金额信息",
+            "members": [
+              "item_text",
+              "entered_dr"
+            ]
+          }
+        ],
+        "fieldTabs": [],
+        "fields": []
+      }
+    },
+    {
+      "id": "fi-payable",
+      "caption": "应付/税/薪酬",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "gl_account_id"
+        ],
+        "match": {
+          "gl_account": [
+            "2000058",
+            "2000064",
+            "2000067"
+          ]
+        }
+      },
+      "panel": "cv_acc_line",
+      "detail": {
+        "table": "cv_acc_line",
+        "pick": [
+          {
+            "ref": "cv_aux_line.supplier_id",
+            "over": {
+              "caption": {
+                "zh_CN": "供应商"
+              },
+              "edit": {
+                "mode": "cmx-dict-select",
+                "required": true
+              }
+            }
+          },
+          {
+            "ref": "cv_aux_line.cost_center_id",
+            "over": {
+              "caption": {
+                "zh_CN": "成本中心"
+              },
+              "edit": {
+                "mode": "cmx-dict-select"
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.item_text",
+            "over": {
+              "caption": {
+                "zh_CN": "摘要"
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.entered_dr",
+            "over": {
+              "caption": {
+                "zh_CN": "金额"
+              },
+              "display": {
+                "decimalDigits": 2,
+                "thousandSeparator": true
+              }
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算",
+            "members": [
+              "supplier_id",
+              "cost_center_id"
+            ]
+          },
+          {
+            "caption": "金额信息",
+            "members": [
+              "item_text",
+              "entered_dr"
+            ]
+          }
+        ],
+        "fields": []
+      }
+    },
+    {
+      "id": "fi-bank",
+      "caption": "银行存款",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "gl_account_id"
+        ],
+        "match": {
+          "gl_account": "2000004"
+        }
+      },
+      "panel": "cv_acc_line",
+      "detail": {
+        "table": "cv_acc_line",
+        "pick": [
+          {
+            "ref": "cv_aux_line.house_bank_id",
+            "over": {
+              "caption": {
+                "zh_CN": "银行账户"
+              },
+              "edit": {
+                "mode": "cmx-dict-select",
+                "required": true
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.item_text",
+            "over": {
+              "caption": {
+                "zh_CN": "摘要"
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.entered_dr",
+            "over": {
+              "caption": {
+                "zh_CN": "金额"
+              },
+              "display": {
+                "decimalDigits": 2,
+                "thousandSeparator": true
+              }
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算",
+            "members": [
+              "house_bank_id"
+            ]
+          },
+          {
+            "caption": "金额信息",
+            "members": [
+              "item_text",
+              "entered_dr"
+            ]
+          }
+        ],
+        "fields": []
+      }
+    },
+    {
+      "id": "fi-inventory",
+      "caption": "存货/资产",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "gl_account_id"
+        ],
+        "match": {
+          "gl_account": [
+            "2000028",
+            "2000031",
+            "2000049"
+          ]
+        }
+      },
+      "panel": "cv_acc_line",
+      "detail": {
+        "table": "cv_acc_line",
+        "pick": [
+          {
+            "ref": "cv_aux_line.cost_center_id",
+            "over": {
+              "caption": {
+                "zh_CN": "成本中心"
+              },
+              "edit": {
+                "mode": "cmx-dict-select"
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.item_text",
+            "over": {
+              "caption": {
+                "zh_CN": "摘要"
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.entered_dr",
+            "over": {
+              "caption": {
+                "zh_CN": "金额"
+              },
+              "display": {
+                "decimalDigits": 2,
+                "thousandSeparator": true
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.entered_dr"
+          },
+          {
+            "ref": "cv_acc_line.entered_cr"
+          },
+          {
+            "ref": "cv_acc_line.local_dr"
+          },
+          {
+            "ref": "cv_acc_line.local_cr"
+          },
+          {
+            "ref": "cv_acc_line.group_dr"
+          },
+          {
+            "ref": "cv_acc_line.group_cr"
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算",
+            "members": [
+              "cost_center_id",
+              {
+                "caption": "子分组",
+                "members": [
+                  "group_dr",
+                  "entered_dr"
+                ]
+              }
+            ]
+          },
+          {
+            "caption": "金额信息",
+            "members": [
+              "item_text",
+              "entered_dr"
+            ]
+          }
+        ],
+        "fields": []
+      }
+    },
+    {
+      "id": "fi-default",
+      "caption": "通用兜底",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "gl_account_id"
+        ],
+        "match": {}
+      },
+      "panel": "cv_acc_line",
+      "detail": {
+        "table": "cv_acc_line",
+        "pick": [
+          {
+            "ref": "cv_acc_line.item_text",
+            "over": {
+              "caption": {
+                "zh_CN": "摘要"
+              }
+            }
+          },
+          {
+            "ref": "cv_acc_line.entered_dr",
+            "over": {
+              "caption": {
+                "zh_CN": "金额"
+              },
+              "display": {
+                "decimalDigits": 2,
+                "thousandSeparator": true
+              }
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "金额信息",
+            "members": [
+              "item_text",
+              "entered_dr"
+            ]
+          }
+        ],
+        "fields": []
+      }
+    }
+  ],
+  "updatedAt": "2026-07-24T01:03:02.311Z",
+  "docRef": {
+    "domain": "fi",
+    "application": "cmxfico",
+    "module": "gl",
+    "file": "cmxfico_doc_meta_v2.json",
+    "title": "cmx-fico 会计凭证"
+  }
+}

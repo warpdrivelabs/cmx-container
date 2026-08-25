@@ -1,0 +1,995 @@
+{
+  "version": 1,
+  "versionName": "",
+  "isDefault": true,
+  "scenario": "account",
+  "domain": "fi",
+  "app": "cmxfico",
+  "module": "gl",
+  "title": "",
+  "anchorDimensions": [],
+  "description": "科目辅助核算：anchor=[account]，按科目/科目类目细分辅助核算维度",
+  "status": "draft",
+  "tags": [],
+  "dimensions": {
+    "fiscal_period": {
+      "name": "会计期间",
+      "attributes": [
+        "item_name"
+      ],
+      "dict": {
+        "dictId": "fiscal_period",
+        "dictCode": "fiscal_period",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": "parent_id",
+        "hierarchical": true,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择会计期间",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "gl_account": {
+      "name": "科目ID",
+      "attributes": [
+        "item_name",
+        "item_code",
+        "account_type",
+        "cashflow_related"
+      ],
+      "dict": {
+        "dictId": "gl_account",
+        "dictCode": "gl_account",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": "parent_id",
+        "hierarchical": true,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择科目ID",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "profit_center": {
+      "name": "利润中心",
+      "attributes": [
+        "item_name"
+      ],
+      "dict": {
+        "dictId": "profit_center",
+        "dictCode": "profit_center",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": "parent_id",
+        "hierarchical": true,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择利润中心",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "cost_center": {
+      "name": "成本中心",
+      "attributes": [
+        "item_name"
+      ],
+      "dict": {
+        "dictId": "cost_center",
+        "dictCode": "cost_center",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": "parent_id",
+        "hierarchical": true,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择成本中心",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "project": {
+      "name": "项目",
+      "attributes": [
+        "item_name"
+      ],
+      "dict": {
+        "dictId": "project",
+        "dictCode": "project",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": "parent_id",
+        "hierarchical": true,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择项目",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "partner": {
+      "name": "合作伙伴(客户/供应商)",
+      "attributes": [
+        "item_name"
+      ],
+      "dict": {
+        "dictId": "partner",
+        "dictCode": "partner",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": "parent_id",
+        "hierarchical": true,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择合作伙伴(客户/供应商)",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "contract": {
+      "name": "合同",
+      "attributes": [
+        "item_name"
+      ],
+      "dict": {
+        "dictId": "contract",
+        "dictCode": "contract",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": null,
+        "hierarchical": false,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择合同",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "bank": {
+      "name": "银行/账户",
+      "attributes": [
+        "item_name"
+      ],
+      "dict": {
+        "dictId": "bank",
+        "dictCode": "bank",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": "parent_id",
+        "hierarchical": true,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择银行/账户",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "cashflow_item": {
+      "name": "现金流量项目",
+      "attributes": [
+        "item_name"
+      ],
+      "dict": {
+        "dictId": "cashflow_item",
+        "dictCode": "cashflow_item",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": "parent_id",
+        "hierarchical": true,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择现金流量项目",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "currency": {
+      "name": "币种",
+      "attributes": [
+        "item_name"
+      ],
+      "dict": {
+        "dictId": "currency",
+        "dictCode": "currency",
+        "idCol": "id",
+        "codeCol": "item_code",
+        "labelCol": "item_name",
+        "parentCol": null,
+        "hierarchical": false,
+        "helpLayout": "grid",
+        "valueField": "item_code",
+        "displayMode": "code-label",
+        "dictTitle": "选择币种",
+        "filters": null,
+        "pageSize": 50,
+        "writeBack": null,
+        "columns": [
+          {
+            "id": "item_code",
+            "caption": "编码",
+            "type": "text",
+            "width": "130px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "item_name",
+            "caption": "名称",
+            "type": "text",
+            "width": "180px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "id",
+            "caption": "ID",
+            "type": "text",
+            "width": "110px",
+            "editMode": "readonly"
+          },
+          {
+            "id": "status",
+            "caption": "状态",
+            "type": "number",
+            "width": "70px",
+            "editMode": "readonly"
+          }
+        ]
+      },
+      "valueType": "dict-select"
+    },
+    "ext_dim1": {
+      "name": "扩展维度槽位1(由gl_ext_dimension绑定)",
+      "attributes": [
+        "item_name"
+      ]
+    },
+    "ext_dim2": {
+      "name": "扩展维度槽位2",
+      "attributes": [
+        "item_name"
+      ]
+    },
+    "ext_dim3": {
+      "name": "扩展维度槽位3",
+      "attributes": [
+        "item_name"
+      ]
+    },
+    "ext_dim4": {
+      "name": "扩展维度槽位4",
+      "attributes": [
+        "item_name"
+      ]
+    },
+    "ext_dim5": {
+      "name": "扩展维度槽位5",
+      "attributes": [
+        "item_name"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "id": "fi-cash",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "account_code"
+        ],
+        "match": {
+          "gl_account.account_type": "AC004",
+          "gl_account.cashflow_related": "true"
+        }
+      },
+      "panel": "voucher_entry",
+      "caption": "现金",
+      "detail": {
+        "table": "voucher_detail",
+        "use": "*",
+        "fields": []
+      }
+    },
+    {
+      "id": "fi-bank",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "account_code"
+        ],
+        "match": {}
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "select",
+              "required": true
+            },
+            "dimType": "dimension",
+            "refDict": "bank",
+            "id": "bankAccount",
+            "name": "bankAccount",
+            "caption": {
+              "zh_CN": "银行账户"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true,
+              "negativeColor": true
+            },
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算",
+            "members": [
+              "bankAccount"
+            ]
+          },
+          {
+            "caption": "金额信息",
+            "members": [
+              "remark",
+              "amount"
+            ]
+          }
+        ],
+        "fieldTabs": [],
+        "table": "voucher_detail"
+      },
+      "panel": "voucher_entry",
+      "caption": "银行"
+    },
+    {
+      "id": "fi-receivable",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "account_code"
+        ],
+        "match": {}
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "select"
+            },
+            "dimType": "dimension",
+            "refDict": "project",
+            "id": "project",
+            "name": "project",
+            "caption": {
+              "zh_CN": "项目"
+            }
+          },
+          {
+            "edit": {
+              "mode": "select",
+              "required": true
+            },
+            "dimType": "dimension",
+            "refDict": "partner",
+            "id": "customer",
+            "name": "customer",
+            "caption": {
+              "zh_CN": "客户"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true,
+              "negativeColor": true
+            },
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算",
+            "members": [
+              {
+                "caption": "对方信息",
+                "members": [
+                  "customer"
+                ]
+              },
+              {
+                "caption": "归集项目",
+                "members": [
+                  "project"
+                ]
+              }
+            ]
+          },
+          {
+            "caption": "金额信息",
+            "members": [
+              "remark",
+              "amount"
+            ]
+          }
+        ],
+        "fieldTabs": [],
+        "table": "voucher_detail"
+      },
+      "panel": "voucher_entry",
+      "caption": "应收"
+    },
+    {
+      "id": "fi-payable",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "account_code"
+        ],
+        "match": {}
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "dict-select",
+              "required": true
+            },
+            "dataType": "",
+            "dimType": "dimension",
+            "refDict": "partner",
+            "id": "supplier",
+            "name": "supplier",
+            "caption": {
+              "zh_CN": "供应商"
+            }
+          },
+          {
+            "edit": {
+              "mode": "dict-select"
+            },
+            "dimType": "dimension",
+            "refDict": "project",
+            "id": "project",
+            "name": "project",
+            "caption": {
+              "zh_CN": "项目"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true,
+              "negativeColor": true
+            },
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算",
+            "members": [
+              "supplier",
+              "project"
+            ]
+          },
+          {
+            "caption": "金额信息",
+            "members": [
+              "remark",
+              "amount"
+            ]
+          }
+        ],
+        "fieldTabs": [],
+        "table": "voucher_detail"
+      },
+      "panel": "voucher_entry",
+      "caption": "应付"
+    },
+    {
+      "id": "fi-expense",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "account_code"
+        ],
+        "match": {}
+      },
+      "panel": "voucher_entry",
+      "detail": {
+        "table": "voucher_detail",
+        "pick": [
+          {
+            "ref": "voucher_detail.cost_center_id",
+            "as": "department",
+            "over": {
+              "caption": {
+                "zh_CN": "部门"
+              },
+              "edit": {
+                "mode": "select",
+                "required": true
+              }
+            }
+          },
+          {
+            "ref": "voucher_detail.project_id",
+            "as": "project",
+            "over": {
+              "caption": {
+                "zh_CN": "项目"
+              },
+              "edit": {
+                "mode": "select"
+              }
+            }
+          },
+          {
+            "ref": "voucher_detail.remark"
+          },
+          {
+            "ref": "voucher_detail.amount",
+            "over": {
+              "display": {
+                "decimalDigits": 2,
+                "thousandSeparator": true,
+                "negativeColor": true
+              }
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算",
+            "members": [
+              "department",
+              "project"
+            ]
+          },
+          {
+            "caption": "金额信息",
+            "members": [
+              "remark",
+              "amount"
+            ]
+          }
+        ],
+        "fields": []
+      }
+    },
+    {
+      "id": "fi-default",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "account_code"
+        ],
+        "match": {}
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true,
+              "negativeColor": true
+            },
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          }
+        ],
+        "fieldTabs": [],
+        "table": "voucher_detail"
+      },
+      "panel": "voucher_entry"
+    }
+  ],
+  "updatedAt": "2026-07-23T02:39:37.865Z",
+  "docRef": {
+    "domain": "fi",
+    "module": "gl",
+    "file": "gl_md_doc_meta_v1.json",
+    "title": "总账"
+  }
+}
