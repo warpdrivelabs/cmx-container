@@ -8,7 +8,8 @@
 //! `cmx_plugin::center_client::upstream::proxy_upstream`）。
 //!
 //! 与 flow 的差异：报表微服务的对外 URL 与平台**完全一致**（`/api/report-design/*`、
-//! `/api/report-source-bindings*`、`/api/rpt/compute`，**无 `/v1` 升级**），故转发路径是恒等映射
+//! `/api/report-source-bindings*`、`/api/rpt/compute`、`/api/consol/*`（合并报表），
+//! **无 `/v1` 升级**），故转发路径是恒等映射
 //! `{report_base}/api{原path}{query}`——比 flow 更简单，不重写路径段。
 //!
 //! 目标经 [`UpstreamResolver`] 按请求动态解析（静态基址 / Nacos 服务发现选例），
@@ -48,7 +49,7 @@ impl ReportProxyModule {
 
 impl ModuleRoutes for ReportProxyModule {
     fn routes(self) -> Router<CmxAppState> {
-        // 覆盖报表三前缀（根与子路径）。自持 State=proxy，故对 CmxAppState 是一个已 with_state 的
+        // 覆盖报表四前缀（根与子路径）。自持 State=proxy，故对 CmxAppState 是一个已 with_state 的
         // 子 Router，merge 进主路由不影响主 state。
         let proxy = self.inner;
         Router::new()
@@ -57,6 +58,8 @@ impl ModuleRoutes for ReportProxyModule {
             .route("/report-source-bindings", any(proxy_handler))
             .route("/report-source-bindings/{*rest}", any(proxy_handler))
             .route("/rpt/{*rest}", any(proxy_handler))
+            .route("/consol", any(proxy_handler))
+            .route("/consol/{*rest}", any(proxy_handler))
             .with_state(proxy)
     }
 
@@ -100,10 +103,13 @@ fn report_target(report_base: &str, uri: &Uri) -> String {
 // ============================================================================
 
 /// 判定一个前端页 id 是否属报表（与 cmx-report/web 的清单一致）：
-///   native：`portal.rpt.*`
+///   native：`portal.rpt.*`、`portal.consol.*`（合并报表工作台）
 ///   html  ：`fi.cmxfico.gl.rpt-designer-*`、`fi.cmxfico.gl.rpt-spreadjs-designer-*`
+///
+/// 与 `cmx-common-api` 页面 handler 的属主路由表 `owner_service_of` 一一对应，新增前缀两处同步。
 fn is_report_owned_page(id: &str) -> bool {
     id.starts_with("portal.rpt.")
+        || id.starts_with("portal.consol.")
         || id.starts_with("fi.cmxfico.gl.rpt-designer-")
         || id.starts_with("fi.cmxfico.gl.rpt-spreadjs-designer-")
 }
