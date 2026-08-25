@@ -13,6 +13,7 @@
 //!   - `POST /native-pages/batch`    批量取源码 → `{items:[NativePageFull]}`
 //!   - `GET  /native-pages/{id}`     单条含源码
 //!   - `GET  /html-pages`            v2 分片索引分页列表（可按 domain/app/module/keyword 过滤）
+//!   - `POST /html-pages`            upsert 保存（F3-save 写路径，门户按 id 归属反代调用）
 //!   - `POST /html-pages/batch`      批量取页面 → `{pages,revs,errors}`
 //!   - `GET  /html-pages/{id}`       单页含 html
 //!
@@ -23,6 +24,7 @@ pub mod config;
 pub mod error;
 pub mod loader;
 pub mod routes;
+pub mod save;
 
 #[cfg(test)]
 mod tests;

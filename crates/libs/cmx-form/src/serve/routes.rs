@@ -38,7 +38,7 @@ where
     let builder = match cfg.html {
         HtmlLayout::Disabled => builder,
         HtmlLayout::ShardedV2 => builder
-            .route("/html-pages", get(list_html_pages::<E>))
+            .route("/html-pages", get(list_html_pages::<E>).post(save_html_page::<E>))
             .route("/html-pages/batch", post(batch_html_pages::<E>))
             .route("/html-pages/{id}", get(get_html_page::<E>)),
     };
@@ -226,6 +226,20 @@ where
         }
     }
     Ok(Json(ApiResp::ok(json!({ "pages": pages, "revs": revs, "errors": errors }))))
+}
+
+/// `POST /html-pages` —— upsert（F3-save 写路径，门户按 id 归属反代调用）。body 与
+/// 门户 save_html_page 同构；返回写后的行。字段三级回退（显式 > 既有行 > id 推导）
+/// 见 [`super::save`] 模块文档。
+pub(crate) async fn save_html_page<E>(
+    State(cfg): State<PageServeConfig>,
+    Json(input): Json<crate::pages::html::HtmlPageInput>,
+) -> Result<Json<ApiResp<Value>>, E>
+where
+    E: From<PageServeError>,
+{
+    let row = super::save::save_html_upsert(&cfg.html_dir, &input).await?;
+    Ok(Json(ApiResp::ok(row)))
 }
 
 /// `GET /html-pages/{id}` —— 单页含 html。

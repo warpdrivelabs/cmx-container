@@ -17,6 +17,9 @@ pub enum PageServeError {
     /// 页面索引中不存在，或源文件缺失。
     #[error("{0}")]
     NotFound(String),
+    /// 落盘失败（写源文件 / 索引分片 / manifest）。
+    #[error("{0}")]
+    Io(String),
 }
 
 impl From<PageServeError> for Error {
@@ -24,6 +27,7 @@ impl From<PageServeError> for Error {
         match e {
             PageServeError::BadRequest(m) => Error::bad_request(m),
             PageServeError::NotFound(m) => Error::not_found(m),
+            PageServeError::Io(m) => Error::internal_error(m),
         }
     }
 }
