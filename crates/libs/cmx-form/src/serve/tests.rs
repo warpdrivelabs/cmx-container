@@ -189,7 +189,7 @@ async fn native_get_不存在走自定义错误码4() {
 }
 
 #[tokio::test]
-async fn native_get_rel_path越界走平台BadRequest() {
+async fn native_get_rel_path越界走平台_bad_request() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(
         dir.path().join("index.json"),

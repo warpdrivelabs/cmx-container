@@ -82,7 +82,7 @@ pub fn cache_enabled() -> bool {
         .unwrap_or(false)
 }
 
-/// 测试专用：强制覆盖缓存开关（测试环境无 config.toml，无法经配置开启）。
+// 测试专用：强制覆盖缓存开关（测试环境无 config.toml，无法经配置开启）。
 #[cfg(test)]
 thread_local! {
     static TEST_OVERRIDE: std::cell::Cell<Option<bool>> = std::cell::Cell::new(None);
