@@ -1,6 +1,6 @@
 ---
-name: "sql-guide"
-description: "SQL 编写与维护指南。Invoke when 用户要求编写/维护 SQL 文件（新建表时必须先询问用户归属主库还是业务库）、或询问 docs/sql/v2 双库目录（platform/biz）、init/migrations 的使用规范。"
+name: sql-guide
+description: SQL 编写与维护指南（docs/sql/v2 双库目录 platform/biz、init_ddl/init_dml、migrations 增量迁移）。当用户要求编写或维护 SQL 文件、新建表（必须先询问归属主库还是业务库）、建迁移文件、或询问 init/migrations 使用规范时必用。
 ---
 
 # SQL 编写与维护指南（v2 · 主库/业务库分离）
@@ -81,16 +81,10 @@ COMMENT ON TABLE/COLUMN <t>...         -- 紧跟建表，不集中后置
 CREATE [UNIQUE] INDEX IF NOT EXISTS ... ON <t> (...)
 ```
 
-### 2.3 init_dml.sql 规范
-- COMMENT 不换行，一行写完；字段定义对齐，便于阅读
+**格式与硬约束（承 2.2 init_ddl）：**
 
-**格式要求：**
-
-- 每个表独占一个区块，使用分隔注释；COMMENT 一行写完不换行；字段定义对齐
-
-**禁止外键约束：**
-
-- 不允许 `FOREIGN KEY`；保留关联字段（如 `plugin_id`），用 `CREATE INDEX` 替代保证查询性能
+- 每个表独占一个区块，使用分隔注释；COMMENT 不换行一行写完；字段定义对齐，便于阅读
+- 禁止 `FOREIGN KEY` 外键约束；保留关联字段（如 `plugin_id`），用 `CREATE INDEX` 替代保证查询性能
 
 ### 2.3 init_dml.sql 规范
 
@@ -120,7 +114,7 @@ COMMENT → 索引 → 种子`。
 ### 3.1 命名规范
 
 ```
-<日期>_<序号><简短描述>.up.sql / .down.sql     （放在对应库的 migrations/ 下）
+<日期>_<序号>_<简短描述>.up.sql / .down.sql     （放在对应库的 migrations/ 下，如 20260820_001_新增用户手机号.up.sql）
 ```
 
 - 日期 YYYYMMDD；序号 3 位、同日从 001 递增、新日重置、**禁止跳号**；建议中文短语描述

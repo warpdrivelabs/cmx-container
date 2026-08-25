@@ -1,6 +1,6 @@
 ---
-name: "config-sync"
-description: "同步配置到 config_template.toml / .env.template 和 CONFIG_MANUAL.md / ENV_MANUAL.md。Invoke when 新增或修改配置项或环境变量时，自动同步到模板文件和配置手册。"
+name: config-sync
+description: 同步配置到 config/config_template.toml、config/.env.template 和 CONFIG_MANUAL.md / ENV_MANUAL.md。当用户新增或修改 TOML 配置项或环境变量时必用，自动同步到模板文件和配置手册。
 ---
 
 # 配置同步技能
@@ -23,9 +23,9 @@ description: "同步配置到 config_template.toml / .env.template 和 CONFIG_MA
 
 ### 分离原则
 
-- **TOML 配置**: 可以在 `.toml` 配置文件中设置的项 → 放入 `config_template.toml` + `CONFIG_MANUAL.md`
-- **环境变量配置**: 仅通过环境变量注入、不在 TOML 文件中配置的项 → 放入 `env_template.toml` + `ENV_MANUAL.md`
-- **TOML 配置的环境变量覆盖**: TOML 配置项支持的环境变量覆盖方式，在 `CONFIG_MANUAL.md` 对应章节末尾说明
+- **TOML 配置**: 可以在 `.toml` 配置文件中设置的项 → 放入 `config/config_template.toml` + `config/CONFIG_MANUAL.md`
+- **环境变量配置**: 仅通过环境变量注入、不在 TOML 文件中配置的项 → 放入 `.env.template` + `config/ENV_MANUAL.md`
+- **TOML 配置的环境变量覆盖**: TOML 配置项支持的环境变量覆盖方式，在 `config/CONFIG_MANUAL.md` 对应章节末尾说明
 
 ---
 
@@ -33,8 +33,8 @@ description: "同步配置到 config_template.toml / .env.template 和 CONFIG_MA
 
 当用户执行以下操作时，**必须**触发此技能：
 
-- 新增或修改 TOML 配置项 → 更新 `config_template.toml` + `CONFIG_MANUAL.md`
-- 新增或修改环境变量 → 更新 `.env.template` + `ENV_MANUAL.md`
+- 新增或修改 TOML 配置项 → 更新 `config/config_template.toml` + `config/CONFIG_MANUAL.md`
+- 新增或修改环境变量 → 更新 `config/.env.template` + `config/ENV_MANUAL.md`
 - 删除配置项或环境变量 → 同步更新对应文件
 - 用户明确要求"更新配置文档"、"同步配置"等
 
@@ -185,7 +185,7 @@ OPTIONAL_VAR=
 3. **保持目录完整**: 两个手册文件的目录中需同步添加/修改条目
 4. **注释风格一致**: 遵循现有文件的注释风格
 5. **不要删除已有内容**: 只追加或修改对应部分
-6. **交叉引用**: 如果 TOML 配置项支持环境变量覆盖，在 `CONFIG_MANUAL.md` 中注明"详见 [ENV_MANUAL.md](ENV_MANUAL.md)"
+6. **交叉引用**: 如果 TOML 配置项支持环境变量覆盖，在 `config/CONFIG_MANUAL.md` 中注明"详见 [ENV_MANUAL.md](config/ENV_MANUAL.md)"
 7. **注释层级一致**: 模板中所有「示例 / 可选 / 废弃」配置项的描述注释**必须**使用 `##`（L2）前缀，
    不允许使用单 `#`（L1）与被注释配置项（L3）混排。code review 与 CI 应检查此项；
    详见 [## 三、注释层级约定](#三注释层级约定)。
@@ -196,8 +196,8 @@ OPTIONAL_VAR=
 
 更新完成后，检查：
 
-- [ ] TOML 配置项 → `config_template.toml` 和 `CONFIG_MANUAL.md` 已同步
-- [ ] 环境变量 → `.env.template` 和 `ENV_MANUAL.md` 已同步
+- [ ] TOML 配置项 → `config_template.toml` 和 `config/CONFIG_MANUAL.md` 已同步
+- [ ] 环境变量 → `.env.template` 和 `config/ENV_MANUAL.md` 已同步
 - [ ] 两个手册文件的目录已更新
 - [ ] 所有字段类型、默认值、说明准确无误
 - [ ] 不推荐使用的旧变量已标注

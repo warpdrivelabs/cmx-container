@@ -1,7 +1,7 @@
 # 审查报告输出模板（Report Template）
 
 > 适用范围：rust-arch-review 技能生成的最终审查报告。
-> 报告路径：`cmx-container/documents/rust-arch-review-YYYY-MM-DD.md`
+> 报告路径：工作区根 `documents/plans/yyyyMMdd_rust-arch-review_架构审查报告.md`（plan-naming 规范；cmx-container 仓内无 documents/）
 > 使用方法：将本模板复制为报告骨架，按审查结果逐节填充。
 
 ---
@@ -11,7 +11,7 @@
 **审查日期**：YYYY-MM-DD
 **审查范围**：{scope_description，如 `cmx-iam` 整个 crate / `cmx-biz/src/form` 单模块 / 全 workspace}
 **审查者**：rust-arch-review 技能（MiniMax-M3）
-**审查依据**：[cmx-container/AGENTS.md](../../../AGENTS.md) 18 章 + [references/checklist.md](./checklist.md) + [references/reuse-catalog.md](./reuse-catalog.md)
+**审查依据**：[cmx-container/AGENTS.md](../../../../AGENTS.md) 19 章 + [references/checklist.md](./checklist.md) + [references/reuse-catalog.md](./reuse-catalog.md)
 
 ---
 
@@ -128,18 +128,18 @@
 
 | 复用资产 | 应复用次数 | 实际复用次数 | 偏离率 | 涉及文件 | 严重级别 |
 |----------|-----------|------------|--------|----------|----------|
-| `cmx-core::dv!` 宏 | 12 | 4 | 66% | `cmx-biz/src/foo.rs:45` 等 | 🟠 |
-| `cmx-core::ParamsBuilder` | 8 | 2 | 75% | `cmx-biz/src/bar.rs:120` | 🟠 |
-| `cmx-database::GenericCrudService` | 8 | 2 | 75% | `cmx-biz/src/application/service.rs:33` 等 | 🟠 |
-| `cmx-api::declare_crud_handlers!` 宏 | 5 | 0 | 100% | `cmx-api/src/handlers/iam/` 全部 | 🔴 |
+| `cmx-core::dv!` 宏 | 12 | 4 | 66% | `cmx-biz/src/foo.rs` 等 | 🟠 |
+| `cmx-core::ParamsBuilder` | 8 | 2 | 75% | `cmx-biz/src/bar.rs` | 🟠 |
+| `cmx-database::GenericCrudService` | 8 | 2 | 75% | `cmx-biz/src/application/service.rs` 等 | 🟠 |
+| `cmx_api_core::declare_crud_handlers!` 宏 | 5 | 0 | 100% | `crates/libs/cmx-apis/cmx-iam-api/src/handlers/iam/` 全部 | 🔴 |
 | `modql::field::Fields` derive | 12 | 12 | 0% | — | ✅ |
 | `modql::filter::FilterNodes` derive | 12 | 12 | 0% | — | ✅ |
 | `DbBmc` trait impl | 12 | 12 | 0% | — | ✅ |
-| `cmx-traits::PluginQuery` 等 | 6 | 1 | 83% | `cmx-service/src/foo.rs:78` | 🟠 |
-| `cmx-utils::ConfigManager` | 31 | 28 | 10% | `cmx-biz/src/baz.rs:10` 等 | 🟡 |
-| `cmx-utils::UuidGenerator` | 24 | 0 | 100% | `cmx-iam/src/foo.rs:30` 等 | 🔴 |
+| `cmx-traits::PluginQuery` 等 | 6 | 1 | 83% | `cmx-service/src/foo.rs` | 🟠 |
+| `cmx-utils::ConfigManager` | 31 | 28 | 10% | `cmx-biz/src/baz.rs` 等 | 🟡 |
+| `cmx-utils::UuidGenerator` | 24 | 0 | 100% | `cmx-iam/src/foo.rs` 等 | 🔴 |
 | `cmx-utils::ZipCompressor` | 5 | 5 | 0% | — | ✅ |
-| `cmx-macros::#[has_permission]` | 15 | 0 | 100% | `cmx-api/src/handlers/iam/` 全部 | 🔴 |
+| `cmx-macros::#[has_permission]` | 15 | 0 | 100% | `crates/libs/cmx-apis/cmx-iam-api/src/handlers/iam/` 全部 | 🔴 |
 
 **总体复用偏离度**：X%（{偏离严重}）
 
@@ -196,8 +196,8 @@
 
 | # | 违例 | 位置 |
 |---|------|------|
-| 1 | `pub fn XxxYyy` (PascalCase) | `crates/libs/cmx-biz/src/foo.rs:30` |
-| 2 | `pub struct xxx` (lowercase) | `crates/libs/cmx-iam/src/bar.rs:50` |
+| 1 | `pub fn XxxYyy` (PascalCase) | `crates/libs/cmx-biz/src/foo.rs` |
+| 2 | `pub struct xxx` (lowercase) | `crates/libs/cmx-iam/src/bar.rs` |
 | ... | | |
 
 #### 文档注释覆盖率
@@ -275,11 +275,11 @@
 
 ## 六、跨维度硬约束
 
-> 来源：[cmx-container/AGENTS.md](../../../AGENTS.md) 18 章 + [references/checklist.md §E](./checklist.md#e-跨维度的硬约束项目特定)。
+> 来源：[cmx-container/AGENTS.md](../../../../AGENTS.md) 19 章 + [references/checklist.md §E](./checklist.md#e-跨维度的硬约束项目特定)。
 
 | 规范条目 | 涉及 | 合规 | 违规示例 | 严重级别 |
 |---------|------|------|----------|----------|
-| §6.1 禁止硬编码 `"default"` 作 app_id | N | M | `cmx-plugin/src/foo.rs:45` | 🔴 |
+| §6.1 禁止硬编码 `"default"` 作 app_id | N | M | `cmx-plugin/src/foo.rs` | 🔴 |
 | §7 Service list/page 必用 filters+list_options | N | M | `<files>` | 🟠 |
 | §8.3 Handler 除 get_by_id 外全 POST | N | M | `<files>` | 🟠 |
 | §9 Entity 必 derive(Fields) | N | M | `<files>` | 🔴 |
@@ -315,9 +315,9 @@ graph TD
 
 | # | 严重级别 | 类别 | 文件:行 | 简述 |
 |---|---------|------|---------|------|
-| 1 | 🔴 | B2 | `cmx-biz/src/foo.rs:30` | 手写 CRUD 而未复用 GenericCrudService |
-| 2 | 🟡 | C1 | `cmx-iam/src/bar.rs:45` | 裸 `unwrap()` |
-| 3 | 🔵 | D3 | `cmx-biz/src/baz.rs:10` | 文档摘要缺句号 |
+| 1 | 🔴 | B2 | `cmx-biz/src/foo.rs` | 手写 CRUD 而未复用 GenericCrudService |
+| 2 | 🟡 | C1 | `cmx-iam/src/bar.rs` | 裸 `unwrap()` |
+| 3 | 🔵 | D3 | `cmx-biz/src/baz.rs` | 文档摘要缺句号 |
 | ... | | | | |
 
 ---
@@ -353,9 +353,9 @@ graph TD
 
 | 资产 | 涉及文件 | 偏离次数 | 示例 |
 |------|---------|---------|------|
-| `cmx-macros::#[has_permission]` | `<files>` | 15 | `cmx-api/src/handlers/iam/...` |
-| `cmx-utils::UuidGenerator` | `<files>` | 24 | `cmx-iam/src/foo.rs:30` |
-| `cmx-api::declare_crud_handlers!` 宏 | `<files>` | 5 | `cmx-api/src/handlers/...` |
+| `cmx-macros::#[has_permission]` | `<files>` | 15 | `crates/libs/cmx-apis/cmx-iam-api/src/handlers/iam/...` |
+| `cmx-utils::UuidGenerator` | `<files>` | 24 | `cmx-iam/src/foo.rs` |
+| `cmx_api_core::declare_crud_handlers!` 宏 | `<files>` | 5 | `crates/libs/cmx-apis/...` |
 
 ### 10.2 中等偏离（🟠 偏离率 30%-60%）
 
@@ -386,7 +386,7 @@ graph TD
 
 | 规范条目 | 来源 | 涉及文件 | 合规 | 违规示例（file:line） |
 |---------|------|----------|------|---------------------|
-| §1.1 thiserror 必用 | AGENTS.md | N | M | `cmx-iam/src/foo.rs:45` |
+| §1.1 thiserror 必用 | AGENTS.md | N | M | `cmx-iam/src/foo.rs` |
 | §1.2 禁手写 impl Error | AGENTS.md | N | M | `<files>` |
 | §1.3 crate 独立 error 模块 | AGENTS.md | N | M | `<files>` |
 | §1.4 禁裸 unwrap | AGENTS.md | N | M | `<files>` |
@@ -430,8 +430,7 @@ graph TD
 
 ### 13.1 关联文件
 
-- 计划文档：[20260715_rust-arch-review_技能完善方案.md](../../../documents/20260715_rust-arch-review_技能完善方案.md)
-- 项目规范：[AGENTS.md](../../../AGENTS.md)
+- 项目规范：[AGENTS.md](../../../../AGENTS.md)
 - 复用资产清单：[references/reuse-catalog.md](./reuse-catalog.md)
 - 检查清单：[references/checklist.md](./checklist.md)
 - 反模式目录：[references/anti-patterns.md](./anti-patterns.md)
@@ -439,7 +438,7 @@ graph TD
 ### 13.2 审查方法论
 
 1. 复用偏离度扫描：Grep 锚点关键词，对照 [reuse-catalog.md](./reuse-catalog.md)
-2. 规范符合度扫描：Read 项目源文件，对照 [AGENTS.md](../../../AGENTS.md) 18 章
+2. 规范符合度扫描：Read 项目源文件，对照 [AGENTS.md](../../../../AGENTS.md) 19 章
 3. 11 子维度深度审查：Read + Grep，对照 [checklist.md](./checklist.md) 11 张表
 4. 反模式识别：Read 疑似症状，对照 [anti-patterns.md](./anti-patterns.md)
 5. 根因聚类：识别"同一根本原因触发的多个问题"，合并报告

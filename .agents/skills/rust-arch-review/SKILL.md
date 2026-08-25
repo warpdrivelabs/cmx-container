@@ -1,19 +1,19 @@
 ---
 name: rust-arch-review
-description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 个子维度（含代码复用与 Rust 最佳实践），对照项目 AGENTS.md 18 章规范，输出结构化审查报告与优化路线图。Invoke when user asks for Rust 代码评审 / 架构审查 / 代码复查 / 看看这段代码 / 目录结构合不合理 / 是否复用了已有代码 / 是否符合最佳实践 / 重构建议."
+description: Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 个子维度（含代码复用与 Rust 最佳实践），对照项目 AGENTS.md 19 章规范，输出结构化审查报告与优化路线图。当用户要求 Rust 代码评审、架构审查、代码复查、"看看这段代码"、目录结构合不合理、是否复用了已有代码、是否符合最佳实践、或要重构建议时必用。
 ---
 
 # Rust 架构与代码质量审查
 
 > 适用项目：`cmx-container`（含全部 workspace 成员）。
-> 维护规范：[AGENTS.md 18 章](../../../AGENTS.md) + [project_rule.md](../../../.trae/rules/project_rule.md)。
+> 维护规范：[AGENTS.md 19 章](../../../AGENTS.md) + [project_rule.md](../../../.trae/rules/project_rule.md)。
 > 关联文件：[references/reuse-catalog.md](./references/reuse-catalog.md) · [references/checklist.md](./references/checklist.md) · [references/anti-patterns.md](./references/anti-patterns.md) · [references/report-template.md](./references/report-template.md)
 
 ---
 
 ## 一、角色设定
 
-你是一位拥有 10 年经验的资深 Rust 架构师，**精通 cmx-container 项目规范（AGENTS.md 18 章）和项目内已有可复用资产**（[reuse-catalog.md](./references/reuse-catalog.md) 14 大类资产清单）。你能从架构师视角审视代码，给出务实、可落地、不破坏向后兼容性的修改建议。
+你是一位拥有 10 年经验的资深 Rust 架构师，**精通 cmx-container 项目规范（AGENTS.md 19 章）和项目内已有可复用资产**（[reuse-catalog.md](./references/reuse-catalog.md) 14 大类资产清单）。你能从架构师视角审视代码，给出务实、可落地、不破坏向后兼容性的修改建议。
 
 ---
 
@@ -67,7 +67,7 @@ description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 
 步骤 0：确定审查范围
 步骤 1：扫描 workspace 与依赖拓扑
 步骤 2：复用偏离度扫描（按 reuse-catalog.md）
-步骤 3：规范符合度扫描（按 AGENTS.md 18 章）
+步骤 3：规范符合度扫描（按 AGENTS.md 19 章）
 步骤 4：分维度深度审查（按 checklist.md 11 子维度）
 步骤 5：交叉问题聚类（根因分析）
 步骤 6：生成报告（按 report-template.md）
@@ -114,7 +114,7 @@ description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 
 
 ### 步骤 3：规范符合度扫描
 
-1. **命令**：按 [AGENTS.md 18 章](../../../AGENTS.md) 逐条 Read + Grep。
+1. **命令**：按 [AGENTS.md 19 章](../../../AGENTS.md) 逐条 Read + Grep。
 2. **重点条目**（来源 [AGENTS.md](../../../AGENTS.md)）：
    - §1.1-1.4 错误处理（thiserror / 禁 unwrap / init 返 Result）
    - §3.1-3.6 依赖管理（workspace / 注释 / 禁 log）
@@ -126,6 +126,7 @@ description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 
    - §14 cmx-core 依赖约束
    - §17 init 返 Result
    - §18 旧接口不参考
+   - §19 RPC 皮肤规范（cmx-rpcs/）
 3. **产物**：规范符合度矩阵（模板见 [report-template.md §十一](./references/report-template.md)）。
 
 ### 步骤 4：分维度深度审查
@@ -144,7 +145,7 @@ description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 
 ### 步骤 6：生成报告
 
 1. **工具**：`Write`（按 [report-template.md](./references/report-template.md)）。
-2. **路径**：`cmx-container/documents/rust-arch-review-YYYY-MM-DD.md`。
+2. **路径**：工作区根 `documents/plans/yyyyMMdd_rust-arch-review_架构审查报告.md`（plan-naming 规范；cmx-container 仓内无 documents/，统一归档到工作区根）。
 3. **产物**：完整报告 + TODO 任务清单 + 复用偏离度表 + 规范符合度矩阵。
 
 ### 步骤 7：与用户确认修改计划
@@ -199,7 +200,7 @@ description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 
    - 文件路径和行号
    - 修改前/修改后代码对比
    - 复用偏离度表（B2 维度强制）
-   - 规范符合度矩阵（AGENTS.md 18 章逐条）
+   - 规范符合度矩阵（AGENTS.md 19 章逐条）
 2. **复用偏离度是核心指标**：发现疑似"重复造轮子"必须先查 [reuse-catalog.md](./references/reuse-catalog.md) 确认是否真重复。
 3. **跨技能引用要明确**：审查中遇到"具体子领域"细节时，必须先调对应技能获取权威标准。
 4. **修改建议考虑向后兼容**：标注是否为破坏性变更。
@@ -209,10 +210,9 @@ description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 
 
 ## 九、关联文件
 
-- 项目规范：[cmx-container/AGENTS.md](../../../AGENTS.md)（18 章）
+- 项目规范：[cmx-container/AGENTS.md](../../../AGENTS.md)（19 章）
 - 技能规范文件：[.trae/rules/project_rule.md](../../../.trae/rules/project_rule.md)
 - 复用资产清单：[references/reuse-catalog.md](./references/reuse-catalog.md)
 - 4 大类 11 子维度检查清单：[references/checklist.md](./references/checklist.md)
 - 反模式与项目内真实案例：[references/anti-patterns.md](./references/anti-patterns.md)
 - 报告输出模板：[references/report-template.md](./references/report-template.md)
-- 技能完善计划：[20260715_rust-arch-review_技能完善方案.md](../../../documents/20260715_rust-arch-review_技能完善方案.md)

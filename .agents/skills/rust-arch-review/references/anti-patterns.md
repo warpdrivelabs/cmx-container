@@ -1,7 +1,7 @@
 # 常见反模式与项目内真实案例（Anti-Patterns）
 
 > 适用范围：rust-arch-review 技能全量审查。
-> 案例来源：参考 2026-07-03 [cmx-plugin 安装升级与模块导入导出代码复用评审报告](../../../documents/20260703_cmx-plugin_安装升级与模块导入导出代码复用评审报告.md) 等项目内真实评审记录。
+> 案例来源：参考 2026-07-03 [cmx-plugin 安装升级与模块导入导出代码复用评审报告](../../../../.trae/documents/20260703_cmx-plugin_安装升级与模块导入导出代码复用评审报告.md) 等项目内真实评审记录。
 > 维护规则：发现新反模式时追加到对应类别；记录「典型症状 + 真实案例 + 修复方向」。
 
 ---
@@ -27,9 +27,9 @@
 
 | 位置 | 实现 | 风险 |
 |------|------|------|
-| `cmx-iam/src/permission/service/import.rs:171+` | `PermissionServiceImpl::import_permissions` 事务内 + diff（增/改/删） | 基准实现 |
+| `cmx-iam/src/permission/service/import.rs` | `PermissionServiceImpl::import_permissions` 事务内 + diff（增/改/删） | 基准实现 |
 | `cmx-iam/src/permission/service/crud.rs` | 普通 CRUD 路径计算 `full_code_path`/`level`/`parent_code` | 维护漂移 |
-| `cmx-plugin/src/service/module_install.rs:532-733` | 手写 SQL 两阶段 upsert | ❌ 无事务、无 diff、无删除清理 |
+| `cmx-plugin/src/service/module_install.rs` | 手写 SQL 两阶段 upsert | ❌ 无事务、无 diff、无删除清理 |
 
 **修复方向**：
 - `module_install.rs` 改为调 `PermissionServiceImpl::import_permissions`（注入式）
@@ -56,10 +56,10 @@ grep -rn "full_code_path" crates/libs/
 | 路径 | 入口 | 状态 |
 |------|------|------|
 | 旧（插件路径） | `utils.rs::execute_ddl_with_lock` → `create_plugin_tables` → `save_plugin_table_metadata` | ❌ 已失效（无活调用方） |
-| 新（模块路径） | `module_install.rs:451-525 install_metadata` + `save_table_metadata:739-840` | ✅ 在用 |
+| 新（模块路径） | `module_install.rs install_metadata` + `save_table_metadata:739-840` | ✅ 在用 |
 
 **修复方向**：
-- 删除旧 `utils.rs::execute_ddl_with_lock` / `create_plugin_tables` / `save_plugin_table_metadata`（`utils.rs:300-374` 起）
+- 删除旧 `utils.rs::execute_ddl_with_lock` / `create_plugin_tables` / `save_plugin_table_metadata`（`utils.rs` 起）
 - 新路径通过 `PgTableDefineExecutor::new(biz_db_id, None)` 复用执行器
 - `cmx_meta_table_define` upsert 统一走 `TableMetadataService` 抽象
 
@@ -78,7 +78,7 @@ grep -rn "PgTableDefineExecutor" crates/libs/
 - `install_persist` 和 `upgrade_persist` 主体逻辑相同，差异仅在前置校验
 - 各自实现：fetch 包、extract、安全校验、解析元数据、依赖检查、目录创建、文件拷贝、事务、seed、upsert、版本历史
 
-**项目内真实案例**：`cmx-plugin/src/service/persistence.rs:116-382`（install） vs `389-628`（upgrade）
+**项目内真实案例**：`cmx-plugin/src/service/persistence.rs`（install） vs `389-628`（upgrade）
 
 **修复方向**：
 - 抽取 `persist_common(PersistContext)` helper
@@ -134,7 +134,7 @@ grep -c "fn install_persist\|fn upgrade_persist" crates/libs/cmx-plugin/src/serv
 
 **典型症状**：
 - `tempdir::TempDir::new("prefix_")` + 时间戳
-- 出现位置：`module_export.rs:51-55` / `module_install.rs:190-194` / `migrate_to_module_packages.rs:239`
+- 出现位置：`module_export.rs` / `module_install.rs` / `migrate_to_module_packages.rs`
 
 **修复方向**：收敛到 `PackageUtils::new_temp_dir(prefix)`
 
@@ -143,7 +143,7 @@ grep -c "fn install_persist\|fn upgrade_persist" crates/libs/cmx-plugin/src/serv
 ### 1.8 `install_forms` 与 `install_menus` 几乎逐行相同
 
 **典型症状**：
-- `module_install.rs:306-370`（forms）vs `376-444`（menus）几乎一致
+- `module_install.rs`（forms）vs `376-444`（menus）几乎一致
 - 读目录 → `.json` → `{module}:{stem}` code → delete_by_code → create
 
 **修复方向**：泛型化 `install_definition_files<T: Serialize + Deserialize>(...)`
@@ -157,9 +157,9 @@ grep -c "fn install_persist\|fn upgrade_persist" crates/libs/cmx-plugin/src/serv
 - 字段重命名/增删时 3 处必须手工同步
 
 **项目内真实案例**：
-- `cmx-iam/src/permission/service/import.rs:27-50`（规范结构体）
-- `module_export.rs:395-404`（`serde_json::json!({...8 字段...})`）
-- `module_install.rs:554-569`（私有内联结构体 `PermDef`）
+- `cmx-iam/src/permission/service/import.rs`（规范结构体）
+- `module_export.rs`（`serde_json::json!({...8 字段...})`）
+- `module_install.rs`（私有内联结构体 `PermDef`）
 
 **修复方向**：
 - 抽到 `cmx-traits::resource::PermissionDefinition` 公共结构体
@@ -185,7 +185,7 @@ grep -c "fn install_persist\|fn upgrade_persist" crates/libs/cmx-plugin/src/serv
 
 ```bash
 grep -rn "use cmx_plugin::" crates/libs/cmx-service/src
-grep -rn "use cmx_iam::" crates/libs/cmx-api/src
+grep -rn "use cmx_iam::" crates/libs/cmx-apis/
 ```
 
 ---
@@ -204,7 +204,7 @@ grep -rn "use cmx_iam::" crates/libs/cmx-api/src
 **审查锚点**：
 
 ```bash
-grep -rn "execute_sql\|query_sql" crates/libs/cmx-api/src/handlers/
+grep -rn "execute_sql\|query_sql" crates/libs/cmx-apis/cmx-*-api/src/handlers/
 ```
 
 ---
@@ -212,7 +212,7 @@ grep -rn "execute_sql\|query_sql" crates/libs/cmx-api/src/handlers/
 ### 2.3 cmx-api 中重定义业务 Entity
 
 **典型症状**：
-- `crates/libs/cmx-api/src/handlers/xxx/model.rs` 中有 `pub struct XxxEntity`
+- `crates/libs/cmx-apis/cmx-*-api/src/handlers/xxx/model.rs` 中有 `pub struct XxxEntity`
 - 而 `cmx-biz/src/xxx/entity.rs` 已有同名 Entity
 
 **修复方向**：
@@ -222,7 +222,7 @@ grep -rn "execute_sql\|query_sql" crates/libs/cmx-api/src/handlers/
 **审查锚点**：
 
 ```bash
-grep -rn "pub struct.*Entity" crates/libs/cmx-api/src/handlers/
+grep -rn "pub struct.*Entity" crates/libs/cmx-apis/cmx-*-api/src/handlers/
 ```
 
 ---
@@ -335,7 +335,7 @@ pub fn init_runtime() -> Result<()> {
 }
 ```
 
-**审查锚点**（来源：[AGENTS.md §17](../../../AGENTS.md)）：
+**审查锚点**（来源：[AGENTS.md §17](../../../../AGENTS.md)）：
 
 ```bash
 grep -rn "fn init(" crates/libs/ --include="*.rs" -A 3
@@ -445,7 +445,7 @@ find crates/libs/cmx-biz/src/ -name "*.rs" -exec grep -c "^\s*pub " {} \; | awk 
 pub fn calculate_tax(amount: f64, rate: f64) -> f64 { ... }
 ```
 
-**修复方向**（来源：[AGENTS.md §13](../../../AGENTS.md)）：
+**修复方向**（来源：[AGENTS.md §13](../../../../AGENTS.md)）：
 
 ```rust
 // ✅ 正确
@@ -592,7 +592,7 @@ use tracing::info;
 info!("...", key = value);
 ```
 
-**审查锚点**（来源：[AGENTS.md §3.4](../../../AGENTS.md)）：
+**审查锚点**（来源：[AGENTS.md §3.4](../../../../AGENTS.md)）：
 
 ```bash
 grep -rn "^log = " crates/libs/*/Cargo.toml crates/libs/cmx-infra/*/Cargo.toml
@@ -671,7 +671,7 @@ if let Some(email) = &req.email {
 let sql = format!("UPDATE users SET {} WHERE id = $1", set_clauses.join(", "));
 ```
 
-**修复方向**（来源：[AGENTS.md §10](../../../AGENTS.md)）：
+**修复方向**（来源：[AGENTS.md §10](../../../../AGENTS.md)）：
 
 ```rust
 // ✅ 正确：用 ParamsBuilder
@@ -692,7 +692,7 @@ let sql = format!("UPDATE users SET {set_clause} WHERE id = $1");
 execute_sql_with_json(mm, db_id, None, sql, json!({ "id": id, "sort": null })).await?;
 ```
 
-**修复方向**（来源：[AGENTS.md §10](../../../AGENTS.md)）：
+**修复方向**（来源：[AGENTS.md §10](../../../../AGENTS.md)）：
 
 ```rust
 execute_sql_with_datavalues(
@@ -740,10 +740,10 @@ mm.execute_sql_with_datavalues(&db_id, None, sql, params).await?;
 
 | # | 独有能力 | 位置 |
 |---|---------|------|
-| ① | `query_sql_zmc_stream_chunks`（mpsc 分帧流式，峰值内存 O(单行)） | `manager/mod.rs:374` |
-| ② | 数组列读取还原（TEXT_ARRAY / INT8_ARRAY / UUID_ARRAY -> DataValue::Array） | `executor/mod.rs:435-452` |
-| ③ | `get_conn()`（返回 `deadpool_postgres::Object`，供事务层手动驱动） | `connection/mod.rs:112` |
-| ④ | 4 个 ToSql 适配器（PgInt / PgDateTime / PgDateTimeNull / PgIntNull） | `executor/mod.rs:24-123` |
+| ① | `query_sql_zmc_stream_chunks`（mpsc 分帧流式，峰值内存 O(单行)） | `manager/mod.rs` |
+| ② | 数组列读取还原（TEXT_ARRAY / INT8_ARRAY / UUID_ARRAY -> DataValue::Array） | `executor/mod.rs` |
+| ③ | `get_conn()`（返回 `deadpool_postgres::Object`，供事务层手动驱动） | `connection/mod.rs` |
+| ④ | 4 个 ToSql 适配器（PgInt / PgDateTime / PgDateTimeNull / PgIntNull） | `executor/mod.rs` |
 
 > ⚠️ **注意区分**：`query_zmc_streaming`（写入 Vec<u8>）**两者都有**，不是独占；唯独 `*_stream_chunks`（mpsc 通道）是 pg 独有。
 
@@ -766,7 +766,7 @@ mm.execute_sql_with_datavalues(&db_id, None, sql, params).await?;
 🔴 **不能简单替换**（需迁移实现）：
 - 依赖 `query_sql_zmc_stream_chunks` 的场景（如 `mem_bench.rs`、O(单行) 内存流式消费）
 - 依赖数组列读取还原（`DataValue::Array` 从数据库读取）的场景
-- 直接依赖 `TokioPgRowSource` 全路径的代码（如 `cmx-database-test` 的 `e2e_server.rs:338`、`mem_bench.rs`）需改为 `SqlxPgRowSource`
+- 直接依赖 `TokioPgRowSource` 全路径的代码（如 `cmx-database-test` 的 `e2e_server.rs`、`mem_bench.rs`）需改为 `SqlxPgRowSource`
 
 **审查锚点**：
 
@@ -861,7 +861,7 @@ let ds = mm.query_sql_with_datavalues(&db_id, None,
 
 **典型症状**：`plugin_id = "cmx-account"`（连字符）
 
-**修复方向**（来源：[AGENTS.md §11](../../../AGENTS.md)）：用下划线 `plugin_id = "cmx_account"`
+**修复方向**（来源：[AGENTS.md §11](../../../../AGENTS.md)）：用下划线 `plugin_id = "cmx_account"`
 
 ---
 
@@ -869,7 +869,7 @@ let ds = mm.query_sql_with_datavalues(&db_id, None,
 
 **典型症状**：业务模块自建表用 `cmx_xxx` 前缀。
 
-**修复方向**（来源：[AGENTS.md §5.4](../../../AGENTS.md)）：系统基础表用 `cmx_` 前缀，业务/插件自建表不强制加（由模块自行命名）。
+**修复方向**（来源：[AGENTS.md §5.4](../../../../AGENTS.md)）：系统基础表用 `cmx_` 前缀，业务/插件自建表不强制加（由模块自行命名）。
 
 ---
 
@@ -884,7 +884,7 @@ CREATE TABLE cmx_order (
 );
 ```
 
-**修复方向**（来源：[AGENTS.md §5.4](../../../AGENTS.md)）：保留关联字段，用 `CREATE INDEX` 替代。
+**修复方向**（来源：[AGENTS.md §5.4](../../../../AGENTS.md)）：保留关联字段，用 `CREATE INDEX` 替代。
 
 ```sql
 CREATE TABLE cmx_order (
@@ -974,7 +974,7 @@ fn test_foo() { ... }
 
 ### 11.1 硬编码 `"default"` 作为 app_id
 
-**典型症状**（来源：[AGENTS.md §6.1](../../../AGENTS.md)）：
+**典型症状**（来源：[AGENTS.md §6.1](../../../../AGENTS.md)）：
 
 ```rust
 // ❌ 反模式

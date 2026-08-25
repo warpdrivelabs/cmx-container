@@ -1,6 +1,6 @@
 ---
-name: "plugin-fn-doc"
-description: "规范 #[plugin_fn] 函数的文档注释，确保 cmx-cli 正确解析生成 api.json。Invoke when 编写或审查 #[plugin_fn] 函数的文档注释，或用户要求生成 api.json 文档。"
+name: plugin-fn-doc
+description: 规范 #[plugin_fn] 函数的文档注释，确保 cmx-cli 正确解析生成 api.json。当用户编写或审查 #[plugin_fn] 函数的文档注释、或要求生成 api.json 文档时必用。
 ---
 
 # cmx-cli 代码注释规范
@@ -215,7 +215,7 @@ cmx-cli 会从 `TypeRegistry` 中查找 `Customer`，自动展开为包含 `name
 分支函数需要添加 `#[doc_type = "branch_fn"]` 属性：
 
 ```rust
-/// 路由判断函数。
+/// 路由判断函数
 ///
 /// 根据输入的 route 字段决定返回哪个分支标识。
 ///

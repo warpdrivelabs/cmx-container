@@ -1,6 +1,6 @@
 ---
 name: clippy-fix
-description: "执行 cargo clippy 检查并修复警告。排除：too_many_arguments、unused_variables、unused_functions。修复前生成修改计划文档，修复后生成修复报告文档。"
+description: 执行 cargo clippy 检查并修复警告（排除 too_many_arguments、unused_variables、unused_functions 三类）。当用户要求检查/运行/修复 clippy 警告、跑"项目警告"检查，或要求生成修复计划/修复报告文档时必用。修复前产出计划文档、修复后产出报告文档（归档工作区根 documents/plans/）。
 ---
 
 # Clippy 警告检查与修复
@@ -27,12 +27,12 @@ description: "执行 cargo clippy 检查并修复警告。排除：too_many_argu
 ### 1. 运行 Clippy 检查
 
 ```bash
-cargo clippy -- -W clippy::all | findstr /V "too_many_arguments unused_variables unused_functions"
+cargo clippy -- -W clippy::all | grep -vE "too_many_arguments|unused_variables|unused_functions"
 ```
 
 ### 2. 生成修复计划文档
 
-在 `documents/` 目录下创建 `修改计划-YYYY-MM-DD.md`：
+在工作区根 `documents/plans/` 目录下创建（plan-naming 规范：`yyyyMMdd_clippy_警告修复计划.md`，如 `20260825_clippy_警告修复计划.md`）：
 
 ```markdown
 # Clippy 警告修复计划 - YYYY-MM-DD
@@ -93,7 +93,7 @@ cargo clippy -- -W clippy::all | findstr /V "too_many_arguments unused_variables
 
 ### 4. 生成修复报告文档
 
-在 `documents/` 目录下创建 `修复报告-YYYY-MM-DD.md`：
+在工作区根 `documents/plans/` 目录下创建（plan-naming 规范：`yyyyMMdd_clippy_警告修复报告.md`）：
 
 ```markdown
 # Clippy 警告修复报告 - YYYY-MM-DD
@@ -247,13 +247,13 @@ fn unused_but_kept() {}
 
 | 文件 | 用途 |
 |------|------|
-| `documents/` | 存放修复计划报告文档 |
+| `<工作区根>/documents/plans/` | 存放修复计划/报告文档（cmx-container 仓内无 documents/，统一归档到工作区根） |
 | `Cargo.toml` | 项目配置 |
 
 ## 注意事项
 
 1. 修复前先备份或使用版本控制
-2. 每次修复后运行 `cargo build` 确保编译通过
+2. 每次修复后运行 `cargo check` 确保编译通过（全局规则：禁止用 `cargo build` 做编译检查）
 3. 如果修复导致编译错误，立即回滚并调整方案
 4. 复杂重构建议分步骤进行
 5. 修复完成后运行 `cargo clippy` 验证

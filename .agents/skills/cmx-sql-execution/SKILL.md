@@ -1,6 +1,6 @@
 ---
 name: cmx-sql-execution
-description: 指导在 Rust 代码中执行 SQL 的规范,涵盖 DatabaseManager API 选择、DataValue 参数构造(dv! 宏/From<Option<T>>/ParamsBuilder)、带类型 NULL(NullTyped)、事务模式。Invoke when 编写手写 SQL 执行代码、构造 Vec<DataValue> 参数、构建动态 UPDATE SET 子句、处理 NULL 绑定类型问题、或在业务 Service 中调用 execute_sql/query_sql 系列 API。
+description: 指导在 Rust 代码中执行 SQL 的规范，涵盖 DatabaseManager API 选择、DataValue 参数构造（dv! 宏 / From<Option<T>> / ParamsBuilder）、带类型 NULL（NullTyped）、事务模式。当用户编写手写 SQL 执行代码、构造 Vec<DataValue> 参数、构建动态 UPDATE SET 子句、处理 NULL 绑定类型问题、或在业务 Service 中调用 execute_sql / query_sql 系列 API 时必用。
 ---
 
 # cmx SQL 执行规范
@@ -55,10 +55,10 @@ description: 指导在 Rust 代码中执行 SQL 的规范,涵盖 DatabaseManager
 
 | # | 独有能力 | 位置 | 说明 |
 |---|---------|------|------|
-| ① | **`query_sql_zmc_stream_chunks`** | `manager/mod.rs:374` + `connection/mod.rs:207` | 真·分帧流式：基于 `mpsc::Sender<Bytes>`，逐行编码为长度分帧发送，峰值内存 O(单行)，16KB 攒批刷写，header 帧先发、空结果容错。cmx-database **完全无此方法** |
-| ② | **数组类型列读取还原** | `executor/mod.rs:435-452`（`PgResultConverter::convert_rows`） | 读取阶段支持 TEXT_ARRAY / INT8_ARRAY / UUID_ARRAY -> `DataValue::Array`。cmx-database 读取方向**不还原数组**（只在绑定时 `bind_pg_array_postgres` 支持写入） |
-| ③ | **`get_conn()` 方法** | `connection/mod.rs:112` | 返回 `deadpool_postgres::Object`，供事务层跨 await 手动驱动 BEGIN/COMMIT。cmx-database 用 sqlx 的 `pool.begin()`，无需此方法 |
-| ④ | **4 个 ToSql 适配器** | `executor/mod.rs:24-123` | `PgInt` / `PgDateTime` / `PgDateTimeNull` / `PgIntNull`。tokio-postgres 类型校验严格（i64 绑 INT4 列会 WrongType），需宽度/时区自适应包装。sqlx 隐式协调，不需要 |
+| ① | **`query_sql_zmc_stream_chunks`** | `manager/mod.rs` + `connection/mod.rs` | 真·分帧流式：基于 `mpsc::Sender<Bytes>`，逐行编码为长度分帧发送，峰值内存 O(单行)，16KB 攒批刷写，header 帧先发、空结果容错。cmx-database **完全无此方法** |
+| ② | **数组类型列读取还原** | `executor/mod.rs`（`PgResultConverter::convert_rows`） | 读取阶段支持 TEXT_ARRAY / INT8_ARRAY / UUID_ARRAY -> `DataValue::Array`。cmx-database 读取方向**不还原数组**（只在绑定时 `bind_pg_array_postgres` 支持写入） |
+| ③ | **`get_conn()` 方法** | `connection/mod.rs` | 返回 `deadpool_postgres::Object`，供事务层跨 await 手动驱动 BEGIN/COMMIT。cmx-database 用 sqlx 的 `pool.begin()`，无需此方法 |
+| ④ | **4 个 ToSql 适配器** | `executor/mod.rs` | `PgInt` / `PgDateTime` / `PgDateTimeNull` / `PgIntNull`。tokio-postgres 类型校验严格（i64 绑 INT4 列会 WrongType），需宽度/时区自适应包装。sqlx 隐式协调，不需要 |
 
 > ⚠️ **注意区分**：`query_zmc_streaming`（写入 `Vec<u8>`）**两者都有**；唯独 `*_stream_chunks`（mpsc 通道）是 pg 独有。
 
@@ -72,31 +72,32 @@ description: 指导在 Rust 代码中执行 SQL 的规范,涵盖 DatabaseManager
     └─ 否 -> ★★★ cmx-database（默认首选）
 ```
 
-**依赖现状**（无任何 crate 独家依赖 cmx-database-pg）：
+**依赖现状**（cmx-api 单体拆分为 `cmx-apis/*` 后的格局，2026-08 核对）：
 
 | 情形 | crate 数 | 具体 |
 |------|---------|------|
-| 同时依赖两者 | 4 | cmx-api、cmx-biz、cmx-database-test、web-server |
-| 只依赖 cmx-database-pg | **0** | 无 |
-| 只依赖 cmx-database | 9 | cmx-api-types、cmx-iam、cmx-audit、cmx-auth、cmx-storage、cmx-metadata、cmx-plugin、cmx-portal、cmx-service |
+| 同时依赖两者 | 5（+1 test） | cmx-api-core、cmx-common-api、cmx-biz、cmx-platform-app、cmx-service-base（另 tests/cmx-database-test） |
+| 只依赖 cmx-database-pg | 3 | cmx-rowsource、cmx-job-store-pg、cmx-web-monitor |
+| 只依赖 cmx-database | 7 | cmx-iam、cmx-metadata、cmx-plugin、cmx-service、cmx-api-types、cmx-biz-api、cmx-plugin-api |
 
 **能否将 cmx-database-pg 的消费方替换为 cmx-database？**
 
 🟢 **可以无痛替换**（占大多数场景）：
 - 凡只用到 `execute_sql*` / `query_sql*` / `query_sql_zmc` / `query_sql_zmc_with_datavalues` / `crud::*` / `transaction::*` / `migration::*` / `host_functions` / `ZmcDataSet` 的消费方
 - 注意 `SqlParams::SeaValues` -> `SqlxValues` 的枚举变体替换
-- 具体使用点：cmx-api 的 `dct.rs`/`doc.rs`、web-server 的 `datasource.rs`、cmx-biz 的 `zmc_loader.rs`
+- 数据源注册真源：`cmx-service-base/src/datasource.rs`、`cmx-platform-app/src/config/datasource.rs`
+- `execute_sql_with_json` 已无调用方（仅两栈 manager 内保留定义），新代码禁止再用
 
 🔴 **不能简单替换**（需迁移实现）：
-- 依赖 `query_sql_zmc_stream_chunks` 的场景（如 `mem_bench.rs`、需要 O(单行) 内存的流式消费）
+- 依赖 `query_sql_zmc_stream_chunks` 的场景（当前仅 `crates/tests/cmx-database-test` 的 `mem_bench.rs` / `e2e_server.rs` 与 pg 自身，需要 O(单行) 内存的流式消费）
 - 依赖数组列读取还原（`DataValue::Array` 从数据库读取）的场景
-- 直接依赖 `TokioPgRowSource` 全路径的代码（如 `cmx-database-test` 的 `e2e_server.rs:338`、`mem_bench.rs`）需改为 `SqlxPgRowSource`
+- 直接依赖 `TokioPgRowSource` 全路径的代码（如 `cmx-database-test` 的 `e2e_server.rs`、`mem_bench.rs`）需改为 `SqlxPgRowSource`
 
 > **默认使用 `cmx-database`**。除非必须使用上述 4 项独有能力，否则不引入 cmx-database-pg。
 >
 > **两 crate 的 `with_json` 系列 API 均不推荐**：`execute_sql_with_json` / `query_sql_with_json` 仅维护旧代码，新代码必须用 `_with_datavalues`。
 >
-> **导出对称性缺口**（不影响功能）：cmx-database 把 `SqlxPgRowSource` 提升到了 crate 根（`lib.rs:29`），而 pg 侧的 `TokioPgRowSource` 只能走全路径 `cmx_database_pg::zmcdataset::TokioPgRowSource`。
+> **导出对称性缺口**（不影响功能）：cmx-database 把 `SqlxPgRowSource` 提升到了 crate 根（`lib.rs`），而 pg 侧的 `TokioPgRowSource` 只能走全路径 `cmx_database_pg::zmcdataset::TokioPgRowSource`。
 
 ### 2.1 API 全景
 
@@ -167,617 +168,21 @@ DatabaseManager (cmx-database / cmx-database-pg 两者 API 对齐)
 
 ---
 
-## 三、DataValue 参数构造
+---
 
-### 3.1 基础类型直接构造
+## 三、references 索引（细节层，按需读取）
 
-```rust
-use cmx_core::model::cell::DataValue;
+| 文件 | 何时读 | 核心内容 |
+|------|--------|----------|
+| `references/datavalue-and-params.md` | 构造 SQL 参数时 | DataValue 基础构造 / From<Option<T>> 糖 / None→0 vs None→NULL 语义 / dv! 宏 / 数组参数(IN) / ParamsBuilder 全 API / set_opt vs set_opt_null / NullTyped 与 SqlTypeMarker |
+| `references/transactions-and-dataset.md` | 写事务、取结果时 | 事务内执行/查询 / 非事务执行 / DataSet 遍历/单行/整列提取 / 权限创建完整示例（事务+DataValue+Option 糖）/ 动态 UPDATE 完整示例（ParamsBuilder） |
+| `references/wasm-boundary-antipatterns.md` | WASM 插件内执行 SQL、或自查写法时 | DbRequest.data_values 优先级 / NullTyped 序列化格式 / 8 类反模式（with_json / 手写 unwrap_or / 手动占位符 / 语义误改 / 混用 .into() / 滥用 pg / zmc 事务误用） |
 
-let params = vec![
-    DataValue::String(id.clone()),           // TEXT / VARCHAR
-    DataValue::Int(count),                   // BIGINT / INT
-    DataValue::Bool(enabled),                // BOOLEAN
-    DataValue::Float(rate),                  // DOUBLE PRECISION
-    DataValue::Decimal(amount),              // NUMERIC
-    DataValue::DateTime(created_at),         // TIMESTAMPTZ
-    DataValue::Date(birth_date),             // DATE
-    DataValue::Uuid(uuid),                   // UUID
-    DataValue::Binary(bytes),                // BYTEA
-    DataValue::Json(json_string),            // JSONB
-    DataValue::Null,                         // NULL(绑定为 None::<String>)
-];
-```
-
-### 3.2 From<Option<T>> 构造糖(★消除冗长模式)
-
-cmx-core 为 DataValue 实现了 `From<Option<T>>`,**消除 `.map(DataValue::X).unwrap_or(DataValue::Null)` 冗长模式**:
-
-```rust
-// ❌ 旧写法(冗长,且 NULL 丢失类型)
-let params = vec![
-    name.map(DataValue::String).unwrap_or(DataValue::Null),        // Option<String>
-    sort_order.map(DataValue::Int).unwrap_or(DataValue::Null),     // Option<i64> → NULL 无类型!
-];
-
-// ✅ 新写法(.into() 配合 From<Option<T>>)
-let params: Vec<DataValue> = vec![
-    name.into(),        // Option<String> → DataValue::String 或 Null
-    sort_order.into(),  // Option<i64> → DataValue::Int 或 NullTyped(Int) ★带类型
-];
-```
-
-**关键规则**:
-- `Option<String>.into()` → `DataValue::String` 或 `DataValue::Null`(TEXT 列,兼容)
-- `Option<i64>.into()` → `DataValue::Int` 或 `DataValue::NullTyped(Int)` ★带类型
-- `Option<bool>.into()` → `DataValue::Bool` 或 `DataValue::NullTyped(Bool)`
-- `Option<Uuid>.into()` → `DataValue::Uuid` 或 `DataValue::NullTyped(Uuid)`
-- `Option<DateTime<Utc>>.into()` → `DataValue::DateTime` 或 `DataValue::NullTyped(Timestamp)`
-- `Option<NaiveDate>.into()` → `DataValue::Date` 或 `DataValue::NullTyped(Date)`
-- `Option<Decimal>.into()` → `DataValue::Decimal` 或 `DataValue::NullTyped(Decimal)`
-
-> **为什么整型/时间/Uuid 的 None 走 NullTyped 而非 Null?**
-> PostgreSQL prepare 时,`None::<String>` 绑定到 INTEGER/TIMESTAMP/UUID 列会类型不匹配。
-> `NullTyped(Int)` 让绑定层知道应绑 `None::<i64>`,类型正确。
-
-### 3.3 语义判断:None→0 vs None→NULL
-
-**必须逐处核对原语义,不盲目改 .into()**:
-
-```rust
-// 语义 A: None 表示 0(有默认值)
-data.sort_order.unwrap_or(0).into()  // → DataValue::Int(0)
-
-// 语义 B: None 表示 NULL(数据库存 NULL)
-data.sort_order.into()  // → DataValue::NullTyped(Int)
-```
-
-### 3.4 dv! 宏(批量构造)
-
-`dv!` 宏基于 `Into<DataValue>` trait 驱动,适合批量构造参数:
-
-```rust
-use cmx_core::dv;
-
-// 空参数
-let params: Vec<DataValue> = dv!();
-
-// 批量构造(每个 expr 须 Into<DataValue>)
-let params = dv![
-    id.clone(),                    // String → DataValue::String
-    data.code.clone(),             // String
-    data.sort_order.unwrap_or(0),  // i64 → DataValue::Int
-    data.description.clone(),      // Option<String> → DataValue::String 或 Null
-    data.parent_id.clone(),        // Option<String>
-];
-
-// 显式带类型的 NULL(非 Vec,返回单个 DataValue)
-let null_uuid: DataValue = dv!(null Uuid);  // → NullTyped(Uuid)
-```
-
-> **dv! vs vec![]:**
-> `dv!` 的优势在于 `Option<T>` 直接传入即自动 `.into()`,而 `vec![]` 需要每个元素显式 `.into()`。
-> 简单场景(2-3 个参数)可用 `vec![a.into(), b.into()]`,复杂场景用 `dv!` 更简洁。
-
-### 3.5 数组参数(IN 查询)
-
-PostgreSQL 支持 `ANY($1)` 数组绑定,使用 `DataValue::Array`:
-
-```rust
-// 单层同类型数组(IN 查询)
-let role_ids: Vec<String> = vec!["r1".into(), "r2".into()];
-let params = vec![DataValue::Array(
-    role_ids.iter().map(|id| DataValue::String(id.clone())).collect(),
-)];
-
-let sql = "SELECT * FROM cmx_role_permission WHERE role_id = ANY($1)";
-let dataset = mm.query_sql_with_datavalues(&db_id, txn_id, sql, params, "role_perms").await?;
-```
-
-> **注意:** Array 仅支持单层、元素同类型(String/i64/Uuid),绑定层按首个元素推断类型。
-> MySQL/SQLite 不支持原生数组,绑定层会退化为逗号分隔字符串/JSON 字符串。
+**读取原则**：先读 SKILL.md §二 选对 API → 按场景读 1 个 reference → 写完对照 wasm-boundary-antipatterns.md 自查。WASM 插件侧另有 [wasm-plugin-developer](../wasm-plugin-developer/SKILL.md) 技能负责工程三层架构与 DbRequest 差异速览。
 
 ---
 
-## 四、ParamsBuilder:动态 UPDATE SET 子句
-
-### 4.1 问题:占位符漂移
-
-手写动态 UPDATE 时,「SQL SET 子句顺序」与「params Vec push 顺序」必须双重一致,极易出错:
-
-```rust
-// ❌ 旧模式(易错:idx 漂移、sets 和 params 顺序不一致)
-let mut sets: Vec<String> = Vec::new();
-let mut params: Vec<DataValue> = vec![DataValue::String(rule_id.to_string())]; // WHERE $1
-let mut idx = 2;
-if let Some(name) = data.name {
-    sets.push(format!("name = ${idx}"));
-    params.push(DataValue::String(name));
-    idx += 1;
-}
-if let Some(priority) = data.priority {
-    sets.push(format!("priority = ${idx}"));
-    params.push(DataValue::Int(priority));
-    idx += 1;
-}
-// ...
-```
-
-### 4.2 解决:ParamsBuilder 自动管理编号
-
-```rust
-use cmx_core::ParamsBuilder;
-
-// SET 从 $1 起,WHERE id 参数放最后
-let mut b = ParamsBuilder::new(0);  // start_offset = 0 → SET 从 $1 起
-b.set_opt("name", data.name)              // Option<String> → None 跳过该列
- .set_opt("priority", data.priority)      // Option<i64> → None 跳过
- .set_opt("status", data.status);         // Option<i64>
-let (set_clause, mut params) = b.build();
-
-if set_clause.is_empty() {
-    return Err(TraitError::Business("未提供任何更新字段".into()));
-}
-
-// WHERE id 参数放最后,占位符编号 = SET 参数数 + 1
-let where_idx = params.len() + 1;
-params.push(DataValue::String(rule_id.to_string()));
-let sql = format!(
-    "UPDATE cmx_rule SET {set_clause}, update_time = NOW() WHERE id = ${where_idx}"
-);
-
-mm.execute_sql_with_datavalues(&db_id, None, &sql, params).await?;
-```
-
-### 4.3 ParamsBuilder API
-
-| 方法 | 说明 |
-|------|------|
-| `new(start_offset)` | 创建 builder,占位符从 `start_offset + 1` 起编号 |
-| `set(col, val)` | 必填列赋值,val 须 `Into<DataValue>` |
-| `set_opt(col, val)` | 可选列赋值,**None 跳过该列**(不加入 SET) |
-| `set_opt_null(col, val)` | 可选列赋值,**None 写入无类型 NULL**(`DataValue::Null`,绑 TEXT) |
-| `build()` | 返回 `(set_clause: String, params: Vec<DataValue>)` |
-| `len()` / `is_empty()` | 查询当前赋值数 |
-| `next_placeholder()` | 查询下一个占位符编号 |
-
-### 4.4 set_opt vs set_opt_null
-
-```rust
-// set_opt: None → 跳过该列(不更新)
-b.set_opt("name", None::<String>);  // SET 子句不含 name
-
-// set_opt_null: None → 写入 SET name = NULL(无类型,绑 TEXT)
-// 注意:当前实现产生 DataValue::Null(非 NullTyped),仅适用于 TEXT 列。
-// 若目标列是 INTEGER/TIMESTAMP/UUID,应改用 set + 显式 NullTyped:
-b.set_opt_null("description", None::<String>);  // SET description = $N (Null)
-b.set("deleted_at", DataValue::NullTyped(SqlTypeMarker::Timestamp));  // 非 TEXT 列的 NULL
-```
-
-### 4.5 占位符编号策略
-
-ParamsBuilder 的 `start_offset` 取决于 SQL 结构:
-
-| SQL 结构 | start_offset | SET 起始占位符 | 说明 |
-|---------|-------------|--------------|------|
-| `UPDATE t SET ... WHERE id = $1` | 0 | $1 | WHERE 参数放最后(★推荐) |
-| `UPDATE t SET ... WHERE id = $N` (N=SET 数+1) | 0 | $1 | 同上,WHERE 编号动态计算 |
-| `WHERE $1 = ... THEN SET ...` (罕见) | 1 | $2 | WHERE 在前,SET 从 $2 起 |
-
-**推荐模式:** SET 从 $1 起,WHERE 参数放 params 最后,编号 = SET 数 + 1。避免 WHERE 和 SET 占位符交叉。
-
----
-
-## 五、带类型 NULL:NullTyped
-
-### 5.1 问题:NULL 丢失类型
-
-PostgreSQL prepare 时,占位符需要知道目标列类型:
-
-```rust
-// ❌ 问题:NULL 绑定到非 TEXT 列
-DataValue::Null  // 绑定为 None::<String> → INTEGER 列 prepare 类型不匹配!
-
-// ✅ 解决:显式声明 NULL 的目标类型
-DataValue::NullTyped(SqlTypeMarker::Int)  // 绑定为 None::<i64> → INTEGER 列类型正确
-```
-
-### 5.2 SqlTypeMarker 枚举
-
-```rust
-pub enum SqlTypeMarker {
-    Bool,       // BOOLEAN
-    Int,        // BIGINT / INTEGER
-    Float,      // DOUBLE PRECISION / REAL
-    Decimal,    // NUMERIC
-    Text,       // TEXT / VARCHAR
-    Timestamp,  // TIMESTAMPTZ
-    Date,       // DATE
-    Uuid,       // UUID
-    Json,       // JSONB
-    Binary,     // BYTEA
-}
-```
-
-### 5.3 何时需要手动 NullTyped
-
-大多数场景 `From<Option<T>>` 会自动产生正确的 NullTyped:
-- `Option<i64>.into()` → `NullTyped(Int)` ✓
-- `Option<Uuid>.into()` → `NullTyped(Uuid)` ✓
-
-**需要手动 NullTyped 的场景**:
-- SQL 占位符对应非字符串列,但参数来源不是 Option(如条件分支)
-- 显式构造 NULL 参数
-
-```rust
-use cmx_core::model::cell::{DataValue, SqlTypeMarker};
-
-// 条件分支:根据情况传 NULL
-let parent_id_param = if has_parent {
-    DataValue::String(parent_id)
-} else {
-    DataValue::NullTyped(SqlTypeMarker::Text)  // 显式 TEXT 类型 NULL
-};
-
-// 或用 dv! 宏的 null 语法
-let null_uuid: DataValue = cmx_core::dv!(null Uuid);
-```
-
-### 5.4 绑定层行为
-
-| 数据库 | NullTyped 行为 | 其他注意 |
-|--------|---------------|---------|
-| PostgreSQL | 按 SqlTypeMarker 分发到 `None::<T>`(类型精确) | `ShortStr`/`LongStr` 绑定为 `&str`;`Array` 按 PG 数组绑定 |
-| MySQL | 统一 `None::<String>`(MySQL NULL 无类型) | `ShortStr`/`LongStr` 绑定为 String |
-| SQLite | 统一 `None::<String>`(SQLite 动态类型) | 同 MySQL |
-
----
-
-## 六、事务模式
-
-### 6.1 事务内执行 SQL
-
-```rust
-// 1. 开启事务
-let txn_id = mm.get_transaction_context().begin(&db_id).await?;
-
-// 2. 事务内执行(传 txn_id: Some)
-let result = mm.execute_sql_with_datavalues(
-    &db_id,
-    Some(&txn_id),   // ★ 事务内执行
-    "INSERT INTO cmx_permission (id, code) VALUES ($1, $2)",
-    dv![id, code],
-).await?;
-
-// 3. 提交或回滚
-match verify_result {
-    Ok(_) => mm.commit_transaction(&txn_id).await?,
-    Err(e) => {
-        mm.rollback_transaction(&txn_id).await?;
-        return Err(e);
-    }
-}
-```
-
-### 6.2 事务内查询
-
-```rust
-let dataset = mm.query_sql_with_datavalues(
-    &db_id,
-    Some(&txn_id),   // 事务内查询
-    "SELECT id, code FROM cmx_permission WHERE domain_code = $1",
-    dv![domain_code],
-    "perm_scope",    // dataset_id(用于日志/调试)
-).await?;
-```
-
-### 6.3 非事务执行
-
-```rust
-// txn_id: None → 自动提交
-mm.execute_sql_with_datavalues(&db_id, None, sql, params).await?;
-```
-
----
-
-## 七、从 DataSet 提取结果
-
-### 7.1 遍历行
-
-```rust
-let dataset = mm.query_sql_with_datavalues(&db_id, None, sql, params, "query_name").await?;
-let schema = dataset.schema.as_ref();
-
-for row in dataset.iter() {
-    let id: String = row.get_by_name_as::<String>(schema, "id").unwrap_or_default();
-    let name: Option<String> = row.get_by_name_as::<String>(schema, "name");
-    let count: i64 = row.get_by_name_as::<i64>(schema, "count").unwrap_or(0);
-}
-```
-
-### 7.2 提取单行(首行)
-
-```rust
-let row = dataset.iter().next()
-    .ok_or_else(|| IamError::Business("记录不存在".into()))?;
-let json_val = row.to_json_value(schema);
-let permission: Permission = serde_json::from_value(json_val)?;
-```
-
-### 7.3 提取整列为 Vec
-
-```rust
-let ids: Vec<String> = dataset.iter()
-    .filter_map(|row| row.get_by_name_as::<String>(schema, "id"))
-    .collect();
-```
-
----
-
-## 八、完整示例:权限创建(事务 + DataValue + Option 糖)
-
-```rust
-use cmx_core::model::cell::DataValue;
-use cmx_core::ParamsBuilder;
-
-async fn create_permission(
-    &self,
-    txn_id: &str,
-    data: &PermissionForCreate,
-) -> Result<Permission, TraitError> {
-    let id = cmx_utils::id::snowflake_id_str();
-    let full_code_path = format!("/{}", data.code);
-    let level = 1i64;
-
-    let sql = "INSERT INTO cmx_permission \
-               (id, code, name, resource_type, parent_id, sort_order, description, \
-                domain_code, app_code, module_code, extension, status, archived, \
-                parent_code, full_code_path, is_leaf, level) \
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, $13, $14, 1, $15)";
-
-    // ★ 使用 .into() 糖,Option<String> 自动转 Null,Option<i64> 自动转 NullTyped(Int)
-    let params = vec![
-        DataValue::String(id),
-        DataValue::String(data.code.clone()),
-        DataValue::String(data.name.clone()),
-        data.resource_type.clone().into(),      // Option<String> → String 或 Null
-        data.parent_id.clone().into(),           // Option<String>
-        data.sort_order.unwrap_or(0).into(),     // ★保留 None→0 语义
-        data.description.clone().into(),         // Option<String>
-        data.domain_code.clone().into(),
-        data.app_code.clone().into(),
-        data.module_code.clone().into(),
-        data.extension.clone().into(),
-        DataValue::Int(1),                       // status 默认 1
-        parent_code.clone().into(),              // Option<String>
-        DataValue::String(full_code_path),
-        DataValue::Int(level),
-    ];
-
-    self.mm
-        .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
-        .await
-        .map_err(|e| TraitError::Business(format!("新增权限失败: {e}")))?;
-
-    // 查询返回
-    let sql = "SELECT * FROM cmx_permission WHERE id = $1";
-    let ds = self.mm
-        .query_sql_with_datavalues(&self.db_id, Some(txn_id), sql, vec![DataValue::String(id)], "perm")
-        .await?;
-    extract_permission(ds)
-}
-```
-
-## 九、完整示例:动态 UPDATE(ParamsBuilder)
-
-```rust
-use cmx_core::ParamsBuilder;
-use cmx_core::model::cell::DataValue;
-
-async fn update_rule(
-    &self,
-    rule_id: &str,
-    data: UpdateRuleRequest,
-) -> Result<(), TraitError> {
-    // ★ ParamsBuilder 自动管理占位符,SET 从 $1 起
-    let mut b = ParamsBuilder::new(0);
-    b.set_opt("name", data.name)               // Option<String>
-     .set_opt("priority", data.priority)       // Option<i64> → NullTyped(Int)
-     .set_opt("status", data.status)           // Option<i64>
-     .set_opt("description", data.description); // Option<String>
-    let (set_clause, mut params) = b.build();
-
-    if set_clause.is_empty() {
-        return Err(TraitError::Business("未提供任何更新字段".into()));
-    }
-
-    // WHERE id 放最后
-    let where_idx = params.len() + 1;
-    params.push(DataValue::String(rule_id.to_string()));
-    let sql = format!(
-        "UPDATE cmx_rule SET {set_clause}, update_time = NOW() WHERE id = ${where_idx}"
-    );
-
-    self.mm.execute_sql_with_datavalues(&self.db_id, None, &sql, params).await?;
-    Ok(())
-}
-```
-
----
-
-## 十、WASM 边界:DbRequest.data_values
-
-### 10.1 问题:JSON 退化带类型 NULL
-
-WASM plugin 通过 `DbRequest` 传参给宿主。旧路径只有 `params: Option<JsonValue>`,NULL 经 `json_to_data_values` 退化为无类型 `DataValue::Null`。
-
-### 10.2 解决:data_values 字段
-
-```rust
-// WASM plugin 端(cmx-plugin-sdk)
-use cmx_core::wasm_types::DbRequest;
-use cmx_core::model::cell::{DataValue, SqlTypeMarker};
-
-let req = DbRequest {
-    sql: "INSERT INTO t (id, optional_int) VALUES ($1, $2)".into(),
-    data_values: Some(vec![
-        DataValue::String(id),
-        DataValue::NullTyped(SqlTypeMarker::Int),  // ★带类型 NULL,跨边界保留
-    ]),
-    ..Default::default()
-};
-```
-
-### 10.3 宿主端优先级
-
-宿主 `do_query`/`do_execute` 用 `match (data_values, params)` 元组匹配:
-1. **data_values 优先**(带类型 NULL 生效)
-2. params JSON(向后兼容,旧 plugin 走这里)
-3. 无参数
-
-### 10.4 NullTyped 序列化格式
-
-`DataValue::NullTyped(SqlTypeMarker::Int)` 序列化为字符串 `"$null:Int"`(与 Binary 的 `B64:` 前缀模式一致),跨 JSON/MsgPack 往返保留类型信息。
-
----
-
-## 十一、反模式
-
-### 11.1 ❌ 使用 execute_sql_with_json(新代码)
-
-```rust
-// ❌ 旧路径,JSON 退化 NULL 类型
-let params = serde_json::json!([id, name, null]);
-mm.execute_sql_with_json(&db_id, None, sql, params).await?;
-```
-
-```rust
-// ✅ 使用 execute_sql_with_datavalues
-let params = dv![id, name, None::<String>];
-mm.execute_sql_with_datavalues(&db_id, None, sql, params).await?;
-```
-
-### 11.2 ❌ 手动 .map().unwrap_or(DataValue::Null)
-
-```rust
-// ❌ 冗长,且整型 NULL 丢失类型
-let params = vec![
-    name.map(DataValue::String).unwrap_or(DataValue::Null),
-    count.map(DataValue::Int).unwrap_or(DataValue::Null),  // NULL 无类型!
-];
-```
-
-```rust
-// ✅ .into() 糖
-let params: Vec<DataValue> = vec![
-    name.into(),    // Option<String> → String 或 Null
-    count.into(),   // Option<i64> → Int 或 NullTyped(Int) ★
-];
-```
-
-### 11.3 ❌ 手动管理占位符编号
-
-```rust
-// ❌ idx 漂移风险
-let mut idx = 2;
-if let Some(name) = data.name {
-    sets.push(format!("name = ${idx}"));
-    params.push(DataValue::String(name));
-    idx += 1;
-}
-```
-
-```rust
-// ✅ ParamsBuilder 自动管理
-let mut b = ParamsBuilder::new(0);
-b.set_opt("name", data.name);
-```
-
-### 11.4 ❌ 盲目把 unwrap_or(DataValue::Int(0)) 改成 .into()
-
-```rust
-// 原代码语义:None → 0(有默认值)
-data.sort_order.map(DataValue::Int).unwrap_or(DataValue::Int(0))
-
-// ❌ 错误改法:None → NullTyped(Int),语义变了(NULL ≠ 0)
-data.sort_order.into()
-
-// ✅ 正确改法:保留 None→0 语义
-data.sort_order.unwrap_or(0).into()
-```
-
-### 11.5 ❌ 在 vec![] 中混用 .into() 和 DataValue::X 导致类型推断歧义
-
-```rust
-// ❌ 可能报类型推断错误(vec![] 的元素类型不明确)
-let params = vec![
-    id,           // String → ?
-    count.into(), // ? → ?
-];
-```
-
-```rust
-// ✅ 显式标注或用 dv! 宏
-let params: Vec<DataValue> = vec![
-    DataValue::String(id),
-    count.into(),
-];
-// 或
-let params = dv![id, count];
-```
-
-### 11.6 ❌ 滥用 cmx-database-pg 替代 cmx-database
-
-```rust
-// ❌ 反模式：非流式场景引入 cmx-database-pg
-use cmx_database_pg::get_default_pg_db_manager;
-let mm = get_default_pg_db_manager();
-mm.execute_sql_with_datavalues(&db_id, None, sql, params).await?;
-```
-
-```rust
-// ✅ 正确：默认用 cmx-database
-use cmx_database::get_default_db_manager;
-let mm = get_default_db_manager();
-mm.execute_sql_with_datavalues(&db_id, None, sql, params).await?;
-```
-
-> cmx-database-pg 仅在需要 `query_sql_zmc_stream_chunks` 或数组列读取还原时引入。
-
-### 11.7 ❌ 用 cmx-database-pg 的 with_json API
-
-```rust
-// ❌ 反模式：cmx-database-pg 的 with_json 同样不推荐
-use cmx_database_pg::get_default_pg_db_manager;
-let mm = get_default_pg_db_manager();
-mm.query_sql_with_json(&db_id, None, sql, json!([id]), "ds").await?;
-```
-
-```rust
-// ✅ 正确：两 crate 均用 _with_datavalues
-mm.query_sql_with_datavalues(&db_id, None, sql, dv![id], "ds").await?;
-```
-
-### 11.8 ❌ 在事务内调 query_sql_zmc（ZmcDataSet 不参与事务）
-
-```rust
-// ❌ 反模式：query_sql_zmc 是只读连接池路径，不走事务
-let txn_id = mm.get_transaction_context().begin(&db_id).await?;
-let zmc_ds = mm.query_sql_zmc_with_datavalues(&db_id, sql, params, "ds").await?;
-// ⚠️ zmc_ds 不在事务内，读到的是其他连接的快照
-mm.commit_transaction(&txn_id).await?;
-```
-
-```rust
-// ✅ 正确：事务内用 query_sql_with_datavalues（返回 DataSet）
-let ds = mm.query_sql_with_datavalues(&db_id, Some(&txn_id), sql, params, "ds").await?;
-```
-
-> `query_sql_zmc*` 系列只读、走连接池、不参与事务；业务单据装载是只读场景才用 ZmcDataSet。
-
----
-
-## 十二、关键源文件参考
+## 四、关键源文件参考
 
 | 文件 | 职责 |
 |------|------|
@@ -792,12 +197,12 @@ let ds = mm.query_sql_with_datavalues(&db_id, Some(&txn_id), sql, params, "ds").
 | `crates/libs/cmx-core/src/model/cell.rs` | DataValue/SqlTypeMarker/SqlParam/dv! 宏/From<Option<T>> |
 | `crates/libs/cmx-core/src/model/builder.rs` | ParamsBuilder |
 | `crates/libs/cmx-core/src/wasm_types/database.rs` | DbRequest(data_values 字段) |
-| `crates/libs/cmx-iam/src/permission/service.rs` | 实战示例:权限 CRUD + 事务 + Option 糖 |
+| `crates/libs/cmx-iam/src/permission/service/`（目录，含 import.rs 等） | 实战示例:权限 CRUD + 事务 + Option 糖 |
 | `crates/libs/cmx-iam/src/rule/service.rs` | 实战示例:ParamsBuilder 动态 UPDATE |
 
 ---
 
-## 十三、与其他技能的协同
+## 五、与其他技能的协同
 
 | 协同技能 | 关系 | 触发场景 |
 |---------|------|---------|
