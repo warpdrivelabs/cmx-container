@@ -144,7 +144,7 @@ description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 
 ### 步骤 6：生成报告
 
 1. **工具**：`Write`（按 [report-template.md](./references/report-template.md)）。
-2. **路径**：`cmx-container/.trae/documents/rust-arch-review-YYYY-MM-DD.md`。
+2. **路径**：`cmx-container/documents/rust-arch-review-YYYY-MM-DD.md`。
 3. **产物**：完整报告 + TODO 任务清单 + 复用偏离度表 + 规范符合度矩阵。
 
 ### 步骤 7：与用户确认修改计划
@@ -215,4 +215,4 @@ description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 
 - 4 大类 11 子维度检查清单：[references/checklist.md](./references/checklist.md)
 - 反模式与项目内真实案例：[references/anti-patterns.md](./references/anti-patterns.md)
 - 报告输出模板：[references/report-template.md](./references/report-template.md)
-- 技能完善计划：[20260715_rust-arch-review_技能完善方案.md](../../../.trae/documents/20260715_rust-arch-review_技能完善方案.md)
+- 技能完善计划：[20260715_rust-arch-review_技能完善方案.md](../../../documents/20260715_rust-arch-review_技能完善方案.md)

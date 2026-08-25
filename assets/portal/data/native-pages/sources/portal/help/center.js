@@ -195,7 +195,7 @@ async function loadRegistry () {
     console.warn('[help-center] DAM registry 加载失败（显示名降级为编码）:', e && e.message || e)
     state.registry = { domains: [], applications: [], modules: [] }
     const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
-    cmx().cmxWarn && cmx().cmxWarn(`功能目录加载失败：${e && e.message || e}（应用名将显示为编码）`)
+    cmx().cmxWarn?.(`功能目录加载失败：${e && e.message || e}（应用名将显示为编码）`)
   }
 }
 

@@ -2,7 +2,7 @@
 
 **评审日期**: 2026-04-24
 **评审人**: AI Code Reviewer
-**被评审文档**: [rds-dataset-enterprise-evaluation.md](file:///e:/rustspace/cmx/cmx-container/.trae/documents/rds-dataset-enterprise-evaluation.md)
+**被评审文档**: [rds-dataset-enterprise-evaluation.md](file:///e:/rustspace/cmx/cmx-container/documents/rds-dataset-enterprise-evaluation.md)
 
 ---
 

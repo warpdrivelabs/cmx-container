@@ -9,7 +9,7 @@
 
 use serde_json::json;
 
-use crate::cache::{cached_read_json, cached_read_text, content_rev, invalidate_paths};
+use crate::cache::{cached_read_json, cached_read_text, content_rev_with_meta, invalidate_paths};
 use crate::config::data_path;
 use crate::error::{PortalError, PortalResult};
 use crate::fsutil::{write_json_atomic, write_text_atomic};
@@ -285,8 +285,22 @@ async fn read_full_from_row(row: &serde_json::Value) -> PortalResult<serde_json:
     }
     let html = html.ok_or_else(|| PortalError::not_found("HTML 源码文件缺失或损坏"))?;
     let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("");
-    // rev 实时算：基于已读 html 内容（不读索引行 rev，天然一致）。
-    let rev = content_rev(html.as_bytes());
+    // rev 实时算：源码内容 + 行字段 canonical（domain|app|module|doc|name|details|relPath，
+    // null/缺失归一空串）。行字段参与哈希后，服务端只改坐标（不动 html）也能让前端
+    // IndexedDB 缓存失效重拉，坐标随缓存自愈传播。
+    let field = |k: &str| row.get(k).and_then(|v| v.as_str()).unwrap_or("");
+    let rev = content_rev_with_meta(
+        &[
+            field("domain"),
+            field("app"),
+            field("module"),
+            field("doc"),
+            field("name"),
+            field("details"),
+            field("relPath"),
+        ],
+        &html,
+    );
     Ok(json!({
         "id": id,
         "name": row.get("name").and_then(|v| v.as_str()).unwrap_or(""),
@@ -560,6 +574,7 @@ pub async fn get_html_page_by_id(id: &str) -> PortalResult<serde_json::Value> {
 /// 请求体可选 `clientRevs: { id → rev }`：
 /// - 缺省 / 空 → 全量返回所有 page 的 body（向后兼容老前端）。
 /// - 存在 → 仅当 `clientRevs[id] !== 索引行 rev` 时才读源文件返回 body；命中（相等）则省略 body。
+///
 /// `revs` 始终返回全量 `{ id → rev }` 清单，供前端刷新本地 rev 表。
 ///
 /// # Arguments

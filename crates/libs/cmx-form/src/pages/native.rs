@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::cache::{cached_read_json, cached_read_text, content_rev, invalidate_paths};
+use crate::cache::{cached_read_json, cached_read_text, content_rev_with_meta, invalidate_paths};
 use crate::config::data_path;
 use crate::error::{PortalError, PortalResult};
 use crate::fsutil::{write_json_atomic, write_text_atomic};
@@ -186,8 +186,13 @@ async fn full_page_from_row(row: &serde_json::Value) -> PortalResult<NativePageF
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    // rev 实时算：基于已读 source 内容（方案2：不读索引行 rev，天然一致）。
-    let rev = content_rev(source.as_bytes());
+    // rev 实时算：源码内容 + 行字段 canonical（name|details|sourceType|relPath）。
+    // 行字段参与哈希，改 name/details 等不动源码的变更也能让前端缓存失效自愈。
+    let row_str = |k: &str| row.get(k).and_then(|v| v.as_str()).unwrap_or("");
+    let rev = content_rev_with_meta(
+        &[row_str("name"), row_str("details"), &source_type, rel_raw],
+        &source,
+    );
     Ok(NativePageFull {
         id,
         name: row

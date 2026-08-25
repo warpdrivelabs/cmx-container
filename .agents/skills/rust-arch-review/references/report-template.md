@@ -1,7 +1,7 @@
 # 审查报告输出模板（Report Template）
 
 > 适用范围：rust-arch-review 技能生成的最终审查报告。
-> 报告路径：`cmx-container/.trae/documents/rust-arch-review-YYYY-MM-DD.md`
+> 报告路径：`cmx-container/documents/rust-arch-review-YYYY-MM-DD.md`
 > 使用方法：将本模板复制为报告骨架，按审查结果逐节填充。
 
 ---
@@ -430,7 +430,7 @@ graph TD
 
 ### 13.1 关联文件
 
-- 计划文档：[20260715_rust-arch-review_技能完善方案.md](../../../.trae/documents/20260715_rust-arch-review_技能完善方案.md)
+- 计划文档：[20260715_rust-arch-review_技能完善方案.md](../../../documents/20260715_rust-arch-review_技能完善方案.md)
 - 项目规范：[AGENTS.md](../../../AGENTS.md)
 - 复用资产清单：[references/reuse-catalog.md](./reuse-catalog.md)
 - 检查清单：[references/checklist.md](./checklist.md)

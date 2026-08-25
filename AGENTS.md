@@ -238,7 +238,7 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 
 ### 6.1 app_id 取值规则（按 `[deploy] mode` 切换）
 
-> 本节规则自 2026-07-21 起更新，对应方案：[单体与分体部署模式统一方案](.trae/documents/20260721_cmx-container_单体与分体部署模式统一方案.md)
+> 本节规则自 2026-07-21 起更新，对应方案：[单体与分体部署模式统一方案](documents/20260721_cmx-container_单体与分体部署模式统一方案.md)
 
 `app_id` 的取值由 `[deploy] mode` 决定，不再无条件等于 `module_code`：
 
@@ -381,7 +381,7 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 
 > 来源技能：`plan-naming` + `doc-generator`。
 
-- `/plan` 方案文档命名：`.trae/documents/<yyyyMMdd>[_<模块名>]_<中文标题>.md`（日期 6/8 位，标题**必须**中文）。
+- `/plan` 方案文档命名：`documents/<yyyyMMdd>[_<模块名>]_<中文标题>.md`（日期 6/8 位，标题**必须**中文）。
 - 为 crate 生成 README → `doc-generator`（至少含简介 + 模块树 + **≥5 个使用场景** + 错误处理 + FAQ）。
 
 ---
@@ -391,7 +391,7 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 > 来源技能：`clippy-fix` + `rust-arch-review`。
 
 - `cargo clippy` **排除**三类告警：`too_many_arguments` / `unused_variables` / `unused_functions`；其余按 auto-fix → 简单 → 中等 → 重构四阶段处理，流程调 `clippy-fix`。
-- 架构审查**五维度**（Crate 划分 / Trait 解耦 / 依赖管理 / 错误处理 / 异步模式）调 `rust-arch-review`，输出 `.trae/documents/rust-arch-review-YYYY-MM-DD.md`。
+- 架构审查**五维度**（Crate 划分 / Trait 解耦 / 依赖管理 / 错误处理 / 异步模式）调 `rust-arch-review`，输出 `documents/rust-arch-review-YYYY-MM-DD.md`。
 
 ---
 
