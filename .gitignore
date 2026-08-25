@@ -56,3 +56,4 @@ __pycache__/
 .playwright-cli
 .mimosa/
 /data/notification-center/
+/databack/
