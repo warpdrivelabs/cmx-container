@@ -1247,12 +1247,10 @@
           "align": "right"
         },
         {
-          "dataType": "BIGINT",
+          "dataType": "VARCHAR",
           "fieldLength": 20,
           "nullable": false,
           "dimType": "dimension",
-          "intDigits": 20,
-          "decimalDigits": 0,
           "id": "doc_type_id",
           "name": "doc_type_id",
           "caption": {
@@ -1275,7 +1273,8 @@
               "domain": "fi",
               "application": "cmxfico",
               "module": "gl"
-            }
+            },
+            "valueField": "code"
           }
         },
         {
