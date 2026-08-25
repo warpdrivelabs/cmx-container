@@ -9,20 +9,6 @@
       "relPath": "portal/datasource/cluster-datasource.js"
     },
     {
-      "id": "portal.definition.base-dct",
-      "name": "字典基础元数据",
-      "details": "native_pages 方式实现的字典基础元数据页面",
-      "sourceType": "js",
-      "relPath": "portal/definition/base-dct.js"
-    },
-    {
-      "id": "definition.base-dct-native",
-      "name": "字典基础元数据(native_pages)",
-      "details": "native_pages 独立实现的字典基础元数据功能",
-      "sourceType": "js",
-      "relPath": "definition/base-dct-native.js"
-    },
-    {
       "id": "portal.dam.registry-center",
       "name": "DAM 注册管理中心",
       "details": "Domain / Application / Module 注册主数据管理中心",
@@ -149,20 +135,6 @@
       "relPath": "fi/cmxfico/voucher-native-zmcjson.js"
     },
     {
-      "id": "portal.doc.doc-loader",
-      "name": "通用业务单据加载页（元数据驱动）",
-      "details": "纯通用：层数 N/各层列/主从关系全来自 /api/doc/meta，动态渲染 N 个 grid。会计凭证只是一组 props（domain/application/module/file + apiPath/binary 选数据通道）。零业务假设，换任何 L1..LN 单据定义即可用。",
-      "sourceType": "js",
-      "relPath": "portal/doc/doc-loader.js"
-    },
-    {
-      "id": "portal.doc.doc-service-test",
-      "name": "业务单据加载服务·全能力自检（native_pages）",
-      "details": "诊断页：逐项调用后端全部能力（/meta、5 装载端点、POST 富查询、子层下推、keyset 游标、/children 懒下钻、tokio-zmc-stream 真流式），展示 PASS/FAIL 清单。元数据驱动、零业务假设。",
-      "sourceType": "js",
-      "relPath": "portal/doc/doc-service-test.js"
-    },
-    {
       "id": "portal.system.registry-editor",
       "name": "注册表编辑器",
       "details": "仿 Windows regedit 的注册表编辑器（native_pages）：左树右值 + 地址栏 + 搜索 + 右键菜单 + 导入/导出 .json；数据为 JSON 树（__values__ 存值，REG_SZ/REG_DWORD/REG_BOOL/REG_JSON 四类型），可编辑根存 localStorage，HKEY_PORTAL_RUNTIME 只读根实时接 /api/registry/dam。",
@@ -182,13 +154,6 @@
       "details": "native_pages 异步任务管理与监控三区工作台（异步任务中心 M1+M2+M3 全能力）：explorer 集群概览(按状态计数+活跃数,点击卡片过滤)+新建作业(job.demo/rpt.compute/rpt.verify 动态表单+优先级+整体失败开关+未知种类原始JSON)+过滤器(种类/状态/关键字)；content 活跃/历史双 tab——活跃作业列表(实时进度条+状态徽标+归属节点+优先级+时间,活跃优先排序)+选中作业监控详情(大进度条+阶段+ETA+明细流+实时日志+全控制条 暂停/恢复/停止/重启/归档)，历史作业列表(已归档只读)+历史详情；property 作业完整属性(含归档时间)。归档=RU/HI 分离(DELETE 转移到 cmx_job_hi 历史表,非真删),历史查询 GET /api/jobs/history。控制走 POST /api/jobs/*+DELETE归档，进度走 SSE /api/jobs/{id}/events+/api/jobs/events汇总流；后端 cmx-job-api(JobModule)+JobManager(PgJobStore持久化+分布式SKIP LOCKED抢占HA+历史归档)。",
       "sourceType": "js",
       "relPath": "portal/job/job-monitor.js"
-    },
-    {
-      "id": "portal.dct.data-editor",
-      "name": "通用字典数据维护",
-      "details": "元数据驱动：根据 dictCode 加载 DictView，支持平级/树形字典的查询/搜索/分页/新增/编辑/删除，changeset 显式保存。审计列只读显示，派生层级列隐藏。",
-      "sourceType": "js",
-      "relPath": "portal/dct/data-editor.js"
     },
     {
       "id": "portal.display.showcase",

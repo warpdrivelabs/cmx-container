@@ -25,28 +25,6 @@
     },
     {
       "app": "",
-      "details": "Outlook邮箱 explorer区：cmx-web-treeview 邮箱目录，通过 workspace.context 推送 selectedMailboxId",
-      "domain": "_legacy",
-      "id": "outlook-mail-explorer",
-      "latestHtmlFile": "outlook-mail-explorer.html",
-      "module": "",
-      "name": "Outlook邮箱-目录树",
-      "page": "outlook-mail-explorer",
-      "relPath": "_legacy/outlook-mail-explorer.html"
-    },
-    {
-      "app": "",
-      "details": "Outlook邮箱 content区：上方 cmx-revo-grid 邮件列表 + 下方邮件正文，监听 selectedMailboxId 切换文件夹",
-      "domain": "_legacy",
-      "id": "outlook-mail-content",
-      "latestHtmlFile": "outlook-mail-content.html",
-      "module": "",
-      "name": "Outlook邮箱-邮件列表与正文",
-      "page": "outlook-mail-content",
-      "relPath": "_legacy/outlook-mail-content.html"
-    },
-    {
-      "app": "",
       "details": "CmxRevoGrid + CmxMasterSlave + CmxColumnModel + CmxDataSet 主从表格演示",
       "domain": "_legacy",
       "id": "demo-master-slave",
@@ -80,42 +58,6 @@
     },
     {
       "app": "",
-      "details": "我的测试页面-click-function1",
-      "domain": "_legacy",
-      "id": "my-page-test101",
-      "latestHtmlFile": "my-page-test101.html",
-      "module": "",
-      "name": "我的测试页面1",
-      "page": "my-page-test101",
-      "relPath": "_legacy/my-page-test101.html",
-      "timestamp": "20260511_123311830"
-    },
-    {
-      "app": "",
-      "details": "我的测试页面-click-function1",
-      "domain": "_legacy",
-      "id": "my-page-test102",
-      "latestHtmlFile": "my-page-test102.html",
-      "module": "",
-      "name": "我的测试页面1",
-      "page": "my-page-test102",
-      "relPath": "_legacy/my-page-test102.html",
-      "timestamp": "20260511_124552755"
-    },
-    {
-      "app": "",
-      "details": "我的测试页面-click-function1",
-      "domain": "_legacy",
-      "id": "my-page-test103",
-      "latestHtmlFile": "my-page-test103.html",
-      "module": "",
-      "name": "我的测试页面1",
-      "page": "my-page-test103",
-      "relPath": "_legacy/my-page-test103.html",
-      "timestamp": "20260507_174835342"
-    },
-    {
-      "app": "",
       "details": "exp_view1",
       "domain": "_legacy",
       "id": "exp_view1",
@@ -128,18 +70,6 @@
     },
     {
       "app": "",
-      "details": "exp_view2",
-      "domain": "_legacy",
-      "id": "exp_view2",
-      "latestHtmlFile": "exp_view2.html",
-      "module": "",
-      "name": "exp_view2",
-      "page": "exp_view2",
-      "relPath": "_legacy/exp_view2.html",
-      "timestamp": "20260508_082419196"
-    },
-    {
-      "app": "",
       "details": "pro_view1",
       "domain": "_legacy",
       "id": "pro_view1",
@@ -149,18 +79,6 @@
       "page": "pro_view1",
       "relPath": "_legacy/pro_view1.html",
       "timestamp": "20260510_224732724"
-    },
-    {
-      "app": "",
-      "details": "pro_view2",
-      "domain": "_legacy",
-      "id": "pro_view2",
-      "latestHtmlFile": "pro_view2.html",
-      "module": "",
-      "name": "pro_view2",
-      "page": "pro_view2",
-      "relPath": "_legacy/pro_view2.html",
-      "timestamp": "20260508_082738370"
     },
     {
       "app": "",
@@ -226,53 +144,6 @@
       "latestHtmlFile": "pre_view2_.html",
       "name": "pre_view2",
       "timestamp": "20260508_083434368"
-    },
-    {
-      "app": "",
-      "details": "flt_view1",
-      "domain": "_legacy",
-      "id": "flt_view1",
-      "latestHtmlFile": "flt_view1.html",
-      "module": "",
-      "name": "flt_view1",
-      "page": "flt_view1",
-      "relPath": "_legacy/flt_view1.html",
-      "timestamp": "20260509_221140216"
-    },
-    {
-      "app": "",
-      "details": "flt_view2",
-      "domain": "_legacy",
-      "id": "flt_view2",
-      "latestHtmlFile": "flt_view2.html",
-      "module": "",
-      "name": "flt_view2",
-      "page": "flt_view2",
-      "relPath": "_legacy/flt_view2.html",
-      "timestamp": "20260509_221153207"
-    },
-    {
-      "app": "",
-      "details": "ws-shared-model",
-      "domain": "_legacy",
-      "id": "ws-shared-model",
-      "latestHtmlFile": "ws-shared-model.html",
-      "module": "",
-      "name": "ws-shared-model",
-      "page": "ws-shared-model",
-      "relPath": "_legacy/ws-shared-model.html"
-    },
-    {
-      "app": "",
-      "details": "my-data-set",
-      "domain": "_legacy",
-      "id": "my-data-set",
-      "latestHtmlFile": "my-data-set.html",
-      "module": "",
-      "name": "my-data-set",
-      "page": "my-data-set",
-      "relPath": "_legacy/my-data-set.html",
-      "timestamp": "20260517_211456485"
     },
     {
       "app": "",
@@ -837,28 +708,6 @@
       "latestHtmlFile": "voucher.html"
     },
     {
-      "id": "ignite-combo-editor-demo",
-      "name": "cmx-ignite-combo 编辑器演示",
-      "details": "cmx-ignite-combo 作为 cmx-ui5-form 与 cmx-revo-grid 的字段编辑器（editMode=ignite-combo）；表格/表单共享 CmxColumnModel，游标联动",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "ignite-combo-editor-demo",
-      "relPath": "_legacy/ignite-combo-editor-demo.html",
-      "latestHtmlFile": "ignite-combo-editor-demo.html"
-    },
-    {
-      "id": "ignite-list-demo",
-      "name": "cmx-ignite-list 主从演示",
-      "details": "cmx-ignite-list 绑定 CmxDataSet + CmxColumnModel（toTitleCols/iconCol），点击列表项移动主表游标，明细 cmx-revo-grid 从表联动",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "ignite-list-demo",
-      "relPath": "_legacy/ignite-list-demo.html",
-      "latestHtmlFile": "ignite-list-demo.html"
-    },
-    {
       "id": "fi.cmxfico.gl.voucher-doc",
       "name": "会计凭证（html_pages）",
       "details": "cmx-fico 总账凭证四层主从，__designer_meta__ 声明式驱动，基于 /api/doc/* + fico-db",
@@ -1181,50 +1030,6 @@
       "relPath": "fi/cmxfico/gl/dictrel-prop-detail.html"
     },
     {
-      "app": "cmxfico",
-      "domain": "fi",
-      "id": "fi.cmxfico.gl.rpt-ws-model",
-      "latestHtmlFile": "rpt-ws-model.html",
-      "module": "gl",
-      "name": "财务报表·共享模型(隐藏)",
-      "page": "rpt-ws-model",
-      "pageId": "fi.cmxfico.gl.rpt-ws-model",
-      "relPath": "fi/cmxfico/gl/rpt-ws-model.html"
-    },
-    {
-      "app": "cmxfico",
-      "domain": "fi",
-      "id": "fi.cmxfico.gl.rpt-ws-explorer",
-      "latestHtmlFile": "rpt-ws-explorer.html",
-      "module": "gl",
-      "name": "财务报表·报表目录",
-      "page": "rpt-ws-explorer",
-      "pageId": "fi.cmxfico.gl.rpt-ws-explorer",
-      "relPath": "fi/cmxfico/gl/rpt-ws-explorer.html"
-    },
-    {
-      "app": "cmxfico",
-      "domain": "fi",
-      "id": "fi.cmxfico.gl.rpt-ws-content",
-      "latestHtmlFile": "rpt-ws-content.html",
-      "module": "gl",
-      "name": "财务报表·报表视图(表样)",
-      "page": "rpt-ws-content",
-      "pageId": "fi.cmxfico.gl.rpt-ws-content",
-      "relPath": "fi/cmxfico/gl/rpt-ws-content.html"
-    },
-    {
-      "app": "cmxfico",
-      "domain": "fi",
-      "id": "fi.cmxfico.gl.rpt-ws-prop",
-      "latestHtmlFile": "rpt-ws-prop.html",
-      "module": "gl",
-      "name": "财务报表·属性/数据集/勾稽",
-      "page": "rpt-ws-prop",
-      "pageId": "fi.cmxfico.gl.rpt-ws-prop",
-      "relPath": "fi/cmxfico/gl/rpt-ws-prop.html"
-    },
-    {
       "id": "fi.cmxfico.gl.rpt-designer-model",
       "latestHtmlFile": "rpt-designer-model.html",
       "module": "gl",
@@ -1307,17 +1112,6 @@
       "relPath": "fi/cmxfico/gl/voucher-flex.html",
       "latestHtmlFile": "voucher-flex.html",
       "doc": null
-    },
-    {
-      "app": "cmxfico",
-      "domain": "fi",
-      "id": "fi.cmxfico.gl.dct-data-editor-html",
-      "pageId": "fi.cmxfico.gl.dct-data-editor-html",
-      "latestHtmlFile": "dct-data-editor-html.html",
-      "module": "gl",
-      "name": "字典数据维护(HTML)",
-      "page": "dct-data-editor-html",
-      "relPath": "fi/cmxfico/gl/dct-data-editor-html.html"
     },
     {
       "id": "fi.cmxfico.gl.meta-model-service-test",

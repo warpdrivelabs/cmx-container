@@ -779,46 +779,6 @@
       "latestHtmlFile": "dictrel-prop-detail.html"
     },
     {
-      "id": "fi.cmxfico.gl.rpt-ws-model",
-      "name": "财务报表·共享模型(隐藏)",
-      "domain": "fi",
-      "app": "cmxfico",
-      "module": "gl",
-      "page": "rpt-ws-model",
-      "relPath": "fi/cmxfico/gl/rpt-ws-model.html",
-      "latestHtmlFile": "rpt-ws-model.html"
-    },
-    {
-      "id": "fi.cmxfico.gl.rpt-ws-explorer",
-      "name": "财务报表·报表目录",
-      "domain": "fi",
-      "app": "cmxfico",
-      "module": "gl",
-      "page": "rpt-ws-explorer",
-      "relPath": "fi/cmxfico/gl/rpt-ws-explorer.html",
-      "latestHtmlFile": "rpt-ws-explorer.html"
-    },
-    {
-      "id": "fi.cmxfico.gl.rpt-ws-content",
-      "name": "财务报表·报表视图(表样)",
-      "domain": "fi",
-      "app": "cmxfico",
-      "module": "gl",
-      "page": "rpt-ws-content",
-      "relPath": "fi/cmxfico/gl/rpt-ws-content.html",
-      "latestHtmlFile": "rpt-ws-content.html"
-    },
-    {
-      "id": "fi.cmxfico.gl.rpt-ws-prop",
-      "name": "财务报表·属性/数据集/勾稽",
-      "domain": "fi",
-      "app": "cmxfico",
-      "module": "gl",
-      "page": "rpt-ws-prop",
-      "relPath": "fi/cmxfico/gl/rpt-ws-prop.html",
-      "latestHtmlFile": "rpt-ws-prop.html"
-    },
-    {
       "id": "fi.cmxfico.gl.voucher-flex",
       "name": "会计凭证（弹性组合）",
       "details": "表单视图版会计凭证；选科目行→辅助核算明细列随弹性组合动态变化（scenario=account）；底部明细 cmx-ui5-form 单行编辑 + 首/上/下/末导航",
@@ -829,16 +789,6 @@
       "doc": null,
       "relPath": "fi/cmxfico/gl/voucher-flex.html",
       "latestHtmlFile": "voucher-flex.html"
-    },
-    {
-      "id": "fi.cmxfico.gl.dct-data-editor-html",
-      "name": "字典数据维护(HTML)",
-      "domain": "fi",
-      "app": "cmxfico",
-      "module": "gl",
-      "page": "dct-data-editor-html",
-      "relPath": "fi/cmxfico/gl/dct-data-editor-html.html",
-      "latestHtmlFile": "dct-data-editor-html.html"
     }
   ]
 }
