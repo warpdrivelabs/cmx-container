@@ -9,7 +9,7 @@ use std::path::Path;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::cache::content_rev;
+use crate::cache::content_rev_with_meta;
 use crate::pages::native::NativePageFull;
 
 use super::error::PageServeError;
@@ -108,16 +108,20 @@ pub(crate) fn load_native_full(
     let source = std::fs::read_to_string(&abs).map_err(|_| {
         PageServeError::NotFound(format!("native page 源文件缺失: {}", e.rel_path))
     })?;
-    let rev = content_rev(source.as_bytes());
+    // rev：源码内容 + 行字段 canonical（name|details|sourceType|relPath；sourceType
+    // 空串回退按 relPath 推断后的最终值，与返回行一致）。行字段参与哈希，
+    // 与门户侧 full_page_from_row 同一自愈语义（见 cache::content_rev_with_meta）。
+    let source_type = if e.source_type.is_empty() {
+        source_type_from_rel(&e.rel_path)
+    } else {
+        e.source_type.clone()
+    };
+    let rev = content_rev_with_meta(&[&e.name, &e.details, &source_type, &e.rel_path], &source);
     Ok(NativePageFull {
         id: e.id.clone(),
         name: e.name.clone(),
         details: e.details.clone(),
-        source_type: if e.source_type.is_empty() {
-            source_type_from_rel(&e.rel_path)
-        } else {
-            e.source_type.clone()
-        },
+        source_type,
         rel_path: e.rel_path.clone(),
         rev,
         source,
@@ -211,7 +215,13 @@ pub(crate) fn load_html_full(
     let html = std::fs::read_to_string(&abs).map_err(|_| {
         PageServeError::NotFound(format!("HTML 源码文件缺失或损坏: {}", r.rel_path))
     })?;
-    let rev = content_rev(html.as_bytes());
+    // rev：源码内容 + 行字段 canonical（domain|app|module|doc|name|details|relPath）。
+    // 与门户侧 read_full_from_row 同一字段序与自愈语义（见 cache::content_rev_with_meta），
+    // 两侧 rev 字节一致，前端缓存锚点不因读路径不同而漂移。
+    let rev = content_rev_with_meta(
+        &[&r.domain, &r.app, &r.module, &r.doc, &r.name, &r.details, &r.rel_path],
+        &html,
+    );
     Ok(json!({
         "id": r.id, "name": r.name, "details": r.details,
         "domain": r.domain, "app": r.app, "module": r.module, "doc": r.doc,

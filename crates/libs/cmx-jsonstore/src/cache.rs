@@ -102,6 +102,28 @@ pub fn content_rev(bytes: &[u8]) -> String {
     format!("{h:016x}")
 }
 
+/// 计算内容 + 行元数据的 `rev`（输出格式与 [`content_rev`] 一致，16 hex）。
+///
+/// 与 [`content_rev`] 的区别：哈希输入在 source 之前前置行字段 canonical 串
+/// （固定字段顺序、`\u{1F}` 分隔、字段缺失/`null` 一律空串），使「行字段变更
+/// （domain/app/module/doc/name/details/relPath 等）而源码不变」时 rev 也随之
+/// 变化。前端 IndexedDB 页面缓存以 rev 为差异同步锚点，行字段参与哈希后，
+/// 服务端只改坐标类的变更也能触发客户端重拉 body——坐标随缓存自愈传播，
+/// 不再依赖用户手动清站点数据。
+///
+/// 字段清单由调用方按行结构传入（顺序即 canonical 序，两侧读路径须一致）：
+/// - html 全量读：`[domain, app, module, doc, name, details, rel_path]` + html；
+/// - native 全量读：`[name, details, source_type, rel_path]` + source。
+pub fn content_rev_with_meta(fields: &[&str], source: &str) -> String {
+    let mut buf = String::new();
+    for f in fields {
+        buf.push_str(f);
+        buf.push('\u{1F}');
+    }
+    buf.push_str(source);
+    content_rev(buf.as_bytes())
+}
+
 /// 缓存读取纯文本文件；文件不存在返回 `None`（与 [`crate::fsutil::read_text_opt`] 语义一致）。
 ///
 /// 命中 L1 直接返回；未命中则读盘并回填。TTL 到期或 [`invalidate_path`] 后自动失效。
@@ -207,6 +229,35 @@ mod tests {
     #[test]
     fn content_rev_differs_for_different_input() {
         assert_ne!(content_rev(b"hello"), content_rev(b"world"));
+    }
+
+    #[test]
+    fn content_rev_with_meta_stable_and_16_hex() {
+        let rev = content_rev_with_meta(&["fi", "cmxfico", "gl", "", "凭证", "", "fi/cmxfico/gl/v.html"], "<html>v</html>");
+        // 幂等：同字段同源码 → 同 rev；输出格式与 content_rev 一致。
+        assert_eq!(rev, content_rev_with_meta(&["fi", "cmxfico", "gl", "", "凭证", "", "fi/cmxfico/gl/v.html"], "<html>v</html>"));
+        assert_eq!(rev.len(), REV_LEN);
+        assert!(rev.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn content_rev_with_meta_field_change_invalidates() {
+        // 同一源码、不同行字段（如仅改 domain）→ rev 必不同（缓存失效自愈的前提）。
+        let a = content_rev_with_meta(&["fi", "cmxfico", "gl"], "<html>x</html>");
+        let b = content_rev_with_meta(&["cr", "cmxfico", "gl"], "<html>x</html>");
+        assert_ne!(a, b);
+        // 与纯内容 rev 也不同（canonical 前缀参与哈希）。
+        assert_ne!(a, content_rev(b"<html>x</html>"));
+    }
+
+    #[test]
+    fn content_rev_with_meta_null_normalizes_to_empty() {
+        // doc=null 与 doc=""（均归一为空串）canonical 等价。
+        let with_null = content_rev_with_meta(&["fi", "cmxfico", "gl", "", "n", "", "p.html"], "s");
+        let with_empty = content_rev_with_meta(&["fi", "cmxfico", "gl", "", "n", "", "p.html"], "s");
+        assert_eq!(with_null, with_empty);
+        // 归一不等于字段整体缺失（少一段分隔符，rev 不同，防「静默漏字段」退化为内容哈希）。
+        assert_ne!(with_null, content_rev_with_meta(&["fi", "cmxfico", "gl", "n", "", "p.html"], "s"));
     }
 
     #[tokio::test]
