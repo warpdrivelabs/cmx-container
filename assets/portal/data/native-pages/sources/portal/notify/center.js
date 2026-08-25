@@ -126,7 +126,7 @@ function bind (root, center, rerender) {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ center, id }),
         })
-      } catch {}
+      } catch (e) { console.warn('[notify-center] 标记已读失败:', e && e.message || e) }
       rerender()
     }
     el.addEventListener('click', open)
@@ -139,7 +139,7 @@ function bind (root, center, rerender) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ all: true, center }),
       })
-    } catch {}
+    } catch (e) { console.warn('[notify-center] 全部已读失败:', e && e.message || e) }
     rerender()
   })
 }

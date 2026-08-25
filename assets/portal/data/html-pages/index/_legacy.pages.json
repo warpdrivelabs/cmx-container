@@ -25,28 +25,6 @@
       "latestHtmlFile": "tabulator-treegrid-demo.html"
     },
     {
-      "details": "Outlook邮箱 explorer区：cmx-web-treeview 邮箱目录，通过 workspace.context 推送 selectedMailboxId",
-      "id": "outlook-mail-explorer",
-      "latestHtmlFile": "outlook-mail-explorer.html",
-      "name": "Outlook邮箱-目录树",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "outlook-mail-explorer",
-      "relPath": "_legacy/outlook-mail-explorer.html"
-    },
-    {
-      "details": "Outlook邮箱 content区：上方 cmx-revo-grid 邮件列表 + 下方邮件正文，监听 selectedMailboxId 切换文件夹",
-      "id": "outlook-mail-content",
-      "latestHtmlFile": "outlook-mail-content.html",
-      "name": "Outlook邮箱-邮件列表与正文",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "outlook-mail-content",
-      "relPath": "_legacy/outlook-mail-content.html"
-    },
-    {
       "details": "CmxRevoGrid + CmxMasterSlave + CmxColumnModel + CmxDataSet 主从表格演示",
       "id": "demo-master-slave",
       "latestHtmlFile": "demo-master-slave.html",
@@ -56,42 +34,6 @@
       "module": "",
       "page": "demo-master-slave",
       "relPath": "_legacy/demo-master-slave.html"
-    },
-    {
-      "details": "我的测试页面-click-function1",
-      "id": "my-page-test101",
-      "latestHtmlFile": "my-page-test101.html",
-      "name": "我的测试页面1",
-      "timestamp": "20260511_123311830",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "my-page-test101",
-      "relPath": "_legacy/my-page-test101.html"
-    },
-    {
-      "details": "我的测试页面-click-function1",
-      "id": "my-page-test102",
-      "latestHtmlFile": "my-page-test102.html",
-      "name": "我的测试页面1",
-      "timestamp": "20260511_124552755",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "my-page-test102",
-      "relPath": "_legacy/my-page-test102.html"
-    },
-    {
-      "details": "我的测试页面-click-function1",
-      "id": "my-page-test103",
-      "latestHtmlFile": "my-page-test103.html",
-      "name": "我的测试页面1",
-      "timestamp": "20260507_174835342",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "my-page-test103",
-      "relPath": "_legacy/my-page-test103.html"
     },
     {
       "details": "exp_view1",
@@ -106,18 +48,6 @@
       "relPath": "_legacy/exp_view1.html"
     },
     {
-      "details": "exp_view2",
-      "id": "exp_view2",
-      "latestHtmlFile": "exp_view2.html",
-      "name": "exp_view2",
-      "timestamp": "20260508_082419196",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "exp_view2",
-      "relPath": "_legacy/exp_view2.html"
-    },
-    {
       "details": "pro_view1",
       "id": "pro_view1",
       "latestHtmlFile": "pro_view1.html",
@@ -128,18 +58,6 @@
       "module": "",
       "page": "pro_view1",
       "relPath": "_legacy/pro_view1.html"
-    },
-    {
-      "details": "pro_view2",
-      "id": "pro_view2",
-      "latestHtmlFile": "pro_view2.html",
-      "name": "pro_view2",
-      "timestamp": "20260508_082738370",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "pro_view2",
-      "relPath": "_legacy/pro_view2.html"
     },
     {
       "details": "ctn_view1",
@@ -198,53 +116,6 @@
       "module": "",
       "page": "pre_view1",
       "relPath": "_legacy/pre_view1.html"
-    },
-    {
-      "details": "flt_view1",
-      "id": "flt_view1",
-      "latestHtmlFile": "flt_view1.html",
-      "name": "flt_view1",
-      "timestamp": "20260509_221140216",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "flt_view1",
-      "relPath": "_legacy/flt_view1.html"
-    },
-    {
-      "details": "flt_view2",
-      "id": "flt_view2",
-      "latestHtmlFile": "flt_view2.html",
-      "name": "flt_view2",
-      "timestamp": "20260509_221153207",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "flt_view2",
-      "relPath": "_legacy/flt_view2.html"
-    },
-    {
-      "details": "ws-shared-model",
-      "id": "ws-shared-model",
-      "latestHtmlFile": "ws-shared-model.html",
-      "name": "ws-shared-model",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "ws-shared-model",
-      "relPath": "_legacy/ws-shared-model.html"
-    },
-    {
-      "details": "my-data-set",
-      "id": "my-data-set",
-      "latestHtmlFile": "my-data-set.html",
-      "name": "my-data-set",
-      "timestamp": "20260517_211456485",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "my-data-set",
-      "relPath": "_legacy/my-data-set.html"
     },
     {
       "details": "inner_page1",
@@ -322,28 +193,6 @@
       "page": "cmx-grid-form-linkage-demo",
       "relPath": "_legacy/cmx-grid-form-linkage-demo.html",
       "latestHtmlFile": "cmx-grid-form-linkage-demo.html"
-    },
-    {
-      "id": "ignite-combo-editor-demo",
-      "name": "cmx-ignite-combo 编辑器演示",
-      "details": "cmx-ignite-combo 作为 cmx-ui5-form 与 cmx-revo-grid 的字段编辑器（editMode=ignite-combo）；表格/表单共享 CmxColumnModel，游标联动",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "ignite-combo-editor-demo",
-      "relPath": "_legacy/ignite-combo-editor-demo.html",
-      "latestHtmlFile": "ignite-combo-editor-demo.html"
-    },
-    {
-      "id": "ignite-list-demo",
-      "name": "cmx-ignite-list 主从演示",
-      "details": "cmx-ignite-list 绑定 CmxDataSet + CmxColumnModel（toTitleCols/iconCol），点击列表项移动主表游标，明细 cmx-revo-grid 从表联动",
-      "domain": "_legacy",
-      "app": "",
-      "module": "",
-      "page": "ignite-list-demo",
-      "relPath": "_legacy/ignite-list-demo.html",
-      "latestHtmlFile": "ignite-list-demo.html"
     }
   ]
 }

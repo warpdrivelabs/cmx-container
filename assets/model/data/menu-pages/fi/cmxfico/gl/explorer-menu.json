@@ -1,14 +1,6 @@
 {
   "version": 1,
   "items": [
-    {
-      "id": "gl",
-      "name": "gl",
-      "caption": "总账",
-      "permissionId": null,
-      "icon": "tabler-filled/home",
-      "expanded": true,
-      "children": [
         {
           "id": "gl-grp-voucher",
           "name": "voucher",
@@ -33,7 +25,7 @@
                       "tabLabel": "凭证",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.voucher-neo"
+                      "html_page": "fi.cmxfico.gl.voucher-neo"
                     }
                   ]
                 }
@@ -55,7 +47,7 @@
                       "tabLabel": "单据",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.trade-neo"
+                      "html_page": "fi.cmxfico.gl.trade-neo"
                     }
                   ]
                 }
@@ -77,7 +69,7 @@
                       "tabLabel": "单据",
                       "icon": "form",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.trade-form"
+                      "html_page": "fi.cmxfico.gl.trade-form"
                     }
                   ]
                 }
@@ -99,7 +91,7 @@
                       "tabLabel": "报销单",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.travel-expense-neo"
+                      "html_page": "fi.cmxfico.gl.travel-expense-neo"
                     }
                   ]
                 }
@@ -126,7 +118,7 @@
                 "id": "glacct_ws",
                 "model": {
                   "type": "html_pages",
-                  "html_page": "portal.model.gl.glacct-model",
+                  "html_page": "fi.cmxfico.gl.glacct-model",
                   "id": "glacct-model"
                 },
                 "explorer": {
@@ -138,7 +130,7 @@
                       "tabLabel": "科目树",
                       "icon": "tree",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.glacct-explorer"
+                      "html_page": "fi.cmxfico.gl.glacct-explorer"
                     }
                   ]
                 },
@@ -151,7 +143,7 @@
                       "tabLabel": "子科目表格",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.glacct-content"
+                      "html_page": "fi.cmxfico.gl.glacct-content"
                     }
                   ]
                 },
@@ -164,7 +156,7 @@
                       "tabLabel": "详情",
                       "icon": "detail-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.glacct-prop-detail"
+                      "html_page": "fi.cmxfico.gl.glacct-prop-detail"
                     }
                   ]
                 }
@@ -181,7 +173,7 @@
                 "id": "dict_ws",
                 "model": {
                   "type": "html_pages",
-                  "html_page": "portal.model.gl.dictws-model",
+                  "html_page": "fi.cmxfico.gl.dictws-model",
                   "id": "dictws-model"
                 },
                 "explorer": {
@@ -193,7 +185,7 @@
                       "tabLabel": "层级树",
                       "icon": "tree",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictws-explorer"
+                      "html_page": "fi.cmxfico.gl.dictws-explorer"
                     }
                   ]
                 },
@@ -206,7 +198,7 @@
                       "tabLabel": "节点表格",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictws-content"
+                      "html_page": "fi.cmxfico.gl.dictws-content"
                     }
                   ]
                 },
@@ -219,7 +211,7 @@
                       "tabLabel": "详情",
                       "icon": "detail-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictws-prop-detail"
+                      "html_page": "fi.cmxfico.gl.dictws-prop-detail"
                     }
                   ]
                 }
@@ -236,7 +228,7 @@
                 "id": "acct_ws",
                 "model": {
                   "type": "html_pages",
-                  "html_page": "portal.model.gl.acctws-model",
+                  "html_page": "fi.cmxfico.gl.acctws-model",
                   "id": "acctws-model"
                 },
                 "explorer": {
@@ -248,7 +240,7 @@
                       "tabLabel": "合并组织",
                       "icon": "org-chart",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.acctws-explorer"
+                      "html_page": "fi.cmxfico.gl.acctws-explorer"
                     }
                   ]
                 },
@@ -261,7 +253,7 @@
                       "tabLabel": "科目核算",
                       "icon": "business-objects-experience",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.acctws-content"
+                      "html_page": "fi.cmxfico.gl.acctws-content"
                     }
                   ]
                 },
@@ -274,7 +266,7 @@
                       "tabLabel": "详情",
                       "icon": "detail-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.acctws-prop-detail"
+                      "html_page": "fi.cmxfico.gl.acctws-prop-detail"
                     }
                   ]
                 }
@@ -293,7 +285,7 @@
                 "propertyWidth": 320,
                 "model": {
                   "type": "html_pages",
-                  "html_page": "portal.model.gl.dictflat-model",
+                  "html_page": "fi.cmxfico.gl.dictflat-model",
                   "id": "dictflat-model"
                 },
                 "explorer": {
@@ -305,7 +297,7 @@
                       "tabLabel": "检索",
                       "icon": "filter",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictflat-explorer"
+                      "html_page": "fi.cmxfico.gl.dictflat-explorer"
                     }
                   ]
                 },
@@ -318,7 +310,7 @@
                       "tabLabel": "币种列表",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictflat-content"
+                      "html_page": "fi.cmxfico.gl.dictflat-content"
                     }
                   ]
                 },
@@ -331,7 +323,7 @@
                       "tabLabel": "详情",
                       "icon": "detail-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictflat-prop-detail"
+                      "html_page": "fi.cmxfico.gl.dictflat-prop-detail"
                     }
                   ]
                 }
@@ -350,7 +342,7 @@
                 "propertyWidth": 340,
                 "model": {
                   "type": "html_pages",
-                  "html_page": "portal.model.gl.dictrel-model",
+                  "html_page": "fi.cmxfico.gl.dictrel-model",
                   "id": "dictrel-model"
                 },
                 "explorer": {
@@ -362,7 +354,7 @@
                       "tabLabel": "主分组",
                       "icon": "tree",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictrel-explorer"
+                      "html_page": "fi.cmxfico.gl.dictrel-explorer"
                     }
                   ]
                 },
@@ -375,7 +367,7 @@
                       "tabLabel": "关系成员",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictrel-content"
+                      "html_page": "fi.cmxfico.gl.dictrel-content"
                     }
                   ]
                 },
@@ -388,7 +380,7 @@
                       "tabLabel": "详情",
                       "icon": "detail-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictrel-prop-detail"
+                      "html_page": "fi.cmxfico.gl.dictrel-prop-detail"
                     }
                   ]
                 }
@@ -872,7 +864,7 @@
                       "tabLabel": "定义",
                       "icon": "settings",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.account-def"
+                      "html_page": "fi.cmxfico.gl.account-def"
                     }
                   ]
                 }
@@ -894,7 +886,7 @@
                       "tabLabel": "定义",
                       "icon": "settings",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.trade-def"
+                      "html_page": "fi.cmxfico.gl.trade-def"
                     }
                   ]
                 }
@@ -934,7 +926,7 @@
                       "tabLabel": "DAM",
                       "icon": "tree",
                       "type": "native_pages",
-                      "native_page": "portal.model.dam.registry-center",
+                      "native_page": "portal.dam.registry-center",
                       "view": "explorer",
                       "props": {}
                     }
@@ -948,7 +940,7 @@
                       "tabLabel": "注册中心",
                       "icon": "tree",
                       "type": "native_pages",
-                      "native_page": "portal.model.dam.registry-center",
+                      "native_page": "portal.dam.registry-center",
                       "view": "manager",
                       "props": {}
                     }
@@ -962,7 +954,7 @@
                       "tabLabel": "资源",
                       "icon": "documents",
                       "type": "native_pages",
-                      "native_page": "portal.model.dam.registry-center",
+                      "native_page": "portal.dam.registry-center",
                       "view": "property",
                       "props": {}
                     }
@@ -1264,7 +1256,7 @@
                       "tabLabel": "凭证",
                       "icon": "form",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.voucher-flex"
+                      "html_page": "fi.cmxfico.gl.voucher-flex"
                     }
                   ]
                 }
@@ -1286,7 +1278,7 @@
                       "tabLabel": "编辑器演示",
                       "icon": "value-help",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dict-editor-demo"
+                      "html_page": "fi.cmxfico.gl.dict-editor-demo"
                     }
                   ]
                 }
@@ -1308,7 +1300,7 @@
                       "tabLabel": "主数据演示",
                       "icon": "value-help",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.gl-master-data-demo"
+                      "html_page": "fi.cmxfico.gl.gl-master-data-demo"
                     }
                   ]
                 }
@@ -1330,7 +1322,7 @@
                       "tabLabel": "字典帮助测试",
                       "icon": "search",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dict-help-test"
+                      "html_page": "fi.cmxfico.gl.dict-help-test"
                     }
                   ]
                 }
@@ -1352,7 +1344,7 @@
                       "tabLabel": "帮助实验室",
                       "icon": "simulate",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dict-help-lab"
+                      "html_page": "fi.cmxfico.gl.dict-help-lab"
                     }
                   ]
                 }
@@ -1374,7 +1366,7 @@
                       "tabLabel": "功能测试",
                       "icon": "database",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.meta-model-service-test"
+                      "html_page": "fi.cmxfico.gl.meta-model-service-test"
                     }
                   ]
                 }
@@ -1396,7 +1388,7 @@
                       "tabLabel": "字典内容",
                       "icon": "grid",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dict-grid-meta"
+                      "html_page": "fi.cmxfico.gl.dict-grid-meta"
                     }
                   ]
                 }
@@ -1418,7 +1410,7 @@
                       "tabLabel": "凭证对比",
                       "icon": "receipt",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.erp-voucher-cnpc"
+                      "html_page": "fi.cmxfico.gl.erp-voucher-cnpc"
                     }
                   ]
                 }
@@ -1440,7 +1432,7 @@
                       "tabLabel": "四层主从凭证",
                       "icon": "org-chart",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.erp-voucher-cnpc-ms"
+                      "html_page": "fi.cmxfico.gl.erp-voucher-cnpc-ms"
                     }
                   ]
                 }
@@ -1457,7 +1449,7 @@
                 "id": "fico_ws",
                 "model": {
                   "type": "html_pages",
-                  "html_page": "portal.model.gl.fico-ws-model",
+                  "html_page": "fi.cmxfico.gl.fico-ws-model",
                   "id": "fico-ws-model"
                 },
                 "explorer": {
@@ -1469,7 +1461,7 @@
                       "tabLabel": "凭证批",
                       "icon": "list",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-explorer"
+                      "html_page": "fi.cmxfico.gl.fico-ws-explorer"
                     }
                   ]
                 },
@@ -1482,14 +1474,14 @@
                       "tabLabel": "凭证视图",
                       "icon": "document-text",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-content"
+                      "html_page": "fi.cmxfico.gl.fico-ws-content"
                     },
                     {
                       "id": "fico-ws-source",
                       "tabLabel": "凭证数据",
                       "icon": "source-code",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-source"
+                      "html_page": "fi.cmxfico.gl.fico-ws-source"
                     }
                   ]
                 },
@@ -1502,28 +1494,28 @@
                       "tabLabel": "详情",
                       "icon": "detail-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-prop-detail"
+                      "html_page": "fi.cmxfico.gl.fico-ws-prop-detail"
                     },
                     {
                       "id": "fico-ws-prop-actions",
                       "tabLabel": "扩展操作",
                       "icon": "action-settings",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-prop-actions"
+                      "html_page": "fi.cmxfico.gl.fico-ws-prop-actions"
                     },
                     {
                       "id": "fico-ws-prop-fx",
                       "tabLabel": "外币管理",
                       "icon": "currency",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-prop-fx"
+                      "html_page": "fi.cmxfico.gl.fico-ws-prop-fx"
                     },
                     {
                       "id": "fico-ws-prop-budget",
                       "tabLabel": "预算管理",
                       "icon": "money-bills",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-prop-budget"
+                      "html_page": "fi.cmxfico.gl.fico-ws-prop-budget"
                     }
                   ]
                 }
@@ -1540,7 +1532,7 @@
                 "id": "fico_ws_doc",
                 "model": {
                   "type": "html_pages",
-                  "html_page": "portal.model.gl.fico-ws-doc-model",
+                  "html_page": "fi.cmxfico.gl.fico-ws-doc-model",
                   "id": "fico-ws-doc-model"
                 },
                 "explorer": {
@@ -1552,7 +1544,7 @@
                       "tabLabel": "凭证批",
                       "icon": "list",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-doc-explorer"
+                      "html_page": "fi.cmxfico.gl.fico-ws-doc-explorer"
                     }
                   ]
                 },
@@ -1565,14 +1557,14 @@
                       "tabLabel": "凭证视图",
                       "icon": "document-text",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-doc-content"
+                      "html_page": "fi.cmxfico.gl.fico-ws-doc-content"
                     },
                     {
                       "id": "fico-ws-doc-source",
                       "tabLabel": "凭证数据",
                       "icon": "source-code",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-doc-source"
+                      "html_page": "fi.cmxfico.gl.fico-ws-doc-source"
                     }
                   ]
                 },
@@ -1585,28 +1577,28 @@
                       "tabLabel": "详情",
                       "icon": "detail-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-doc-prop-detail"
+                      "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-detail"
                     },
                     {
                       "id": "fico-ws-doc-prop-actions",
                       "tabLabel": "扩展操作",
                       "icon": "action-settings",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-doc-prop-actions"
+                      "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-actions"
                     },
                     {
                       "id": "fico-ws-doc-prop-fx",
                       "tabLabel": "外币管理",
                       "icon": "currency",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-doc-prop-fx"
+                      "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-fx"
                     },
                     {
                       "id": "fico-ws-doc-prop-budget",
                       "tabLabel": "预算管理",
                       "icon": "money-bills",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.fico-ws-doc-prop-budget"
+                      "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-budget"
                     }
                   ]
                 }
@@ -1625,7 +1617,7 @@
                 "propertyWidth": 320,
                 "model": {
                   "type": "html_pages",
-                  "html_page": "portal.model.gl.dicttree-model",
+                  "html_page": "fi.cmxfico.gl.dicttree-model",
                   "id": "dicttree-model"
                 },
                 "explorer": {
@@ -1637,7 +1629,7 @@
                       "tabLabel": "科目树",
                       "icon": "tree",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dicttree-explorer"
+                      "html_page": "fi.cmxfico.gl.dicttree-explorer"
                     }
                   ]
                 },
@@ -1650,7 +1642,7 @@
                       "tabLabel": "子科目表格",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dicttree-content"
+                      "html_page": "fi.cmxfico.gl.dicttree-content"
                     }
                   ]
                 },
@@ -1663,7 +1655,7 @@
                       "tabLabel": "详情",
                       "icon": "detail-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dicttree-prop-detail"
+                      "html_page": "fi.cmxfico.gl.dicttree-prop-detail"
                     }
                   ]
                 }
@@ -1682,7 +1674,7 @@
                 "propertyWidth": 320,
                 "model": {
                   "type": "html_pages",
-                  "html_page": "portal.model.gl.dictcls-model",
+                  "html_page": "fi.cmxfico.gl.dictcls-model",
                   "id": "dictcls-model"
                 },
                 "explorer": {
@@ -1694,7 +1686,7 @@
                       "tabLabel": "伙伴分类",
                       "icon": "tree",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictcls-explorer"
+                      "html_page": "fi.cmxfico.gl.dictcls-explorer"
                     }
                   ]
                 },
@@ -1707,7 +1699,7 @@
                       "tabLabel": "伙伴列表",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictcls-content"
+                      "html_page": "fi.cmxfico.gl.dictcls-content"
                     }
                   ]
                 },
@@ -1720,7 +1712,7 @@
                       "tabLabel": "详情",
                       "icon": "detail-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.dictcls-prop-detail"
+                      "html_page": "fi.cmxfico.gl.dictcls-prop-detail"
                     }
                   ]
                 }
@@ -1742,7 +1734,7 @@
                       "tabLabel": "凭证(html_pages)",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.voucher-doc"
+                      "html_page": "fi.cmxfico.gl.voucher-doc"
                     }
                   ]
                 }
@@ -1792,7 +1784,7 @@
                       "tabLabel": "凭证(html·Sqlx二进制)",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.voucher-doc-sqlxbin"
+                      "html_page": "fi.cmxfico.gl.voucher-doc-sqlxbin"
                     }
                   ]
                 }
@@ -1814,7 +1806,7 @@
                       "tabLabel": "凭证列表",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.voucher-list"
+                      "html_page": "fi.cmxfico.gl.voucher-list"
                     }
                   ]
                 }
@@ -1920,7 +1912,7 @@
                       "tabLabel": "自检(html)",
                       "icon": "sys-monitor",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.doc-service-test"
+                      "html_page": "fi.cmxfico.gl.doc-service-test"
                     }
                   ]
                 }
@@ -1942,7 +1934,7 @@
                       "tabLabel": "员工信息",
                       "icon": "tabler-outline/users",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.employee"
+                      "html_page": "fi.cmxfico.gl.employee"
                     }
                   ]
                 }
@@ -1964,7 +1956,7 @@
                       "tabLabel": "编辑器演示",
                       "icon": "form",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.ignite-combo-editor"
+                      "html_page": "fi.cmxfico.gl.ignite-combo-editor"
                     }
                   ]
                 }
@@ -1986,7 +1978,7 @@
                       "tabLabel": "主从演示",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.ignite-list"
+                      "html_page": "fi.cmxfico.gl.ignite-list"
                     }
                   ]
                 }
@@ -2079,7 +2071,7 @@
                       "tabLabel": "测试",
                       "icon": "table-view",
                       "type": "html_pages",
-                      "html_page": "portal.model.gl.ccm-attrs-test"
+                      "html_page": "fi.cmxfico.gl.ccm-attrs-test"
                     }
                   ]
                 }
@@ -2087,7 +2079,7 @@
             }
           ]
         }
-      ]
-    }
+
+
   ]
 }

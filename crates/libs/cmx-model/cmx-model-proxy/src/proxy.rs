@@ -101,7 +101,7 @@ fn model_target(model_base: &str, uri: &Uri) -> String {
 /// 判定一个前端页 id 是否属模型中心（资产归属治理后唯一前缀，与
 /// `assets/model/web` 清单一致）：
 ///   native + html 统一为 `portal.model.*`（如 portal.model.definition.base-dct、
-///   portal.model.gl.dictcls-explorer）。
+///   portal.model.gl.dct-data-editor-html）。
 /// **不含** `portal.mdm.*`（已独立 cmx-mdm）与门户自有页（job/help/notify/system/demo/_legacy）。
 fn is_model_owned_page(id: &str) -> bool {
     id.starts_with("portal.model.")
