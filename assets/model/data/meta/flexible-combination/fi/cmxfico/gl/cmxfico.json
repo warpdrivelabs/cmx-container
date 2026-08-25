@@ -8,7 +8,7 @@
   "module": "gl",
   "title": "会计凭证",
   "anchorDimensions": [],
-  "description": "多字段集多绑定案例：字段集0=cv_aux_line（辅助核算维度）→ 页面 auxModel；fieldTabs=cv_acc_line（金额信息）→ 页面 amountModel；同一 FC 实例按表路由，点分录行两张网格同时换列",
+  "description": "L1/L2/L3 科目层级联动案例：L1/L2 规则用 $under 配在祖先科目上（资产类=1、负债类=2、应交税费=2221），L3 规则精确匹配（222101 进项税）。选中 L3 科目时锚点带 __path 祖先链，多层规则叠加合并——字段位置 L1 基础在前、L3 精确(3分)覆盖 L2/L1 泛化(1.5分)。同时保留多字段集多绑定：字段集0=cv_aux_line→页面 auxModel；fieldTabs=cv_acc_line→页面 amountModel；dimensions 同时声明字段引用维度 cost_center/bus_partner（供 dict-enrich 校验）",
   "status": "draft",
   "tags": [],
   "dimensions": {
@@ -65,12 +65,44 @@
         ]
       },
       "valueType": "dict-select"
+    },
+    "cost_center": {
+      "name": "成本中心",
+      "attributes": [
+        "name",
+        "code"
+      ],
+      "dict": {
+        "dictId": "cost_center",
+        "dictCode": "cost_center",
+        "helpLayout": "grid",
+        "displayMode": "code-label",
+        "dictTitle": "选择成本中心",
+        "pageSize": 50
+      },
+      "valueType": "dict-select"
+    },
+    "bus_partner": {
+      "name": "业务伙伴（客户/供应商）",
+      "attributes": [
+        "name",
+        "code"
+      ],
+      "dict": {
+        "dictId": "bus_partner",
+        "dictCode": "bus_partner",
+        "helpLayout": "grid",
+        "displayMode": "code-label",
+        "dictTitle": "选择业务伙伴",
+        "pageSize": 50
+      },
+      "valueType": "dict-select"
     }
   },
   "rules": [
     {
-      "id": "fi-receivable",
-      "caption": "应收账款",
+      "id": "r-l1-asset",
+      "caption": "L1 资产类（$under=1）",
       "anchor": {
         "dimensions": [
           "gl_account"
@@ -79,32 +111,32 @@
           "gl_account_id"
         ],
         "match": {
-          "gl_account": "2000013"
+          "gl_account": {
+            "$under": "1"
+          }
         }
       },
-      "panel": "cv_acc_line",
+      "panel": "cv_aux_line",
       "detail": {
         "table": "cv_aux_line",
         "pick": [
           {
-            "ref": "cv_aux_line.customer_id",
+            "ref": "cv_aux_line.cost_center_id",
             "over": {
               "caption": {
-                "zh_CN": "客户"
+                "zh_CN": "成本中心"
               },
               "edit": {
-                "mode": "cmx-dict-select",
-                "required": true
+                "mode": "cmx-dict-select"
               }
             }
           }
         ],
-        "fields": [],
         "groups": [
           {
-            "caption": "辅助核算",
+            "caption": "辅助核算(L1资产)",
             "members": [
-              "customer_id"
+              "cost_center_id"
             ]
           }
         ],
@@ -132,37 +164,26 @@
                     "thousandSeparator": true
                   }
                 }
-              },
-              {
-                "ref": "cv_acc_line.local_dr"
-              },
-              {
-                "ref": "cv_acc_line.local_cr"
-              },
-              {
-                "ref": "cv_acc_line.group_dr"
-              },
-              {
-                "ref": "cv_acc_line.group_cr"
               }
             ],
-            "fields": [],
             "groups": [
               {
-                "caption": "金额信息",
+                "caption": "金额信息(L1基础)",
                 "members": [
                   "item_text",
                   "entered_dr"
                 ]
               }
-            ]
+            ],
+            "fields": []
           }
-        ]
+        ],
+        "fields": []
       }
     },
     {
-      "id": "fi-payable",
-      "caption": "应付/税/薪酬",
+      "id": "r-l1-liability",
+      "caption": "L1 负债类（$under=2）",
       "anchor": {
         "dimensions": [
           "gl_account"
@@ -171,14 +192,12 @@
           "gl_account_id"
         ],
         "match": {
-          "gl_account": [
-            "2000058",
-            "2000064",
-            "2000067"
-          ]
+          "gl_account": {
+            "$under": "2"
+          }
         }
       },
-      "panel": "cv_acc_line",
+      "panel": "cv_aux_line",
       "detail": {
         "table": "cv_aux_line",
         "pick": [
@@ -193,26 +212,13 @@
                 "required": true
               }
             }
-          },
-          {
-            "ref": "cv_aux_line.cost_center_id",
-            "over": {
-              "caption": {
-                "zh_CN": "成本中心"
-              },
-              "edit": {
-                "mode": "cmx-dict-select"
-              }
-            }
           }
         ],
-        "fields": [],
         "groups": [
           {
-            "caption": "辅助核算",
+            "caption": "辅助核算(L1负债)",
             "members": [
-              "supplier_id",
-              "cost_center_id"
+              "supplier_id"
             ]
           }
         ],
@@ -233,7 +239,19 @@
                 "ref": "cv_acc_line.entered_dr",
                 "over": {
                   "caption": {
-                    "zh_CN": "金额"
+                    "zh_CN": "借方金额"
+                  },
+                  "display": {
+                    "decimalDigits": 2,
+                    "thousandSeparator": true
+                  }
+                }
+              },
+              {
+                "ref": "cv_acc_line.entered_cr",
+                "over": {
+                  "caption": {
+                    "zh_CN": "贷方金额"
                   },
                   "display": {
                     "decimalDigits": 2,
@@ -242,23 +260,25 @@
                 }
               }
             ],
-            "fields": [],
             "groups": [
               {
-                "caption": "金额信息",
+                "caption": "金额信息(L1负债)",
                 "members": [
                   "item_text",
-                  "entered_dr"
+                  "entered_dr",
+                  "entered_cr"
                 ]
               }
-            ]
+            ],
+            "fields": []
           }
-        ]
+        ],
+        "fields": []
       }
     },
     {
-      "id": "fi-bank",
-      "caption": "银行存款",
+      "id": "r-l2-tax",
+      "caption": "L2 应交税费（$under=2221）",
       "anchor": {
         "dimensions": [
           "gl_account"
@@ -267,18 +287,101 @@
           "gl_account_id"
         ],
         "match": {
-          "gl_account": "2000004"
+          "gl_account": {
+            "$under": "2221"
+          }
         }
       },
-      "panel": "cv_acc_line",
+      "panel": "cv_aux_line",
       "detail": {
         "table": "cv_aux_line",
         "pick": [
           {
-            "ref": "cv_aux_line.house_bank_id",
+            "ref": "cv_aux_line.cost_center_id",
             "over": {
               "caption": {
-                "zh_CN": "银行账户"
+                "zh_CN": "计提成本中心"
+              },
+              "edit": {
+                "mode": "cmx-dict-select"
+              }
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算(L2税费)",
+            "members": [
+              "cost_center_id"
+            ]
+          }
+        ],
+        "fieldTabs": [
+          {
+            "id": "ftab_amount",
+            "table": "cv_acc_line",
+            "pick": [
+              {
+                "ref": "cv_acc_line.local_dr",
+                "over": {
+                  "caption": {
+                    "zh_CN": "本位币借方"
+                  },
+                  "display": {
+                    "decimalDigits": 2
+                  }
+                }
+              },
+              {
+                "ref": "cv_acc_line.local_cr",
+                "over": {
+                  "caption": {
+                    "zh_CN": "本位币贷方"
+                  },
+                  "display": {
+                    "decimalDigits": 2
+                  }
+                }
+              }
+            ],
+            "groups": [
+              {
+                "caption": "金额信息(L2税费本位币)",
+                "members": [
+                  "local_dr",
+                  "local_cr"
+                ]
+              }
+            ],
+            "fields": []
+          }
+        ],
+        "fields": []
+      }
+    },
+    {
+      "id": "r-l3-vat-in",
+      "caption": "L3 进项税额（精确=222101）",
+      "anchor": {
+        "dimensions": [
+          "gl_account"
+        ],
+        "columns": [
+          "gl_account_id"
+        ],
+        "match": {
+          "gl_account": "222101"
+        }
+      },
+      "panel": "cv_aux_line",
+      "detail": {
+        "table": "cv_aux_line",
+        "pick": [
+          {
+            "ref": "cv_aux_line.supplier_id",
+            "over": {
+              "caption": {
+                "zh_CN": "进项税供应商(税率联动)"
               },
               "edit": {
                 "mode": "cmx-dict-select",
@@ -287,12 +390,11 @@
             }
           }
         ],
-        "fields": [],
         "groups": [
           {
-            "caption": "辅助核算",
+            "caption": "辅助核算(L3进项税·覆盖供应商定义)",
             "members": [
-              "house_bank_id"
+              "supplier_id"
             ]
           }
         ],
@@ -302,140 +404,33 @@
             "table": "cv_acc_line",
             "pick": [
               {
-                "ref": "cv_acc_line.item_text",
+                "ref": "cv_acc_line.group_dr",
                 "over": {
                   "caption": {
-                    "zh_CN": "摘要"
-                  }
-                }
-              },
-              {
-                "ref": "cv_acc_line.entered_dr",
-                "over": {
-                  "caption": {
-                    "zh_CN": "金额"
+                    "zh_CN": "集团口径借方"
                   },
                   "display": {
-                    "decimalDigits": 2,
-                    "thousandSeparator": true
+                    "decimalDigits": 2
                   }
                 }
               }
             ],
-            "fields": [],
             "groups": [
               {
-                "caption": "金额信息",
+                "caption": "金额信息(L3集团口径)",
                 "members": [
-                  "item_text",
-                  "entered_dr"
+                  "group_dr"
                 ]
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "id": "fi-inventory",
-      "caption": "存货/资产",
-      "anchor": {
-        "dimensions": [
-          "gl_account"
-        ],
-        "columns": [
-          "gl_account_id"
-        ],
-        "match": {
-          "gl_account": [
-            "2000028",
-            "2000031",
-            "2000049"
-          ]
-        }
-      },
-      "panel": "cv_acc_line",
-      "detail": {
-        "table": "cv_aux_line",
-        "pick": [
-          {
-            "ref": "cv_aux_line.cost_center_id",
-            "over": {
-              "caption": {
-                "zh_CN": "成本中心"
-              },
-              "edit": {
-                "mode": "cmx-dict-select"
-              }
-            }
-          }
-        ],
-        "fields": [],
-        "groups": [
-          {
-            "caption": "辅助核算",
-            "members": [
-              "cost_center_id"
-            ]
-          }
-        ],
-        "fieldTabs": [
-          {
-            "id": "ftab_amount",
-            "table": "cv_acc_line",
-            "pick": [
-              {
-                "ref": "cv_acc_line.item_text",
-                "over": {
-                  "caption": {
-                    "zh_CN": "摘要"
-                  }
-                }
-              },
-              {
-                "ref": "cv_acc_line.entered_dr",
-                "over": {
-                  "caption": {
-                    "zh_CN": "金额"
-                  },
-                  "display": {
-                    "decimalDigits": 2,
-                    "thousandSeparator": true
-                  }
-                }
-              },
-              {
-                "ref": "cv_acc_line.entered_cr"
-              },
-              {
-                "ref": "cv_acc_line.local_dr"
-              },
-              {
-                "ref": "cv_acc_line.local_cr"
-              },
-              {
-                "ref": "cv_acc_line.group_dr"
-              },
-              {
-                "ref": "cv_acc_line.group_cr"
               }
             ],
-            "fields": [],
-            "groups": [
-              {
-                "caption": "金额信息",
-                "members": [
-                  "item_text",
-                  "entered_dr"
-                ]
-              }
-            ]
+            "fields": []
           }
-        ]
+        ],
+        "fields": []
       }
     },
     {
-      "id": "fi-default",
+      "id": "r-fallback",
       "caption": "通用兜底",
       "anchor": {
         "dimensions": [
@@ -446,11 +441,30 @@
         ],
         "match": {}
       },
-      "panel": "cv_acc_line",
+      "panel": "cv_aux_line",
       "detail": {
         "table": "cv_aux_line",
-        "pick": [],
-        "fields": [],
+        "pick": [
+          {
+            "ref": "cv_aux_line.cost_center_id",
+            "over": {
+              "caption": {
+                "zh_CN": "成本中心"
+              },
+              "edit": {
+                "mode": "cmx-dict-select"
+              }
+            }
+          }
+        ],
+        "groups": [
+          {
+            "caption": "辅助核算(兜底)",
+            "members": [
+              "cost_center_id"
+            ]
+          }
+        ],
         "fieldTabs": [
           {
             "id": "ftab_amount",
@@ -477,22 +491,23 @@
                 }
               }
             ],
-            "fields": [],
             "groups": [
               {
-                "caption": "金额信息",
+                "caption": "金额信息(兜底)",
                 "members": [
                   "item_text",
                   "entered_dr"
                 ]
               }
-            ]
+            ],
+            "fields": []
           }
-        ]
+        ],
+        "fields": []
       }
     }
   ],
-  "updatedAt": "2026-07-24T01:03:02.311Z",
+  "updatedAt": "2026-08-25T07:52:39.000Z",
   "docRef": {
     "domain": "fi",
     "application": "cmxfico",
