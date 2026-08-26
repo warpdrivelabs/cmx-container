@@ -16,7 +16,7 @@ pub mod pipeline;
 pub mod quota;
 pub mod store;
 
-pub use builder::{BuildError, Builder, BuilderConfig, CommandRunner, RunOutput, TokioCommandRunner};
+pub use builder::{BuildError, Builder, BuilderConfig, CacheConfig, CommandRunner, RunOutput, TokioCommandRunner};
 pub use executor::{BuildExecutor, BuildLogEvent, SubmitOutcome};
 pub use model::{BuildArtifact, BuildJob, BuildRequest, BuildStatus};
 pub use pipeline::{BuildPipeline, Deployer, DocScanner, PipelineResult, Signer};

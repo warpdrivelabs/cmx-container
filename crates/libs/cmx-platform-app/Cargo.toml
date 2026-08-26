@@ -16,6 +16,13 @@ authors.workspace = true
 # 基础设施经 cmx-service-base 公用包装配（wasm/plugins/crypto/storage/services/Nacos/rpc…）。
 # 对偶于 cmx-flow-app（流程微服务核，在独立 ws cmx-flowengine）。
 
+[features]
+# 开发工具端点（二次开发平台：构建/触发/工作区/版本回滚）——透传给 cmx-common-api。
+# 违反集群无状态约束，仅单节点 dev 部署开启（生产 bin 不加此 feature）。
+# 用法：`cargo build -p cmx-portal-server --features cmx-platform-app/dev-tools`。
+default = []
+dev-tools = ["cmx-common-api/dev-tools"]
+
 [dependencies]
 # 内部依赖 - 工具库
 cmx-utils = { workspace = true }

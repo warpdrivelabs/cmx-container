@@ -6,6 +6,7 @@
 //! - **W5**：`POST /api/dev/vscode/register` —— 给孤儿端点一个后端归属（落 `cmx_dev_workspace`）。
 //! - **W1**：`POST /api/dev/build/jobs`（提交构建）/ `GET /api/dev/build/jobs/{id}` / `GET /api/dev/build/jobs`。
 //! - **W3**：`POST /api/dev/trigger/bindings`（增）/ `GET /api/dev/trigger/bindings`（列）/ `DELETE .../{id}`。
+//! - **W6**：`GET /api/dev/plugins/{id}/versions`（版本历史）/ `POST /api/dev/plugins/{id}/rollback`（一键回滚）。
 
 use axum::extract::Path;
 use axum::Json;
@@ -31,7 +32,6 @@ fn ise(msg: impl Into<String>) -> Error {
 // ─────────────────── W5 · 工作区注册（孤儿端点归属） ───────────────────
 
 /// `POST /api/dev/vscode/register` —— 扩展上报工作区（落 `cmx_dev_workspace`，幂等 upsert）。
-#[utoipa::path(post, path = "/api/dev/vscode/register", tag = "DevPlatform")]
 pub async fn vscode_register(Json(req): Json<RegisterRequest>) -> Result<Json<ApiResp<Value>>> {
     let store = PgDevWorkspaceStore::new(db_id().await);
     store.ensure_schema().await.map_err(ise)?;
@@ -40,12 +40,38 @@ pub async fn vscode_register(Json(req): Json<RegisterRequest>) -> Result<Json<Ap
 }
 
 /// `GET /api/dev/workspaces` —— 列已注册工作区。
-#[utoipa::path(get, path = "/api/dev/workspaces", tag = "DevPlatform")]
 pub async fn list_workspaces() -> Result<Json<ApiResp<Value>>> {
     let store = PgDevWorkspaceStore::new(db_id().await);
     store.ensure_schema().await.map_err(ise)?;
     let ws = store.list().await.map_err(ise)?;
     Ok(Json(ApiResp::ok(json!(ws))))
+}
+
+/// `GET /api/dev/workspaces/authz?dev={dev}` —— W5 M1 Nginx auth_request 子请求校验。
+///
+/// 返回 200 放行、403 拒绝（供 nginx `auth_request` 判断当前用户可否进 `{dev}` 的工作区）。
+/// M1 起步：dev 已注册即放行；接入真实身份后按 `dev_id == 当前用户` 或租户成员判定。
+#[derive(serde::Deserialize)]
+pub struct AuthzQuery {
+    pub dev: String,
+}
+
+pub async fn workspace_authz(
+    axum::extract::Query(q): axum::extract::Query<AuthzQuery>,
+) -> axum::response::Response {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    let store = PgDevWorkspaceStore::new(db_id().await);
+    if store.ensure_schema().await.is_err() {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    // dev 对应工作区存在且 active → 放行。（接真实认证后再叠加 dev==user / 租户成员校验。）
+    match store.get(&q.dev).await {
+        Ok(Some(ws)) if ws.status == "active" => StatusCode::OK.into_response(),
+        Ok(_) => (StatusCode::FORBIDDEN, "工作区不存在或未激活").into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 // ─────────────────── W1 · 构建作业 ───────────────────
@@ -54,7 +80,6 @@ pub async fn list_workspaces() -> Result<Json<ApiResp<Value>>> {
 ///
 /// M0 端点：先落作业记录 + 返回 job_id，编译执行的 worker 装配（cmx-build::Builder + Pipeline）
 /// 为后续独立部署项；此处不在请求线程内 spawn cargo（守 W1 铁律）。
-#[utoipa::path(post, path = "/api/dev/build/jobs", tag = "DevPlatform")]
 pub async fn submit_build_job(Json(req): Json<BuildRequest>) -> Result<Json<ApiResp<Value>>> {
     let store = PgBuildJobStore::new(db_id().await);
     store.ensure_schema().await.map_err(ise)?;
@@ -103,7 +128,6 @@ pub async fn submit_build_job(Json(req): Json<BuildRequest>) -> Result<Json<ApiR
 /// `GET /api/dev/build/jobs/{id}/logs` —— SSE 流式编译日志（作业在跑时可订阅）。
 ///
 /// 作业未在跑（或平台未装配执行器）→ 返回一次性提示事件后结束。
-#[utoipa::path(get, path = "/api/dev/build/jobs/{id}/logs", tag = "DevPlatform")]
 pub async fn stream_build_logs(Path(id): Path<String>) -> axum::response::Response {
     use axum::response::sse::{Event, KeepAlive};
     use axum::response::{IntoResponse, Sse};
@@ -151,7 +175,6 @@ pub async fn stream_build_logs(Path(id): Path<String>) -> axum::response::Respon
 }
 
 /// `GET /api/dev/build/jobs/{id}` —— 查作业状态/结果。
-#[utoipa::path(get, path = "/api/dev/build/jobs/{id}", tag = "DevPlatform")]
 pub async fn get_build_job(Path(id): Path<String>) -> Result<Json<ApiResp<Value>>> {
     let store = PgBuildJobStore::new(db_id().await);
     store.ensure_schema().await.map_err(ise)?;
@@ -164,7 +187,6 @@ pub async fn get_build_job(Path(id): Path<String>) -> Result<Json<ApiResp<Value>
 }
 
 /// `GET /api/dev/build/jobs` —— 列最近构建作业。
-#[utoipa::path(get, path = "/api/dev/build/jobs", tag = "DevPlatform")]
 pub async fn list_build_jobs() -> Result<Json<ApiResp<Value>>> {
     let store = PgBuildJobStore::new(db_id().await);
     store.ensure_schema().await.map_err(ise)?;
@@ -175,7 +197,6 @@ pub async fn list_build_jobs() -> Result<Json<ApiResp<Value>>> {
 // ─────────────────── W3 · 触发绑定 ───────────────────
 
 /// `POST /api/dev/trigger/bindings` —— 增/改一条触发绑定。
-#[utoipa::path(post, path = "/api/dev/trigger/bindings", tag = "DevPlatform")]
 pub async fn save_trigger_binding(Json(b): Json<TriggerBinding>) -> Result<Json<ApiResp<Value>>> {
     let store = PgTriggerBindingStore::new(db_id().await);
     store.ensure_schema().await.map_err(ise)?;
@@ -184,7 +205,6 @@ pub async fn save_trigger_binding(Json(b): Json<TriggerBinding>) -> Result<Json<
 }
 
 /// `GET /api/dev/trigger/bindings?kind=event|cron|bizhook` —— 列某类绑定。
-#[utoipa::path(get, path = "/api/dev/trigger/bindings", tag = "DevPlatform")]
 pub async fn list_trigger_bindings(
     axum::extract::Query(q): axum::extract::Query<KindQuery>,
 ) -> Result<Json<ApiResp<Value>>> {
@@ -196,7 +216,6 @@ pub async fn list_trigger_bindings(
 }
 
 /// `DELETE /api/dev/trigger/bindings/{id}` —— 删一条绑定。
-#[utoipa::path(delete, path = "/api/dev/trigger/bindings/{id}", tag = "DevPlatform")]
 pub async fn delete_trigger_binding(Path(id): Path<i64>) -> Result<Json<ApiResp<Value>>> {
     let store = PgTriggerBindingStore::new(db_id().await);
     store.ensure_schema().await.map_err(ise)?;
@@ -220,4 +239,91 @@ fn parse_kind(s: &str) -> TriggerKind {
 /// 生成作业 id（时间戳派生，避免额外 uuid 依赖）。
 fn new_job_id() -> String {
     format!("build-{}", Utc::now().timestamp_micros())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rollback_req_deserialize() {
+        let j = json!({ "targetVersion": "1.0.0", "operator": "alice" });
+        let r: RollbackReq = serde_json::from_value(j).unwrap();
+        assert_eq!(r.target_version, "1.0.0");
+        assert_eq!(r.operator.as_deref(), Some("alice"));
+        // operator 可省。
+        let r2: RollbackReq = serde_json::from_value(json!({ "targetVersion": "2.0" })).unwrap();
+        assert!(r2.operator.is_none());
+    }
+
+    #[test]
+    fn authz_query_parse() {
+        let q: AuthzQuery = serde_json::from_value(json!({ "dev": "alice" })).unwrap();
+        assert_eq!(q.dev, "alice");
+    }
+}
+
+// ─────────────────── W6 · 插件版本历史 + 一键回滚 ───────────────────
+
+/// `GET /api/dev/plugins/{id}/versions` —— 列某插件的版本历史（含 is_current 标记）。
+pub async fn plugin_versions(Path(plugin_id): Path<String>) -> Result<Json<ApiResp<Value>>> {
+    use cmx_plugin::infrastructure::database::version_history::VersionHistoryRepository;
+    let dbm = get_default_db_manager().clone();
+    let db_id = get_default_db_manager().get_default_db_id().await;
+    let repo = VersionHistoryRepository::new(dbm, db_id);
+    let versions = repo
+        .list_versions(&plugin_id)
+        .await
+        .map_err(|e| ise(format!("列版本历史失败: {e}")))?;
+    // 精简为 UX 友好字段。
+    let items: Vec<Value> = versions
+        .into_iter()
+        .map(|v| {
+            json!({
+                "version": v.version,
+                "isCurrent": v.is_current,
+                "installedAt": v.installed_at,
+                "wasmPath": v.wasm_path,
+                "sourceType": v.zip_source_type,
+                "archived": v.archived != 0,
+            })
+        })
+        .collect();
+    Ok(Json(ApiResp::ok(json!({ "pluginId": plugin_id, "versions": items }))))
+}
+
+/// `POST /api/dev/plugins/{id}/rollback` body：`{ targetVersion, operator? }` —— 一键回滚到指定历史版本。
+#[derive(serde::Deserialize)]
+pub struct RollbackReq {
+    #[serde(rename = "targetVersion")]
+    pub target_version: String,
+    #[serde(default)]
+    pub operator: Option<String>,
+}
+
+pub async fn plugin_rollback(
+    Path(plugin_id): Path<String>,
+    Json(req): Json<RollbackReq>,
+) -> Result<Json<ApiResp<Value>>> {
+    use cmx_plugin::service::downgrade::DowngradeRequest;
+    use cmx_plugin::GlobalPluginManager;
+
+    let dreq = DowngradeRequest {
+        plugin_id: plugin_id.clone(),
+        target_version: req.target_version.clone(),
+        source: None,
+        operator: req.operator.clone(),
+        app_id: None,
+    };
+    let resp = GlobalPluginManager::get()
+        .downgrade(dreq)
+        .await
+        .map_err(|e| ise(format!("回滚失败: {e}")))?;
+    Ok(Json(ApiResp::ok(json!({
+        "pluginId": resp.plugin_id,
+        "oldVersion": resp.old_version,
+        "newVersion": resp.new_version,
+        "success": resp.success,
+        "message": resp.message,
+    }))))
 }

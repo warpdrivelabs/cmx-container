@@ -115,7 +115,7 @@ mod tests {
     struct OkRunner;
     #[async_trait]
     impl CommandRunner for OkRunner {
-        async fn run(&self, _p: &str, _a: &[String], _c: &str, _t: Duration, on_line: Arc<dyn Fn(String) + Send + Sync>) -> Result<RunOutput, crate::builder::BuildError> {
+        async fn run(&self, _p: &str, _a: &[String], _c: &str, _e: &[(String, String)], _t: Duration, on_line: Arc<dyn Fn(String) + Send + Sync>) -> Result<RunOutput, crate::builder::BuildError> {
             on_line("Compiling foo".into());
             Ok(RunOutput { exit_code: Some(0), log: "Compiling foo\n".into() })
         }
@@ -210,7 +210,7 @@ mod tests {
     struct SlowRunner;
     #[async_trait]
     impl CommandRunner for SlowRunner {
-        async fn run(&self, _p: &str, _a: &[String], _c: &str, _t: Duration, _o: Arc<dyn Fn(String) + Send + Sync>) -> Result<RunOutput, crate::builder::BuildError> {
+        async fn run(&self, _p: &str, _a: &[String], _c: &str, _e: &[(String, String)], _t: Duration, _o: Arc<dyn Fn(String) + Send + Sync>) -> Result<RunOutput, crate::builder::BuildError> {
             tokio::time::sleep(Duration::from_millis(300)).await;
             Ok(RunOutput { exit_code: Some(0), log: String::new() })
         }

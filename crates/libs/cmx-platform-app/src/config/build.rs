@@ -24,7 +24,17 @@ use cmx_database::get_default_db_manager;
 pub async fn init_build() -> crate::Result<()> {
     let db_id = get_default_db_manager().get_default_db_id().await;
 
-    let builder = Arc::new(Builder::new(Arc::new(TokioCommandRunner)));
+    let builder = Arc::new(Builder::with_config(
+        Arc::new(TokioCommandRunner),
+        cmx_build::BuilderConfig {
+            cache: cmx_build::CacheConfig {
+                cargo_home: std::env::var("CMX_BUILD_CARGO_HOME").ok(),
+                target_dir: std::env::var("CMX_BUILD_TARGET_DIR").ok(),
+                rustc_wrapper: std::env::var("CMX_BUILD_RUSTC_WRAPPER").ok(),
+            },
+            ..Default::default()
+        },
+    ));
     let store: Arc<dyn BuildJobStore> = Arc::new(PgBuildJobStore::new(db_id));
 
     let pipeline = Arc::new(BuildPipeline::new(
@@ -66,6 +76,7 @@ impl DocScanner for CliDocScanner {
                 "cmx-cli",
                 &["doc".into(), "scan".into()],
                 plugin_path,
+                &[],
                 Duration::from_secs(60),
                 Arc::new(|_| {}),
             )

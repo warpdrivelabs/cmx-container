@@ -25,6 +25,7 @@ fn inner_routes() -> Router<CmxAppState> {
         // W5：孤儿端点归属 —— 扩展工作区注册
         .route("/vscode/register", post(platform::vscode_register))
         .route("/workspaces", get(platform::list_workspaces))
+        .route("/workspaces/authz", get(platform::workspace_authz))
         // W1：构建作业
         .route(
             "/build/jobs",
@@ -41,6 +42,9 @@ fn inner_routes() -> Router<CmxAppState> {
             "/trigger/bindings/{id}",
             delete(platform::delete_trigger_binding),
         )
+        // —— W6：插件版本历史 + 一键回滚 ——
+        .route("/plugins/{id}/versions", get(platform::plugin_versions))
+        .route("/plugins/{id}/rollback", post(platform::plugin_rollback))
 }
 
 pub struct DevModule;

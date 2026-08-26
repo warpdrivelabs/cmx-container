@@ -196,7 +196,7 @@ mod tests {
     struct OkRunner;
     #[async_trait]
     impl CommandRunner for OkRunner {
-        async fn run(&self, _p: &str, _a: &[String], _c: &str, _t: Duration, _o: Arc<dyn Fn(String) + Send + Sync>) -> Result<RunOutput, BuildError> {
+        async fn run(&self, _p: &str, _a: &[String], _c: &str, _e: &[(String, String)], _t: Duration, _o: Arc<dyn Fn(String) + Send + Sync>) -> Result<RunOutput, BuildError> {
             Ok(RunOutput { exit_code: Some(0), log: "ok".into() })
         }
     }

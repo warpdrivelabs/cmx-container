@@ -39,12 +39,13 @@ pub struct RunOutput {
 /// 命令执行器（依赖注入接缝，便于单测）。
 #[async_trait]
 pub trait CommandRunner: Send + Sync {
-    /// 在 `cwd` 执行 `program args...`，`timeout` 内完成；行级日志经 `on_line` 回调（流式）。
+    /// 在 `cwd` 执行 `program args...`，注入 `envs` 环境变量，`timeout` 内完成；行级日志经 `on_line`。
     async fn run(
         &self,
         program: &str,
         args: &[String],
         cwd: &str,
+        envs: &[(String, String)],
         timeout: Duration,
         on_line: Arc<dyn Fn(String) + Send + Sync>,
     ) -> Result<RunOutput, BuildError>;
@@ -60,15 +61,20 @@ impl CommandRunner for TokioCommandRunner {
         program: &str,
         args: &[String],
         cwd: &str,
+        envs: &[(String, String)],
         timeout: Duration,
         on_line: Arc<dyn Fn(String) + Send + Sync>,
     ) -> Result<RunOutput, BuildError> {
         use tokio::process::Command;
-        let mut child = Command::new(program)
-            .args(args)
+        let mut cmd = Command::new(program);
+        cmd.args(args)
             .current_dir(cwd)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
+        let mut child = cmd
             .spawn()
             .map_err(|e| BuildError::Io(format!("启动 {program} 失败: {e}")))?;
 
@@ -119,12 +125,47 @@ impl CommandRunner for TokioCommandRunner {
     }
 }
 
+/// 构建缓存配置 —— 共享 CARGO_HOME + target 目录，加速增量构建。
+#[derive(Debug, Clone, Default)]
+pub struct CacheConfig {
+    /// 共享 `CARGO_HOME`（registry/git 缓存）。None=不注入（用系统默认）。
+    pub cargo_home: Option<String>,
+    /// 共享 `CARGO_TARGET_DIR`（编译产物缓存）。None=各工程自带 target/。
+    pub target_dir: Option<String>,
+    /// `sccache` 等编译缓存包装器路径（设则注入 `RUSTC_WRAPPER`）。
+    pub rustc_wrapper: Option<String>,
+}
+
+impl CacheConfig {
+    /// 展开为环境变量对（供 CommandRunner 注入）。
+    pub fn to_envs(&self) -> Vec<(String, String)> {
+        let mut envs = Vec::new();
+        if let Some(h) = &self.cargo_home {
+            envs.push(("CARGO_HOME".to_string(), h.clone()));
+        }
+        if let Some(t) = &self.target_dir {
+            envs.push(("CARGO_TARGET_DIR".to_string(), t.clone()));
+        }
+        if let Some(w) = &self.rustc_wrapper {
+            envs.push(("RUSTC_WRAPPER".to_string(), w.clone()));
+        }
+        envs
+    }
+
+    /// 是否配置了任一缓存项。
+    pub fn is_enabled(&self) -> bool {
+        self.cargo_home.is_some() || self.target_dir.is_some() || self.rustc_wrapper.is_some()
+    }
+}
+
 /// Builder 配置。
 pub struct BuilderConfig {
     /// 编译超时。
     pub timeout: Duration,
     /// 日志尾部保留字节数。
     pub log_tail_bytes: usize,
+    /// 缓存配置（共享 CARGO_HOME / target / sccache）。
+    pub cache: CacheConfig,
 }
 
 impl Default for BuilderConfig {
@@ -132,6 +173,7 @@ impl Default for BuilderConfig {
         Self {
             timeout: Duration::from_secs(600),
             log_tail_bytes: 8 * 1024,
+            cache: CacheConfig::default(),
         }
     }
 }
@@ -178,9 +220,10 @@ impl Builder {
         on_line: Arc<dyn Fn(String) + Send + Sync>,
     ) -> Result<BuildArtifact, BuildError> {
         let args = Self::cargo_args(req);
+        let envs = self.cfg.cache.to_envs();
         let out = self
             .runner
-            .run("cargo", &args, &req.plugin_path, self.cfg.timeout, on_line)
+            .run("cargo", &args, &req.plugin_path, &envs, self.cfg.timeout, on_line)
             .await?;
 
         if out.exit_code != Some(0) {
@@ -190,8 +233,14 @@ impl Builder {
             });
         }
 
-        // 产物路径：<plugin_path>/target/<target>/<profile>/*.wasm（取首个）。
-        let wasm = locate_wasm(&req.plugin_path, &req.target, &req.profile)
+        // 产物根：配了 CARGO_TARGET_DIR 则用它，否则 <plugin_path>/target。
+        let target_root = self
+            .cfg
+            .cache
+            .target_dir
+            .clone()
+            .unwrap_or_else(|| format!("{}/target", req.plugin_path.trim_end_matches('/')));
+        let wasm = locate_wasm(&target_root, &req.target, &req.profile)
             .ok_or_else(|| BuildError::ArtifactNotFound(req.plugin_path.clone()))?;
         let bytes = std::fs::read(&wasm).map_err(|e| BuildError::Io(format!("读产物失败: {e}")))?;
         let rev = content_rev(&bytes);
@@ -204,13 +253,10 @@ impl Builder {
     }
 }
 
-/// 定位产物 wasm（首个 .wasm 文件）。
-fn locate_wasm(plugin_path: &str, target: &str, profile: &str) -> Option<PathBuf> {
+/// 定位产物 wasm（首个 .wasm 文件）。`target_root` 是 target 目录（含缓存重定向后的路径）。
+fn locate_wasm(target_root: &str, target: &str, profile: &str) -> Option<PathBuf> {
     let profile_dir = if profile == "release" { "release" } else { "debug" };
-    let dir = PathBuf::from(plugin_path)
-        .join("target")
-        .join(target)
-        .join(profile_dir);
+    let dir = PathBuf::from(target_root).join(target).join(profile_dir);
     let entries = std::fs::read_dir(&dir).ok()?;
     for e in entries.flatten() {
         let p = e.path();
@@ -316,10 +362,15 @@ mod tests {
             program: &str,
             args: &[String],
             _cwd: &str,
+            envs: &[(String, String)],
             _timeout: Duration,
             on_line: Arc<dyn Fn(String) + Send + Sync>,
         ) -> Result<RunOutput, BuildError> {
             self.seen.lock().unwrap().push(format!("{program} {}", args.join(" ")));
+            // 记录收到的缓存 env（供 cache 测试断言）。
+            for (k, v) in envs {
+                self.seen.lock().unwrap().push(format!("ENV {k}={v}"));
+            }
             let mut log = String::new();
             for l in &self.lines {
                 on_line(l.clone());
@@ -365,5 +416,42 @@ mod tests {
         let on_line: Arc<dyn Fn(String) + Send + Sync> = Arc::new(|_| {});
         let err = b.build(&req(), on_line).await.unwrap_err();
         assert!(matches!(err, BuildError::ArtifactNotFound(_)));
+    }
+
+    #[test]
+    fn cache_config_to_envs() {
+        let c = CacheConfig {
+            cargo_home: Some("/cache/cargo".into()),
+            target_dir: Some("/cache/target".into()),
+            rustc_wrapper: Some("sccache".into()),
+        };
+        let envs = c.to_envs();
+        assert!(c.is_enabled());
+        assert!(envs.contains(&("CARGO_HOME".into(), "/cache/cargo".into())));
+        assert!(envs.contains(&("CARGO_TARGET_DIR".into(), "/cache/target".into())));
+        assert!(envs.contains(&("RUSTC_WRAPPER".into(), "sccache".into())));
+        assert!(!CacheConfig::default().is_enabled());
+    }
+
+    #[tokio::test]
+    async fn build_injects_cache_envs_into_runner() {
+        let runner = Arc::new(MockRunner {
+            exit: Some(101), // 让它编译失败即返回，不必真有产物。
+            lines: vec![],
+            seen: Mutex::new(Vec::new()),
+        });
+        let cfg = BuilderConfig {
+            cache: CacheConfig {
+                cargo_home: Some("/shared/cargo".into()),
+                target_dir: Some("/shared/target".into()),
+                rustc_wrapper: None,
+            },
+            ..Default::default()
+        };
+        let b = Builder::with_config(runner.clone(), cfg);
+        let _ = b.build(&req(), Arc::new(|_| {})).await; // 忽略结果，只看 env 注入。
+        let seen = runner.seen.lock().unwrap();
+        assert!(seen.iter().any(|s| s == "ENV CARGO_HOME=/shared/cargo"), "应注入 CARGO_HOME");
+        assert!(seen.iter().any(|s| s == "ENV CARGO_TARGET_DIR=/shared/target"), "应注入 CARGO_TARGET_DIR");
     }
 }
