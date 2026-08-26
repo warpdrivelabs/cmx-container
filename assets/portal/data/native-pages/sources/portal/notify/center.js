@@ -1,12 +1,16 @@
 // 通知中心 native_pages 页面：单 content 视图，按 props.center 展示 任务/消息/日志 通知列表。
-// 支持：列表(未读高亮)、点击单条标记已读、全部已读、刷新；数据来自后端 /api/notifications。
+// 支持：列表(未读高亮)、点击单条标记已读 + link 跳转(node:/menu: → portal-help-action，
+// https → window.open)、type/level 筛选、仅看未读、nextCursor 分页「加载更多」、全部已读；
+// 未读角标取 /api/notifications/counts（不随分页失真）；centers 元信息消费后端接口。
 // 由 shellbar 铃铛下拉选中某中心后打开（每个中心一个 tab，props.center 区分）。
 
-const CENTERS = {
-  task: { label: '任务中心', icon: 'task' },
-  message: { label: '消息中心', icon: 'email' },
-  log: { label: '日志中心', icon: 'history' },
-}
+const FALLBACK_CENTERS = [
+  { id: 'task', label: '任务中心', icon: 'task' },
+  { id: 'message', label: '消息中心', icon: 'email' },
+  { id: 'log', label: '日志中心', icon: 'history' },
+]
+
+const LEVELS = ['info', 'success', 'warning', 'error']
 
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -37,7 +41,7 @@ function fmtTime (ms) {
 function centerOf (ctx) {
   // props 由 native-host 经 JSON 属性注入，渲染时作为 ctx.props 传入。
   const p = ctx?.props?.center || ctx?.host?.__props?.center
-  return (p && CENTERS[p]) ? p : 'task'
+  return p || 'task'
 }
 
 function styleCss () {
@@ -56,6 +60,13 @@ function styleCss () {
     .nc-btn{border:1px solid color-mix(in srgb,var(--neo-cyan) 20%,transparent);border-radius:6px;background:var(--sapList_Background,#fff);
       color:var(--neo-cyan);font:inherit;font-size:12px;padding:4px 10px;cursor:pointer}
     .nc-btn:hover{background:color-mix(in srgb,var(--neo-cyan) 12%,var(--sapList_Background,#fff))}
+    .nc-filter{flex:0 0 auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;box-sizing:border-box;
+      border-bottom:1px solid color-mix(in srgb,var(--neo-cyan) 10%,var(--sapList_BorderColor,#e5e5e5))}
+    .nc-filter select{font:inherit;font-size:12px;padding:3px 6px;border-radius:6px;max-width:180px;
+      border:1px solid color-mix(in srgb,var(--neo-cyan) 20%,var(--sapField_BorderColor,#89919a));
+      background:var(--sapField_Background,var(--sapList_Background,#fff));color:var(--sapField_TextColor,var(--sapTextColor,#1d2d3e))}
+    .nc-filter label{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sapContent_LabelColor,#6a6d70);cursor:pointer}
+    .nc-filter input[type="checkbox"]{accent-color:var(--neo-cyan)}
     .nc-list{flex:1 1 auto;min-height:0;overflow:auto;padding:8px 10px 16px;display:flex;flex-direction:column;gap:6px}
     .nc-item{display:flex;gap:10px;padding:9px 12px;border:1px solid color-mix(in srgb,var(--neo-cyan) 10%,var(--sapList_BorderColor,#e5e5e5));
       border-radius:8px;background:var(--sapList_Background,#fff);cursor:pointer;transition:border-color .14s,box-shadow .14s,background .14s}
@@ -67,10 +78,16 @@ function styleCss () {
     .nc-item-title{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .nc-item.unread .nc-item-title{font-weight:700}
     .nc-item-body{font-size:12px;color:var(--sapContent_LabelColor,#6a6d70);margin-top:2px;white-space:pre-wrap;word-break:break-word}
-    .nc-item-meta{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70);margin-top:4px;display:flex;gap:8px;align-items:center}
+    .nc-item-meta{font-size:11px;color:var(--sapContent_LabelColor,#6a6d70);margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .nc-level{font-size:10px;font-weight:700;border-radius:4px;padding:0 5px;border:1px solid currentColor}
     .nc-level[data-l="error"]{color:var(--neo-red)} .nc-level[data-l="warning"]{color:var(--neo-warn)}
     .nc-level[data-l="success"]{color:var(--neo-mint)} .nc-level[data-l="info"]{color:var(--neo-cyan)}
+    .nc-tag{font-size:10px;border-radius:4px;padding:0 5px;border:1px solid color-mix(in srgb,var(--neo-cyan) 35%,transparent);color:var(--neo-cyan)}
+    .nc-agg{font-size:10px;font-weight:700;color:var(--neo-red)}
+    .nc-more{flex:0 0 auto;display:flex;justify-content:center;padding:6px 0 10px}
+    .nc-more button{border:1px solid color-mix(in srgb,var(--neo-cyan) 20%,transparent);border-radius:6px;
+      background:var(--sapList_Background,#fff);color:var(--neo-cyan);font:inherit;font-size:12px;padding:4px 16px;cursor:pointer}
+    .nc-more button:hover{background:color-mix(in srgb,var(--neo-cyan) 12%,var(--sapList_Background,#fff))}
     .nc-empty{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--sapContent_LabelColor,#6a6d70)}
     .nc-empty ui5-icon{width:1.6rem;height:1.6rem;color:color-mix(in srgb,var(--neo-cyan) 55%,var(--sapContent_LabelColor,#6a6d70))}
   `
@@ -78,88 +95,174 @@ function styleCss () {
 
 function itemHtml (it) {
   const lvl = it.level || 'info'
-  return `<div class="nc-item ${it.read ? '' : 'unread'}" role="button" tabindex="0" data-id="${esc(it.id)}">
+  const meta = [
+    `<span class="nc-level" data-l="${esc(lvl)}">${esc(lvl)}</span>`,
+    it.type ? `<span class="nc-tag">${esc(it.type)}</span>` : '',
+    it.aggCount > 1 ? `<span class="nc-agg">×${esc(it.aggCount)}</span>` : '',
+    `<span>${esc(fmtTime(it.createdAt))}</span>`,
+    it.read ? '' : '<span style="color:var(--neo-red)">● 未读</span>',
+  ].filter(Boolean).join('')
+  return `<div class="nc-item ${it.read ? '' : 'unread'}" role="button" tabindex="0" data-id="${esc(it.id)}" data-link="${esc(it.link || '')}">
     <span class="nc-dot"></span>
     <div class="nc-main">
       <div class="nc-item-title">${esc(it.title)}</div>
       ${it.body ? `<div class="nc-item-body">${esc(it.body)}</div>` : ''}
-      <div class="nc-item-meta">
-        <span class="nc-level" data-l="${esc(lvl)}">${esc(lvl)}</span>
-        <span>${esc(fmtTime(it.createdAt))}</span>
-        ${it.read ? '' : '<span style="color:var(--neo-red)">● 未读</span>'}
-      </div>
+      <div class="nc-item-meta">${meta}</div>
     </div>
   </div>`
 }
 
-function viewHtml (center, items) {
-  const meta = CENTERS[center] || CENTERS.task
-  const unread = items.filter((x) => !x.read).length
-  const body = items.length
-    ? items.map(itemHtml).join('')
-    : `<cmx-empty-state icon="${meta.icon}" title="暂无通知" size="sm"></cmx-empty-state>`
-  return `<div class="nc" data-center="${esc(center)}">
+function viewHtml (st) {
+  const meta = st.centers.find((c) => c.id === st.center) || st.centers[0] || FALLBACK_CENTERS[0]
+  const unread = st.counts ? st.counts[st.center] || 0 : 0
+  const types = Array.from(new Set(st.items.map((x) => x.type).filter(Boolean))).sort()
+  const body = st.items.length
+    ? st.items.map(itemHtml).join('')
+    : `<cmx-empty-state icon="${esc(meta.icon || 'bell')}" title="暂无通知" size="sm"></cmx-empty-state>`
+  const more = st.nextCursor
+    ? `<div class="nc-more"><button type="button" data-act="more">加载更多${st.total ? `（共 ${esc(st.total)} 条）` : ''}</button></div>`
+    : ''
+  return `<div class="nc" data-center="${esc(st.center)}">
     <div class="nc-head">
-      <ui5-icon name="${meta.icon}"></ui5-icon>
-      <span class="nc-title">${esc(meta.label)}</span>
+      <ui5-icon name="${esc(meta.icon || 'bell')}"></ui5-icon>
+      <span class="nc-title">${esc(meta.label || '通知中心')}</span>
       <span class="nc-count" data-zero="${unread ? 0 : 1}">${unread > 99 ? '99+' : unread}</span>
       <span class="nc-actions">
         <button class="nc-btn" type="button" data-act="refresh">刷新</button>
         <button class="nc-btn" type="button" data-act="read-all">全部已读</button>
       </span>
     </div>
+    <div class="nc-filter">
+      <select data-filter="type" title="按业务类型筛选">
+        <option value="">全部类型</option>
+        ${types.map((t) => `<option value="${esc(t)}" ${st.filters.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}
+      </select>
+      <select data-filter="level" title="按等级筛选">
+        <option value="">全部等级</option>
+        ${LEVELS.map((l) => `<option value="${esc(l)}" ${st.filters.level === l ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+      </select>
+      <label><input type="checkbox" data-filter="unread" ${st.filters.unread ? 'checked' : ''}/>仅看未读</label>
+    </div>
     <div class="nc-list">${body}</div>
+    ${more}
   </div>`
 }
 
-async function loadItems (center) {
-  const d = await apiJson(`/api/notifications?center=${encodeURIComponent(center)}`)
-  return (d && d.items) || []
+async function loadCenters () {
+  try {
+    const d = await apiJson('/api/notifications/centers')
+    return (d && Array.isArray(d.centers) && d.centers.length) ? d.centers : FALLBACK_CENTERS
+  } catch { return FALLBACK_CENTERS }
 }
 
-function bind (root, center, rerender) {
+async function loadCounts () {
+  try { return await apiJson('/api/notifications/counts') } catch { return null }
+}
+
+async function loadItems (st, reset) {
+  const q = new URLSearchParams()
+  q.set('center', st.center)
+  if (st.filters.type) q.set('type', st.filters.type)
+  if (st.filters.level) q.set('level', st.filters.level)
+  if (st.filters.unread) q.set('isRead', 'false')
+  q.set('limit', '50')
+  if (!reset && st.nextCursor) q.set('cursor', st.nextCursor)
+  const d = await apiJson(`/api/notifications?${q.toString()}`)
+  const items = (d && d.items) || []
+  st.items = reset ? items : st.items.concat(items)
+  st.nextCursor = (d && d.nextCursor) || null
+  if (reset) st.total = (d && d.total) || 0
+}
+
+/** link 跳转：node:/menu: → portal-help-action 组合事件（与帮助中心同通道）；URL → window.open。 */
+function openLink (el, link) {
+  if (!link) return
+  if (link.startsWith('node:')) {
+    const id = link.slice(5).trim()
+    if (id) el.dispatchEvent(new CustomEvent('portal-help-action', { detail: { kind: 'node', id }, bubbles: true, composed: true }))
+  } else if (link.startsWith('menu:')) {
+    const key = link.slice(5).trim()
+    if (key) el.dispatchEvent(new CustomEvent('portal-help-action', { detail: { kind: 'menu', key }, bubbles: true, composed: true }))
+  } else if (/^https?:\/\//.test(link)) {
+    try { window.open(link, '_blank', 'noopener') } catch {}
+  }
+}
+
+function bind (root, st, rerender) {
   root.querySelectorAll('[data-id]').forEach((el) => {
     const open = async () => {
       const id = el.getAttribute('data-id')
-      try {
-        await apiJson('/api/notifications/mark-read', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ center, id }),
-        })
-      } catch (e) { console.warn('[notify-center] 标记已读失败:', e && e.message || e) }
-      rerender()
+      const link = el.getAttribute('data-link') || ''
+      const wasUnread = !st.items.find((x) => String(x.id) === String(id))?.read
+      if (wasUnread) {
+        try {
+          await apiJson('/api/notifications/mark-read', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ center: st.center, id }),
+          })
+        } catch (e) { console.warn('[notify-center] 标记已读失败:', e && e.message || e) }
+      }
+      if (link) openLink(el, link)
+      await rerender()
     }
     el.addEventListener('click', open)
     el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open() } })
   })
-  root.querySelector('[data-act="refresh"]')?.addEventListener('click', () => rerender())
+  root.querySelector('[data-act="refresh"]')?.addEventListener('click', () => { st.nextCursor = null; rerender() })
+  root.querySelector('[data-act="more"]')?.addEventListener('click', () => rerender(false))
   root.querySelector('[data-act="read-all"]')?.addEventListener('click', async () => {
     try {
       await apiJson('/api/notifications/mark-read', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all: true, center }),
+        body: JSON.stringify({ all: true, center: st.center }),
       })
     } catch (e) { console.warn('[notify-center] 全部已读失败:', e && e.message || e) }
-    rerender()
+    st.nextCursor = null
+    await rerender()
+  })
+  root.querySelectorAll('[data-filter]').forEach((el) => {
+    const key = el.getAttribute('data-filter')
+    const evt = el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input'
+    el.addEventListener(evt, async () => {
+      const v = el.type === 'checkbox' ? el.checked : el.value
+      st.filters[key] = v
+      st.nextCursor = null
+      await rerender()
+    })
   })
 }
 
 async function mount (ctx) {
   const host = ctx.host
-  const center = centerOf(ctx)
-  const render = async () => {
+  const st = {
+    center: centerOf(ctx),
+    centers: FALLBACK_CENTERS,
+    filters: { type: '', level: '', unread: false },
+    items: [],
+    nextCursor: null,
+    total: 0,
+    counts: null,
+  }
+  const render = async (reset = true) => {
     const root = host?.renderRoot || host?.shadowRoot?.querySelector('.native-page-root')
     if (!root || !root.isConnected) return
-    let items = []
-    try { items = await loadItems(center) } catch (e) { /* 显示空态 */ }
-    root.innerHTML = `<style>${styleCss()}</style>${viewHtml(center, items)}`
+    try { await loadItems(st, reset) } catch (e) {
+      console.warn('[notify-center] 加载通知失败:', e && e.message || e)
+      st.items = reset ? [] : st.items
+      st.nextCursor = null
+    }
+    st.counts = await loadCounts()
+    root.innerHTML = `<style>${styleCss()}</style>${viewHtml(st)}`
     const wrap = root.querySelector('.nc')
-    if (wrap) bind(wrap, center, () => { render() })
+    if (wrap) bind(wrap, st, render)
   }
-  // 首帧：等 renderRoot 就绪再渲染
+  // 首帧：等 renderRoot 就绪再渲染；centers 元信息异步补齐后刷新一次。
   const wait = (n = 0) => {
     const root = host?.renderRoot || host?.shadowRoot?.querySelector('.native-page-root')
-    if (root && root.isConnected) { render(); return }
+    if (root && root.isConnected) {
+      loadCenters().then((cs) => { st.centers = cs; return render() }).catch(() => {})
+      return
+    }
     if (n < 20) requestAnimationFrame(() => wait(n + 1))
   }
   requestAnimationFrame(() => wait())
