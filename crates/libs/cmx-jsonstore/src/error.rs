@@ -17,6 +17,14 @@ pub enum PortalError {
     #[error("请求参数错误: {0}")]
     BadRequest(String),
 
+    /// 无权执行该操作（映射 403）。
+    #[error("无权执行: {0}")]
+    Forbidden(String),
+
+    /// 触发限流（映射 429）。
+    #[error("请求过于频繁: {0}")]
+    TooManyRequests(String),
+
     /// JSON 解析失败（映射 500）。
     #[error("JSON 解析失败: {0}")]
     Json(#[from] serde_json::Error),
@@ -41,6 +49,16 @@ impl PortalError {
         Self::BadRequest(msg.into())
     }
 
+    /// 构造无权执行错误。
+    pub fn forbidden(msg: impl Into<String>) -> Self {
+        Self::Forbidden(msg.into())
+    }
+
+    /// 构造限流错误。
+    pub fn too_many_requests(msg: impl Into<String>) -> Self {
+        Self::TooManyRequests(msg.into())
+    }
+
     /// 构造通用业务错误。
     pub fn business(msg: impl Into<String>) -> Self {
         Self::Business(msg.into())
@@ -56,6 +74,8 @@ impl From<PortalError> for cmx_api_types::Error {
         match err {
             PortalError::NotFound(msg) => cmx_api_types::Error::not_found(msg),
             PortalError::BadRequest(msg) => cmx_api_types::Error::bad_request(msg),
+            PortalError::Forbidden(msg) => cmx_api_types::Error::forbidden(msg),
+            PortalError::TooManyRequests(_) => cmx_api_types::Error::rate_limit_exceeded(60, 0, 60),
             other => cmx_api_types::Error::internal_error(other.to_string()),
         }
     }
