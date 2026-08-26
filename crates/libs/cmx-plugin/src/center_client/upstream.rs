@@ -110,10 +110,10 @@ pub(crate) fn upstream_from_config(cfg: &CenterClientConfig, key: &str) -> Optio
             .filter(|s| !s.is_empty())
             .is_some()
         {
-            tracing::warn!(
-                service.key = key,
-                // "services.{key} 同时配置 url 与 discovery，discovery 被 url 遮蔽（非主备兜底）；需服务发现请删除 url"
-            );
+            // tracing::warn!(
+            //     service.key = key,
+            //     "services.{key} 同时配置 url 与 discovery，discovery 被 url 遮蔽（非主备兜底）；需服务发现请删除 url"
+            // );
         }
         return Some(ProxyUpstream::Static(
             base.trim_end_matches('/').to_string(),
