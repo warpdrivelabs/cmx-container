@@ -53,7 +53,8 @@ async fn init() {
 | 审计日志 | 操作审计记录，支持按插件/操作/时间范围过滤 |
 | 插件市场 | 插件发布、搜索、下载、评分统计 |
 | 模块包安装/导出 | `ModuleInstallService`（模块迁移包导入：版本校验→upsert cmx_module→资源安装→逐插件安装）/ `ModuleExportService`（聚合 zip 导出） |
-| 远程定义导入 | `remote_importers`（form/menu/permission/table 四类，经 cmx-resource-rpc gRPC 传输） |
+| 远程定义导入 | `remote_importers`（form/menu/permission/table 四类；远程传输按 `[center_client.services]` per-key `transport` 选 http（ZIP over HTTP）或 grpc（cmx-resource-rpc）） |
+| 服务定位与反代 | `center_client`：`[center_client.services]` 单表（键 → `url`/`discovery`/`transport`），mode 已退役；`proxy_upstream(key)` 逐键解析反代目标（静态基址固化 / Nacos 加权随机选例），`log_center_client_snapshot` 启动快照 + `warm_proxy_upstreams` 订阅预热 |
 | 插件间调用宿主函数 | `PluginHostFunctions`（深度限制/循环检测/超时三层防护） |
 
 ## 模块结构
@@ -124,7 +125,7 @@ cmx-plugin
 │   ├── repository.rs       # 市场数据仓库
 │   ├── service.rs          # 市场服务
 │   └── stats.rs            # 统计服务
-├── center_client/          # 服务中心客户端（精简版：config（services 单表，per-key 定位+传输）/ upstream（反代目标解析）/ packer / types）
+├── center_client/          # 服务中心客户端（config（services 单表，per-key 定位+传输）/ upstream（反代目标解析与选例）/ packer / types）
 ├── common/                 # 通用工具
 │   ├── definition.rs       # 插件定义解析
 │   ├── dependency.rs       # 依赖检查工具
@@ -186,6 +187,14 @@ cmx-plugin
 
 WASM 插件间调用宿主函数（`host_functions.rs`），通过 GlobalRuntime 实现跨插件服务调用，自带三层防护：调用深度限制（默认 8 层）、循环检测、Extism 原生超时（默认 30 秒）。
 
+### CenterClientConfig / ProxyUpstream
+
+服务中心客户端（`center_client/`），服务定位与传输均为 per-key 自由表（`[center_client.services]`，原 `mode` 字段已退役）：
+
+- `CenterClientConfig::load()`：从 ConfigManager 加载（toml `[center_client]` < `CENTER_CLIENT__*` env）；键值对：`url`（静态基址）/ `discovery`（Nacos 服务名）二选一定位，`transport`（"http"/"grpc"）可选，缺省取全局 `default_transport`；`has_remote_import_keys()` 判定 menu/perm/form 是否配了远程导入键，`transport_of(key)` 解析生效传输。
+- `proxy_upstream(key)` → `Option<ProxyUpstream>`：反代键（flow/report/rules/model/mdm）逐键解析目标；`resolve()` 动态选例（HTTP 按 Nacos weight 加权随机，gRPC 按服务名经全局 RPC 客户端路由），`resolver_fn()` 固化供反代层共享。
+- `log_center_client_snapshot()` / `warm_proxy_upstreams()`：启动期配置快照（补偿键拼写错误静默不挂路由的可见性）与 discovery 目标订阅预热；键所有权约定：`menu`/`perm`/`form` 归远程导入器，`flow`/`report`/`rules`/`model`/`mdm` 归反向代理。新增微服务只需在 toml 加一行键值，配置层零代码改动。
+
 ## 使用指南
 
 ### 一、全局插件管理器
@@ -210,11 +219,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 方式3：注入外部依赖（数据库、缓存、分布式锁、PubSub）
     use cmx_database::DatabaseManager;
-    use cmx_buffer::CacheManager;
+    use cmx_buffer::{CacheManager, RedisClient, RedisConfig};
     use std::sync::Arc;
 
     let db = Arc::new(DatabaseManager::new(Default::default()));
-    let cache = Arc::new(CacheManager::new(Default::default()));
+    let cache = Arc::new(CacheManager::new(
+        RedisClient::new(RedisConfig::default()).await?,
+    ));
     GlobalPluginManager::initialize_with_deps(
         Default::default(),
         Some(db),

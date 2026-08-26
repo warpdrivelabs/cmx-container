@@ -369,7 +369,7 @@ let err = OrchestrationError { message: "节点执行失败".to_string() };
 
 - `TableDefine`：`table_name` / `display_name` / `columns` / `primary_keys` / `indexes` / `version` / `partition_type` / `partition_columns` / `extensions` 等
 - `ColumnDefine`：`name` / `label` / `field_type` / `is_primary_key` / `is_nullable` / `default_value` / `length` / `precision` / `scale` / `db_type` / `ordinal` / 外键信息（`is_foreign_key` / `foreign_key_table` / `foreign_key_column`）/ `extensions`
-- `IndexDefine`（支持 `#[derive(Default)]`）与 `IndexKind`、`PartitionType`
+- `IndexDefine`（支持 `#[derive(Default)]`）与 `IndexKind`、`PartitionType`；`IndexDefine` 含 `valid` 字段（serde 默认 true）：内省侧标记 INVALID / NOT-READY 索引（如 `CREATE INDEX CONCURRENTLY` 失败残留），diff 视其为「内容永不匹配」必产生重建；设计期产出恒为 true
 
 ```rust
 use cmx_core::model::meta::FieldType;

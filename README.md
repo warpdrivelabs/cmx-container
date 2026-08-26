@@ -11,14 +11,14 @@
 
 ## 项目简介
 
-`cmx-container` 是 CMX 企业级平台的**后端公用库与插件平台**，以 Cargo Workspace 组织，当前含 **65 个活跃成员 crate**（另有 `cmx-wasmdemo`、`cmx-nacos` 两个已停用 crate 源码保留、member 注释）。定位演进历程：早期是单体「插件化容器运行时」（含 web-server bin），后经架构重构——**server bin 迁至下游 `cmx-portalservice`（薄 bin + 业务层），流程引擎迁 `cmx-flowengine`、报表迁 `cmx-report`、规则引擎迁 `cmx-rulesengine`（各自独立 workspace），本仓库沉淀为被各微服务跨 workspace 共享的公用库 + 插件平台**。
+`cmx-container` 是 CMX 企业级平台的**后端公用库与插件平台**，以 Cargo Workspace 组织，当前含 **53 个活跃成员 crate**（另有 `cmx-wasmdemo`、`cmx-nacos` 两个已停用 crate 源码保留、member 注释）。定位演进历程：早期是单体「插件化容器运行时」（含 web-server bin），后经架构重构——**server bin 迁至下游 `cmx-portalservice`（薄 bin + 业务层），流程引擎迁 `cmx-flowengine`、报表迁 `cmx-report`、规则引擎迁 `cmx-rulesengine`（各自独立 workspace），本仓库沉淀为被各微服务跨 workspace 共享的公用库 + 插件平台**。
 
 核心能力：
 
 - **WASM 插件平台**：Extism 运行时（`cmx-runtime`）+ 插件管理/市场/集群同步（`cmx-plugin`）+ 插件 SDK 与示范（`cmx-plugin-sdk` / `cmx-plugin-demo`）
 - **可视化服务编排**：声明式 JSON 流程 + 事务框 + 分支路由（`cmx-service`，gRPC 皮肤在 `cmx-rpcs/cmx-orchestrator-rpc`）
-- **元数据数据服务**：数据字典 DCT / 业务单据 DOC / 主数据 MDM 三域「api + model + store-pg」三件套，定义 JSON 驱动的强类型装载/回存/铸号
-- **模型中心**：表定义 → DDL 生成 → 数据库初始化 → 模块部署台账（`cmx-model/*`、`cmx-metadata`）
+- **元数据数据服务**：DCT 字典 / DOC 单据 / MDM 主数据引擎已迁独立微服务（`../cmx-model` / `../cmx-mdm`），门户侧仅剩反代薄壳（见「协议皮肤与装配」）
+- **模型中心**：引擎（含编码引擎）迁独立微服务 `../cmx-model`（`cmx-model-server` :8093），本仓库仅留 `cmx-model-proxy` 反代薄壳；`cmx-metadata` 保留（表定义 JSON → DDL 生成/迁移/seed）
 - **统一认证授权**：JWT 双令牌 + Refresh Rotation + OAuth2/PKCE（`cmx-auth`）；RBAC/角色组/SoD 互斥 + 缓存熔断（`cmx-iam`）
 - **通用业务编码引擎**：单据号/流水号规则铸号（`cmx-code/*`）
 - **定时任务中心**：常驻消费者作业、集群可重入（`cmx-job/*`）
@@ -41,11 +41,12 @@
     ├──────────────────────────────────────────────────────────────────┤
     │ 协议皮肤：cmx-apis/（HTTP：api-core + 各域 *-api）                 │
     │           cmx-rpcs/（gRPC：orchestrator-rpc · resource-rpc）       │
-    │           反代薄壳：flow-api / rpt-api / rule-api（proxy-only）    │
+    │           反代薄壳：flow-api / rpt-api / rule-api /                │
+    │           model-proxy / mdm-proxy（proxy-only，核 cmx-proxy-core） │
     ├──────────────────────────────────────────────────────────────────┤
     │ 域层：cmx-biz · cmx-iam · cmx-plugin · cmx-ai · cmx-form          │
-    │       cmx-doc/* · cmx-dct/* · cmx-mdm/* · cmx-job/*               │
-    │       cmx-model/* · cmx-code/* · cmx-master-slave · cmx-metadata  │
+    │       cmx-job/* · cmx-metadata                                │
+    │       （doc/dct/code/master-slave/model/mdm 引擎已迁独立微服务）    │
     ├──────────────────────────────────────────────────────────────────┤
     │ 运行时/服务：cmx-runtime（Extism WASM） · cmx-service（编排）      │
     │              cmx-debug · cmx-jsonstore                            │
@@ -63,7 +64,7 @@
 
 - **薄 bin + 公用库下沉**：各微服务 bin 只做启动装配，业务与基建全部经 `path = "../cmx-container/crates/..."` 复用本仓库。
 - **协议皮肤与领域分离**（AGENTS.md 第八章）：HTTP handler 集中在 `cmx-apis/*-api` 薄皮肤 crate（参数提取/响应封装），gRPC 皮肤集中在 `cmx-rpcs/*-rpc`；领域逻辑留在域 crate。
-- **独立微服务反代**：流程/报表/规则三个引擎已在独立 workspace，本仓库仅留 proxy-only 薄壳（`cmx-flow-api` 等），门户编译期不触碰引擎源码。
+- **独立微服务反代**：流程/报表/规则/模型中心/主数据五域均在独立 workspace，本仓库仅留 proxy-only 薄壳（`cmx-flow-api` / `cmx-model-proxy` 等），门户编译期不触碰引擎源码；公共转发核见 `cmx-proxy-core`。
 - **Trait 解耦**：`cmx-auth` 不直接依赖 `cmx-iam`，经 `cmx-traits` 的 `UserAuthQuery` / `PermissionChecker` 注入。
 - **无状态集群约束**：进程无状态、会话与缓存外置（Redis/DB）、定时任务 `SELECT ... FOR UPDATE SKIP LOCKED` 可重入、插件集群同步走 Redis Pub/Sub 单写原则。
 - **依赖集中管理**：第三方依赖在 workspace `Cargo.toml` 统一定义，成员 crate 以 `workspace = true` 引用。
@@ -73,15 +74,17 @@
 ```text
 cmx-container/
 ├── AGENTS.md                    # 开发规范（18 章，权威）
-├── Cargo.toml                   # Workspace 配置（version 0.1.12 · 65 成员）
+├── Cargo.toml                   # Workspace 配置（version 0.1.12 · 53 成员）
 ├── crates/
 │   ├── libs/                    # 全部公用库 crate（见下节导航）
 │   ├── tests/cmx-database-test/ # 数据库层基准/E2E 测试 crate
 │   └── web/web-folder/          # 门户前端静态资源（历史遗留位置）
 ├── sdk/cmx-cli/                 # 插件开发 CLI：脚手架 + api.json 生成
-├── data/                        # 平台数据蓝本：meta/ menu-pages/ html-pages/
-│                                #   native-pages/ form-pages/ dictbak/ factbak/
-│                                #   flow/ help/ service-catalog/ modules/ 等
+├── assets/                      # 开发期统一资产工作区：按属主服务隔离的页面/菜单/
+│                                #   元数据真源（portal/model/mdm/flow/report/rules），
+│                                #   经 scripts/publish-assets.sh 发布到各主应用仓
+├── databack/                    # 历史数据备份：meta/ menu-pages/ html-pages/
+│                                #   native-pages/ form-pages/ dictbak/ factbak/ 等（原 data/）
 ├── config/                      # 配置模板 + CONFIG_MANUAL.md + ENV_MANUAL.md
 ├── docs/                        # 设计文档与方案（含 sql/migrations）
 ├── docker/                      # Dockerfile / compose / k8s 部署
@@ -141,19 +144,15 @@ cmx-container/
 | [cmx-plugin-sdk](crates/libs/cmx-plugin-sdk/README.md) · [cmx-plugin-demo](crates/libs/cmx-plugin-demo/README.md) | 插件 SDK（cdylib+rlib）与官方示范 |
 | [cmx-ai](crates/libs/cmx-ai/README.md) | OpenCode AI 中继：SSE 会话/消息/审批 |
 | [cmx-form](crates/libs/cmx-form/README.md) | form/html/native 三类页面资源 JSON 存储 |
-| [cmx-master-slave](crates/libs/cmx-master-slave/README.md) | 主从结构引擎：schema 路径树/树装配/汇总上卷/变更集 |
 | [cmx-metadata](crates/libs/cmx-metadata/README.md) | 表定义 JSON → DDL 生成/迁移/seed 执行器 |
 
 ### 域三件套（api + model + store-pg）
 
 | 域 | api（HTTP 皮肤） | model（领域） | store-pg（持久化） |
 |----|------------------|---------------|--------------------|
-| 单据 DOC | [cmx-doc-api](crates/libs/cmx-doc/cmx-doc-api/README.md) | [cmx-doc-model](crates/libs/cmx-doc/cmx-doc-model/README.md) | [cmx-doc-store-pg](crates/libs/cmx-doc/cmx-doc-store-pg/README.md) |
-| 字典 DCT | [cmx-dct-api](crates/libs/cmx-dct/cmx-dct-api/README.md) | [cmx-dct-model](crates/libs/cmx-dct/cmx-dct-model/README.md) | [cmx-dct-store-pg](crates/libs/cmx-dct/cmx-dct-store-pg/README.md) |
-| 主数据 MDM | [cmx-mdm-api](crates/libs/cmx-mdm/cmx-mdm-api/README.md) | [cmx-mdm-model](crates/libs/cmx-mdm/cmx-mdm-model/README.md) | [cmx-mdm-store-pg](crates/libs/cmx-mdm/cmx-mdm-store-pg/README.md) |
 | 任务 JOB | [cmx-job-api](crates/libs/cmx-job/cmx-job-api/README.md) | [cmx-job-core](crates/libs/cmx-job/cmx-job-core/README.md) | [cmx-job-store-pg](crates/libs/cmx-job/cmx-job-store-pg/README.md) |
-| 模型 MODEL | [cmx-model-api](crates/libs/cmx-model/cmx-model-api/README.md) | [cmx-model-meta](crates/libs/cmx-model/cmx-model-meta/README.md) | [cmx-model-deploy](crates/libs/cmx-model/cmx-model-deploy/README.md)（部署） |
-| 编码 CODE | [cmx-code-api](crates/libs/cmx-code/cmx-code-api/README.md) | [cmx-code-model](crates/libs/cmx-code/cmx-code-model/README.md) | —（复用通用 store） |
+
+> DOC 单据 / DCT 字典 / CODE 编码 / MODEL 模型中心三件套已迁至独立 workspace `../cmx-model`（模型中心微服务），MDM 主数据三件套已迁至 `../cmx-mdm`；门户侧仅剩反代薄壳（见下表）。
 
 ### 协议皮肤与装配
 
@@ -165,7 +164,7 @@ cmx-container/
 | [cmx-biz-api](crates/libs/cmx-apis/cmx-biz-api/README.md) · [cmx-iam-api](crates/libs/cmx-apis/cmx-iam-api/README.md) · [cmx-plugin-api](crates/libs/cmx-apis/cmx-plugin-api/README.md) · [cmx-ai-api](crates/libs/cmx-apis/cmx-ai-api/README.md) · [cmx-storage-api](crates/libs/cmx-apis/cmx-storage-api/README.md) | 各域 HTTP 皮肤 |
 | [cmx-orchestrator-rpc](crates/libs/cmx-rpcs/cmx-orchestrator-rpc/README.md) · [cmx-resource-rpc](crates/libs/cmx-rpcs/cmx-resource-rpc/README.md) | gRPC 皮肤（编排调用 / 资源包跨服务导入） |
 | [cmx-rpc-gen](crates/libs/cmx-rpc-gen/README.md) | volo-build 编译期 gRPC 代码生成 |
-| [cmx-flow-api](crates/libs/cmx-flow/cmx-flow-api/README.md) · [cmx-rpt-api](crates/libs/cmx-rpt/cmx-rpt-api/README.md) · [cmx-rule-api](crates/libs/cmx-rule/cmx-rule-api/README.md) | 反代薄壳 → 独立微服务（proxy-only） |
+| [cmx-flow-api](crates/libs/cmx-flow/cmx-flow-api/README.md) · [cmx-rpt-api](crates/libs/cmx-rpt/cmx-rpt-api/README.md) · [cmx-rule-api](crates/libs/cmx-rule/cmx-rule-api/README.md) · [cmx-model-proxy](crates/libs/cmx-model/cmx-model-proxy/README.md) · [cmx-mdm-proxy](crates/libs/cmx-mdm/cmx-mdm-proxy/README.md) | 反代薄壳 → 独立微服务（proxy-only；公共转发核见 [cmx-proxy-core](crates/libs/cmx-proxy-core/README.md)） |
 | [cmx-platform-app](crates/libs/cmx-platform-app/README.md) | 平台总装配：聚合全域路由 + 有序初始化 |
 | [cmx-service-base](crates/libs/cmx-service-base/README.md) | 微服务起服基础设施（feature 门控 init_* 原语） |
 | [cmx-web-chassis](crates/libs/cmx-web-chassis/README.md) · [cmx-web-monitor](crates/libs/cmx-web-monitor/README.md) | HTTP 服务底盘 / 技术监控 |
@@ -204,7 +203,7 @@ cd ../cmx-portalservice
 # 启动后监听 0.0.0.0:8080，访问 http://127.0.0.1:8080/portal/
 ```
 
-流程（:8091+）、报表、规则引擎分别见 `../cmx-flowengine`、`../cmx-report`、`../cmx-rulesengine` 仓库各自 README。
+流程（:8091+）、报表、规则引擎分别见 `../cmx-flowengine`、`../cmx-report`、`../cmx-rulesengine` 仓库各自 README；模型中心见 `../cmx-model`（:8093），主数据见 `../cmx-mdm`（:8095）。
 
 ### 3. 配置
 
@@ -250,7 +249,7 @@ docker-compose -f docker/docker-compose.local.yml up -d              # 本地 co
 
 ### Q: 如何给平台新增菜单/页面/字典数据？
 
-数据真源在本仓库 `data/`（menu-pages / html-pages / native-pages / meta 等），经模型中心 deploy 或同步脚本落地数据库；详见 `data/20260716_data_目录结构与内容总结.md`。
+开发、修改在 `assets/`（按属主服务隔离的统一资产工作区，页面 id 一服务一前缀），发布时经 `scripts/publish-assets.sh <svc>` 拷贝到对应主应用仓；历史数据备份在 `databack/`（原 data/）。详见 [assets/README.md](assets/README.md)。
 
 ## 文档导航
 
@@ -262,7 +261,8 @@ docker-compose -f docker/docker-compose.local.yml up -d              # 本地 co
 | [docs/sql/](docs/sql/) | SQL 迁移与 DDL |
 | [docs/cmx-docker-build-guide.md](docs/cmx-docker-build-guide.md) | Docker 镜像构建 |
 | [docs/multi-instance-deployment-analysis.md](docs/multi-instance-deployment-analysis.md) | 多实例/集群部署分析 |
-| [data/20260716_data_目录结构与内容总结.md](data/20260716_data_目录结构与内容总结.md) | 平台数据蓝本目录说明 |
+| [assets/README.md](assets/README.md) | 统一资产工作区：属主归属与发布流程 |
+| [databack/20260716_data_目录结构与内容总结.md](databack/20260716_data_目录结构与内容总结.md) | 历史数据备份目录说明（原 data/） |
 | [crates/libs/](crates/libs/) | 各 crate README（见上文导航表） |
 
 ## 许可证 / 贡献 / 安全

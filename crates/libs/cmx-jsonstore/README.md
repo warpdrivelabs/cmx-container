@@ -23,7 +23,7 @@
 
 两个关键设计：
 
-1. **rev = xxhash64(source bytes) 截断 16 hex**：非密码学哈希，但 CMX 页面缓存属"非安全上下文"（服务端算、内部作者编辑、无对抗方、碰撞后果轻微=一次刷新即修）。rev 同时作 HTTP ETag 值与前端 IndexedDB 缓存校验锚点。
+1. **rev = xxhash64(source bytes) 截断 16 hex**：非密码学哈希，但 CMX 页面缓存属"非安全上下文"（服务端算、内部作者编辑、无对抗方、碰撞后果轻微=一次刷新即修）。rev 同时作 HTTP ETag 值与前端 IndexedDB 缓存校验锚点；`content_rev_with_meta` 另在源内容前前置行字段 canonical 串（固定字段序、`\u{1F}` 分隔、缺失/null 归一为空串），使行字段（坐标/名称等）变更而源码不变时 rev 也随之变化——前端缓存自愈，无需用户手动清站点数据。
 2. **缓存开关与 TTL 的生效语义不同**：`cache_enabled()`（`assets.page_cache_enabled`，**缺省 false**）是运行时热读，改配置即生效；moka 实例的 TTL（`assets.page_cache_ttl_secs` 缺省 30s）与容量（`assets.page_cache_max_entries` 缺省 4096）在 `LazyLock` 首次访问时固定，**改配置需重启**（重建实例代价大且丢缓存，不值得）。
 
 ---
@@ -63,7 +63,7 @@
 | 统一错误 | `PortalError` 五类变体 + HTTP 状态映射语义（404/400/500）；`From<PortalError> for cmx_api_types::Error` |
 | L1 缓存 | `cached_read_text` / `cached_read_json`：命中直返，未命中读盘回填；Text/Json 形态互转按需回填；开关关闭时全部穿透 |
 | 写后失效 | `invalidate_path` / `invalidate_paths`（索引双写场景）/ `invalidate_all`（索引重建全清空，moka 同步方法） |
-| rev 锚点 | `content_rev(bytes)`：xxhash64 → 16 hex；`REV_LEN = 16`；保存后读比较均为 O(1) 字符串相等 |
+| rev 锚点 | `content_rev(bytes)`：xxhash64 → 16 hex；`content_rev_with_meta(fields, source)`：行字段 canonical + 源码同哈希（行字段变更也触发前端缓存失效重拉，缓存自愈）；`REV_LEN = 16`；保存后读比较均为 O(1) 字符串相等 |
 | 集群一致性 | 跨节点各自 moka TTL（30s）收敛，不依赖即时广播；rev 实时算天然一致（秒级一致留远期 Redis pub-sub） |
 | ID 校验 | `is_safe_id`（`[a-zA-Z0-9._-]{1,128}`）/ `is_safe_segment`（不含点）/ `is_safe_json_file` / `validate_id` |
 | 路径防穿越 | `resolve_within(base, rel)`：去前导 `/` 与 `data/` 前缀、逐段拼接、拒绝 `..`/根/盘符 |
@@ -113,6 +113,10 @@ pub async fn write_text_atomic(path: &Path, text: &str) -> PortalResult<()>;
 pub const REV_LEN: usize = 16;
 pub fn cache_enabled() -> bool;                      // assets.page_cache_enabled，缺省 false（运行时热读）
 pub fn content_rev(bytes: &[u8]) -> String;          // xxhash64 → 16 hex 小写
+pub fn content_rev_with_meta(fields: &[&str], source: &str) -> String;
+    // 行字段 canonical（\u{1F} 分隔、缺失/null 归一空串）+ 源码 → 16 hex；
+    // html 全量读字段序 [domain,app,module,doc,name,details,rel_path]，
+    // native 全量读字段序 [name,details,source_type,rel_path]（两侧读路径须一致）
 pub async fn cached_read_text(path: &Path) -> PortalResult<Option<String>>;
 pub async fn cached_read_json(path: &Path) -> PortalResult<Option<serde_json::Value>>;
 pub async fn invalidate_path(path: &Path);

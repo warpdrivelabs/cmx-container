@@ -1,6 +1,6 @@
 # cmx-platform-app
 
-> 平台总装配器（原 cmx-portal-app）：把 CMX 平台所有业务域的路由聚合到一起、按序执行 20 步基础设施初始化并起 HTTP 服务的最上层组装 crate，供各微服务 bin 以一行 `run_platform(banner)` 拉起完整平台。
+> 平台总装配器（原 cmx-portal-app）：把 CMX 平台所有业务域的路由聚合到一起、按序执行基础设施初始化并起 HTTP 服务的最上层组装 crate，供各微服务 bin 以一行 `run_platform(banner)` 拉起完整平台。
 
 [![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
 [![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
@@ -16,7 +16,8 @@
 
 - **一处装配，处处起服**：依赖约 50 个平台 crate（8+ 个 `*-api` 路由模块、IAM/审计/认证链、RPC 皮肤、任务中心、AI 代理等）。各独立微服务 bin 跨 workspace path 只引它一个，即牵入完整平台依赖树。它必须留在 cmx-container（与被装配的平台 crate 内聚）。
 - **初始化顺序 load-bearing**：审计依赖数据源、IAM 依赖审计、系统身份在 finalize 之前……顺序不可随意调换。基础设施经公用包 `cmx-service-base` 的包装配（wasm/plugins/crypto/storage/services/Nacos/rpc…），门户专属组装（如 `build_function_invoker` 绑 cmx-biz）留在本 crate 的 `config/`。
-- **一芯双壳的代理切换**：流程/报表/规则三个引擎均为独立微服务。各按 `[center_client.urls].{flow,report,rules}` 配置二选一——配了远程地址就挂反代 Module + 页面反代层，没配就不挂该模块路由；前端与其余装配全零改动。
+- **门户仅留反代薄壳**：流程/报表/规则/模型中心/主数据五个引擎均为独立微服务（编译期不依赖引擎源码）。各按 `[center_client.services]` 的服务定位键（flow/report/rules/model/mdm）决定——配了（`url` 静态基址或 `discovery` Nacos 服务名）就挂反代 Module + 页面反代层，没配就不挂该模块路由（五者均无进程内嵌兜底）；前端与其余装配全零改动。
+- **框架级配置统一**：日志配置改走 `ChassisConfig::load("cmx-server", "portal-server.toml")` 直读 toml `[server]` 段 + `SERVER__*` 环境变量覆盖；前端 dist 托管路径改读统一 `[assets]` 段（`assets.web_*_dist`）。
 - **对偶关系**：与 `cmx-flow-app`（流程微服务装配核，在独立 workspace cmx-flowengine）成对——同一套装配模式，不同服务身份。
 
 ---
@@ -31,7 +32,8 @@
 | `cmx-web-chassis` | 纯框架骨架：日志初始化、banner、serve + 优雅关闭 |
 | `cmx-web-monitor` | 技术监控（`/_mon`）：身份读取器、拓扑 provider、活体探测 |
 | `cmx-rpt-api` / `cmx-rule-api` / `cmx-flow-api` | 报表/规则/流程的纯反代 Module + 页面反代层（在此合并进主路由，破环） |
-| `cmx-doc-api` / `cmx-dct-api` / `cmx-mdm-api` / `cmx-code-api` / `cmx-model-api` / `cmx-storage-api` / `cmx-ai-api` / `cmx-job-api` | 各业务域 HTTP 路由 Module（在此合并，cmx-api 不依赖它们） |
+| `cmx-model-proxy` / `cmx-mdm-proxy` | 模型中心（`/api/{dct,dict,doc,model,definitions,flexible-combination,code}/*`）/ 主数据（`/api/mdm/*`）的纯反代 Module + 页面反代层（引擎已抽为独立微服务 cmx-model / cmx-mdm，门户不依赖引擎源码） |
+| `cmx-storage-api` / `cmx-ai-api` / `cmx-job-api` | 存储/AI/异步任务中心的 HTTP 路由 Module（在此合并，cmx-api 不依赖它们） |
 | `cmx-biz-api` / `cmx-plugin-api` / `cmx-iam-api` | 域/应用/菜单/数据源、插件市场、IAM/认证路由 |
 | `cmx-iam` / `cmx-auth` / `cmx-audit` / `cmx-biz` | IAM 服务、认证服务、审计日志器、业务执行核心（组装注入） |
 | `cmx-orchestrator-rpc` / `cmx-resource-rpc` | RPC 皮肤 Bundle 来源：依赖哪些域的 `*-rpc` = 对外提供哪些 gRPC 服务 |
@@ -55,10 +57,10 @@
                ▼
 ┌────────────────────────────────────────────────────────────┐
 │  cmx-platform-app（总装配层）                                │
-│  ① 20 步有序 init（infra→crypto→cache→datasources→…→IAM 链 │
-│     →RPC→AppState→AI→jobs→分发引擎→router）                 │
+│  ① 有序 init（infra→center_client 快照/预热→crypto→cache→   │
+│     datasources→…→IAM 链→RPC→AppState→AI→jobs→router）      │
 │  ② CmxAppState 注入（plugin/runtime/service/auth/iam…）     │
-│  ③ 路由聚合（各 *-api Module + flow/rpt/rule 反代切换）      │
+│  ③ 路由聚合（各 *-api Module + 五引擎按配置反代挂载）       │
 │  ④ serve + 优雅关闭（委托 cmx-web-chassis）                  │
 └──────────────┬─────────────────────────────────────────────┘
                ▼
@@ -72,12 +74,12 @@
 | 功能 | 说明 |
 |------|------|
 | 平台起服入口 | `run_platform(banner)`：init + AppState + 路由 + serve + 优雅关闭一气呵成 |
-| 20 步有序初始化 | 基础设施→数据链→IAM/认证链→RPC→AppState→AI→任务中心→分发引擎，顺序敏感 |
-| 全域路由聚合 | 21 个 Module 无条件 merge + flow/report/rules 三者按配置反代挂载 |
-| OpenAPI 聚合 | 以 `ApiDoc` 为基底 merge 各域 `*ApiDoc` 切片，挂 `/swagger-ui` |
+| 有序初始化 | 基础设施→服务定位快照/上游预热→数据链→IAM/认证链→RPC→AppState→AI→任务中心，顺序敏感 |
+| 全域路由聚合 | 15 个 Module 无条件 merge + flow/report/rules/model/mdm 五者按 `[center_client.services]` 配置反代挂载 |
+| OpenAPI 聚合 | 以 `ApiDoc` 为基底 merge 各域 `*ApiDoc` 切片（DCT/DOC/MDM 切片随引擎迁出，门户不再合并），挂 `/swagger-ui` |
 | 服务依赖拓扑 | `service_topology()` 枚举各能力 embedded/proxy 真源，喂 `/_mon` 拓扑面板与活体探测 |
 | 中间件栈 | 权限→监控→认证→上下文→追踪→100MB 请求体限制→CORS→压缩（排除 octet-stream 流式端点） |
-| 前端静态托管 | `/portal`（SPA 回退）、`/html`（SPA 回退）、`/shared`（纯静态）按配置挂 dist |
+| 前端静态托管 | `/portal`（SPA 回退）、`/html`（SPA 回退）、`/shared`（纯静态）按统一 `[assets]` 段配置挂 dist |
 | RPC 装配 | `OrchestratorBundle` + `ResourceDataBundle` 显式注册，`build_function_invoker()` 绑 cmx-biz 后注入 cmx-rpc |
 | gRPC 端口上报 | `init_rpc` 返回 gRPC 端口并注入注册中心 metadata |
 
@@ -88,17 +90,16 @@
 ```text
 cmx-platform-app
 ├── src
-│   ├── lib.rs               # run_platform 入口：20 步 init 编排 + serve + 优雅关闭
+│   ├── lib.rs               # run_platform 入口：有序 init 编排 + serve + 优雅关闭
 │   ├── app_state.rs         # build_app_state：向 CmxAppState 注入各子系统 trait 实例
 │   ├── error.rs             # Error / Result（ConfigError/ServerSetup/DatasourceInit/…）
 │   ├── router.rs            # build_router：API 路由 + 中间件栈 + 静态托管组装
-│   ├── routes.rs            # routes()：全域 Module 聚合 + flow/report/rules 反代切换 + OpenAPI merge
+│   ├── routes.rs            # routes()：全域 Module 聚合 + 五引擎反代切换 + OpenAPI merge
 │   └── config/
 │       ├── mod.rs           # WebConfig 单例 / AppIdentity / DeployMode
 │       ├── audit.rs         # build_audit_logger：审计日志器（依赖数据源，须在 datasources 后）
 │       ├── auth.rs          # init_auth_service / init_system_identity
 │       ├── cache.rs         # init_cache：读 ConfigManager 得 RedisConfig 再委托 cmx-service-base
-│       ├── code.rs          # init_code_engine：编码引擎全局注入（供 DCT/DOC 钩子）
 │       ├── datasource.rs    # init_datasources：sqlx 数据源建池 + SysDatasource 持久化（portal 专属）
 │       ├── iam.rs           # init_iam_services / finalize_iam_state / run_permission_check
 │       ├── jobs.rs          # init_job_center：异步任务中心（M3 分布式态）
@@ -131,13 +132,13 @@ fn graceful_shutdown_timeout() -> Duration; // 私有
 ### 路由（`routes.rs` / `router.rs`，crate 内部模块）
 
 ```rust
-/// 全部 API 路由（src/routes.rs）：21 个 Module merge + 三引擎反代切换
+/// 全部 API 路由（src/routes.rs）：15 个 Module merge + 五引擎反代切换
 pub fn routes() -> Router<CmxAppState>;
 
 /// Swagger UI + 聚合 OpenAPI 路由（/swagger-ui、/api-docs/openapi.json）
 pub fn get_swagger_routes() -> Router;
 
-/// 流程引擎是否反代态（读 [center_client.urls].flow）
+/// 流程引擎是否反代态（读 [center_client.services].flow）
 pub fn flow_is_proxied() -> bool;
 
 /// 服务依赖拓扑：各能力 embedded/proxy 的真源清单（喂 cmx-web-monitor）
@@ -203,7 +204,7 @@ fn portal_banner() -> BannerSpec {
 
 #[tokio::main]
 async fn main() {
-    // 薄壳只定义 banner，其余全部装配（20 步 init + 路由 + serve）交给总装配器：
+    // 薄壳只定义 banner，其余全部装配（有序 init + 路由 + serve）交给总装配器：
     // - dotenvy、日志、Nacos/配置中心、数据源、IAM 链、RPC、任务中心……
     // - 监听地址取 server.host / server.port（缺省 0.0.0.0:8080）
     if let Err(e) = cmx_platform_app::run_platform(portal_banner()).await {
@@ -215,14 +216,18 @@ async fn main() {
 
 ### 二、按配置切换「内嵌 / 反代」引擎路由
 
-流程/报表/规则三引擎的部署形态由 `[center_client.urls]` 决定，前端与其余装配零改动：
+流程/报表/规则/模型/主数据五引擎的部署形态由 `[center_client.services]` 的 per-key 定位决定，前端与其余装配零改动：
 
 ```toml
 # 配置文件（节选）——配了即反代到独立微服务；不配则不挂该模块路由
-[center_client.urls]
-flow   = "http://127.0.0.1:8081"   # /api/flow/*  → cmx-flow-server
-report = "http://127.0.0.1:8082"   # /api/report-design/* 等 → cmx-rpt-server
-rules  = "http://127.0.0.1:8083"   # /api/rules/* → cmx-rule-server（无内嵌形态，不配即无路由）
+[center_client.services]
+flow   = { url = "http://127.0.0.1:8081" }        # /api/flow/*  → cmx-flow-server
+report = { discovery = "cmx-rpt-server" }         # /api/report-design/* 等 → Nacos 选例（HTTP 选例按 weight 加权随机）
+rules  = { url = "http://127.0.0.1:8083" }        # /api/rules/* → cmx-rule-server
+model  = { url = "http://127.0.0.1:8093" }        # /api/{dct,dict,doc,model,…}/* → cmx-model-server
+mdm    = { url = "http://127.0.0.1:8095" }        # /api/mdm/* → cmx-mdm-server
+# 定位二选一：url（静态基址）/ discovery（Nacos 服务名）；不同键可混用。
+# 服务间调用另可按键配 transport = "http" | "grpc"（反代恒走 HTTP，配 grpc 仅 warn）。
 ```
 
 ```rust
@@ -313,7 +318,7 @@ let grpc_port = cmx_service_base::init_rpc(
 
 ### Q1: `run_platform` 到底初始化了多少步？
 
-按代码顺序：dotenvy → 日志（chassis）→ `init_infra`（Nacos/配置中心/全局配置）→ crypto → cache → datasources → storage → web-monitor（服务名/身份/采样器/拓扑/探测）→ flow 部署形态判定 → web_config → debug → runtime(WASM) → event_bus → services → plugins → service_invoker → code_engine → audit_logger → iam_services → auth_service → system_identity → finalize_iam_state → 权限校验 → RPC → AppState → AI 子系统 → 任务中心 → MDM 分发引擎 → build_router → bind → serve → shutdown_infra。文档注释以「11 步」概要描述，Cargo.toml 注释以「20 步」计数，实际以代码为准。
+按代码顺序：dotenvy → 日志（chassis，`ChassisConfig::load("cmx-server", "portal-server.toml")`）→ `init_infra`（Nacos/配置中心/全局配置）→ `log_center_client_snapshot`（服务定位配置快照）+ `warm_proxy_upstreams`（discovery 目标订阅预热）→ crypto → cache → datasources → storage → web-monitor（服务名/身份/采样器/拓扑/探测）→ flow 部署形态判定 → web_config → debug → runtime(WASM) → event_bus → services → plugins → service_invoker → audit_logger → iam_services → auth_service → system_identity → finalize_iam_state → 权限校验 → RPC → AppState → AI 子系统 → 任务中心 → build_router → bind → serve → shutdown_infra。注：编码引擎注入（init_code_engine）与 MDM 分发引擎启动已随模型中心/主数据迁至独立微服务（cmx-model-server / cmx-mdm-server），门户不再执行。
 
 ### Q2: `config/nacos.rs` 为什么没出现在模块导出里？
 
@@ -325,8 +330,12 @@ let grpc_port = cmx_service_base::init_rpc(
 
 ### Q4: 前端 dist 托管的三个路径分别是什么？
 
-`/portal` → CMXPortalManager/dist（SPA，未命中回退 index.html）；`/html` → CMXHTMLDesigner/dist（SPA）；`/shared` → cmx-ui5-runtime/dist（纯静态，缺文件 404 不回退）。路径由 `portal.web_portal_dist` / `web_html_dist` / `web_shared_dist` 配置给出，未配置则跳过（开发走 vite 代理）。
+`/portal` → CMXPortalManager/dist（SPA，未命中回退 index.html）；`/html` → CMXHTMLDesigner/dist（SPA）；`/shared` → cmx-ui5-runtime/dist（纯静态，缺文件 404 不回退）。路径由统一 `[assets]` 段的 `assets.web_portal_dist` / `assets.web_html_dist` / `assets.web_shared_dist` 配置给出，未配置则跳过（开发走 vite 代理）。
 
 ### Q5: 与 cmx-flow-app 是什么关系？
 
 对偶关系：本 crate 是**平台聚合服务**的装配核（原 web-server），`cmx-flow-app` 是**流程微服务**的装配核（独立 workspace cmx-flowengine）。二者装配模式一致，服务身份不同；平台侧通过 `FlowProxyModule` 反代对接 flow-server。
+
+### Q6: 设计器保存业务域页面怎么处理归属？
+
+F3-save：门户 `POST /api/html-pages` 按页面 id 归属分流——属主引擎的页面（如 `portal.model.*` / `portal.mdm.*`）整包反代到属主服务的同名端点（引擎侧经 `cmx-form::serve` 的 F3-save 写路径落自有资产工作区），其余落门户本地存储；batch 取页同理按归属扇出。详见 cmx-common-api 的 pages handlers。

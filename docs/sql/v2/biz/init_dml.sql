@@ -638,99 +638,113 @@ ON CONFLICT (activation_code) DO UPDATE SET
 -- ─────────────────────────────────────────────
 
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000002, 'MDM_KH', '客户主数据编码（CUS+日期+流水）', 'auto',
         '[{"type":"const","value":"CUS"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
 -- 物料主数据编码：MAT + YYYYMMDD + 4位日流水 → MAT202608180001
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000003, 'MDM_WL', '物料主数据编码（MAT+日期+流水）', 'auto',
         '[{"type":"const","value":"MAT"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
 -- 会计科目编码：ref 段取行字段 acct_no（用户在 CR 填的科目号，如 1001 / 100101）→ code = 科目号。
 -- 说明：激活器 create 分支会先用占位码覆盖 header_row.code，仅当 dictMeta.codeRule 铸号成功才能再覆盖，
 --       故科目号走 ref 段「借铸号通道」写入 code 列——code 与 acct_no 恒等，无需改 Rust 代码。
 --       acct_no 为空时铸出空串（NOT NULL 允许），科目号在 CR 表单为必填，正常不会发生。
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000004, 'MDM_KJ', '会计科目编码（取科目号 acct_no 原值）', 'auto',
         '[{"type":"ref","field":"acct_no"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
 
 
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000005, 'MDM_BZ', '币种编码（取 ISO 币种码）', 'auto',
         '[{"type":"ref","field":"currency_code"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000006, 'MDM_JLDW', '计量单位编码（取单位编码）', 'auto',
         '[{"type":"ref","field":"uom_code"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000007, 'MDM_WLDL', '物料分类编码（取分类编码）', 'auto',
         '[{"type":"ref","field":"class_code"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000008, 'MDM_CBZX', '成本中心编码（取中心编码）', 'auto',
         '[{"type":"ref","field":"cost_center_code"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000009, 'MDM_LRZX', '利润中心编码（取中心编码）', 'auto',
         '[{"type":"ref","field":"profit_center_code"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000010, 'MDM_GS', '公司编码（取公司编码）', 'auto',
         '[{"type":"ref","field":"company_code"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000011, 'MDM_ZZ', '组织编码（取组织编码）', 'auto',
         '[{"type":"ref","field":"org_code"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000012, 'MDM_BM', '部门编码（取部门编码）', 'auto',
         '[{"type":"ref","field":"dept_code"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000013, 'MDM_GW', '岗位编码（取岗位编码）', 'auto',
         '[{"type":"ref","field":"position_code"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000014, 'MDM_YG', '员工编码（取工号）', 'auto',
         '[{"type":"ref","field":"emp_no"}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
 
 
 
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000015, 'MDM_GYS', '供应商主数据编码（SUP+日期+流水）', 'auto',
         '[{"type":"const","value":"SUP"},{"type":"dateSerial","format":"YYYYMMDD","width":4,"start":1}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, org_scope, condition, segments, joiner, pattern, enable_gap,
                            use_sequence, valid_from, valid_to, priority, is_active, create_time, update_time, archived,
@@ -742,10 +756,11 @@ VALUES (53303780052992, 'MDM_BILL', '主数据单据(类型+日期+流水)', 'au
 
 
 -- MDM 变更申请单据号保底规则（20260813_002）
-INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active)
+INSERT INTO cmx_code_rule (id, rule_code, rule_name, mode, segments, joiner, is_active,
+                           domain_code, application_code, module_code)
 VALUES (9000000000000001, 'MDM_BILL', 'MDM 变更申请单据号（CR+日期+流水）', 'auto',
         '[{"type":"const","value":"CR"},{"type":"dateSerial","format":"YYYYMMDD","width":6,"start":1}]'::jsonb,
-        '', TRUE)
+        '', TRUE, 'basic', 'dataplatform', 'mdm')
 ON CONFLICT (rule_code) WHERE archived = 0 DO NOTHING;
 
 -- ============================================================

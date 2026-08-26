@@ -375,6 +375,175 @@
           ]
         },
         {
+          "id": "gl-grp-rules",
+          "name": "rules",
+          "caption": "决策管理",
+          "permissionId": null,
+          "icon": "tabler-outline/bulb",
+          "expanded": true,
+          "children": [
+            {
+              "id": "fi-gl-rules-design-workbench",
+              "name": "rules-design-workbench",
+              "caption": "决策集设计工作台",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "table-view",
+              "workspace": {
+                "id": "rules_design_workbench",
+                "explorer": {
+                  "caption": "决策集",
+                  "icon": "tree",
+                  "views": [
+                    {
+                      "id": "rules-design-explorer",
+                      "tabLabel": "决策集",
+                      "icon": "tree",
+                      "type": "native_pages",
+                      "native_page": "portal.rules.design-workbench",
+                      "view": "explorer"
+                    }
+                  ]
+                },
+                "content": {
+                  "caption": "决策表",
+                  "icon": "table-view",
+                  "views": [
+                    {
+                      "id": "rules-design-content",
+                      "tabLabel": "决策表",
+                      "icon": "table-view",
+                      "type": "native_pages",
+                      "native_page": "portal.rules.design-workbench",
+                      "view": "content"
+                    }
+                  ]
+                },
+                "property": {
+                  "caption": "完整性",
+                  "icon": "detail-view",
+                  "views": [
+                    {
+                      "id": "rules-design-prop",
+                      "tabLabel": "完整性",
+                      "icon": "detail-view",
+                      "type": "native_pages",
+                      "native_page": "portal.rules.design-workbench",
+                      "view": "property"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "fi-gl-rules-sim-workbench",
+              "name": "rules-sim-workbench",
+              "caption": "决策应用工作台",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "play",
+              "workspace": {
+                "id": "rules_sim_workbench",
+                "explorer": {
+                  "caption": "决策集",
+                  "icon": "tree",
+                  "views": [
+                    {
+                      "id": "rules-sim-explorer",
+                      "tabLabel": "决策集",
+                      "icon": "tree",
+                      "type": "native_pages",
+                      "native_page": "portal.rules.sim-workbench",
+                      "view": "explorer"
+                    }
+                  ]
+                },
+                "content": {
+                  "caption": "求值",
+                  "icon": "play",
+                  "views": [
+                    {
+                      "id": "rules-sim-content",
+                      "tabLabel": "求值",
+                      "icon": "play",
+                      "type": "native_pages",
+                      "native_page": "portal.rules.sim-workbench",
+                      "view": "content"
+                    }
+                  ]
+                },
+                "property": {
+                  "caption": "决策轨迹",
+                  "icon": "detail-view",
+                  "views": [
+                    {
+                      "id": "rules-sim-prop",
+                      "tabLabel": "trace",
+                      "icon": "detail-view",
+                      "type": "native_pages",
+                      "native_page": "portal.rules.sim-workbench",
+                      "view": "property"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "fi-gl-rules-logs",
+              "name": "rules-logs",
+              "caption": "决策审计中心",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "history",
+              "workspace": {
+                "id": "rules_logs",
+                "explorer": {
+                  "caption": "决策集",
+                  "icon": "tree",
+                  "views": [
+                    {
+                      "id": "rules-logs-explorer",
+                      "tabLabel": "决策集",
+                      "icon": "tree",
+                      "type": "native_pages",
+                      "native_page": "portal.rules.logs",
+                      "view": "explorer"
+                    }
+                  ]
+                },
+                "content": {
+                  "caption": "决策日志",
+                  "icon": "history",
+                  "views": [
+                    {
+                      "id": "rules-logs-content",
+                      "tabLabel": "日志",
+                      "icon": "history",
+                      "type": "native_pages",
+                      "native_page": "portal.rules.logs",
+                      "view": "content"
+                    }
+                  ]
+                },
+                "property": {
+                  "caption": "归因",
+                  "icon": "detail-view",
+                  "views": [
+                    {
+                      "id": "rules-logs-prop",
+                      "tabLabel": "trace",
+                      "icon": "detail-view",
+                      "type": "native_pages",
+                      "native_page": "portal.rules.logs",
+                      "view": "property"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
           "id": "gl-grp-basedata",
           "name": "basedata",
           "caption": "基础数据维护",

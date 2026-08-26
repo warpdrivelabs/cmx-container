@@ -28,6 +28,7 @@
 
 - **PG-only**：`DbType` 枚举保留了 `MySql`/`Sqlite` 占位，但实际只有 `Postgres` 可用，注册其他类型直接报错；
 - **schema 注入**：建池时通过 deadpool `post_create` 钩子对每条新连接执行 `SET search_path TO <schema>, public`；
+- **建池即首连验证**：deadpool 建池是惰性的，`new_db_pool` 建池后立即拨号一条连接（顺带执行 post_create 的 SET search_path）并归还，网络不可达 / 库不存在 / 认证失败在注册期即报 `Error::PoolFirstConnect`——fail-fast，不拖到首次 `get`；
 - **事务安全**：`TransactionGuard` RAII 守卫（Drop 经 mpsc 通道异步回滚）+ 全局事务注册表 + `start_monitoring()` 后台扫描（默认 300s 超时自动回滚）；
 - **零拷贝出口**：查询可返回 `ZmcDataSet<TokioPgRowSource>`（持有原始 `tokio_postgres::Row`，惰性列式 msgpack 编码），超大结果可走「真·分帧流式」`query_sql_zmc_stream_chunks`，峰值内存 O(单行)；
 - **类型自适应**：`PgInt` 按 INT2/INT4/INT8 宽度自适应编码，`PgDateTime` 按 TIMESTAMP/TIMESTAMPTZ 自适应，结果转换失败一律置 `Null` 不 panic。
@@ -68,7 +69,7 @@
 | 功能 | 说明 | 关键入口 |
 |------|------|----------|
 | 多数据源管理 | 动态注册/注销数据源，按 `db_id` 路由；`source_type == "biz"` 回退 default | `DatabaseManager::register_data_source` |
-| 连接池 | deadpool-postgres，`post_create` 注入 search_path，优雅关闭（活跃计数等待） | `DbPool` / `new_db_pool` |
+| 连接池 | deadpool-postgres，`post_create` 注入 search_path，建池即首连验证（库不可达注册期报 `PoolFirstConnect` fail-fast），优雅关闭（活跃计数等待） | `DbPool` / `new_db_pool` |
 | SQL 执行 | 四种参数形态：无参 / `DataValue` / `SqlParam`（带类型 NULL）/ `sea_query::Values` | `execute_sql*` 系列 |
 | SQL 查询 | 返回老 `DataSet`（JSON 链路）或零拷贝 `ZmcDataSet`（二进制链路） | `query_sql*` 系列 |
 | 声明式事务 | `transaction!` 宏 + `Propagation`（目前仅实现 `Required`）+ `with_transaction_by_id`（take/放回不持锁执行闭包） | `cmx_database_pg::transaction!` |
@@ -88,7 +89,7 @@
 src/
 ├── lib.rs               # 导出面；模块名与 cmx-database 逐一对照
 ├── config/              # DbType / PoolConfig（max10·min2·connect30s·acquire30s·idle600s·lifetime1800s）/ DbConfig / PoolStatus
-├── connection/          # DbPool（池化执行）、DatabasePoolImpl（活跃计数/优雅关闭）、DbRegistry 全局注册表、new_db_pool（search_path 注入）
+├── connection/          # DbPool（池化执行）、DatabasePoolImpl（活跃计数/优雅关闭）、DbRegistry 全局注册表、new_db_pool（search_path 注入 + 首连验证）
 ├── executor/            # PgInt（INT2/4/8 宽度自适应）、PgDateTime（TZ 自适应）、ParamValue::from_json、
 │                        #   bind_data_values_pg、PgResultConverter::convert_rows（按 OID 分派，失败即 Null 不 panic）、sea_values_to_tosql
 ├── manager/             # DatabaseManager（数据源路由 + execute/query 委托）、PoolManager、TransactionContext、
