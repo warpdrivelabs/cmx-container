@@ -211,7 +211,7 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 
 - **系统基础表名必须以 `cmx_` 前缀**（如 `cmx_file_detail`、`cmx_account`、`cmx_plugin`）；业务模块 / 插件自建的表可不加（由模块自行命名）
 - **禁止外键约束**（`FOREIGN KEY`），保留关联字段并用 `CREATE INDEX` 替代
-- 标准审计字段（9 项）、树形 / 层级字段（5 项）、DDL 幂等性、`COMMENT` 格式等完整规范见 `pg-table-generator` 与 `sql-guide` 技能
+- 标准审计字段（8 项 = id + 7 审计）、树形 / 层级字段（5 项）、DDL 幂等性、`COMMENT` 格式等完整规范见 `pg-table-generator` 与 `sql-guide` 技能
 
 ### 5.5 迁移文件命名
 
@@ -379,7 +379,7 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 
 ## 十五、方案与文档规范
 
-> 来源技能：`plan-naming` + `doc-generator`。
+> 来源技能：`doc-generator` + 根目录 `../.agents/skills/plan-naming`（方案命名规范唯一真源，本仓不再存副本）。
 
 - `/plan` 方案文档命名：`documents/<yyyyMMdd>[_<模块名>]_<中文标题>.md`（日期 6/8 位，标题**必须**中文）。
 - 为 crate 生成 README → `doc-generator`（至少含简介 + 模块树 + **≥5 个使用场景** + 错误处理 + FAQ）。

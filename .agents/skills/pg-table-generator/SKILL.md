@@ -1,11 +1,21 @@
 ---
-name: "pg-table-generator"
-description: "Generates PostgreSQL DDL table definitions with standard audit fields, proper comments, and nullable constraints. Invoke when user asks to create/generate PostgreSQL table structure, DDL, or schema definition."
+name: pg-table-generator
+description: 生成 PostgreSQL DDL 表定义（标准审计字段 8 项、命名规则、注释、可空约束、树形字段、索引规范）。当用户要求创建/生成 PostgreSQL 表结构、建表、写 DDL 或 schema 定义时必用。只管 DDL 语法层；SQL 文件落哪（platform/biz 双库、init/migrations）由 sql-guide 技能管，插件表元数据由 plugin-metadata-generator 管。
 ---
 
 # PostgreSQL 表结构生成器
 
 根据用户需求生成 PostgreSQL DDL 表定义。
+
+## 与相邻技能的边界（先读）
+
+| 场景 | 用哪个 | 边界 |
+|------|--------|------|
+| 生成 CREATE TABLE / INDEX / COMMENT 语法 | **本技能** | 只管 DDL 语法层（字段/审计/树形/索引规范），不管文件落哪 |
+| SQL 文件落哪（platform/biz 双库、init_ddl/migrations、迁移命名） | [sql-guide](../sql-guide/SKILL.md) | **建表前必须先问用户归属主库还是业务库**（sql-guide 铁律），再由本技能生成 DDL |
+| 插件自带的表（metadata JSON 定义，装包时建表） | [plugin-metadata-generator](../plugin-metadata-generator/SKILL.md) | 插件表走 metadata/seeddata 声明式定义，主键惯例 `Int/BIGINT` 自增系；本技能面向**手工维护的系统表 DDL**，主键 `varchar(64)`——两者不要混用规范 |
+
+> 主键口径：本技能（系统表）`id varchar(64)`（雪花/短码等字符串 id）；插件 metadata 表按其规范（`field_type: "Int" / db_type: "BIGINT"`）。差异是两类表的既有惯例，不是矛盾。
 
 ## 硬约束（必须遵守）
 
@@ -20,7 +30,7 @@ description: "Generates PostgreSQL DDL table definitions with standard audit fie
 1. **不使用双引号**：表名、字段名、约束名、索引名等所有标识符均不使用双引号包裹，直接使用小写字母和下划线命名。
 2. **不指定 schema**：生成的 SQL 不包含 `schema_name` 前缀，直接使用表名（即默认 schema 为 `public`，由数据库 search\_path 决定）。
 
-### 标准审计字段（所有表必需）
+### 标准审计字段（8 项 = id + 7 审计，所有表必需；与 init_ddl 现状实测一致）
 
 所有表必须包含以下标准字段（除 `id` 外均放在表最后）：
 
@@ -170,239 +180,10 @@ COMMENT ON COLUMN table_name.id IS '主键ID';
 -- ... 其他字段注释 ...
 ```
 
-## 使用示例
+## 使用示例与字段类型参考
 
-### 示例1：简单表
+4 个完整 DDL 示例（简单表 / 带唯一索引的表 / 订单表 biz_order / 含关联字段不使用外键的表）与字段类型映射参考（字符串/数值/时间/JSON/数组各场景选型）见 [references/ddl-examples.md](references/ddl-examples.md)。生成时**先读该文件的示例 1 定骨架，再按需参考其余示例**。
 
-用户输入：
-
-```
-生成用户表 user，包含字段：username(varchar(50)), email(varchar(100)), phone(varchar(20))
-```
-
-输出：
-
-```sql
--- 用户表
-CREATE TABLE user (
-    -- 主键
-    id varchar(64) NOT NULL,
-
-    -- 业务字段
-    username varchar(50),
-    email varchar(100),
-    phone varchar(20),
-
-    -- 标准审计字段
-    archived int4 DEFAULT 0,
-    create_time timestamp DEFAULT CURRENT_TIMESTAMP,
-    update_time timestamp DEFAULT CURRENT_TIMESTAMP,
-    create_by varchar(100),
-    create_name varchar(100),
-    update_by varchar(100),
-    update_name varchar(100),
-
-    -- 标准扩展信息字段（可选，按需添加）
-    ext_attributes text,
-
-    PRIMARY KEY (id)
-);
-
-COMMENT ON TABLE user IS '用户表';
-COMMENT ON COLUMN user.id IS '主键ID';
-COMMENT ON COLUMN user.username IS '用户名';
-COMMENT ON COLUMN user.email IS '邮箱';
-COMMENT ON COLUMN user.phone IS '手机号';
-COMMENT ON COLUMN user.archived IS '是否归档：0-否，1-是';
-COMMENT ON COLUMN user.create_time IS '创建时间';
-COMMENT ON COLUMN user.update_time IS '更新时间';
-COMMENT ON COLUMN user.create_by IS '创建人ID';
-COMMENT ON COLUMN user.create_name IS '创建人姓名';
-COMMENT ON COLUMN user.update_by IS '更新人ID';
-COMMENT ON COLUMN user.update_name IS '更新人姓名';
-COMMENT ON COLUMN user.ext_attributes IS '扩展属性，存储JSON格式的额外业务属性';
-```
-
-### 示例2：带唯一索引的表
-
-用户输入：
-
-```
-生成商品表 product，包含：name(varchar(100)必填), code(varchar(50)唯一索引必填), price(numeric(10,2)), stock(int4)
-```
-
-输出：
-
-```sql
--- 商品表
-CREATE TABLE product (
-    -- 主键
-    id varchar(64) NOT NULL,
-
-    -- 业务字段
-    name varchar(100) NOT NULL,
-    code varchar(50) NOT NULL,
-    price numeric(10,2),
-    stock int4,
-
-    -- 标准审计字段
-    archived int4 DEFAULT 0,
-    create_time timestamp DEFAULT CURRENT_TIMESTAMP,
-    update_time timestamp DEFAULT CURRENT_TIMESTAMP,
-    create_by varchar(100),
-    create_name varchar(100),
-    update_by varchar(100),
-    update_name varchar(100),
-
-    -- 标准扩展信息字段（可选，按需添加）
-    ext_attributes text,
-
-    PRIMARY KEY (id)
-);
-
-CREATE UNIQUE INDEX uk_product_code ON product (code) WHERE archived = 0;
-
-COMMENT ON TABLE product IS '商品表';
-COMMENT ON COLUMN product.id IS '主键ID';
-COMMENT ON COLUMN product.name IS '商品名称';
-COMMENT ON COLUMN product.code IS '商品编码';
-COMMENT ON COLUMN product.price IS '商品价格';
-COMMENT ON COLUMN product.stock IS '库存数量';
-COMMENT ON COLUMN product.archived IS '是否归档：0-否，1-是';
-COMMENT ON COLUMN product.create_time IS '创建时间';
-COMMENT ON COLUMN product.update_time IS '更新时间';
-COMMENT ON COLUMN product.create_by IS '创建人ID';
-COMMENT ON COLUMN product.create_name IS '创建人姓名';
-COMMENT ON COLUMN product.update_by IS '更新人ID';
-COMMENT ON COLUMN product.update_name IS '更新人姓名';
-COMMENT ON COLUMN product.ext_attributes IS '扩展属性，存储JSON格式的额外业务属性';
-```
-
-### 示例3：订单表
-
-用户输入：
-
-```
-生成订单表 order，包含：order_no(varchar(50)唯一索引), amount(numeric(12,2)), status(int4)
-```
-
-输出：
-
-```sql
--- 订单表
-CREATE TABLE order (
-    -- 主键
-    id varchar(64) NOT NULL,
-
-    -- 业务字段
-    order_no varchar(50) NOT NULL,
-    amount numeric(12,2),
-    status int4,
-
-    -- 标准审计字段
-    archived int4 DEFAULT 0,
-    create_time timestamp DEFAULT CURRENT_TIMESTAMP,
-    update_time timestamp DEFAULT CURRENT_TIMESTAMP,
-    create_by varchar(100),
-    create_name varchar(100),
-    update_by varchar(100),
-    update_name varchar(100),
-
-    PRIMARY KEY (id)
-);
-
-CREATE UNIQUE INDEX uk_order_order_no ON order (order_no) WHERE archived = 0;
-
-COMMENT ON TABLE order IS '订单表';
-COMMENT ON COLUMN order.id IS '主键ID';
-COMMENT ON COLUMN order.order_no IS '订单编号';
-COMMENT ON COLUMN order.amount IS '订单金额';
-COMMENT ON COLUMN order.status IS '订单状态';
-COMMENT ON COLUMN order.archived IS '是否归档：0-否，1-是';
-COMMENT ON COLUMN order.create_time IS '创建时间';
-COMMENT ON COLUMN order.update_time IS '更新时间';
-COMMENT ON COLUMN order.create_by IS '创建人ID';
-COMMENT ON COLUMN order.create_name IS '创建人姓名';
-COMMENT ON COLUMN order.update_by IS '更新人ID';
-COMMENT ON COLUMN order.update_name IS '更新人姓名';
-```
-
-### 示例4：含关联字段但不使用外键的表
-
-> 演示硬约束 2 / 3：保留关联字段 `user_id`，**不**写 `FOREIGN KEY`，外层用 `CREATE INDEX` 加速查询。
-
-用户输入：
-
-```
-生成订单项表 order_item，包含：order_id(varchar(64) 关联order表id), user_id(varchar(64) 关联user表id), product_id(varchar(64)), quantity(int4)
-```
-
-输出：
-
-```sql
--- 订单项表
-CREATE TABLE order_item (
-    -- 主键
-    id varchar(64) NOT NULL,
-
-    -- 业务字段（含关联字段，不加外键）
-    order_id varchar(64) NOT NULL,
-    user_id varchar(64),
-    product_id varchar(64),
-    quantity int4,
-
-    -- 标准审计字段
-    archived int4 DEFAULT 0,
-    create_time timestamp DEFAULT CURRENT_TIMESTAMP,
-    update_time timestamp DEFAULT CURRENT_TIMESTAMP,
-    create_by varchar(100),
-    create_name varchar(100),
-    update_by varchar(100),
-    update_name varchar(100),
-
-    -- 标准扩展信息字段（可选，按需添加）
-    ext_attributes text,
-
-    PRIMARY KEY (id)
-);
-
--- 关联字段索引（外层单独创建，不使用外键）
-CREATE INDEX idx_order_item_order_id ON order_item (order_id);
-CREATE INDEX idx_order_item_user_id ON order_item (user_id);
-CREATE INDEX idx_order_item_product_id ON order_item (product_id);
-
-COMMENT ON TABLE order_item IS '订单项表';
-COMMENT ON COLUMN order_item.id IS '主键ID';
-COMMENT ON COLUMN order_item.order_id IS '关联订单表ID';
-COMMENT ON COLUMN order_item.user_id IS '关联用户表ID';
-COMMENT ON COLUMN order_item.product_id IS '关联商品表ID';
-COMMENT ON COLUMN order_item.quantity IS '数量';
-COMMENT ON COLUMN order_item.archived IS '是否归档：0-否，1-是';
-COMMENT ON COLUMN order_item.create_time IS '创建时间';
-COMMENT ON COLUMN order_item.update_time IS '更新时间';
-COMMENT ON COLUMN order_item.create_by IS '创建人ID';
-COMMENT ON COLUMN order_item.create_name IS '创建人姓名';
-COMMENT ON COLUMN order_item.update_by IS '更新人ID';
-COMMENT ON COLUMN order_item.update_name IS '更新人姓名';
-COMMENT ON COLUMN order_item.ext_attributes IS '扩展属性，存储JSON格式的额外业务属性';
-```
-
-## 字段类型参考
-
-| 业务场景   | 推荐类型                          |
-| ------ | ----------------------------- |
-| 短文本/枚举 | varchar(N)                    |
-| 长文本    | text                          |
-| 整数     | int4                          |
-| 长整数    | int8                          |
-| 小数     | numeric(p,s)                  |
-| 金额     | numeric(12,2) 或 numeric(18,2) |
-| 日期时间   | timestamp                     |
-| 日期     | date                          |
-| 时间     | time                          |
-| 布尔值    | bool                          |
-| JSON   | jsonb                         |
-| 数组     | type\[]                       |
 
 ## 触发关键词
 
