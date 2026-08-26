@@ -510,8 +510,8 @@ mod tests {
             .expect("register test data source");
 
         // ensure schema（幂等，无参数 DDL）
-        let ddl =
-            include_str!("../../../../../../docs/sql/migrations/20260624_001_cmx_audit_log.up.sql");
+        // 注：DDL 内联为 crate 本地测试夹具，避免依赖 docs/sql/ 迁移目录布局（v2 重构后已迁移）。
+        let ddl = include_str!("cmx_audit_log.testfixture.sql");
         mm.execute_sql(TEST_DB_ID, None, ddl)
             .await
             .expect("ensure cmx_audit_log schema");
