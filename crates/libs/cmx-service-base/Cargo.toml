@@ -41,7 +41,7 @@ db-sqlx = ["dep:cmx-database"]
 storage = ["dep:cmx-storage", "dep:cmx-database", "dep:cmx-utils"]
 services = ["dep:cmx-service", "dep:cmx-runtime", "dep:cmx-traits", "dep:cmx-database", "dep:cmx-utils", "dep:cmx-plugin"]
 plugins = ["dep:cmx-plugin", "dep:cmx-database", "dep:cmx-utils"]
-wasm = ["dep:cmx-runtime", "dep:cmx-traits", "dep:cmx-database", "dep:cmx-utils", "dep:cmx-buffer"]
+wasm = ["dep:cmx-runtime", "dep:cmx-traits", "dep:cmx-database", "dep:cmx-utils", "dep:cmx-buffer", "dep:cmx-http"]
 registry-config = ["dep:cmx-registry-config", "dep:cmx-utils", "dep:tokio", "dep:local-ip-address"]
 rpc = ["dep:cmx-rpc", "dep:cmx-registry-config", "dep:cmx-traits", "dep:cmx-utils", "dep:tokio"]
 
@@ -59,6 +59,7 @@ thiserror = { workspace = true }
 
 # —— 可选（feature 门控；flow default-features=false 一个不拉）——
 cmx-buffer = { workspace = true, optional = true }          # redis
+cmx-http = { workspace = true, optional = true }            # wasm（cmx:http 出站 provider，W4）
 cmx-utils = { workspace = true, optional = true }           # config-manager / crypto / registry-config
 cmx-debug = { workspace = true, optional = true }           # debug
 cmx-traits = { workspace = true, optional = true }          # event-bus / services / wasm

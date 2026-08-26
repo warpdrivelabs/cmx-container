@@ -1,0 +1,21 @@
+[package]
+name = "cmx-meta-proxy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 元数据管理的**平台反代薄壳**（对标 cmx-model-proxy / cmx-rpt-api 的纯反代形态）。
+#
+# 元数据管理是**全新独立微服务**：中立核 cmx-meta-app 在独立 workspace ../cmx-meta-data，由那边的
+# cmx-meta-server（:8096）承载。门户经 `[center_client.services].meta` 决定：配了 = 反代到独立微服务
+# （本壳）；没配 = 门户不挂元数据路由（本服务全新、无进程内嵌兜底，与 flow/report/rules 同构）。
+# 本 crate 只含反代：MetaProxyModule 把 `/api/meta/*` + 元数据拥有的 `meta.*` native/html 页取页请求
+# 透明转发到远程 cmx-meta-server。前端零改。
+
+[dependencies]
+# API 共享骨架层（CmxAppState / routes::traits::ModuleRoutes）。单向依赖：cmx-meta-proxy → cmx-api-core。
+cmx-api-core = { workspace = true }
+# Web 框架（Router 类型）
+axum = { workspace = true }
+# 反代转发核（头卫生/超时/流式转发/三层出站鉴权，各反代壳共用）
+cmx-proxy-core = { workspace = true }

@@ -31,6 +31,7 @@ cmx-rule-api = { workspace = true }
 cmx-flow-api = { workspace = true }
 cmx-model-proxy = { workspace = true }
 cmx-mdm-proxy = { workspace = true }
+cmx-meta-proxy = { workspace = true }
 cmx-storage-api = { workspace = true }
 cmx-ai-api = { workspace = true }
 cmx-biz-api = { workspace = true }
@@ -51,6 +52,14 @@ cmx-iam = { workspace = true }
 cmx-biz = { workspace = true }
 cmx-buffer = { workspace = true }
 cmx-plugin = { workspace = true }
+# 二次开发平台：全局构建执行器装配（W1）
+cmx-build = { workspace = true }
+cmx-build-store-pg = { workspace = true }
+# W3：触发面泛化（事件订阅 + 定时 + 分发器）
+cmx-plugin-trigger = { workspace = true }
+cmx-plugin-trigger-store-pg = { workspace = true }
+# auto_publish 打包 ZIP
+zip = { workspace = true }
 cmx-ai = { workspace = true }
 cmx-runtime = { workspace = true }
 cmx-traits = { workspace = true }

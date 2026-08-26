@@ -7,7 +7,8 @@
 use crate::error::PluginError;
 use cmx_core::{
     CacheGetRequest, CacheResponse, CacheSetRequest, CallServiceRequest, CallServiceResponse,
-    DbRequest, DbResponse, IamRequest, IamResponse, PluginFunCallResponse, PluginFunRequest,
+    DbRequest, DbResponse, HttpRequest, HttpResponse, IamRequest, IamResponse,
+    PluginFunCallResponse, PluginFunRequest,
 };
 use extism_pdk::*;
 
@@ -72,6 +73,13 @@ extern "ExtismHost" {
 extern "ExtismHost" {
     /// IAM 用户/权限查询（单一入口，按 IamRequest 变体分发）
     fn iam_query(request: Vec<u8>) -> Vec<u8>;
+}
+
+// 声明 HTTP 出站宿主函数（MsgPack 编码，W4）。仅在 manifest 申请了 `cmx:http` 命名空间时可用。
+#[host_fn("cmx:http")]
+extern "ExtismHost" {
+    /// 受控 HTTP 出站请求（宿主侧按 egress 策略裁决）
+    fn http_fetch(request: Vec<u8>) -> Vec<u8>;
 }
 
 /// 宿主函数调用器
@@ -433,5 +441,28 @@ impl HostCaller {
             codes: codes.to_vec(),
         })?;
         Ok(resp.check_results)
+    }
+
+    // ─────────────────── HTTP 出站（cmx:http，W4） ───────────────────
+
+    /// 发起受控 HTTP 出站请求。
+    ///
+    /// 宿主侧按 egress 策略裁决（域名白名单 / SSRF 防护 / 超时 / 体积/方法/配额上限）。被拒或失败时
+    /// 返回的 [`HttpResponse`] 中 `success=false` 且 `error` 载明原因。**前提**：插件 manifest 已申请
+    /// `cmx:http` 命名空间，否则此 import 不存在、实例化即失败。
+    ///
+    /// # 参数
+    /// - `request`: [`HttpRequest`]（url/method/headers/body/timeout_ms）
+    ///
+    /// # 返回值
+    /// - `Ok(HttpResponse)`: 宿主裁决结果（放行则含 status/headers/body）
+    pub fn http_fetch(request: HttpRequest) -> Result<HttpResponse, Error> {
+        let bytes = rmp_serde::to_vec(&request)?;
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:http")]` 宏生成的 extern "ExtismHost" 函数 http_fetch。
+        // 宏生成符合 ExtismHost ABI 的绑定；参数 `bytes` 是 MsgPack 编码的有效 Vec<u8> 所有权值，
+        // 由 pdk 传给宿主；宿主实现了对应 import 并遵循该 ABI；返回值经 pdk 解码，宿主错误经 `?` 传播。
+        let result = unsafe { http_fetch(bytes)? };
+        let response: HttpResponse = rmp_serde::from_slice(&result)?;
+        Ok(response)
     }
 }

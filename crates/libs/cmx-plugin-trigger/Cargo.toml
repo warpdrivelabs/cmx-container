@@ -1,0 +1,19 @@
+[package]
+name = "cmx-plugin-trigger"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# 依赖倒置：只依赖 traits（FunctionInvoker）+ core（SVRContext），**不碰 extism / cmx-job-core**。
+cmx-traits = { workspace = true }
+cmx-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+# event_bus 订阅接线用 tokio::spawn（同步 handler → 异步分发）
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

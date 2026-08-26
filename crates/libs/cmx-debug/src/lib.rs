@@ -10,6 +10,7 @@ use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 
+pub mod health;
 pub mod plugin;
 
 lazy_static! {

@@ -23,6 +23,7 @@ use cmx_rpt_api::ReportProxyModule;
 use cmx_rule_api::RulesProxyModule;
 use cmx_model_proxy::ModelProxyModule;
 use cmx_mdm_proxy::MdmProxyModule;
+use cmx_meta_proxy::MetaProxyModule;
 use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -37,6 +38,8 @@ const RULES_UPSTREAM_KEY: &str = "rules";
 const MODEL_UPSTREAM_KEY: &str = "model";
 /// 服务定位键：主数据中心（`[center_client.services].mdm`）。
 const MDM_UPSTREAM_KEY: &str = "mdm";
+/// 服务定位键：元数据管理（`[center_client.services].meta`）。
+const META_UPSTREAM_KEY: &str = "meta";
 
 /// 解析流程引擎反代目标（per-key 定位，见 `cmx_plugin::center_client::upstream`）。
 ///
@@ -83,6 +86,15 @@ pub(crate) fn model_upstream() -> Option<ProxyUpstream> {
 /// cmx-mdm-server；没配 = 门户不挂 `/api/mdm/*` 路由。
 pub(crate) fn mdm_upstream() -> Option<ProxyUpstream> {
     cmx_plugin::center_client::proxy_upstream(MDM_UPSTREAM_KEY)
+}
+
+/// 解析元数据管理反代目标（per-key 定位）。
+///
+/// 元数据管理是全新独立微服务 cmx-meta-data（:8096），**无进程内嵌兜底**（与 flow/report/rules/model
+/// 抽出后同构）。配了 `[center_client.services].meta` = 反代到独立 cmx-meta-server；没配 = 门户不挂
+/// `/api/meta/*` 路由。
+pub(crate) fn meta_upstream() -> Option<ProxyUpstream> {
+    cmx_plugin::center_client::proxy_upstream(META_UPSTREAM_KEY)
 }
 
 /// 平台服务依赖拓扑：枚举各已挂载能力当前挂的是「进程内内嵌」还是「反代独立微服务」。
@@ -180,6 +192,16 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
         deps.push(cmx_web_monitor::ServiceDep {
             key: "mdm".into(),
             label: "主数据".into(),
+            mode: "proxy".into(),
+            target: upstream.resolve(),
+            proxiable: true,
+        });
+    }
+    // 元数据管理：全新独立微服务——配置了目标才挂（proxy），没配则不在拓扑里（无进程内嵌形态）。
+    if let Some(upstream) = meta_upstream() {
+        deps.push(cmx_web_monitor::ServiceDep {
+            key: "meta".into(),
+            label: "元数据管理".into(),
             mode: "proxy".into(),
             target: upstream.resolve(),
             proxiable: true,
@@ -315,6 +337,29 @@ fn merge_mdm(router: Router<CmxAppState>) -> Router<CmxAppState> {
         }
     }
 }
+
+/// 按配置产出元数据管理路由：配置了反代目标 → MetaProxyModule（转发 `/api/meta/*`）+ 页面反代
+/// （`meta.*` native/html 页转发到 cmx-meta-server）；没配 → 不挂元数据路由。
+///
+/// 元数据管理是全新独立微服务 cmx-meta-data（:8096），**无进程内嵌兜底**（与 flow/report/rules/model/
+/// mdm 同构）。前端零改：浏览器请求同源 `/api/meta/*`，切换只看 `[center_client.services].meta`。
+fn merge_meta(router: Router<CmxAppState>) -> Router<CmxAppState> {
+    match meta_upstream() {
+        Some(upstream) => {
+            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            tracing::info!(upstream = %upstream.describe(), "元数据管理：独立微服务模式（MetaProxy 转发 /api/meta/* + 页面反代 meta.*）");
+            let resolver = upstream.resolver_fn();
+            let router = router.merge(
+                MetaProxyModule::with_resolver(resolver.clone(), api_key.clone()).routes(),
+            );
+            cmx_meta_proxy::with_meta_page_proxy(router, resolver, api_key)
+        }
+        None => {
+            tracing::warn!("元数据管理：未配置反代目标（[center_client.services] 未配 meta 键或 url/discovery 均空）→ 门户不挂 /api/meta/* 路由；请启动独立 cmx-meta-server 并配置其地址");
+            router
+        }
+    }
+}
 ///
 /// 直接调用 cmx-api 的统一路由注册，返回配置好的 Axum Router。
 /// 外部模块路由（报表 ReportProxyModule、流程 FlowProxyModule、规则 RulesProxyModule、业务单据
@@ -351,7 +396,7 @@ pub fn routes() -> Router<CmxAppState> {
     // （Dct/Doc/Model/Code 四模块，见 merge_model 的 None 分支——故已从 base 移出）。
     // 主数据按 [center_client.services].mdm：配了=反代到独立 cmx-mdm-server，没配=不挂
     // /api/mdm/* 路由（无进程内嵌，见 merge_mdm 的 None 分支——故已从 base 移出）。
-    merge_mdm(merge_model(merge_flow(merge_report(merge_rules(base)))))
+    merge_meta(merge_mdm(merge_model(merge_flow(merge_report(merge_rules(base))))))
 }
 
 /// 获取 Swagger 文档路由

@@ -4,7 +4,9 @@
 
 pub mod audit;
 pub mod auth;
+pub mod build;
 pub mod cache;
+pub mod cron;
 pub mod datasource;
 pub mod iam;
 pub mod jobs;
@@ -13,6 +15,7 @@ pub mod migration;
 // rpc.rs 只留 portal 专属组装（build_function_invoker 绑 cmx-biz / load_outgoing_credential 绑 cmx-plugin）。
 pub mod rpc;
 pub mod runtime;
+pub mod trigger;
 
 pub use datasource::init_datasources;
 
@@ -27,6 +30,8 @@ pub use jobs::init_job_center;
 pub use migration::init_database_migrations;
 pub use rpc::build_function_invoker;
 pub use runtime::init_runtime;
+pub use build::init_build;
+pub use trigger::init_triggers;
 
 use cmx_utils::{ConfigError, ConfigManager, ConfigResult};
 use serde::Deserialize;

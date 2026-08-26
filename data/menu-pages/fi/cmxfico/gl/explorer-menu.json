@@ -1,0 +1,2083 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "gl-grp-voucher",
+      "name": "voucher",
+      "caption": "凭证与单据",
+      "permissionId": null,
+      "icon": "tabler-outline/receipt",
+      "expanded": true,
+      "children": [
+        {
+          "id": "fi-gl-voucher",
+          "name": "voucher",
+          "caption": "财务会计凭证",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/file-spreadsheet",
+          "workspace": {
+            "content": {
+              "caption": "财务会计凭证",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "凭证",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.voucher-neo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-trade",
+          "name": "trade",
+          "caption": "交易单据",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/shopping-cart",
+          "workspace": {
+            "content": {
+              "caption": "交易单据",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "单据",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.trade-neo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-trade-form",
+          "name": "trade-form",
+          "caption": "交易单据（表单视图）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/forms",
+          "workspace": {
+            "content": {
+              "caption": "交易单据（表单视图）",
+              "icon": "form",
+              "views": [
+                {
+                  "tabLabel": "单据",
+                  "icon": "form",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.trade-form"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-travel-expense",
+          "name": "travel-expense",
+          "caption": "差旅费报销",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/plane-departure",
+          "workspace": {
+            "content": {
+              "caption": "差旅费报销",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "报销单",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.travel-expense-neo"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "gl-grp-basedata",
+      "name": "basedata",
+      "caption": "基础数据维护",
+      "permissionId": null,
+      "icon": "tabler-outline/database",
+      "expanded": true,
+      "children": [
+        {
+          "id": "fi-gl-glacct-ws",
+          "name": "glacct-ws",
+          "caption": "总账科目维护",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "account",
+          "workspace": {
+            "id": "glacct_ws",
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.glacct-model",
+              "id": "glacct-model"
+            },
+            "explorer": {
+              "caption": "科目树",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "glacct-explorer",
+                  "tabLabel": "科目树",
+                  "icon": "tree",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.glacct-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "子科目",
+              "icon": "table-view",
+              "views": [
+                {
+                  "id": "glacct-content",
+                  "tabLabel": "子科目表格",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.glacct-content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "详情",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "glacct-prop-detail",
+                  "tabLabel": "详情",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.glacct-prop-detail"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-dict-ws",
+          "name": "dict-ws",
+          "caption": "合并组织机构维护",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "org-chart",
+          "workspace": {
+            "id": "dict_ws",
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.dictws-model",
+              "id": "dictws-model"
+            },
+            "explorer": {
+              "caption": "层级树",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "dictws-explorer",
+                  "tabLabel": "层级树",
+                  "icon": "tree",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictws-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "节点列表",
+              "icon": "table-view",
+              "views": [
+                {
+                  "id": "dictws-content",
+                  "tabLabel": "节点表格",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictws-content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "详情",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "dictws-prop-detail",
+                  "tabLabel": "详情",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictws-prop-detail"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-acct-ws",
+          "name": "acct-ws",
+          "caption": "会计核算管理",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "business-objects-experience",
+          "workspace": {
+            "id": "acct_ws",
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.acctws-model",
+              "id": "acctws-model"
+            },
+            "explorer": {
+              "caption": "合并组织",
+              "icon": "org-chart",
+              "views": [
+                {
+                  "id": "acctws-explorer",
+                  "tabLabel": "合并组织",
+                  "icon": "org-chart",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.acctws-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "科目核算",
+              "icon": "business-objects-experience",
+              "views": [
+                {
+                  "id": "acctws-content",
+                  "tabLabel": "科目核算",
+                  "icon": "business-objects-experience",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.acctws-content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "科目详情",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "acctws-prop-detail",
+                  "tabLabel": "详情",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.acctws-prop-detail"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-dictflat-ws",
+          "name": "dictflat-ws",
+          "caption": "币种字典维护(平级)",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "currency",
+          "workspace": {
+            "id": "dictflat_ws",
+            "explorerWidth": 240,
+            "propertyWidth": 320,
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.dictflat-model",
+              "id": "dictflat-model"
+            },
+            "explorer": {
+              "caption": "检索",
+              "icon": "filter",
+              "views": [
+                {
+                  "id": "dictflat-explorer",
+                  "tabLabel": "检索",
+                  "icon": "filter",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictflat-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "币种列表",
+              "icon": "table-view",
+              "views": [
+                {
+                  "id": "dictflat-content",
+                  "tabLabel": "币种列表",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictflat-content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "详情",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "dictflat-prop-detail",
+                  "tabLabel": "详情",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictflat-prop-detail"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-dictrel-ws",
+          "name": "dictrel-ws",
+          "caption": "核算主体分组关系维护",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "org-chart",
+          "workspace": {
+            "id": "dictrel_ws",
+            "explorerWidth": 260,
+            "propertyWidth": 340,
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.dictrel-model",
+              "id": "dictrel-model"
+            },
+            "explorer": {
+              "caption": "主分组",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "dictrel-explorer",
+                  "tabLabel": "主分组",
+                  "icon": "tree",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictrel-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "关系成员",
+              "icon": "table-view",
+              "views": [
+                {
+                  "id": "dictrel-content",
+                  "tabLabel": "关系成员",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictrel-content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "详情",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "dictrel-prop-detail",
+                  "tabLabel": "详情",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictrel-prop-detail"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "grp-meta-def",
+      "name": "meta-def",
+      "caption": "定义中心",
+      "permissionId": null,
+      "icon": "tabler-outline/adjustments",
+      "expanded": true,
+      "children": [
+        {
+          "id": "flexible-combination-manager",
+          "name": "flexible-combination-manager",
+          "caption": "弹性组合管理",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/adjustments-cog",
+          "workspace": {
+            "content": {
+              "caption": "弹性组合管理",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "设计",
+                  "icon": "settings",
+                  "type": "flexible-combination-manager",
+                  "data": {}
+                },
+                {
+                  "tabLabel": "源码",
+                  "icon": "source-code",
+                  "type": "flexible-combination-source",
+                  "data": {}
+                },
+                {
+                  "tabLabel": "Schema",
+                  "icon": "database",
+                  "type": "flexible-combination-schema",
+                  "data": {}
+                }
+              ]
+            },
+            "explorer": {
+              "caption": "档案列表",
+              "icon": "tree",
+              "views": [
+                {
+                  "tabLabel": "档案",
+                  "icon": "list",
+                  "type": "flexible-combination-list",
+                  "data": {}
+                }
+              ]
+            },
+            "property": {
+              "caption": "属性",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "检查器",
+                  "icon": "detail-view",
+                  "type": "flexible-combination-inspector",
+                  "data": {}
+                },
+                {
+                  "tabLabel": "校验/预览",
+                  "icon": "validate",
+                  "type": "flexible-combination-verify",
+                  "data": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "dict-def-manager",
+          "name": "dict-def-manager",
+          "caption": "数据字典定义",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/book",
+          "workspace": {
+            "content": {
+              "caption": "数据字典定义",
+              "icon": "book",
+              "views": [
+                {
+                  "tabLabel": "设计",
+                  "icon": "book",
+                  "type": "dct-def-manager",
+                  "data": {}
+                },
+                {
+                  "tabLabel": "源码",
+                  "icon": "source-code",
+                  "type": "dct-def-source",
+                  "data": {}
+                }
+              ]
+            },
+            "explorer": {
+              "caption": "字典列表",
+              "icon": "tree",
+              "views": [
+                {
+                  "tabLabel": "字典",
+                  "icon": "list",
+                  "type": "dct-def-list",
+                  "data": {}
+                }
+              ]
+            },
+            "property": {
+              "caption": "属性",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "检查器",
+                  "icon": "detail-view",
+                  "type": "dct-def-inspector",
+                  "data": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "gl-dict-data-editor",
+          "name": "gl-dict-data-editor",
+          "caption": "字典数据维护",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/database",
+          "workspace": {
+            "content": {
+              "caption": "字典数据维护",
+              "icon": "database",
+              "views": [
+                {
+                  "tabLabel": "字典数据",
+                  "icon": "database",
+                  "type": "native_pages",
+                  "native_page": "portal.model.dct.data-editor",
+                  "view": "content",
+                  "props": {
+                    "dbId": "fico-db"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "gl-dict-data-editor-html",
+          "name": "gl-dict-data-editor-html",
+          "caption": "字典数据维护（HTML）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/database",
+          "workspace": {
+            "content": {
+              "caption": "字典数据维护（HTML）",
+              "icon": "database",
+              "views": [
+                {
+                  "tabLabel": "字典数据",
+                  "icon": "database",
+                  "type": "html_pages",
+                  "html_page": "portal.model.gl.dct-data-editor-html",
+                  "view": "content",
+                  "props": {
+                    "dbId": "fico-db"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "doc-def-manager",
+          "name": "doc-def-manager",
+          "caption": "业务单据定义",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/file-invoice",
+          "workspace": {
+            "content": {
+              "caption": "业务单据定义",
+              "icon": "document",
+              "views": [
+                {
+                  "tabLabel": "设计",
+                  "icon": "document",
+                  "type": "doc-def-manager",
+                  "data": {}
+                },
+                {
+                  "tabLabel": "源码",
+                  "icon": "source-code",
+                  "type": "doc-def-source",
+                  "data": {}
+                }
+              ]
+            },
+            "explorer": {
+              "caption": "单据列表",
+              "icon": "tree",
+              "views": [
+                {
+                  "tabLabel": "单据",
+                  "icon": "list",
+                  "type": "doc-def-list",
+                  "data": {}
+                }
+              ]
+            },
+            "property": {
+              "caption": "属性",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "检查器",
+                  "icon": "detail-view",
+                  "type": "doc-def-inspector",
+                  "data": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "code-rule-manager",
+          "name": "code-rule-manager",
+          "caption": "编码规则管理",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/barcode",
+          "workspace": {
+            "explorer": {
+              "caption": "规则列表",
+              "icon": "tree",
+              "views": [
+                {
+                  "tabLabel": "规则",
+                  "icon": "list",
+                  "type": "code-rule-list",
+                  "data": {}
+                }
+              ]
+            },
+            "content": {
+              "caption": "段序列",
+              "icon": "barcode",
+              "views": [
+                {
+                  "tabLabel": "设计",
+                  "icon": "barcode",
+                  "type": "code-rule-manager",
+                  "data": {}
+                }
+              ]
+            },
+            "property": {
+              "caption": "规则属性",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "属性",
+                  "icon": "detail-view",
+                  "type": "code-rule-inspector",
+                  "data": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "base-dct-def-manager",
+          "name": "base-dct-def-manager",
+          "caption": "字典基础元数据",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/template",
+          "workspace": {
+            "content": {
+              "caption": "字典基础元数据",
+              "icon": "template",
+              "views": [
+                {
+                  "tabLabel": "设计",
+                  "icon": "template",
+                  "type": "base-dct-def-manager",
+                  "data": {}
+                },
+                {
+                  "tabLabel": "源码",
+                  "icon": "source-code",
+                  "type": "base-dct-def-source",
+                  "data": {}
+                }
+              ]
+            },
+            "explorer": {
+              "caption": "基础文件",
+              "icon": "tree",
+              "views": [
+                {
+                  "tabLabel": "字段集",
+                  "icon": "list",
+                  "type": "base-dct-def-list",
+                  "data": {}
+                }
+              ]
+            },
+            "property": {
+              "caption": "属性",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "检查器",
+                  "icon": "detail-view",
+                  "type": "base-dct-def-inspector",
+                  "data": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "base-dct-native-pages-manager",
+          "name": "base-dct-native-pages-manager",
+          "caption": "字典基础元数据(native_pages)",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/template",
+          "workspace": {
+            "content": {
+              "caption": "字典基础元数据(native_pages)",
+              "icon": "template",
+              "views": [
+                {
+                  "tabLabel": "设计",
+                  "icon": "template",
+                  "type": "native_pages",
+                  "native_page": "portal.model.definition.base-dct-native",
+                  "view": "manager",
+                  "props": {}
+                },
+                {
+                  "tabLabel": "源码",
+                  "icon": "source-code",
+                  "type": "native_pages",
+                  "native_page": "portal.model.definition.base-dct-native",
+                  "view": "source",
+                  "props": {}
+                }
+              ]
+            },
+            "explorer": {
+              "caption": "基础文件",
+              "icon": "tree",
+              "views": [
+                {
+                  "tabLabel": "字段集",
+                  "icon": "list",
+                  "type": "native_pages",
+                  "native_page": "portal.model.definition.base-dct-native",
+                  "view": "list",
+                  "props": {}
+                }
+              ]
+            },
+            "property": {
+              "caption": "属性",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "检查器",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "portal.model.definition.base-dct-native",
+                  "view": "inspector",
+                  "props": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "base-doc-def-manager",
+          "name": "base-doc-def-manager",
+          "caption": "单据基础元数据",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/template",
+          "workspace": {
+            "content": {
+              "caption": "单据基础元数据",
+              "icon": "template",
+              "views": [
+                {
+                  "tabLabel": "设计",
+                  "icon": "template",
+                  "type": "base-doc-def-manager",
+                  "data": {}
+                },
+                {
+                  "tabLabel": "源码",
+                  "icon": "source-code",
+                  "type": "base-doc-def-source",
+                  "data": {}
+                }
+              ]
+            },
+            "explorer": {
+              "caption": "基础文件",
+              "icon": "tree",
+              "views": [
+                {
+                  "tabLabel": "字段集",
+                  "icon": "list",
+                  "type": "base-doc-def-list",
+                  "data": {}
+                }
+              ]
+            },
+            "property": {
+              "caption": "属性",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "检查器",
+                  "icon": "detail-view",
+                  "type": "base-doc-def-inspector",
+                  "data": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "custom-page-designer",
+          "name": "custom-page-designer",
+          "caption": "自定义页面设计",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/layout-dashboard",
+          "workspace": {
+            "content": {
+              "caption": "自定义页面设计",
+              "icon": "business-objects-experience",
+              "views": [
+                {
+                  "tabLabel": "页面",
+                  "icon": "business-objects-experience",
+                  "type": "custom-page-designer",
+                  "data": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-account-def",
+          "name": "account-def",
+          "caption": "科目弹性组合",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/book",
+          "workspace": {
+            "content": {
+              "caption": "科目弹性组合",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "定义",
+                  "icon": "settings",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.account-def"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-trade-def",
+          "name": "trade-def",
+          "caption": "交易弹性组合",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/shopping-cart-cog",
+          "workspace": {
+            "content": {
+              "caption": "交易弹性组合",
+              "icon": "settings",
+              "views": [
+                {
+                  "tabLabel": "定义",
+                  "icon": "settings",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.trade-def"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "workspace-node-editor",
+          "name": "workspace-node-editor",
+          "caption": "工作区节点编辑",
+          "type": "workspace-node-editor",
+          "permissionId": null,
+          "icon": "tabler-outline/sitemap"
+        }
+      ]
+    },
+    {
+      "id": "gl-grp-platform",
+      "name": "platform",
+      "caption": "平台工具",
+      "permissionId": null,
+      "icon": "tabler-outline/settings",
+      "expanded": true,
+      "children": [
+        {
+          "id": "portal-dam-registry",
+          "name": "dam-registry",
+          "caption": "DAM 注册管理中心",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tree",
+          "workspace": {
+            "explorer": {
+              "caption": "DAM 导航",
+              "icon": "tree",
+              "views": [
+                {
+                  "tabLabel": "DAM",
+                  "icon": "tree",
+                  "type": "native_pages",
+                  "native_page": "portal.dam.registry-center",
+                  "view": "explorer",
+                  "props": {}
+                }
+              ]
+            },
+            "content": {
+              "caption": "DAM 注册管理中心",
+              "icon": "tree",
+              "views": [
+                {
+                  "tabLabel": "注册中心",
+                  "icon": "tree",
+                  "type": "native_pages",
+                  "native_page": "portal.dam.registry-center",
+                  "view": "manager",
+                  "props": {}
+                }
+              ]
+            },
+            "property": {
+              "caption": "资源",
+              "icon": "documents",
+              "views": [
+                {
+                  "tabLabel": "资源",
+                  "icon": "documents",
+                  "type": "native_pages",
+                  "native_page": "portal.dam.registry-center",
+                  "view": "property",
+                  "props": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-registry-editor",
+          "name": "registry-editor",
+          "caption": "注册表编辑器",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/database-search",
+          "workspace": {
+            "id": "registry_editor",
+            "content": {
+              "caption": "注册表编辑器",
+              "icon": "tabler-outline/database-search",
+              "views": [
+                {
+                  "id": "registry-editor-content",
+                  "tabLabel": "注册表",
+                  "icon": "tabler-outline/database-search",
+                  "type": "native_pages",
+                  "native_page": "portal.system.registry-editor",
+                  "view": "content"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-job-center",
+          "name": "job-center",
+          "caption": "任务中心",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "process",
+          "workspace": {
+            "id": "job_center",
+            "model": {
+              "type": "native_pages",
+              "native_page": "portal.job.monitor",
+              "id": "job-center-model",
+              "view": "active"
+            },
+            "explorer": {
+              "caption": "概览 / 新建 / 过滤",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "job-center-explorer",
+                  "tabLabel": "任务台",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "portal.job.monitor",
+                  "view": "explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "任务列表与监控",
+              "icon": "process",
+              "views": [
+                {
+                  "id": "job-center-active",
+                  "tabLabel": "活跃作业",
+                  "icon": "process",
+                  "type": "native_pages",
+                  "native_page": "portal.job.monitor",
+                  "view": "active"
+                },
+                {
+                  "id": "job-center-history",
+                  "tabLabel": "历史作业",
+                  "icon": "history",
+                  "type": "native_pages",
+                  "native_page": "portal.job.monitor",
+                  "view": "history"
+                }
+              ]
+            },
+            "property": {
+              "caption": "作业属性",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "job-center-prop",
+                  "tabLabel": "属性",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "portal.job.monitor",
+                  "view": "property"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "gl-grp-dev",
+      "name": "dev",
+      "caption": "开发与演示",
+      "permissionId": null,
+      "icon": "tabler-outline/flask",
+      "expanded": false,
+      "children": [
+        {
+          "id": "demo-master-slave",
+          "name": "master-slave-demo",
+          "caption": "主从表单生成测试",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "table-view",
+          "workspace": {
+            "content": {
+              "caption": "主从表格示例",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "主从表格",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "demo-master-slave"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "combo-box-demo",
+          "name": "combo-box-demo",
+          "caption": "cmx-combo-box 三模式演示",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/select",
+          "workspace": {
+            "content": {
+              "caption": "cmx-combo-box 三模式演示",
+              "icon": "tabler-outline/select",
+              "views": [
+                {
+                  "tabLabel": "combo-box 演示",
+                  "icon": "tabler-outline/select",
+                  "type": "html_pages",
+                  "html_page": "combo-box-demo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "tabulator-treegrid-demo",
+          "name": "tabulator-treegrid-demo",
+          "caption": "cmx-tabulator 会计科目树",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/binary-tree",
+          "workspace": {
+            "content": {
+              "caption": "cmx-tabulator 会计科目树（cf_gl_account 自分级字典）",
+              "icon": "tabler-outline/binary-tree",
+              "views": [
+                {
+                  "tabLabel": "会计科目树",
+                  "icon": "tabler-outline/binary-tree",
+                  "type": "html_pages",
+                  "html_page": "tabulator-treegrid-demo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "dict-select-demo",
+          "name": "dict-select-demo",
+          "caption": "cmx-dict-select 数据字典选择演示",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/list-search",
+          "workspace": {
+            "content": {
+              "caption": "cmx-dict-select 数据字典选择演示",
+              "icon": "tabler-outline/list-search",
+              "views": [
+                {
+                  "tabLabel": "字典选择演示",
+                  "icon": "tabler-outline/list-search",
+                  "type": "html_pages",
+                  "html_page": "dict-select-demo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "cmx-input-editors-demo",
+          "name": "cmx-input-editors-demo",
+          "caption": "录入控件演示（文本/数字/日期/日期时间）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/forms",
+          "workspace": {
+            "content": {
+              "caption": "录入控件演示（文本/数字/日期/日期时间）",
+              "icon": "tabler-outline/forms",
+              "views": [
+                {
+                  "tabLabel": "录入控件演示",
+                  "icon": "tabler-outline/forms",
+                  "type": "html_pages",
+                  "html_page": "cmx-input-editors-demo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "cmx-grid-form-linkage-demo",
+          "name": "cmx-grid-form-linkage-demo",
+          "caption": "grid↔form 联动（四录入组件·模型面板）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/table-options",
+          "workspace": {
+            "content": {
+              "caption": "grid↔form 联动（四录入组件·模型面板）",
+              "icon": "tabler-outline/table-options",
+              "views": [
+                {
+                  "tabLabel": "grid↔form 联动",
+                  "icon": "tabler-outline/table-options",
+                  "type": "html_pages",
+                  "html_page": "cmx-grid-form-linkage-demo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-voucher-demo",
+          "name": "gl-voucher-demo",
+          "caption": "会计凭证（三层·维度选择）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/stack-2",
+          "workspace": {
+            "content": {
+              "caption": "会计凭证（头/分录/明细 三层）",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "凭证",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.gl-voucher-demo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-voucher-v1-demo",
+          "name": "gl-voucher-v1-demo",
+          "caption": "会计凭证（v1 单表多字典）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/database",
+          "workspace": {
+            "content": {
+              "caption": "会计凭证 v1(单表多字典)",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "凭证",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.gl-voucher-v1-demo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-voucher-flex",
+          "name": "voucher-flex",
+          "caption": "会计凭证（弹性组合）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/forms",
+          "workspace": {
+            "content": {
+              "caption": "会计凭证（弹性组合）",
+              "icon": "form",
+              "views": [
+                {
+                  "tabLabel": "凭证",
+                  "icon": "form",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.voucher-flex"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-dict-editor-demo",
+          "name": "dict-editor-demo",
+          "caption": "字典选择编辑器演示",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/edit",
+          "workspace": {
+            "content": {
+              "caption": "cmx-dict-select 编辑器演示（grid + form）",
+              "icon": "value-help",
+              "views": [
+                {
+                  "tabLabel": "编辑器演示",
+                  "icon": "value-help",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dict-editor-demo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-master-data-demo",
+          "name": "gl-master-data-demo",
+          "caption": "总账主数据演示",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/database-search",
+          "workspace": {
+            "content": {
+              "caption": "总账主数据演示",
+              "icon": "value-help",
+              "views": [
+                {
+                  "tabLabel": "主数据演示",
+                  "icon": "value-help",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.gl-master-data-demo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-dict-help-test",
+          "name": "dict-help-test",
+          "caption": "主数据帮助测试",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/test-pipe",
+          "workspace": {
+            "content": {
+              "caption": "主数据帮助测试",
+              "icon": "value-help",
+              "views": [
+                {
+                  "tabLabel": "字典帮助测试",
+                  "icon": "search",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dict-help-test"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-dict-help-lab",
+          "name": "dict-help-lab",
+          "caption": "主数据帮助实验室",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/flask",
+          "workspace": {
+            "content": {
+              "caption": "主数据帮助实验室",
+              "icon": "simulate",
+              "views": [
+                {
+                  "tabLabel": "帮助实验室",
+                  "icon": "simulate",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dict-help-lab"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-meta-model-service-test",
+          "name": "meta-model-service-test",
+          "caption": "元数据模型服务测试",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "database",
+          "workspace": {
+            "content": {
+              "caption": "元数据模型服务测试",
+              "icon": "database",
+              "views": [
+                {
+                  "tabLabel": "功能测试",
+                  "icon": "database",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.meta-model-service-test"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-dict-grid-meta",
+          "name": "dict-grid-meta",
+          "caption": "数据字典动态表格",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "grid",
+          "workspace": {
+            "content": {
+              "caption": "数据字典动态表格",
+              "icon": "grid",
+              "views": [
+                {
+                  "tabLabel": "字典内容",
+                  "icon": "grid",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dict-grid-meta"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-erp-voucher-cnpc",
+          "name": "erp-voucher-cnpc",
+          "caption": "ERP凭证样例(CNPC)",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "receipt",
+          "workspace": {
+            "content": {
+              "caption": "ERP凭证样例(CNPC)",
+              "icon": "receipt",
+              "views": [
+                {
+                  "tabLabel": "凭证对比",
+                  "icon": "receipt",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.erp-voucher-cnpc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-erp-voucher-cnpc-ms",
+          "name": "erp-voucher-cnpc-ms",
+          "caption": "ERP凭证样例(MasterSlave模型版)",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "org-chart",
+          "workspace": {
+            "content": {
+              "caption": "ERP凭证样例(MasterSlave模型版)",
+              "icon": "org-chart",
+              "views": [
+                {
+                  "tabLabel": "四层主从凭证",
+                  "icon": "org-chart",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.erp-voucher-cnpc-ms"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-fico-ws",
+          "name": "fico-ws",
+          "caption": "ERP凭证(三区工作台)",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "business-objects-experience",
+          "workspace": {
+            "id": "fico_ws",
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.fico-ws-model",
+              "id": "fico-ws-model"
+            },
+            "explorer": {
+              "caption": "凭证批",
+              "icon": "list",
+              "views": [
+                {
+                  "id": "fico-ws-explorer",
+                  "tabLabel": "凭证批",
+                  "icon": "list",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "凭证",
+              "icon": "document-text",
+              "views": [
+                {
+                  "id": "fico-ws-content",
+                  "tabLabel": "凭证视图",
+                  "icon": "document-text",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-content"
+                },
+                {
+                  "id": "fico-ws-source",
+                  "tabLabel": "凭证数据",
+                  "icon": "source-code",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-source"
+                }
+              ]
+            },
+            "property": {
+              "caption": "属性/操作",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "fico-ws-prop-detail",
+                  "tabLabel": "详情",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-prop-detail"
+                },
+                {
+                  "id": "fico-ws-prop-actions",
+                  "tabLabel": "扩展操作",
+                  "icon": "action-settings",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-prop-actions"
+                },
+                {
+                  "id": "fico-ws-prop-fx",
+                  "tabLabel": "外币管理",
+                  "icon": "currency",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-prop-fx"
+                },
+                {
+                  "id": "fico-ws-prop-budget",
+                  "tabLabel": "预算管理",
+                  "icon": "money-bills",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-prop-budget"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-fico-ws-doc",
+          "name": "fico-ws-doc",
+          "caption": "ERP凭证(doc服务版)",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "business-objects-experience",
+          "workspace": {
+            "id": "fico_ws_doc",
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.fico-ws-doc-model",
+              "id": "fico-ws-doc-model"
+            },
+            "explorer": {
+              "caption": "凭证批",
+              "icon": "list",
+              "views": [
+                {
+                  "id": "fico-ws-doc-explorer",
+                  "tabLabel": "凭证批",
+                  "icon": "list",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-doc-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "凭证",
+              "icon": "document-text",
+              "views": [
+                {
+                  "id": "fico-ws-doc-content",
+                  "tabLabel": "凭证视图",
+                  "icon": "document-text",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-doc-content"
+                },
+                {
+                  "id": "fico-ws-doc-source",
+                  "tabLabel": "凭证数据",
+                  "icon": "source-code",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-doc-source"
+                }
+              ]
+            },
+            "property": {
+              "caption": "属性/操作",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "fico-ws-doc-prop-detail",
+                  "tabLabel": "详情",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-detail"
+                },
+                {
+                  "id": "fico-ws-doc-prop-actions",
+                  "tabLabel": "扩展操作",
+                  "icon": "action-settings",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-actions"
+                },
+                {
+                  "id": "fico-ws-doc-prop-fx",
+                  "tabLabel": "外币管理",
+                  "icon": "currency",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-fx"
+                },
+                {
+                  "id": "fico-ws-doc-prop-budget",
+                  "tabLabel": "预算管理",
+                  "icon": "money-bills",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-budget"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-dicttree-ws",
+          "name": "dicttree-ws",
+          "caption": "总账科目维护(自分级)",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tree",
+          "workspace": {
+            "id": "dicttree_ws",
+            "explorerWidth": 280,
+            "propertyWidth": 320,
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.dicttree-model",
+              "id": "dicttree-model"
+            },
+            "explorer": {
+              "caption": "科目树",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "dicttree-explorer",
+                  "tabLabel": "科目树",
+                  "icon": "tree",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dicttree-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "子科目",
+              "icon": "table-view",
+              "views": [
+                {
+                  "id": "dicttree-content",
+                  "tabLabel": "子科目表格",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dicttree-content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "详情",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "dicttree-prop-detail",
+                  "tabLabel": "详情",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dicttree-prop-detail"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-dictcls-ws",
+          "name": "dictcls-ws",
+          "caption": "总账科目维护(带分类)",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "customer",
+          "workspace": {
+            "id": "dictcls_ws",
+            "explorerWidth": 260,
+            "propertyWidth": 320,
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.dictcls-model",
+              "id": "dictcls-model"
+            },
+            "explorer": {
+              "caption": "伙伴分类",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "dictcls-explorer",
+                  "tabLabel": "伙伴分类",
+                  "icon": "tree",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictcls-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "合作伙伴",
+              "icon": "table-view",
+              "views": [
+                {
+                  "id": "dictcls-content",
+                  "tabLabel": "伙伴列表",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictcls-content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "详情",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "dictcls-prop-detail",
+                  "tabLabel": "详情",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.dictcls-prop-detail"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-cmxfico-voucher-doc-json",
+          "name": "voucher-doc-json",
+          "caption": "会计凭证①(html·DataSet)",
+          "type": "workspace-node",
+          "icon": "tabler-outline/receipt",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "会计凭证业务单据（html_pages · sqlx DataSet + JSON）",
+              "icon": "document",
+              "views": [
+                {
+                  "tabLabel": "凭证(html_pages)",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.voucher-doc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-cmxfico-voucher-native-json",
+          "name": "voucher-native-json",
+          "caption": "会计凭证②(native·DataSet)",
+          "type": "workspace-node",
+          "icon": "tabler-outline/receipt",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "会计凭证业务单据（通用页 · sqlx DataSet + JSON）",
+              "icon": "document",
+              "views": [
+                {
+                  "tabLabel": "凭证(通用页·DataSet)",
+                  "icon": "table-view",
+                  "type": "native_pages",
+                  "native_page": "portal.model.doc.doc-loader",
+                  "view": "content",
+                  "props": {
+                    "file": "cmxfico_doc_meta_v1.json",
+                    "dbId": "fico-db",
+                    "apiPath": "/api/doc/data/sqlx-dataset-json"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-cmxfico-voucher-doc-sqlxbin",
+          "name": "voucher-doc-sqlxbin",
+          "caption": "会计凭证③(html·Sqlx二进制)",
+          "type": "workspace-node",
+          "icon": "tabler-outline/receipt",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "会计凭证业务单据（html_pages · sqlx ZmcDataSet + 二进制）",
+              "icon": "document",
+              "views": [
+                {
+                  "tabLabel": "凭证(html·Sqlx二进制)",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.voucher-doc-sqlxbin"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-cmxfico-voucher-list",
+          "name": "voucher-list",
+          "caption": "会计凭证·单据列表(Sqlx)",
+          "type": "workspace-node",
+          "icon": "tabler-outline/receipt",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "会计凭证单据列表（Sqlx 二进制 · 列表跳详情）",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "凭证列表",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.voucher-list"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-cmxfico-voucher-native-bin",
+          "name": "voucher-native-bin",
+          "caption": "会计凭证④(native·tokio二进制)",
+          "type": "workspace-node",
+          "icon": "tabler-outline/receipt",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "会计凭证业务单据（通用页 · tokio ZmcDataSet + 二进制）",
+              "icon": "document",
+              "views": [
+                {
+                  "tabLabel": "凭证(通用页·tokio二进制)",
+                  "icon": "table-view",
+                  "type": "native_pages",
+                  "native_page": "portal.model.doc.doc-loader",
+                  "view": "content",
+                  "props": {
+                    "file": "cmxfico_doc_meta_v1.json",
+                    "dbId": "fico-db",
+                    "apiPath": "/api/doc/data/tokio-zmc-msgpack",
+                    "binary": true
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-cmxfico-voucher-native-zmcjson",
+          "name": "voucher-native-zmcjson",
+          "caption": "会计凭证⑤(native·Zmc→JSON)",
+          "type": "workspace-node",
+          "icon": "tabler-outline/receipt",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "会计凭证业务单据（通用页 · ZmcDataSet 零拷贝装载 + 纯 JSON 出口）",
+              "icon": "document",
+              "views": [
+                {
+                  "tabLabel": "凭证(通用页·Zmc→JSON)",
+                  "icon": "table-view",
+                  "type": "native_pages",
+                  "native_page": "portal.model.doc.doc-loader",
+                  "view": "content",
+                  "props": {
+                    "file": "cmxfico_doc_meta_v1.json",
+                    "dbId": "fico-db",
+                    "apiPath": "/api/doc/data/tokio-zmc-json"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-cmxfico-doc-service-test-native",
+          "name": "doc-service-test-native",
+          "caption": "加载服务自检(native)",
+          "type": "workspace-node",
+          "icon": "tabler-outline/checklist",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "业务单据加载服务 · 全后端能力自检（native_pages）",
+              "icon": "sys-monitor",
+              "views": [
+                {
+                  "tabLabel": "自检(native)",
+                  "icon": "sys-monitor",
+                  "type": "native_pages",
+                  "native_page": "portal.model.doc.doc-service-test",
+                  "view": "content",
+                  "props": {
+                    "file": "cmxfico_doc_meta_v1.json",
+                    "dbId": "fico-db"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-cmxfico-doc-service-test-html",
+          "name": "doc-service-test-html",
+          "caption": "加载服务自检(html)",
+          "type": "workspace-node",
+          "icon": "tabler-outline/checklist",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "业务单据加载服务 · 全后端能力自检（html_pages）",
+              "icon": "sys-monitor",
+              "views": [
+                {
+                  "tabLabel": "自检(html)",
+                  "icon": "sys-monitor",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.doc-service-test"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-cmxfico-gl-employee",
+          "name": "employee",
+          "caption": "AI员工信息表单",
+          "type": "workspace-node",
+          "icon": "tabler-outline/users",
+          "permissionId": null,
+          "workspace": {
+            "content": {
+              "caption": "AI员工信息表单",
+              "icon": "tabler-outline/users",
+              "views": [
+                {
+                  "tabLabel": "员工信息",
+                  "icon": "tabler-outline/users",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.employee"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-ignite-combo-editor",
+          "name": "ignite-combo-editor",
+          "caption": "Ignite 组合框编辑器",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/select",
+          "workspace": {
+            "content": {
+              "caption": "Ignite 组合框编辑器",
+              "icon": "form",
+              "views": [
+                {
+                  "tabLabel": "编辑器演示",
+                  "icon": "form",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.ignite-combo-editor"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-ignite-list",
+          "name": "ignite-list",
+          "caption": "Ignite 列表主从",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/list",
+          "workspace": {
+            "content": {
+              "caption": "Ignite 列表主从",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "主从演示",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.ignite-list"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "report-display-components-showcase",
+          "name": "display-components-showcase",
+          "caption": "展示组件库演示",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/layout-grid",
+          "workspace": {
+            "content": {
+              "caption": "展示组件库演示",
+              "icon": "tabler-outline/layout-grid",
+              "views": [
+                {
+                  "id": "display-showcase-content",
+                  "tabLabel": "展示组件",
+                  "icon": "tabler-outline/layout-grid",
+                  "type": "native_pages",
+                  "native_page": "portal.display.showcase",
+                  "view": "content",
+                  "props": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "native-pages-linkage-demo",
+          "name": "native-pages-linkage-demo",
+          "caption": "原生页面联动演示(native_pages·CE+context)",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/topology-star-3",
+          "workspace": {
+            "explorer": {
+              "caption": "产品列表",
+              "icon": "list",
+              "views": [
+                {
+                  "tabLabel": "产品",
+                  "icon": "product",
+                  "type": "native_pages",
+                  "native_page": "demo.product-explorer",
+                  "view": "default",
+                  "props": {}
+                }
+              ]
+            },
+            "content": {
+              "caption": "产品详情 / 整页演示",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "tabLabel": "详情(content CE)",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "demo.product-content",
+                  "view": "default",
+                  "props": {}
+                },
+                {
+                  "tabLabel": "整页HTML(iframe)",
+                  "icon": "internet-browser",
+                  "type": "native_pages",
+                  "native_page": "demo.interactive",
+                  "view": "default",
+                  "props": {}
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-ccm-attrs-test",
+          "name": "ccm-attrs-test",
+          "caption": "CCM全属性测试",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/test-pipe",
+          "workspace": {
+            "content": {
+              "caption": "CmxColumnModel 全属性 + select/date 编辑器 + 表单校验测试",
+              "icon": "table-view",
+              "views": [
+                {
+                  "tabLabel": "测试",
+                  "icon": "table-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.ccm-attrs-test"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

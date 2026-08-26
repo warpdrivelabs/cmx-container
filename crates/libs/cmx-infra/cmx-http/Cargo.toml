@@ -1,0 +1,29 @@
+[package]
+name = "cmx-http"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# 内部依赖 - 特征定义（HostFunctionProvider / HostFuncError）
+cmx-traits = { workspace = true }
+# 内部依赖 - 核心库（HttpRequest / HttpResponse DTO）
+cmx-core = { workspace = true }
+# HTTP 客户端（复用 workspace 版本，rustls）
+reqwest = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON
+serde_json = { workspace = true }
+# MessagePack 序列化/反序列化（宿主↔访客 payload）
+rmp-serde = { workspace = true }
+# 异步运行时（block_on 当前 Handle）
+tokio = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# 时间处理（配额窗口）
+chrono = { workspace = true }
+# 并发 HashMap（per-plugin 配额计数）
+dashmap = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,19 @@
+[package]
+name = "cmx-build"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# 核心：作业模型 + store trait + Builder（隔离目录编译 wasm）。零 extism/运行时依赖。
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+# 执行器：per-job 日志广播 + 进程内 job→sender 映射
+dashmap = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process"] }
