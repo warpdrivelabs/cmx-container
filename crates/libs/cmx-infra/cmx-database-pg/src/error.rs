@@ -38,6 +38,9 @@ pub enum Error {
     /// 无法创建模型管理器提供者。
     #[error("无法创建模型管理器提供者: {0}")]
     CantCreateModelManagerProvider(String),
+    /// 连接池首连验证失败（建池即拨号，网络不可达 / 库不存在 / 认证失败在此暴露）。
+    #[error("连接池首连验证失败: {0}")]
+    PoolFirstConnect(String),
     /// 连接超时。
     #[error("连接超时")]
     ConnectionTimeout,

@@ -536,5 +536,18 @@ async fn new_db_pool(config: &DbConfig) -> crate::Result<DbPool> {
         .build()
         .map_err(|e| crate::Error::CantCreateModelManagerProvider(e.to_string()))?;
 
+    // 首连验证（sqlx `connect()` 等效语义）：deadpool 建池是惰性的，网络不可达 / 库
+    // 不存在 / 认证失败在首次 `get` 前不可见——建池即拨号一条连接（顺带执行
+    // post_create 的 SET search_path）并立即归还，失败即 Err，fail-fast 暴露在注册期。
+    pool.get()
+        .await
+        .map_err(|e| {
+            crate::Error::PoolFirstConnect(format!(
+                "db_id={}: {e}（网络不可达 / 库不存在 / 认证失败，请检查 [[databases]] db_url）",
+                config.db_id
+            ))
+        })?;
+    info!("PG 连接池首连验证通过: {}", config.db_id);
+
     Ok(DbPool { pool })
 }

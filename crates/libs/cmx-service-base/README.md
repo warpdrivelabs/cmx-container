@@ -219,7 +219,8 @@ async fn boot() -> anyhow::Result<()> {
     let cfg = cmx_service_base::BaseConfig::from_toml_path("flow-server.toml")
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    // ③ 注册 tokio-postgres 数据源（新链路；单项失败只 warn 不阻断启动）
+    // ③ 注册 tokio-postgres 数据源（新链路；建池即首连验证，库不可达返回 Err——
+    //    引擎启动钩子据此 fail-fast 终止启动）
     cmx_service_base::register_pg_datasources(&cfg.databases).await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(())

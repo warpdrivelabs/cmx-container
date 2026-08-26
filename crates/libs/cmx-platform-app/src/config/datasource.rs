@@ -429,8 +429,10 @@ async fn register_datasources(mm: &DatabaseManager, configs: Vec<DbConfig>) -> c
 
 /// 把配置数据源并行注册到 tokio-postgres 管理器(零拷贝新链路用)。
 ///
-/// 仅注册 Postgres 类型(pg 管理器 PG-only);逐个失败仅告警,不阻断启动 —— 新链路是
-/// 可选增量,老 sqlx 链路已在前面注册成功。`DbConfig` 两 crate 字段一致,逐字段映射。
+/// 仅注册 Postgres 类型(pg 管理器 PG-only)。base 原语现带建池首连验证（单项失败即返回
+/// Err、截断后续项）——此处忽略 Result 维持「非致命增量」语义：新链路是可选增量，且同批
+/// URL 已在前面经老 sqlx 链路 `connect()` 首连成功，新链路首连失败概率极低。
+/// `DbConfig` 两 crate 字段一致,逐字段映射。
 async fn register_pg_datasources(configs: Vec<DbConfig>) {
     use cmx_database_pg::{DbConfig as PgDbConfig, DbType as PgDbType, PoolConfig as PgPoolConfig};
 
@@ -462,7 +464,7 @@ async fn register_pg_datasources(configs: Vec<DbConfig>) {
         })
         .collect();
 
-    // 失败只 warn 不阻断（base 内部逐项处理）；整体 Result 忽略以保持原「非致命增量」语义。
+    // 忽略 Result 保持「非致命增量」语义（首连失败即中止循环，见函数文档）。
     let _ = cmx_service_base::register_pg_datasources(&pg_configs).await;
 }
 

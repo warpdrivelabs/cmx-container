@@ -29,6 +29,7 @@ const state = {
   // 数据库运维工作台（概览页下方）：场景由「数据库态 × 每模块每 kind 版本态」组合推导，真实落库。
   build: {
     loaded: false, loading: false, error: '',
+    loadingPromise: null,    // loadDbState 的在途 Promise（防并发/防循环调用）
     dbState: null,           // { db_id, page_mode, db_status, meta_version, expected_meta_version, scenario_counts, modules[] }
     dsKey: '',               // 当前 dbState 对应的 db_id（切库时失效重算）
     dbStateAbort: null,      // loadDbState 的 AbortController（切库时取消上一个请求，避免竞态）
@@ -160,6 +161,10 @@ function resetBuildStateForDatasource () {
   const b = state.build
   // 切库时取消正在进行的 db-state 请求
   if (b.dbStateAbort) { try { b.dbStateAbort.abort() } catch {} b.dbStateAbort = null }
+  // loadingPromise 不主动 abort（让其自然结束），但清空引用即可——切库后下次进 bindOverview
+  // 会按 force=false 走"非强制"路径，看到旧 in-flight Promise 不会重新发起新请求；
+  // 旧 Promise 完成时内部 `b.dbStateAbort !== abort` 校验会让它静默丢弃结果，不会污染新库状态。
+  b.loadingPromise = null
   b.loaded = false
   b.loading = false
   b.error = ''
@@ -753,25 +758,49 @@ function mcModuleMatchesFilter (m) {
     (!q || `${m.module_name} ${m.key}`.toLowerCase().includes(q))
 }
 
-/** 拉取数据库态（后端 GET /api/model/db-state 提供库门闸 + 每模块每 kind scenario）。 */
+/**
+ * 拉取数据库态（后端 GET /api/model/db-state 提供库门闸 + 每模块每 kind scenario）。
+ *
+ * 防重入 / 防循环调用：
+ * 1. `b.loadingPromise` 记录当前在途请求；并发调用直接复用同一 Promise，不再发起新请求。
+ * 2. `b.dbStateAbort === abort` 在 await 之后二次校验：旧请求 abort 后即便 race-window resolve，
+ *    也不会写回 b.dbState / b.loaded / b.error，避免与新请求互相覆盖引发死循环。
+ * 3. early-return 始终返回 `null`（明确不做事），调用方须容忍 null 而非依赖 then。
+ */
 async function loadDbState (ds, force = false) {
   const b = state.build
   const key = ds ? (ds.db_id || ds.id) : ''
-  if (b.loaded && b.dsKey === key && !force) return
+  // ★ 防重入：已在途且非强制刷新 → 复用同一 Promise（并发触发共用结果）
+  if (b.loadingPromise && !force) return b.loadingPromise
+  if (b.loaded && b.dsKey === key && !force) return null
   // 取消上一个未完成的请求，避免快速切库时后发先至导致状态错乱
   if (b.dbStateAbort) { try { b.dbStateAbort.abort() } catch {} }
   const abort = new AbortController()
   b.dbStateAbort = abort
   b.loading = true; b.error = ''; b.dsKey = key
-  try {
-    b.dbState = mcNormalizeDbState(await apiJson(`/api/model/db-state?db_id=${encodeURIComponent(key)}`, { signal: abort.signal }), key)
-    b.loaded = true
-  } catch (err) {
-    if (err?.name !== 'AbortError') b.error = '模型态加载失败：' + err.message
-  } finally {
-    if (b.dbStateAbort === abort) b.dbStateAbort = null
-    b.loading = false
-  }
+  const promise = (async () => {
+    try {
+      const data = await apiJson(`/api/model/db-state?db_id=${encodeURIComponent(key)}`, { signal: abort.signal })
+      // abort 后 race-window 仍可能 resolve：必须是当前在途 abort 才落库，否则丢弃
+      if (b.dbStateAbort !== abort) return
+      b.dbState = mcNormalizeDbState(data, key)
+      b.loaded = true
+    } catch (err) {
+      // 仅当仍是当前在途请求时记录错误；已被新请求替代的旧请求不污染状态
+      if (b.dbStateAbort !== abort) return
+      if (err?.name === 'AbortError') return
+      b.error = '模型态加载失败：' + (err?.message || err)
+    } finally {
+      // 仅当仍是当前在途请求时清 loading/abort 句柄；旧请求 finally 不去覆盖新请求的状态
+      if (b.dbStateAbort === abort) {
+        b.dbStateAbort = null
+        b.loading = false
+      }
+    }
+  })()
+  b.loadingPromise = promise
+  promise.finally(() => { if (b.loadingPromise === promise) b.loadingPromise = null })
+  return promise
 }
 
 /** 当前 tab 生效的显示模式：init tab -> 始终进初始化视图；总览 tab -> 始终进模块矩阵（系统表操作统一到初始化 tab）。 */
@@ -1679,11 +1708,14 @@ function bindOverview (root) {
   const b = state.build
   const ds = state.datasources.find((d) => d.id === state.selectedDsId) || null
   // 首次进入 / 切库 → 加载模型态（真实 db-state），拉到后局部重渲染工作台。
-  // ★ 失败后不自动重试（b.error 置位即短路）：否则 loadDbState 失败 → .then(refreshOverviewHosts)
-  //   → renderInto → bindOverview 会与失败的 loadDbState 互踢，形成死循环（后端不可达时狂打 db-state）。
-  //   切库时 resetBuildStateForDatasource 会清 error，可正常重载新库。
-  if (ds && (!b.loaded || b.dsKey !== (ds.db_id || ds.id)) && !b.loading && !b.error) {
-    void loadDbState(ds).then(() => refreshOverviewHosts())
+  // ★ 三重防重入：
+  //   (1) `!b.error` 失败短路（避免 bindOverview 与失败的 loadDbState 互踢死循环）；
+  //   (2) `!b.loadingPromise` 在途短路（并发触发共用同一 Promise，不发起新请求）；
+  //   (3) `!b.loading` 保留兜底（防御 loadingPromise 字段缺失场景）。
+  //   切库时 resetBuildStateForDatasource 会清 error/loadingPromise，可正常重载新库。
+  if (ds && (!b.loaded || b.dsKey !== (ds.db_id || ds.id)) && !b.loading && !b.loadingPromise && !b.error) {
+    const p = loadDbState(ds)
+    if (p) p.then(() => refreshOverviewHosts())
   }
   // 局部重渲：只重画工作台卡片，保留概览容器（避免整块闪烁）。
   const rerender = () => {
@@ -1723,14 +1755,21 @@ function bindOverview (root) {
       b.opTab = tab
       mcSyncActiveRunLog()
       // 切到「初始化」tab → 拉取最新真实状态再渲染，确保状态准确。
-      if (tab === 'init') { void loadDbState(state.datasources.find((d) => d.id === state.selectedDsId), true).then(rerender) } else { rerender() }
+      if (tab === 'init') {
+        const p = loadDbState(state.datasources.find((d) => d.id === state.selectedDsId), true)
+        if (p) p.then(rerender)
+        else rerender()
+      } else { rerender() }
       return
     }
     if (t.hasAttribute('data-mc-stop')) { stopMcInit(); return }
     if (t.hasAttribute('data-mc-retry-dbstate')) {
       // 手动重试：清 error 后强制重载（绕过 bindOverview 的 !b.error 短路）。
       const cur = state.datasources.find((d) => d.id === state.selectedDsId)
-      if (cur) { void loadDbState(cur, true).then(() => refreshOverviewHosts()) }
+      if (cur) {
+        const p = loadDbState(cur, true)
+        if (p) p.then(() => refreshOverviewHosts())
+      }
       rerender()
       return
     }
