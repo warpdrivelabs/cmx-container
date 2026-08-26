@@ -538,8 +538,10 @@ async fn new_db_pool(config: &DbConfig) -> crate::Result<DbPool> {
 
     // 首连验证（sqlx `connect()` 等效语义）：deadpool 建池是惰性的，网络不可达 / 库
     // 不存在 / 认证失败在首次 `get` 前不可见——建池即拨号一条连接（顺带执行
-    // post_create 的 SET search_path）并立即归还，失败即 Err，fail-fast 暴露在注册期。
-    pool.get()
+    // post_create 的 SET search_path）并立即归还（`let _` 丢弃 Object 即归还池），
+    // 失败即 Err，fail-fast 暴露在注册期。
+    let _ = pool
+        .get()
         .await
         .map_err(|e| {
             crate::Error::PoolFirstConnect(format!(
