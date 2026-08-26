@@ -1,7 +1,7 @@
 //! WASM 运行时初始化（feature `wasm`）。
 //!
-//! 从 web-server `config/runtime.rs` 提取的**通用部分**：建 Extism 引擎 + 注册 logging/db/buffer
-//! 三个通用 host-fn provider + `GlobalRuntime::set`/`GlobalExtismEngine::initialize`。
+//! 从 web-server `config/runtime.rs` 提取的**通用部分**：建 Extism 引擎 + 注册
+//! logging/db/buffer/http 四个通用 host-fn provider + `GlobalRuntime::set`/`GlobalExtismEngine::initialize`。
 //!
 //! ★ 关键（trait/hook 拆分）：portal 专属的 `cmx:iam`（cmx-iam）/ plugin（cmx-plugin）两 provider
 //! **不在本库**——由调用方经 `extra_providers` 注入。`HostFunctionProvider` 是 cmx-traits trait，
@@ -17,11 +17,11 @@ use tracing::info;
 
 use crate::{BaseError, Result};
 
-/// 初始化 WASM 运行时。注册 3 个通用 provider（logging/db/buffer）+ 调用方注入的 `extra_providers`
+/// 初始化 WASM 运行时。注册 4 个通用 provider（logging/db/buffer/http）+ 调用方注入的 `extra_providers`
 /// （portal 传 iam+plugin），设全局引擎。
 ///
 /// - `extra_providers`：调用方构造的额外 host-fn provider（如 IamHostFunctions/PluginHostFunctions），
-///   在通用 3 个之后依次注册。空 vec = 只装通用 3 个。
+///   在通用 4 个之后依次注册。空 vec = 只装通用 4 个。
 pub async fn init_wasm(extra_providers: Vec<Arc<dyn HostFunctionProvider>>) -> Result<()> {
     info!("初始化 WASM 运行时...");
 
@@ -51,6 +51,26 @@ pub async fn init_wasm(extra_providers: Vec<Arc<dyn HostFunctionProvider>>) -> R
         .register_provider(buffer_provider)
         .map_err(|e| BaseError::Setup(format!("注册缓存宿主函数失败: {e}")))?;
 
+    // 通用 provider ④HTTP 出站（cmx:http，W4）。默认 deny-all；`CMX_HTTP_ALLOW_HOSTS`（逗号分隔）
+    // 配白名单方可出站。能力仍受"仅声明命名空间可 import"约束——未申请 cmx:http 的插件拿不到 import。
+    let http_provider: Arc<dyn HostFunctionProvider> = {
+        use cmx_http::{EgressPolicy, HttpHostFunctions, StaticPolicySource};
+        let allow_hosts: Vec<String> = std::env::var("CMX_HTTP_ALLOW_HOSTS")
+            .unwrap_or_default()
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let policy = EgressPolicy {
+            allow_hosts,
+            ..Default::default()
+        };
+        Arc::new(HttpHostFunctions::new(Arc::new(StaticPolicySource(policy))))
+    };
+    engine
+        .register_provider(http_provider)
+        .map_err(|e| BaseError::Setup(format!("注册 HTTP 出站宿主函数失败: {e}")))?;
+
     // 调用方注入的额外 provider（portal 传 iam/plugin）。
     let extra_count = extra_providers.len();
     for provider in extra_providers {
@@ -66,7 +86,7 @@ pub async fn init_wasm(extra_providers: Vec<Arc<dyn HostFunctionProvider>>) -> R
 
     info!(
         "WASM 运行时初始化完成，已注册 {} 个宿主函数提供者",
-        3 + extra_count // logging/db/buffer + 注入
+        4 + extra_count // logging/db/buffer/http + 注入
     );
 
     Ok(())

@@ -1,0 +1,1324 @@
+{
+    "version": 1,
+    "items": [
+        {
+            "id": "mdm-root",
+            "name": "mdm",
+            "caption": "主数据管理",
+            "icon": "database",
+            "expanded": true,
+            "children": [
+                {
+                    "id": "mdm-archives",
+                    "name": "archives",
+                    "caption": "主数据档案",
+                    "icon": "tabler-outline/archive",
+                    "expanded": true,
+                    "children": [
+                        {
+                            "id": "mdm-arch-biz",
+                            "name": "arch-biz",
+                            "caption": "往来单位",
+                            "icon": "tabler-outline/users",
+                            "expanded": true,
+                            "children": [
+                                {
+                                    "id": "mdm-supplier-list",
+                                    "name": "supplier-list",
+                                    "caption": "供应商列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/plus",
+                                    "workspace": {
+                                        "id": "mdm_supplier_list",
+                                        "content": {
+                                            "caption": "供应商列表",
+                                            "icon": "tabler-outline/plus",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-supplier-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/plus",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "supplier",
+                                                        "docType": "gys",
+                                                        "title": "供应商列表",
+                                                        "entityName": "供应商",
+                                                        "icon": "supplier",
+                                                        "columns": [
+                                                            "code",
+                                                            "name",
+                                                            "tax_no",
+                                                            "credit_code",
+                                                            "short_name",
+                                                            "published_version"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-customer-list",
+                                    "name": "customer-list",
+                                    "caption": "客户列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/users",
+                                    "workspace": {
+                                        "id": "mdm_customer_list",
+                                        "content": {
+                                            "caption": "客户列表",
+                                            "icon": "tabler-outline/users",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-customer-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/users",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "customer",
+                                                        "docType": "kh",
+                                                        "title": "客户列表",
+                                                        "entityName": "客户",
+                                                        "icon": "customer",
+                                                        "columns": [
+                                                            "code",
+                                                            "name",
+                                                            "customer_type",
+                                                            "credit_level",
+                                                            "credit_code",
+                                                            "short_name",
+                                                            "published_version"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "id": "mdm-arch-material",
+                            "name": "arch-material",
+                            "caption": "物料",
+                            "icon": "tabler-outline/package",
+                            "expanded": true,
+                            "children": [
+                                {
+                                    "id": "mdm-material-list",
+                                    "name": "material-list",
+                                    "caption": "物料列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/package",
+                                    "workspace": {
+                                        "id": "mdm_material_list",
+                                        "content": {
+                                            "caption": "物料列表",
+                                            "icon": "tabler-outline/package",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-material-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/package",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "material",
+                                                        "docType": "wl",
+                                                        "title": "物料列表",
+                                                        "entityName": "物料",
+                                                        "icon": "material",
+                                                        "columns": [
+                                                            "code",
+                                                            "name",
+                                                            "class_id",
+                                                            "spec",
+                                                            "model",
+                                                            "base_uom_id",
+                                                            "material_type",
+                                                            "published_version"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-material-class-list",
+                                    "name": "material-class-list",
+                                    "caption": "物料分类列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/category",
+                                    "workspace": {
+                                        "id": "mdm_material_class_list",
+                                        "content": {
+                                            "caption": "物料分类列表",
+                                            "icon": "tabler-outline/category",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-material-class-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/category",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "material_class",
+                                                        "docType": "wldl",
+                                                        "title": "物料分类列表",
+                                                        "entityName": "物料分类",
+                                                        "icon": "material_class",
+                                                        "columns": [
+                                                            "class_code",
+                                                            "name",
+                                                            "class_type",
+                                                            "published_version"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-uom-list",
+                                    "name": "uom-list",
+                                    "caption": "计量单位列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/ruler",
+                                    "workspace": {
+                                        "id": "mdm_uom_list",
+                                        "content": {
+                                            "caption": "计量单位列表",
+                                            "icon": "tabler-outline/ruler",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-uom-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/ruler",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "uom",
+                                                        "docType": "jldw",
+                                                        "title": "计量单位列表",
+                                                        "entityName": "计量单位",
+                                                        "icon": "uom",
+                                                        "columns": [
+                                                            "uom_code",
+                                                            "name",
+                                                            "unit_type"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "id": "mdm-arch-finance",
+                            "name": "arch-finance",
+                            "caption": "财务",
+                            "icon": "tabler-outline/report-money",
+                            "expanded": true,
+                            "children": [
+                                {
+                                    "id": "mdm-account-list",
+                                    "name": "account-list",
+                                    "caption": "会计科目列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/calculator",
+                                    "workspace": {
+                                        "id": "mdm_account_list",
+                                        "content": {
+                                            "caption": "会计科目列表",
+                                            "icon": "tabler-outline/calculator",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-account-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/calculator",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "gl_account",
+                                                        "docType": "kj",
+                                                        "title": "会计科目列表",
+                                                        "entityName": "会计科目",
+                                                        "icon": "account",
+                                                        "columns": [
+                                                            "acct_no",
+                                                            "name",
+                                                            "acct_type",
+                                                            "direction",
+                                                            "published_version"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-cost-center-list",
+                                    "name": "cost-center-list",
+                                    "caption": "成本中心列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/chart-pie",
+                                    "workspace": {
+                                        "id": "mdm_cost_center_list",
+                                        "content": {
+                                            "caption": "成本中心列表",
+                                            "icon": "tabler-outline/chart-pie",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-cost-center-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/chart-pie",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "cost_center",
+                                                        "docType": "cbzx",
+                                                        "title": "成本中心列表",
+                                                        "entityName": "成本中心",
+                                                        "icon": "cost_center",
+                                                        "columns": [
+                                                            "cost_center_code",
+                                                            "name",
+                                                            "dept_id",
+                                                            "published_version"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-profit-center-list",
+                                    "name": "profit-center-list",
+                                    "caption": "利润中心列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/trending-up",
+                                    "workspace": {
+                                        "id": "mdm_profit_center_list",
+                                        "content": {
+                                            "caption": "利润中心列表",
+                                            "icon": "tabler-outline/trending-up",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-profit-center-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/trending-up",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "profit_center",
+                                                        "docType": "lrzx",
+                                                        "title": "利润中心列表",
+                                                        "entityName": "利润中心",
+                                                        "icon": "profit_center",
+                                                        "columns": [
+                                                            "profit_center_code",
+                                                            "name",
+                                                            "published_version"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-currency-list",
+                                    "name": "currency-list",
+                                    "caption": "币种列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/coins",
+                                    "workspace": {
+                                        "id": "mdm_currency_list",
+                                        "content": {
+                                            "caption": "币种列表",
+                                            "icon": "tabler-outline/coins",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-currency-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/coins",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "currency",
+                                                        "docType": "bz",
+                                                        "title": "币种列表",
+                                                        "entityName": "币种",
+                                                        "icon": "currency",
+                                                        "columns": [
+                                                            "currency_code",
+                                                            "name",
+                                                            "symbol",
+                                                            "decimal_places",
+                                                            "is_base"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "id": "mdm-arch-org",
+                            "name": "arch-org",
+                            "caption": "组织人事",
+                            "icon": "tabler-outline/building-community",
+                            "expanded": true,
+                            "children": [
+                                {
+                                    "id": "mdm-company-list",
+                                    "name": "company-list",
+                                    "caption": "公司列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/building",
+                                    "workspace": {
+                                        "id": "mdm_company_list",
+                                        "content": {
+                                            "caption": "公司列表",
+                                            "icon": "tabler-outline/building",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-company-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/building",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "company",
+                                                        "docType": "gs",
+                                                        "title": "公司列表",
+                                                        "entityName": "公司",
+                                                        "icon": "company",
+                                                        "columns": [
+                                                            "company_code",
+                                                            "name",
+                                                            "short_name",
+                                                            "legal_person",
+                                                            "base_currency_id"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-organization-list",
+                                    "name": "organization-list",
+                                    "caption": "组织单元列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/sitemap",
+                                    "workspace": {
+                                        "id": "mdm_organization_list",
+                                        "content": {
+                                            "caption": "组织单元列表",
+                                            "icon": "tabler-outline/sitemap",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-organization-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/sitemap",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "organization",
+                                                        "docType": "zz",
+                                                        "title": "组织单元列表",
+                                                        "entityName": "组织单元",
+                                                        "icon": "organization",
+                                                        "columns": [
+                                                            "org_code",
+                                                            "name",
+                                                            "company_id",
+                                                            "org_type"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-department-list",
+                                    "name": "department-list",
+                                    "caption": "部门列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/layout-grid",
+                                    "workspace": {
+                                        "id": "mdm_department_list",
+                                        "content": {
+                                            "caption": "部门列表",
+                                            "icon": "tabler-outline/layout-grid",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-department-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/layout-grid",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "department",
+                                                        "docType": "bm",
+                                                        "title": "部门列表",
+                                                        "entityName": "部门",
+                                                        "icon": "department",
+                                                        "columns": [
+                                                            "dept_code",
+                                                            "name",
+                                                            "org_id"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-position-list",
+                                    "name": "position-list",
+                                    "caption": "岗位列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/id-badge",
+                                    "workspace": {
+                                        "id": "mdm_position_list",
+                                        "content": {
+                                            "caption": "岗位列表",
+                                            "icon": "tabler-outline/id-badge",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-position-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/id-badge",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "position",
+                                                        "docType": "gw",
+                                                        "title": "岗位列表",
+                                                        "entityName": "岗位",
+                                                        "icon": "position",
+                                                        "columns": [
+                                                            "position_code",
+                                                            "name",
+                                                            "job_family",
+                                                            "job_grade"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "mdm-employee-list",
+                                    "name": "employee-list",
+                                    "caption": "员工列表",
+                                    "type": "workspace-node",
+                                    "permissionId": null,
+                                    "icon": "tabler-outline/user",
+                                    "workspace": {
+                                        "id": "mdm_employee_list",
+                                        "content": {
+                                            "caption": "员工列表",
+                                            "icon": "tabler-outline/user",
+                                            "views": [
+                                                {
+                                                    "id": "mdm-employee-list-content",
+                                                    "tabLabel": "列表",
+                                                    "icon": "tabler-outline/user",
+                                                    "type": "native_pages",
+                                                    "native_page": "portal.mdm.master-list",
+                                                    "view": "content",
+                                                    "props": {
+                                                        "dictCode": "employee",
+                                                        "docType": "yg",
+                                                        "title": "员工列表",
+                                                        "entityName": "员工",
+                                                        "icon": "employee",
+                                                        "columns": [
+                                                            "emp_no",
+                                                            "name",
+                                                            "dept_id",
+                                                            "position_id",
+                                                            "mobile",
+                                                            "emp_status"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "id": "mdm-cr-all",
+                    "name": "cr-all",
+                    "caption": "变更申请单",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/checklist",
+                    "workspace": {
+                        "id": "mdm_cr_all",
+                        "content": {
+                            "caption": "变更申请单",
+                            "icon": "tabler-outline/checklist",
+                            "views": [
+                                {
+                                    "id": "mdm-cr-all-content",
+                                    "tabLabel": "单据列表",
+                                    "icon": "tabler-outline/checklist",
+                                    "type": "native_pages",
+                                    "native_page": "portal.mdm.cr-todo",
+                                    "view": "content",
+                                    "props": {
+                                        "title": "变更申请单"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "mdm-governance",
+                    "name": "governance",
+                    "caption": "治理与分发",
+                    "icon": "tabler-outline/settings",
+                    "expanded": true,
+                    "children": [
+                        {
+                            "id": "mdm-duplicate-check",
+                            "name": "duplicate-check",
+                            "caption": "查重候选台",
+                            "type": "workspace-node",
+                            "permissionId": null,
+                            "icon": "tabler-outline/copy-check",
+                            "workspace": {
+                                "id": "mdm_duplicate_check",
+                                "content": {
+                                    "caption": "查重候选台",
+                                    "icon": "tabler-outline/copy-check",
+                                    "views": [
+                                        {
+                                            "id": "mdm-duplicate-check-content",
+                                            "tabLabel": "查重",
+                                            "icon": "tabler-outline/copy-check",
+                                            "type": "native_pages",
+                                            "native_page": "portal.mdm.duplicate-check",
+                                            "view": "content",
+                                            "props": {}
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            "id": "mdm-steward",
+                            "name": "steward",
+                            "caption": "数据管家工作台",
+                            "type": "workspace-node",
+                            "permissionId": null,
+                            "visible": 1,
+                            "icon": "tabler-outline/user-check",
+                            "workspace": {
+                                "id": "mdm_steward",
+                                "content": {
+                                    "caption": "数据管家工作台",
+                                    "icon": "tabler-outline/user-check",
+                                    "views": [
+                                        {
+                                            "id": "mdm-steward-content",
+                                            "tabLabel": "管家",
+                                            "icon": "tabler-outline/user-check",
+                                            "type": "native_pages",
+                                            "native_page": "portal.mdm.steward",
+                                            "view": "content"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            "id": "mdm-health",
+                            "name": "mdm-health",
+                            "caption": "MDM 健康检查",
+                            "type": "workspace-node",
+                            "permissionId": null,
+                            "icon": "tabler-outline/heart-rate-monitor",
+                            "workspace": {
+                                "id": "mdm_health",
+                                "content": {
+                                    "caption": "MDM 健康检查",
+                                    "icon": "tabler-outline/heart-rate-monitor",
+                                    "views": [
+                                        {
+                                            "id": "mdm-health-content",
+                                            "tabLabel": "健康检查",
+                                            "icon": "tabler-outline/heart-rate-monitor",
+                                            "type": "native_pages",
+                                            "native_page": "portal.mdm.health",
+                                            "view": "content"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            "id": "mdm-subscription-manager",
+                            "name": "subscription-manager",
+                            "caption": "订阅管理",
+                            "type": "workspace-node",
+                            "permissionId": null,
+                            "icon": "tabler-outline/broadcast",
+                            "workspace": {
+                                "id": "mdm_subscription_manager",
+                                "content": {
+                                    "caption": "分发订阅管理",
+                                    "icon": "tabler-outline/broadcast",
+                                    "views": [
+                                        {
+                                            "id": "mdm-subscription-manager-content",
+                                            "tabLabel": "订阅管理",
+                                            "icon": "tabler-outline/broadcast",
+                                            "type": "native_pages",
+                                            "native_page": "portal.mdm.subscription-manager",
+                                            "view": "content"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            "id": "mdm-dispatch-monitor",
+                            "name": "dispatch-monitor",
+                            "caption": "分发监控",
+                            "type": "workspace-node",
+                            "permissionId": null,
+                            "icon": "tabler-outline/activity",
+                            "workspace": {
+                                "id": "mdm_dispatch_monitor",
+                                "content": {
+                                    "caption": "分发监控",
+                                    "icon": "tabler-outline/activity",
+                                    "views": [
+                                        {
+                                            "id": "mdm-dispatch-monitor-content",
+                                            "tabLabel": "分发监控",
+                                            "icon": "tabler-outline/activity",
+                                            "type": "native_pages",
+                                            "native_page": "portal.mdm.dispatch-monitor",
+                                            "view": "content"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            "id": "mdm-activation-mapper",
+                            "name": "activation-mapper",
+                            "caption": "激活映射配置器",
+                            "type": "workspace-node",
+                            "permissionId": null,
+                            "icon": "tabler-outline/database-search",
+                            "workspace": {
+                                "id": "mdm_activation_mapper",
+                                "explorer": {
+                                    "caption": "映射列表",
+                                    "icon": "tree",
+                                    "views": [
+                                        {
+                                            "id": "mdm-activation-mapper-explorer",
+                                            "tabLabel": "映射",
+                                            "icon": "list",
+                                            "type": "native_pages",
+                                            "native_page": "portal.mdm.activation-mapper",
+                                            "view": "explorer"
+                                        }
+                                    ]
+                                },
+                                "content": {
+                                    "caption": "激活映射配置器",
+                                    "icon": "tabler-outline/database-search",
+                                    "views": [
+                                        {
+                                            "id": "mdm-activation-mapper-content",
+                                            "tabLabel": "激活映射",
+                                            "icon": "tabler-outline/database-search",
+                                            "type": "native_pages",
+                                            "native_page": "portal.mdm.activation-mapper",
+                                            "view": "content"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "mdm-base-manage",
+            "name": "mdm-base-manage",
+            "caption": "基础管理",
+            "icon": "tabler-outline/folder",
+            "expanded": true,
+            "children": [
+                {
+                    "id": "mdm-base-dct-def-manager",
+                    "name": "mdm-base-dct-def-manager",
+                    "caption": "字典基础元数据",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/template",
+                    "workspace": {
+                        "content": {
+                            "caption": "字典基础元数据",
+                            "icon": "template",
+                            "views": [
+                                {
+                                    "tabLabel": "设计",
+                                    "icon": "template",
+                                    "type": "base-dct-def-manager",
+                                    "data": {}
+                                },
+                                {
+                                    "tabLabel": "源码",
+                                    "icon": "source-code",
+                                    "type": "base-dct-def-source",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "explorer": {
+                            "caption": "基础文件",
+                            "icon": "tree",
+                            "views": [
+                                {
+                                    "tabLabel": "字段集",
+                                    "icon": "list",
+                                    "type": "base-dct-def-list",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "属性",
+                            "icon": "settings",
+                            "views": [
+                                {
+                                    "tabLabel": "检查器",
+                                    "icon": "detail-view",
+                                    "type": "base-dct-def-inspector",
+                                    "data": {}
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "mdm-dict-def-manager",
+                    "name": "mdm-dict-def-manager",
+                    "caption": "数据字典定义",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/book",
+                    "workspace": {
+                        "content": {
+                            "caption": "数据字典定义",
+                            "icon": "book",
+                            "views": [
+                                {
+                                    "tabLabel": "设计",
+                                    "icon": "book",
+                                    "type": "dct-def-manager",
+                                    "data": {}
+                                },
+                                {
+                                    "tabLabel": "源码",
+                                    "icon": "source-code",
+                                    "type": "dct-def-source",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "explorer": {
+                            "caption": "字典列表",
+                            "icon": "tree",
+                            "views": [
+                                {
+                                    "tabLabel": "字典",
+                                    "icon": "list",
+                                    "type": "dct-def-list",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "属性",
+                            "icon": "settings",
+                            "views": [
+                                {
+                                    "tabLabel": "检查器",
+                                    "icon": "detail-view",
+                                    "type": "dct-def-inspector",
+                                    "data": {}
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "mdm-dict-data-editor",
+                    "name": "mdm-dict-data-editor",
+                    "caption": "字典数据维护",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/database",
+                    "workspace": {
+                        "content": {
+                            "caption": "字典数据维护",
+                            "icon": "database",
+                            "views": [
+                                {
+                                    "tabLabel": "字典数据",
+                                    "icon": "database",
+                                    "type": "native_pages",
+                                    "native_page": "portal.model.dct.data-editor",
+                                    "view": "content",
+                                    "props": {}
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "mdm-base-doc-def-manager",
+                    "name": "mdm-base-doc-def-manager",
+                    "caption": "单据基础元数据",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/template",
+                    "workspace": {
+                        "content": {
+                            "caption": "单据基础元数据",
+                            "icon": "template",
+                            "views": [
+                                {
+                                    "tabLabel": "设计",
+                                    "icon": "template",
+                                    "type": "base-doc-def-manager",
+                                    "data": {}
+                                },
+                                {
+                                    "tabLabel": "源码",
+                                    "icon": "source-code",
+                                    "type": "base-doc-def-source",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "explorer": {
+                            "caption": "基础文件",
+                            "icon": "tree",
+                            "views": [
+                                {
+                                    "tabLabel": "字段集",
+                                    "icon": "list",
+                                    "type": "base-doc-def-list",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "属性",
+                            "icon": "settings",
+                            "views": [
+                                {
+                                    "tabLabel": "检查器",
+                                    "icon": "detail-view",
+                                    "type": "base-doc-def-inspector",
+                                    "data": {}
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "mdm-doc-def-manager",
+                    "name": "mdm-doc-def-manager",
+                    "caption": "业务单据定义",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/file-invoice",
+                    "workspace": {
+                        "content": {
+                            "caption": "业务单据定义",
+                            "icon": "document",
+                            "views": [
+                                {
+                                    "tabLabel": "设计",
+                                    "icon": "document",
+                                    "type": "doc-def-manager",
+                                    "data": {}
+                                },
+                                {
+                                    "tabLabel": "源码",
+                                    "icon": "source-code",
+                                    "type": "doc-def-source",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "explorer": {
+                            "caption": "单据列表",
+                            "icon": "tree",
+                            "views": [
+                                {
+                                    "tabLabel": "单据",
+                                    "icon": "list",
+                                    "type": "doc-def-list",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "属性",
+                            "icon": "settings",
+                            "views": [
+                                {
+                                    "tabLabel": "检查器",
+                                    "icon": "detail-view",
+                                    "type": "doc-def-inspector",
+                                    "data": {}
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "mdm-flexible-combination-manager",
+                    "name": "mdm-flexible-combination-manager",
+                    "caption": "弹性组合管理",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/adjustments-cog",
+                    "workspace": {
+                        "content": {
+                            "caption": "弹性组合管理",
+                            "icon": "settings",
+                            "views": [
+                                {
+                                    "tabLabel": "设计",
+                                    "icon": "settings",
+                                    "type": "flexible-combination-manager",
+                                    "data": {}
+                                },
+                                {
+                                    "tabLabel": "源码",
+                                    "icon": "source-code",
+                                    "type": "flexible-combination-source",
+                                    "data": {}
+                                },
+                                {
+                                    "tabLabel": "Schema",
+                                    "icon": "database",
+                                    "type": "flexible-combination-schema",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "explorer": {
+                            "caption": "档案列表",
+                            "icon": "tree",
+                            "views": [
+                                {
+                                    "tabLabel": "档案",
+                                    "icon": "list",
+                                    "type": "flexible-combination-list",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "属性",
+                            "icon": "settings",
+                            "views": [
+                                {
+                                    "tabLabel": "检查器",
+                                    "icon": "detail-view",
+                                    "type": "flexible-combination-inspector",
+                                    "data": {}
+                                },
+                                {
+                                    "tabLabel": "校验/预览",
+                                    "icon": "validate",
+                                    "type": "flexible-combination-verify",
+                                    "data": {}
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "md-code-rule-manager",
+                    "name": "md-code-rule-manager",
+                    "caption": "编码规则管理",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/barcode",
+                    "workspace": {
+                        "explorer": {
+                            "caption": "规则列表",
+                            "icon": "tree",
+                            "views": [
+                                {
+                                    "tabLabel": "规则",
+                                    "icon": "list",
+                                    "type": "code-rule-list",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "content": {
+                            "caption": "编码规则管理",
+                            "icon": "barcode",
+                            "views": [
+                                {
+                                    "tabLabel": "设计",
+                                    "icon": "barcode",
+                                    "type": "code-rule-manager",
+                                    "data": {}
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "规则属性",
+                            "icon": "settings",
+                            "views": [
+                                {
+                                    "tabLabel": "属性",
+                                    "icon": "detail-view",
+                                    "type": "code-rule-inspector",
+                                    "data": {}
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "id": "flow-common",
+            "caption": "流程管理",
+            "name": "flow",
+            "icon": "tabler-outline/git-branch",
+            "expanded": true,
+            "children": [
+                {
+                    "id": "fi-gl-flow-design-workbench-common",
+                    "name": "flow-design-workbench",
+                    "caption": "流程设计工作台",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "workflow-tasks",
+                    "workspace": {
+                        "id": "flow_design_workbench",
+                        "explorer": {
+                            "caption": "流程定义",
+                            "icon": "tree",
+                            "views": [
+                                {
+                                    "id": "flow-design-workbench-explorer",
+                                    "tabLabel": "定义",
+                                    "icon": "tree",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.design-workbench",
+                                    "view": "explorer"
+                                }
+                            ]
+                        },
+                        "content": {
+                            "caption": "流程设计工作台",
+                            "icon": "workflow-tasks",
+                            "views": [
+                                {
+                                    "id": "flow-design-workbench-content",
+                                    "tabLabel": "流程图",
+                                    "icon": "workflow-tasks",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.design-workbench",
+                                    "view": "content"
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "节点属性",
+                            "icon": "detail-view",
+                            "views": [
+                                {
+                                    "id": "flow-design-workbench-prop",
+                                    "tabLabel": "属性",
+                                    "icon": "detail-view",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.design-workbench",
+                                    "view": "property"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "mdm-flow-form-binding-admin",
+                    "name": "flow-form-binding-admin",
+                    "caption": "表单注册表",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "form",
+                    "workspace": {
+                        "id": "mdm_flow_form_binding_admin",
+                        "explorer": {
+                            "caption": "表单绑定",
+                            "icon": "form",
+                            "views": [
+                                {
+                                    "id": "mdm-flow-form-binding-admin-explorer",
+                                    "tabLabel": "绑定",
+                                    "icon": "form",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.form-binding-admin",
+                                    "view": "explorer"
+                                }
+                            ]
+                        },
+                        "content": {
+                            "caption": "绑定编辑",
+                            "icon": "detail-view",
+                            "views": [
+                                {
+                                    "id": "mdm-flow-form-binding-admin-content",
+                                    "tabLabel": "编辑",
+                                    "icon": "detail-view",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.form-binding-admin",
+                                    "view": "content"
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "字段说明",
+                            "icon": "hint",
+                            "views": [
+                                {
+                                    "id": "mdm-flow-form-binding-admin-prop",
+                                    "tabLabel": "说明",
+                                    "icon": "hint",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.form-binding-admin",
+                                    "view": "property"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "fi-gl-flow-todo-center-common",
+                    "name": "flow-todo-center",
+                    "caption": "待办中心",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "task",
+                    "workspace": {
+                        "id": "flow_todo_center",
+                        "explorer": {
+                            "caption": "待办分类",
+                            "icon": "tree",
+                            "views": [
+                                {
+                                    "id": "flow-todo-center-explorer",
+                                    "tabLabel": "分类",
+                                    "icon": "tree",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.todo-center",
+                                    "view": "explorer"
+                                }
+                            ]
+                        },
+                        "content": {
+                            "caption": "待办中心",
+                            "icon": "task",
+                            "views": [
+                                {
+                                    "id": "flow-todo-center-content",
+                                    "tabLabel": "待办",
+                                    "icon": "task",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.todo-center",
+                                    "view": "content"
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "流程轨迹",
+                            "icon": "detail-view",
+                            "views": [
+                                {
+                                    "id": "flow-todo-center-prop",
+                                    "tabLabel": "轨迹",
+                                    "icon": "detail-view",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.todo-center",
+                                    "view": "property"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}

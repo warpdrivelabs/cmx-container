@@ -1,0 +1,19 @@
+[package]
+name = "cmx-plugin-trigger-store-pg"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# 触发绑定契约（TriggerBindingStore trait + DTO）
+cmx-plugin-trigger = { workspace = true }
+# DB 层（execute_sql / query_sql_with_params / SqlParams / DataSet）
+cmx-database = { workspace = true }
+# DataValue / DataSet
+cmx-core = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

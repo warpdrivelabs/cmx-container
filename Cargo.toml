@@ -13,6 +13,7 @@ members = [
     "crates/libs/cmx-infra/cmx-database-pg",
     "crates/libs/cmx-infra/cmx-rowsource",
     "crates/libs/cmx-infra/cmx-buffer",
+    "crates/libs/cmx-infra/cmx-http",
 #    "crates/libs/cmx-infra/cmx-nacos",
     "crates/libs/cmx-infra/cmx-registry-config",
     "crates/libs/cmx-infra/cmx-storage",
@@ -37,12 +38,19 @@ members = [
     "crates/libs/cmx-iam",
     "crates/libs/cmx-macros",
     "crates/libs/cmx-plugin-sdk",
+    "crates/libs/cmx-plugin-trigger",
+    "crates/libs/cmx-plugin-trigger-store-pg",
+    "crates/libs/cmx-build",
+    "crates/libs/cmx-build-store-pg",
+    "crates/libs/cmx-dev-workspace",
+    "crates/libs/cmx-dap",
 #    "crates/libs/cmx-wasmdemo",
     "crates/libs/cmx-plugin-demo",
     "crates/libs/cmx-debug",
     "crates/libs/cmx-jsonstore",
     "crates/libs/cmx-form",
     "crates/libs/cmx-model/cmx-model-proxy",
+    "crates/libs/cmx-meta/cmx-meta-proxy",
     "crates/libs/cmx-rpc-gen",
     "crates/libs/cmx-infra/cmx-rpc",
     # —— RPC 皮肤薄 crate（gRPC 服务归域，集中 cmx-rpcs/，对称 cmx-apis/）——
@@ -116,6 +124,8 @@ cmx-database-pg = { path = "crates/libs/cmx-infra/cmx-database-pg", version = "0
 cmx-rowsource = { path = "crates/libs/cmx-infra/cmx-rowsource", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 缓存
 cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer", version = "0.1.12", registry = "nora" }
+# 内部依赖 - HTTP 出站 host 能力（cmx:http，W4）
+cmx-http = { path = "crates/libs/cmx-infra/cmx-http", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 元数据
 cmx-metadata = { path = "crates/libs/cmx-metadata", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 插件
@@ -128,6 +138,18 @@ cmx-runtime = { path = "crates/libs/cmx-runtime", version = "0.1.12", registry =
 cmx-service = { path = "crates/libs/cmx-service", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 插件SDK
 cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 触发面泛化（事件/定时/业务钩子 → 插件，W3；零 extism 依赖）
+cmx-plugin-trigger = { path = "crates/libs/cmx-plugin-trigger", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 触发绑定 PG 存储（W3）
+cmx-plugin-trigger-store-pg = { path = "crates/libs/cmx-plugin-trigger-store-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 服务端编译流水线核心（W1；隔离目录编 wasm）
+cmx-build = { path = "crates/libs/cmx-build", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 构建作业 PG 存储（W1）
+cmx-build-store-pg = { path = "crates/libs/cmx-build-store-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 开发者工作区注册（W5·M0；孤儿端点归属）
+cmx-dev-workspace = { path = "crates/libs/cmx-dev-workspace", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 自建 DAP 桥（W2-b 骨架：DAP 线协议 + cmx-debug 桥接）
+cmx-dap = { path = "crates/libs/cmx-dap", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 调试
 cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.12", registry = "nora" }
 # 内部依赖 - AI 生成能力中继层（一期薄代理：转发 OpenCode + SSE 翻译）
@@ -196,6 +218,8 @@ cmx-mdm-proxy = { path = "crates/libs/cmx-mdm/cmx-mdm-proxy", version = "0.1.12"
 # 内部依赖 - 模型中心 HTTP 层（ModelModule 路由，web-server 合并，避免 cmx-api⇄cmx-model 环）
 # 内部依赖 - 模型中心平台反代薄壳（ModelProxyModule，proxy-only；反代到独立 cmx-model-server）
 cmx-model-proxy = { path = "crates/libs/cmx-model/cmx-model-proxy", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 元数据管理平台反代薄壳（MetaProxyModule，proxy-only；反代到独立 cmx-meta-server :8096）
+cmx-meta-proxy = { path = "crates/libs/cmx-meta/cmx-meta-proxy", version = "0.1.12", registry = "nora" }
 # 编译期全局注册
 inventory = "0.3"
 # 对象存储访问层

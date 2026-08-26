@@ -35,6 +35,12 @@ cmx-database-pg = { workspace = true }
 cmx-metadata = { workspace = true }
 # 内部依赖 - 插件
 cmx-plugin = { workspace = true }
+# 内部依赖 - 二次开发平台（W1 构建 / W3 触发 / W5 工作区）HTTP 端点装配
+cmx-build = { workspace = true }
+cmx-build-store-pg = { workspace = true }
+cmx-plugin-trigger = { workspace = true }
+cmx-plugin-trigger-store-pg = { workspace = true }
+cmx-dev-workspace = { workspace = true }
 # 内部依赖 - AI 生成中继层（薄代理转发 OpenCode + SSE 翻译）
 cmx-ai = { workspace = true }
 # 内部依赖 - 特征定义

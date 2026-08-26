@@ -1,0 +1,14 @@
+[package]
+name = "cmx-dap"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# 会话复用 cmx-debug（attach/session/DWARF 全在那）；本 crate 只加 DAP 线协议 + 桥接骨架。
+cmx-debug = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

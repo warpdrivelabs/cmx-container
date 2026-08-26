@@ -15,8 +15,8 @@ use config::web_config;
 
 use crate::app_state::build_app_state;
 use crate::config::{
-    build_audit_logger, build_function_invoker, finalize_iam_state, init_auth_service, init_cache,
-    init_datasources, init_iam_services, init_job_center, init_runtime,
+    build_audit_logger, build_function_invoker, finalize_iam_state, init_auth_service, init_build,
+    init_cache, init_datasources, init_iam_services, init_job_center, init_runtime, init_triggers,
     init_system_identity, init_web_config, run_permission_check,
 };
 // 基础设施改由公用包 cmx-service-base 提供：
@@ -115,6 +115,11 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
 
     init_runtime().await?;
 
+    // 全局构建执行器（W1：cargo 后台编译 + SSE 日志；供 /api/dev/build/jobs）。非致命：失败只 warn。
+    if let Err(e) = init_build().await {
+        tracing::warn!(error = %e, "全局构建执行器装配失败（/api/dev/build/jobs 将回退仅落作业）");
+    }
+
     init_event_bus().map_err(|e| Error::ServerSetup(format!("初始化全局事件总线失败: {e}")))?;
 
     init_services()
@@ -126,6 +131,11 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     init_service_invoker()
         .await
         .map_err(|e| Error::ServiceInit(format!("服务调用器初始化失败: {e}")))?;
+
+    // W3 触发面：event_bus 订阅 + cron 调度（依赖 GlobalPluginManager + FunctionInvoker 就绪）。非致命。
+    if let Err(e) = init_triggers().await {
+        tracing::warn!(error = %e, "触发面装配失败（事件/定时触发插件不生效）");
+    }
 
     // 编码引擎全局注入随模型中心迁至独立微服务 cmx-model-server（DCT/DOC 落库在那里发生，由它
     // 自注入 GlobalCodeMinter）。门户已退役内嵌 DCT/DOC，故此处不再注入编码引擎。

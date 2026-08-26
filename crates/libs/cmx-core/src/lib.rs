@@ -10,8 +10,8 @@ pub use model::iam::{PermissionDeniedError, RoleRequirement};
 pub use model::service::*;
 pub use wasm_types::{
     CacheGetRequest, CacheResponse, CacheSetRequest, CallServiceRequest, CallServiceResponse,
-    DbRequest, DbResponse, ExecutionStep, IamRequest, IamResponse, OrchestrationError,
-    PluginFunCallResponse, PluginFunRequest, PluginInfoResponse, StepStatus, WasmCheckResult,
-    WasmContext, WasmEffectivePermissions, WasmFunctionRequest, WasmFunctionResponse,
-    WasmUserDetails,
+    DbRequest, DbResponse, ExecutionStep, HttpRequest, HttpResponse, IamRequest, IamResponse,
+    OrchestrationError, PluginFunCallResponse, PluginFunRequest, PluginInfoResponse, StepStatus,
+    WasmCheckResult, WasmContext, WasmEffectivePermissions, WasmFunctionRequest,
+    WasmFunctionResponse, WasmUserDetails,
 };

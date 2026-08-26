@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "meta-root",
+      "name": "meta",
+      "caption": "元数据管理",
+      "icon": "tabler-outline/schema",
+      "expanded": true,
+      "children": [
+        {
+          "id": "meta-designers",
+          "name": "designers",
+          "caption": "定义设计器",
+          "icon": "tabler-outline/pencil-code",
+          "expanded": true,
+          "children": [
+            {
+              "id": "meta-dct-designer",
+              "name": "meta-dct-designer",
+              "caption": "数据字典设计器",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "tabler-outline/list-details",
+              "workspace": {
+                "id": "meta_dct_designer",
+                "content": {
+                  "caption": "数据字典设计器",
+                  "icon": "list-details",
+                  "views": [
+                    {
+                      "id": "meta-dct-designer-content",
+                      "tabLabel": "设计器",
+                      "icon": "list-details",
+                      "type": "native_pages",
+                      "native_page": "meta.dct.designer",
+                      "view": "content"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "meta-doc-designer",
+              "name": "meta-doc-designer",
+              "caption": "业务单据设计器",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "tabler-outline/file-invoice",
+              "workspace": {
+                "id": "meta_doc_designer",
+                "content": {
+                  "caption": "业务单据设计器",
+                  "icon": "file-invoice",
+                  "views": [
+                    {
+                      "id": "meta-doc-designer-content",
+                      "tabLabel": "设计器",
+                      "icon": "file-invoice",
+                      "type": "native_pages",
+                      "native_page": "meta.doc.designer",
+                      "view": "content"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "meta-flc-designer",
+              "name": "meta-flc-designer",
+              "caption": "弹性组合设计器",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "tabler-outline/layers-intersect",
+              "workspace": {
+                "id": "meta_flc_designer",
+                "content": {
+                  "caption": "弹性组合设计器",
+                  "icon": "layers-intersect",
+                  "views": [
+                    {
+                      "id": "meta-flc-designer-content",
+                      "tabLabel": "设计器",
+                      "icon": "layers-intersect",
+                      "type": "native_pages",
+                      "native_page": "meta.flc.designer",
+                      "view": "content"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "meta-tools",
+          "name": "tools",
+          "caption": "工具",
+          "icon": "tabler-outline/tools",
+          "expanded": true,
+          "children": [
+            {
+              "id": "meta-entity-workbench",
+              "name": "meta-entity-workbench",
+              "caption": "实体工作台",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "tabler-outline/table-options",
+              "workspace": {
+                "id": "meta_entity_workbench",
+                "content": {
+                  "caption": "实体工作台",
+                  "icon": "table-options",
+                  "views": [
+                    {
+                      "id": "meta-entity-workbench-content",
+                      "tabLabel": "设计器",
+                      "icon": "table-options",
+                      "type": "native_pages",
+                      "native_page": "meta.entity.workbench",
+                      "view": "content"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "meta-data-maintenance",
+              "name": "meta-data-maintenance",
+              "caption": "引用数据维护",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "tabler-outline/database-edit",
+              "workspace": {
+                "id": "meta_data_maintenance",
+                "content": {
+                  "caption": "引用数据维护",
+                  "icon": "database-edit",
+                  "views": [
+                    {
+                      "id": "meta-data-maintenance-content",
+                      "tabLabel": "设计器",
+                      "icon": "database-edit",
+                      "type": "native_pages",
+                      "native_page": "meta.data.maintenance",
+                      "view": "content"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "meta-i18n-editor",
+              "name": "meta-i18n-editor",
+              "caption": "翻译包编辑",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "tabler-outline/language",
+              "workspace": {
+                "id": "meta_i18n_editor",
+                "content": {
+                  "caption": "翻译包编辑",
+                  "icon": "language",
+                  "views": [
+                    {
+                      "id": "meta-i18n-editor-content",
+                      "tabLabel": "设计器",
+                      "icon": "language",
+                      "type": "native_pages",
+                      "native_page": "meta.i18n.editor",
+                      "view": "content"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
