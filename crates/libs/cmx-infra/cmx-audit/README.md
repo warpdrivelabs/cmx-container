@@ -76,6 +76,8 @@ src/
     ├── mod.rs    # AuditFilter（组合过滤条件）+ AuditStore trait（save / save_batch / query）
     ├── database.rs  # DatabaseAuditStore：PG 实现（表 cmx_audit_log，sea-query + sqlx 桥接，
     │                #   app_id 隔离、DeployMode 分支、delete_hard 安全约束、BATCH_CHUNK=1000）
+    ├── cmx_audit_log.testfixture.sql  # 测试专用建表夹具（database.rs 单测 include_str!，
+    │                #   不依赖 docs/sql/ 迁移目录布局；生产 DDL 仍见 docs/sql/migrations）
     └── memory.rs    # MemoryAuditStore：内存实现（测试 / 单体场景）
 ```
 

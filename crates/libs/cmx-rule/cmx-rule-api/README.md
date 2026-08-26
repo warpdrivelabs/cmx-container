@@ -38,14 +38,14 @@
 | 依赖 | 用途 |
 |------|------|
 | `cmx-api-core` | API 共享骨架层（`CmxAppState` / `routes::traits::ModuleRoutes`），单向依赖避免环 |
-| `cmx-proxy-core` | 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，三反代壳共用） |
+| `cmx-proxy-core` | 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，各域反代壳共用） |
 | `axum` | Web 框架（Router / Request / Response / 中间件） |
 
 ### 下游使用方（谁依赖本 crate）
 
 | 使用方 | 引用方式 | 实际用途 |
 |--------|---------|---------|
-| `cmx-platform-app` | `cmx-rule-api = { workspace = true }` | 门户组装层 `merge_rules`：`rules_remote_base()` 非空时 merge `RulesProxyModule::routes()` 并叠加 `with_rules_page_proxy` 页面反代层 |
+| `cmx-platform-app` | `cmx-rule-api = { workspace = true }` | 门户组装层 `merge_rules`：`rules_upstream()`（`[center_client.services].rules` per-key 定位）非空时 merge `RulesProxyModule::routes()` 并叠加 `with_rules_page_proxy` 页面反代层；未配置则不挂规则路由 |
 
 被反代的微服务（本 crate 编译期不可见）：`../cmx-rulesengine` 的 `cmx-rule-server`。
 
@@ -71,8 +71,8 @@
 ```text
 cmx-rule-api
 ├── src
-│   ├── lib.rs     # 模块声明与导出（pub use proxy::{with_rules_page_proxy, RulesProxyModule}）
-│   └── proxy.rs   # 反代实现：RulesProxyModule 路由 + forward 转发核 + 逐跳头过滤 + 页面反代中间件
+│   ├── lib.rs     # 模块声明与导出（pub use proxy::{UpstreamResolver, RulesProxyModule, with_rules_page_proxy}）
+│   └── proxy.rs   # 反代实现：RulesProxyModule 路由 + rules_target 恒等重写 + 页面反代中间件（转发核在 cmx-proxy-core）
 └── Cargo.toml
 ```
 
@@ -81,11 +81,11 @@ cmx-rule-api
 ## 关键类型 / API
 
 ```rust
-// src/proxy.rs —— 反代模块（持远程基址 + 出站凭证 + 复用 HTTP 客户端）
-pub struct RulesProxyModule { /* inner: Arc<ProxyState> */ }
+// src/proxy.rs —— 反代模块（持目标 resolver + 出站凭证 + 连接池）
+pub struct RulesProxyModule { /* inner: Arc<ProxyCore> */ }
 impl RulesProxyModule {
-    /// 用远程基址 + 出站 API Key 构建；基址末尾多余 `/` 会去掉。
-    pub fn new(rules_base: impl Into<String>, api_key: Option<String>) -> Self;
+    /// 用目标 resolver + 出站 API Key 构建（API 反代与页面反代共享同一转发核/连接池）。
+    pub fn with_resolver(resolver: UpstreamResolver, api_key: Option<String>) -> Self;
 }
 
 impl ModuleRoutes for RulesProxyModule {

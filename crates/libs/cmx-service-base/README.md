@@ -67,7 +67,7 @@
 | `BaseConfig::from_toml_path` | default | 轻量加载 `[[databases]]` + `[redis]`（文件缺失回退空配置） |
 | `BaseConfig::from_config_manager` | config-manager | 重量加载：读全局 ConfigManager 的多源配置 |
 | `init_config_manager` | config-manager | 所有能力中心共用的唯一一段 ConfigManager 装配（CONFIG_FILE → env） |
-| `register_pg_datasources` | default | 把 pg 形态 DbConfig 注册到 tokio-postgres 全局管理器（失败仅 warn 不阻断） |
+| `register_pg_datasources` | default | 把 pg 形态 DbConfig 注册到 tokio-postgres 全局管理器（建池即首连验证，库不可达返回 Err——启动钩子据此 fail-fast） |
 | `init_cache(cfg)` | redis | Redis 缓存 + 分布式锁（共享同一 client） |
 | `init_crypto` | crypto | 全局加密服务（读 env `CMX_ENCRYPT_KEY`，幂等） |
 | `init_debug` | debug | 全局调试会话管理器（起后台清理线程，幂等） |
@@ -133,7 +133,8 @@ pub fn init_config_manager() -> Result<()>;
 ### 数据源与缓存
 
 ```rust
-/// 注册一组 pg 数据源（tokio-postgres 链路）；非 Postgres 项跳过；单项失败仅 warn 不阻断
+/// 注册一组 pg 数据源（tokio-postgres 链路）；非 Postgres 项跳过；
+/// 建池即首连验证，单项失败（含库不可达）返回 Err——调用方（启动钩子）应终止启动
 pub async fn register_pg_datasources(configs: &[cmx_database_pg::DbConfig]) -> Result<()>;
 
 /// 用给定 RedisConfig 初始化全局缓存 + 分布式锁（共享同一 RedisClient）

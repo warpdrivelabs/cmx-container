@@ -1,6 +1,6 @@
 # cmx-rpt-api
 
-> 报表域的平台**反代薄壳**（proxy-only）：把门户 `/api/report-design/*`、`/api/report-source-bindings/*`、`/api/rpt/*` 与报表拥有的前端页取页请求透明转发到独立报表微服务 `../cmx-report` 的 `cmx-rpt-server`，前端零改。
+> 报表域的平台**反代薄壳**（proxy-only）：把门户 `/api/report-design/*`、`/api/report-source-bindings/*`、`/api/rpt/*`、`/api/consol/*`（合并报表）与报表拥有的前端页取页请求透明转发到独立报表微服务 `../cmx-report` 的 `cmx-rpt-server`，前端零改。
 
 [![Version](https://img.shields.io/badge/version-0.1.12-blue.svg)]()
 [![Edition](https://img.shields.io/badge/rust--edition-2024-orange.svg)]()
@@ -16,8 +16,16 @@
 
 与 flow 壳的关键差异：报表微服务对外 URL 与平台**完全一致**（无 `/v1` 升级），故转发是**恒等映射** `{report_base}/api{原path}{query}`，不重写任何路径段。本 crate 对外导出两件东西：
 
-- `ReportProxyModule`：实现 `cmx-api-core` 的 `ModuleRoutes` 契约，覆盖报表三前缀（`/report-design`、`/report-source-bindings`、`/rpt`），全方法转发。
+- `ReportProxyModule`：实现 `cmx-api-core` 的 `ModuleRoutes` 契约，覆盖报表四前缀（`/report-design`、`/report-source-bindings`、`/rpt`、`/consol`），全方法转发。
 - `with_report_page_proxy`：页面反代中间件层，把**报表拥有的** native/html 单页取页请求转发到 cmx-rpt-server（它自暴同款字节对齐 API），其余页请求落回门户内嵌 handler。
+
+### 合并报表（consol）支持
+
+合并报表工作台整体由独立报表微服务承载，本壳为其补齐门户侧入口：
+
+- **转发路由**：`/consol` 与 `/consol/{*rest}` 恒等转发到 `{report_base}/api/consol/*`（cmx-rpt-server 已在 `/api` 下挂 consol_routes），页面取数不再 404。
+- **页面白名单**：`portal.consol.*`（合并报表工作台 native 页）纳入 `is_report_owned_page` 归属判定；与 `cmx-common-api` 页面 handler 的属主路由表 `owner_service_of` 一一对应，新增前缀两处同步。
+- **元数据定义**：合并报表模型定义见平台数据蓝本 `assets/model/data/meta/definitions/fi/cmxfico/consol/`（`cmxfico_consol_dct_meta_v1.json`）。
 
 ### 三层出站鉴权
 
@@ -40,14 +48,14 @@
 | 依赖 | 用途 |
 |------|------|
 | `cmx-api-core` | API 共享骨架层（`CmxAppState` / `routes::traits::ModuleRoutes`），单向依赖避免环 |
-| `cmx-proxy-core` | 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，三反代壳共用） |
+| `cmx-proxy-core` | 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，各域反代壳共用） |
 | `axum` | Web 框架（Router / Request / Response / 中间件） |
 
 ### 下游使用方（谁依赖本 crate）
 
 | 使用方 | 引用方式 | 实际用途 |
 |--------|---------|---------|
-| `cmx-platform-app` | `cmx-rpt-api = { workspace = true }` | 门户组装层 `merge_report`：`report_remote_base()` 非空时 merge `ReportProxyModule::routes()` 并叠加 `with_report_page_proxy` 页面反代层 |
+| `cmx-platform-app` | `cmx-rpt-api = { workspace = true }` | 门户组装层 `merge_report`：`report_upstream()`（`[center_client.services].report` per-key 定位）非空时 merge `ReportProxyModule::routes()` 并叠加 `with_report_page_proxy` 页面反代层；未配置则不挂报表路由 |
 
 被反代的微服务（本 crate 编译期不可见）：`../cmx-report` 的 `cmx-rpt-server`。
 
@@ -57,8 +65,9 @@
 
 | 功能 | 说明 |
 |------|------|
-| API 反代（恒等映射） | `/report-design`、`/report-source-bindings`（根+子路径）与 `/rpt/{*rest}` 全方法（any）转发到 `{report_base}/api{path}{query}`，query 原样透传 |
-| 页面反代（按 id 归属判定） | `portal.rpt.*`（native）与 `fi.cmxfico.gl.rpt-designer-*`、`fi.cmxfico.gl.rpt-spreadjs-designer-*`（html）命中转发；batch/list 不拦截，未命中 `next.run` 落回门户 handler |
+| API 反代（恒等映射） | `/report-design`、`/report-source-bindings`（根+子路径）、`/consol`（根+子路径）与 `/rpt/{*rest}` 全方法（any）转发到 `{report_base}/api{path}{query}`，query 原样透传 |
+| 合并报表（consol） | `/api/consol/*` 恒等转发（cmx-rpt-server 已挂 consol_routes）+ `portal.consol.*` 页面白名单 + 合并报表元数据定义（见上节） |
+| 页面反代（按 id 归属判定） | `portal.rpt.*`、`portal.consol.*`（native）与 `fi.cmxfico.gl.rpt-designer-*`、`fi.cmxfico.gl.rpt-spreadjs-designer-*`（html）命中转发；归属表与 `cmx-common-api` 的 `owner_service_of` 两处同步；batch/list 不拦截，未命中 `next.run` 落回门户 handler |
 | 共用转发核 | `proxy_handler`（API 反代）与 `page_proxy_mw`（页面反代）共用同一 `ProxyCore`（基址 resolver/凭证/客户端一份）；头卫生/超时/流式转发在 `cmx-proxy-core` 一处定义 |
 | 三层出站鉴权 | X-API-Key + X-Delegated-User-Token + X-Request-Id（见上表），注入前剥除客户端伪造值 |
 | 双向流式转发 | 请求体 `reqwest::Body::wrap_stream`、响应体 `Body::from_stream`，不整体缓冲；`text/event-stream` 逐块透传 |
@@ -73,8 +82,8 @@
 ```text
 cmx-rpt-api
 ├── src
-│   ├── lib.rs     # 模块声明与导出（pub use proxy::{ReportProxyModule, with_report_page_proxy}）
-│   └── proxy.rs   # 反代实现：ReportProxyModule 路由 + forward 转发核 + 逐跳头过滤 + 页面反代中间件
+│   ├── lib.rs     # 模块声明与导出（pub use proxy::{ReportProxyModule, UpstreamResolver, with_report_page_proxy}）
+│   └── proxy.rs   # 反代实现：ReportProxyModule 四前缀路由 + report_target 恒等重写 + 页面反代中间件（转发核在 cmx-proxy-core）
 └── Cargo.toml
 ```
 
@@ -83,15 +92,15 @@ cmx-rpt-api
 ## 关键类型 / API
 
 ```rust
-// src/proxy.rs —— 反代模块（持远程基址 + 出站凭证 + 复用 HTTP 客户端）
-pub struct ReportProxyModule { /* inner: Arc<ProxyState> */ }
+// src/proxy.rs —— 反代模块（持目标 resolver + 出站凭证 + 连接池）
+pub struct ReportProxyModule { /* inner: Arc<ProxyCore> */ }
 impl ReportProxyModule {
-    /// 用远程基址 + 出站 API Key 构建；基址末尾多余 `/` 会去掉。
-    pub fn new(report_base: impl Into<String>, api_key: Option<String>) -> Self;
+    /// 用目标 resolver + 出站 API Key 构建（API 反代与页面反代共享同一转发核/连接池）。
+    pub fn with_resolver(resolver: UpstreamResolver, api_key: Option<String>) -> Self;
 }
 
 impl ModuleRoutes for ReportProxyModule {
-    fn routes(self) -> Router<CmxAppState>;   // /report-design、/report-source-bindings、/rpt 三前缀，自持 State
+    fn routes(self) -> Router<CmxAppState>;   // /report-design、/report-source-bindings、/rpt、/consol 四前缀，自持 State
     fn prefix() -> &'static str;              // "report"
     fn module_name(&self) -> &'static str;    // "report-proxy"
 }
@@ -123,7 +132,7 @@ fn merge_report(router: Router<CmxAppState>, upstream: Option<cmx_plugin::center
             let api_key = load_outgoing_credential();
             // resolver：Static 固化基址；Discovery 每请求查实例缓存选例（捕获启动期配置快照）
             let resolver = upstream.resolver_fn();
-            // ① merge 反代模块：/api/report-design/* 等三前缀 → {base}/api/report-design/*（恒等）
+            // ① merge 反代模块：/api/report-design/* 等四前缀 → {base}/api/report-design/*（恒等）
             let router = router.merge(ReportProxyModule::with_resolver(resolver.clone(), api_key.clone()).routes());
             // ② 叠加页面反代层：portal.rpt.* / fi.cmxfico.gl.rpt-designer-* 单页请求也转发过去
             with_report_page_proxy(router, resolver, api_key)
@@ -150,7 +159,8 @@ assert_eq!(
 );
 
 // 浏览器请求 GET /api/report-design/overview（本进程已剥 /api，path=/report-design/overview）
-// → 转发 GET {report_base}/api/report-design/overview，恒等映射不重写路径段
+// → 转发 GET {report_base}/api/report-design/overview，恒等映射不重写路径段；
+//   合并报表取数同理：GET /api/consol/{rest} → {report_base}/api/consol/{rest}
 ```
 
 ### 场景三：混合 id 的页面请求不拦截（共享端点按 id 归属判定）
@@ -158,7 +168,8 @@ assert_eq!(
 ```rust
 // /api/native-pages 是共享端点：一部分页属门户、一部分属报表。
 // page_proxy_mw 只拦截「单页取页且 id 命中报表前缀」的请求：
-//   GET /api/native-pages/portal.rpt.designer   → 命中 is_report_owned_page → 转发 report-server
+//   GET /api/native-pages/portal.rpt.designer        → 命中 is_report_owned_page → 转发 report-server
+//   GET /api/native-pages/portal.consol.workbench    → 命中（合并报表工作台）→ 转发 report-server
 //   GET /api/native-pages/portal.workspace.home  → 未命中 → next.run 落回门户内嵌 handler
 //   POST /api/native-pages/batch                 → 不拦截（含混合 id，留门户聚合）
 // report-server 返回逐字节一致的页面源（rev 一致，ETag/缓存不错位），shell 零感知。

@@ -63,7 +63,7 @@
 | 声明式装配 | `ServiceSpec<S>`：name / config / router / state / nest_api(默认 true) / monitor(默认 true) / banner / init_hooks，builder 链式填充 |
 | 有序启动钩子 | `init(name, hook)` 追加；钩子收 `&ServiceMeta`（服务名），返回 `anyhow::Result`；Err 中止启动并带上钩子名 |
 | 分层日志 | 控制台 CompactFormatter（时间戳+彩色级别+线程+文件:行号+消息）+ 按天滚动 JSON 文件；RUST_LOG 覆盖 log_level |
-| 配置三级装配 | `ChassisConfig::load(service, env_prefix, default_toml)`：默认值 → 可选 toml → 环境变量覆盖 |
+| 配置三级装配 | `ChassisConfig::load(service, default_toml)`：默认值 → 可选 toml（只认 `[server]` 段，顶层旧散字段打迁移提示不生效）→ 环境变量 `SERVER__*` 覆盖 |
 | 中间件栈 | `default_layers`：Trace → 请求体 100MiB 上限 → CORS permissive → 压缩（octet-stream 除外） |
 | 优雅关闭 | `serve_with_shutdown`：Ctrl+C + Unix SIGTERM select → 等待活动连接 → 超时兜底退出 |
 | 启动横幅 | `BannerSpec`：多行字符画 + 标语 + 渐变停靠点 + 签名；终端 ANSI 纵向渐变，非终端降级纯文本；东亚全角字符按 2 列对齐 |
@@ -121,7 +121,7 @@ pub struct ChassisConfig { pub host: String, pub port: u16, pub log_dir: String,
     pub log_file: String, pub log_level: String, pub graceful_timeout_secs: u64 }
 impl ChassisConfig {
     pub fn defaults(service: &str) -> Self;                     // 0.0.0.0:8080 / logs / <service>.log / info / 10s
-    pub fn load(service: &str, env_prefix: &str, default_toml: &str) -> Self;
+    pub fn load(service: &str, default_toml: &str) -> Self;     // CONFIG_FILE → default_toml，只认 [server] 段
 }
 
 // src/banner.rs
@@ -169,8 +169,8 @@ async fn main() -> cmx_web_chassis::Result<()> {
 ### 场景二：平台服务复用部分能力（不整体接管）
 
 ```rust
-// 门户 web-server 有自己的中间件/静态托管，只复用「框架无关下半段」：
-let cfg = ChassisConfig::load("portal", "PORTAL", "web-server.toml");
+// 门户等平台服务有自己的中间件/静态托管，只复用「框架无关下半段」：
+let cfg = ChassisConfig::load("portal", "portal-server.toml");
 
 // ① 只要分层日志（guard 持有到 main 结束，否则文件日志丢尾部）
 let _guard = cmx_web_chassis::init_tracing(&cfg);

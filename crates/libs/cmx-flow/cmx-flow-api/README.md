@@ -31,9 +31,9 @@
 
 flow-server 的 S6 认证桥据此：API Key 验服务身份，委托令牌解真实用户 + 租户。
 
-### 转发核行为（cmx-proxy-core，三反代壳共用）
+### 转发核行为（cmx-proxy-core，各域反代壳共用）
 
-壳只负责路径重写与页面归属判定，转发行为统一在 `cmx-proxy-core` 一处定义：
+壳只负责路径重写与页面归属判定，转发行为统一在 `cmx-proxy-core` 一处定义（详见其 README）：
 
 - **头卫生**：出站前剥除客户端可伪造的 `X-API-Key` / `X-Delegated-User-Token` / `X-Request-Id` 与 `Cookie`（防伪造服务身份/委托令牌打穿内部服务），随后从可信源重新注入上表三层；补齐 `X-Forwarded-For/Proto/Host`。
 - **超时语义**：只设连接超时 5s + 读空闲超时 60s，**不设总超时**——SSE/长轮询等流式响应只要持续有数据就不被掐断。
@@ -48,14 +48,14 @@ flow-server 的 S6 认证桥据此：API Key 验服务身份，委托令牌解�
 | 依赖 | 用途 |
 |------|------|
 | `cmx-api-core` | API 共享骨架层（`CmxAppState` / `routes::traits::ModuleRoutes`），单向依赖避免环 |
-| `cmx-proxy-core` | 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，三反代壳共用） |
+| `cmx-proxy-core` | 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，各域反代壳共用） |
 | `axum` | Web 框架（Router / Request / Response） |
 
 ### 下游使用方（谁依赖本 crate）
 
 | 使用方 | 引用方式 | 实际用途 |
 |--------|---------|---------|
-| `cmx-platform-app` | `cmx-flow-api = { workspace = true }` | 门户组装层 `merge_flow`：`flow_remote_base()` 非空时 merge `FlowProxyModule::routes()` 并叠加 `with_flow_page_proxy` 页面反代层 |
+| `cmx-platform-app` | `cmx-flow-api = { workspace = true }` | 门户组装层 `merge_flow`：`flow_upstream()`（`[center_client.services].flow` per-key 定位）非空时 merge `FlowProxyModule::routes()` 并叠加 `with_flow_page_proxy` 页面反代层；未配置则不挂流程路由 |
 
 被反代的微服务（本 crate 编译期不可见）：`../cmx-flowengine` 的 `cmx-flow-server`。
 
@@ -81,8 +81,8 @@ flow-server 的 S6 认证桥据此：API Key 验服务身份，委托令牌解�
 ```text
 cmx-flow-api
 ├── src
-│   ├── lib.rs     # 模块声明与导出（pub use proxy::{FlowProxyModule, with_flow_page_proxy}）
-│   └── proxy.rs   # 反代实现：ProxyModule 路由 + 转发核 + 逐跳头过滤 + 页面反代中间件
+│   ├── lib.rs     # 模块声明与导出（pub use proxy::{FlowProxyModule, UpstreamResolver, with_flow_page_proxy}）
+│   └── proxy.rs   # 反代实现：FlowProxyModule 路由 + flow_target 升 v1 重写 + 页面反代中间件（转发核在 cmx-proxy-core）
 └── Cargo.toml
 ```
 
@@ -91,11 +91,11 @@ cmx-flow-api
 ## 关键类型 / API
 
 ```rust
-// src/proxy.rs —— 反代模块（持远程基址 + 出站凭证 + 复用 HTTP 客户端）
-pub struct FlowProxyModule { /* inner: Arc<ProxyState> */ }
+// src/proxy.rs —— 反代模块（持目标 resolver + 出站凭证 + 连接池）
+pub struct FlowProxyModule { /* inner: Arc<ProxyCore> */ }
 impl FlowProxyModule {
-    /// 用远程基址 + 出站 API Key 构建；基址末尾多余 `/` 会去掉。
-    pub fn new(flow_base: impl Into<String>, api_key: Option<String>) -> Self;
+    /// 用目标 resolver + 出站 API Key 构建（API 反代与页面反代共享同一转发核/连接池）。
+    pub fn with_resolver(resolver: UpstreamResolver, api_key: Option<String>) -> Self;
 }
 
 impl ModuleRoutes for FlowProxyModule {
@@ -154,9 +154,9 @@ let module = FlowProxyModule::with_resolver(resolver, Some("svc-key-001".into())
 assert_eq!(module.module_name(), "flow-proxy");
 assert_eq!(<FlowProxyModule as cmx_api_core::routes::traits::ModuleRoutes>::prefix(), "flow");
 
-// 浏览器请求 POST /api/flow/v1/definitions?draft=true
-// → 转发 POST {flow_base}/api/flow/v1/v1/definitions?draft=true 之外，
-//   实际映射：/flow/{rest} 中的 rest=「v1/definitions」拼到 /api/flow/v1/ 之后，路径不重排
+// 浏览器请求 POST /api/flow/definitions?draft=true（本进程已剥 /api，path=/flow/definitions）
+// → flow_target 剥 /flow/ 前缀得 rest=「definitions」，升到 v1 正式契约：
+//   转发 POST {flow_base}/api/flow/v1/definitions?draft=true（/v1 升级由壳完成，浏览器无感）
 ```
 
 ### 场景三：SSE 长连接透传

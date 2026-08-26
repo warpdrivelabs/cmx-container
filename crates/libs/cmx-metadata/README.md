@@ -58,9 +58,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 表定义加载 | 单表/多表 JSON 文件与字符串加载（`loader`），多配置文件管理与依赖排序（`config`） |
 | DDL 生成 | `DdlDialect` trait（方言抽象）+ `PostgresDdlDialect` 实现：CREATE TABLE / INDEX / COMMENT / DROP / ALTER |
 | DDL 解析 | `DdlParser` trait + `PostgresDdlParser`：DDL 字符串 → `TableDefine`（往返） |
-| 增量 DDL | `DdlDiff`：两组 `TableDefine` 比对，产出 `TableChange` 列表并可转为 ALTER DDL 语句 |
-| DDL 执行 | `PgTableDefineExecutor`（建表/升级）+ `execute_ddl_by_ids` 等自由函数（裸 DDL 语句执行） |
-| 库内表结构回读 | `PgTableDefineExecutor::query_current_table_define`：查 `information_schema` 重建 `TableDefine` |
+| 增量 DDL | `DdlDiff`：两组 `TableDefine` 比对，产出 `TableChange` 列表并可转为 ALTER DDL 语句；含默认值语义等价比较（消除编译侧/内省侧形态差异假阳性）、索引改名重建、INVALID 索引强制重建、手工索引保护（不删只报告） |
+| DDL 执行 | `PgTableDefineExecutor`（建表/升级，先探测表存在性分流，消除误导日志）+ `execute_ddl_by_ids` 等自由函数（裸 DDL 语句执行） |
+| 库内表结构回读 | `PgTableDefineExecutor::query_current_table_define`：查 `information_schema` 重建 `TableDefine`；INVALID/NOT-READY 索引以 `valid = false` 带出（diff 侧强制 DROP+重建） |
 | i18n 伴生表 | `derive_i18n_table_define`：为 `i18n: true` 的表派生 `<表名>_i18n` 伴生表定义 |
 | 种子数据 | `load_seed_data`（.json / .csv）+ `PgSeedDataExecutor`（批量 upsert，冲突列可配，产出 `SeedDataSummary`） |
 
@@ -247,7 +247,14 @@ for s in &stmts {
 }
 ```
 
-变更类型（`ddl::diff`）：`TableChange`（建表/删表/改表）、`ColumnChange`（加列/改列/删列）、`IndexChange`（加索引/删索引）、`ColumnCommentChange`（注释变更）。
+变更类型（`ddl::diff`）：`TableChange`（建表/删表/改表）、`ColumnChange`（加列/改列/删列）、`IndexChange`（`AddIndex` / `DropIndex`（携带旧索引定义）/ `RenameIndex { old, new }`（内容一致仅改名，旧名为系统命名 `uk_`/`idx_` 前缀时 DROP 旧名+CREATE 新名）/ `PreservedManualIndex`（手工索引保留不删，仅报告提示））、`ColumnCommentChange`（注释变更）。
+
+索引删除判定三档（库中多余且定义无内容匹配时）：
+1. INVALID 索引——占名必碍事，无条件 DROP（自愈优先）；
+2. 系统命名（`uk_`/`idx_` 前缀）或名字仍在当前定义中——本系统管理，DROP；
+3. 其余——视为 DBA 手工创建，`PreservedManualIndex` 保留不删（不生成 DDL）。
+
+列默认值比较经 `defaults_equivalent` 语义等价判定（两侧同套归一化：剥 `::type` cast 后缀/外层单引号定界/布尔大小写，jsonb 空格差异语义兜底），消除首次部署后每次部署都重复 `SET DEFAULT` 的永久假阳性；已知局限：timestamp 字面量落库被 PG 补零（`'2023-01-01'` → `'2023-01-01 00:00:00'::timestamp`）仍判为变更（存量定义无日期类默认值）。
 
 ### 五、DDL 执行
 
@@ -449,7 +456,7 @@ match result {
 
 ### Q3: 建表时如何避免破坏已有数据？
 
-**A**: `create_or_upgrade_table` 先尝试 `create_table`，失败（表已存在）则走 `upgrade_table`——内部经 `query_current_table_define` 回读库内结构后与目标定义 diff，仅生成加列/改列/索引等增量语句，不做删表重建。
+**A**: `create_or_upgrade_table` 先经 `table_exists`（information_schema 探测）分流：存在走 `upgrade_table`，不存在才走 `create_table`（覆盖了 trait 默认「先试建表失败再升级」实现——默认实现对已存在的表会打印注定不执行的 CREATE/COMMENT/INDEX 日志，误导排障）。升级路径内部经 `query_current_table_define` 回读库内结构后与目标定义 diff，仅生成加列/改列/索引等增量语句，不做删表重建；手工索引不在定义中也不会被删（仅报告提示）。
 
 ### Q4: 种子数据重复执行会重复插入吗？
 

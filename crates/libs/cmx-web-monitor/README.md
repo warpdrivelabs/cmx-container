@@ -14,7 +14,7 @@
 
 四个观测维度：
 
-- **请求遥测**：`observe` 中间件采集每请求全维度（方法/路径/参数/协议/客户端 IP/UA/认证方式/租户/用户/角色/状态/耗时/响应字节）进进程级环形缓冲（cap 500）+ 原子计数；SSE 长连接经 `sse_connect` / `sse_disconnect` 单独计数。
+- **请求遥测**：`observe` 中间件采集每请求全维度（方法/路径/参数/协议/客户端 IP/UA/认证方式/租户/用户/角色/状态/耗时/响应字节）进进程级环形缓冲（cap 500）+ 原子计数，**并同步输出一行式访问日志**（target `cmx_access`，级别按状态分级：5xx=error / 4xx=warn / 其余=info；`[server].log_level = "info,cmx_access=off"` 或 RUST_LOG 同语法可关）；SSE 长连接经 `sse_connect` / `sse_disconnect` 单独计数。
 - **系统指标**：`spawn_system_sampler` 后台任务（幂等，**3s 间隔**）用 sysinfo 刷新快照——**绝不在请求路径调 sysinfo::refresh**（刷新是重操作，会拖慢请求）；网络速率 = 相邻采样差 / 间隔。
 - **DB 连接池**：读平台 PG 单例 `cmx_database_pg::get_default_pg_db_manager()` 各数据源 deadpool 池计数（零查询开销），`inUse = size - available` 派生。
 - **依赖拓扑**：服务声明自己依赖的能力（`ServiceDep`：key/label/mode embedded|proxy/target），`spawn_topology_prober` 每 **10s** 对 proxy 目标打 `GET {target}/_mon/tech-stats`（3s 超时）判活并测往返延迟——CMX「一芯双壳」部署形态下，门户可据此展示 flow/report 等远程引擎的活体状态。
@@ -52,7 +52,7 @@
 
 | 功能 | 说明 |
 |------|------|
-| observe 中间件 | 每请求采集进 `CallRecord`（15+ 字段）环形缓冲；**建议夹在认证中间件内层**（`.layer(observe).layer(auth)`）使身份 scope 已建立 |
+| observe 中间件 | 每请求采集进 `CallRecord`（15+ 字段）环形缓冲，同时输出一行式访问日志（target `cmx_access`，按状态分级，可经日志过滤关闭）；**建议夹在认证中间件内层**（`.layer(observe).layer(auth)`）使身份 scope 已建立 |
 | 聚合快照 | `requests_snapshot()`：overview（总量/错误率/平均与最大延迟/QPS/运行时长/SSE 活跃）+ byProtocol/byAuth/byClient(top10)/byUser(top10)/byEndpoint(top12) + recent(倒序 100) |
 | SSE 计数 | `sse_connect()` / `sse_disconnect()` 由服务 SSE handler 入口/流 Drop 时调，活跃与累计分开计 |
 | 系统采样 | `SystemMetrics`（camelCase）：procMem/procCpu/procUptime + hostMem/hostCpu/负载/网络速率/磁盘列表；3s 后台采样，请求只读快照 |
@@ -72,7 +72,7 @@
 cmx-web-monitor
 ├── src
 │   ├── lib.rs        # monitor_routes()（/_mon、/_mon/tech-stats、/_mon/deps）+ 全部顶层再导出
-│   ├── middleware.rs # CallRecord / observe / sse_connect / sse_disconnect / requests_snapshot / client_stats（环形缓冲 cap 500）
+│   ├── middleware.rs # CallRecord / observe / sse_connect / sse_disconnect / requests_snapshot / client_stats（环形缓冲 cap 500 + cmx_access 访问日志）
 │   ├── system.rs     # SystemMetrics / DiskInfo / system_snapshot / spawn_system_sampler（3s 后台采样）
 │   ├── topology.rs   # ServiceDep / ProbeResult / set_topology_provider / spawn_topology_prober（10s 探测）/ topology_snapshot
 │   ├── identity.rs   # Identity / set_identity_provider / current_identity（零捕获 fn 指针注入）
