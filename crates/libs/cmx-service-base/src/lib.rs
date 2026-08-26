@@ -3,7 +3,8 @@
 //! 把「一个微服务起服前要初始化的基础设施」收成可复用原语，供各微服务 main 按需调用：
 //! - [`BaseConfig`]：配置加载（轻量 toml 直读 / 重量 ConfigManager façade）。
 //! - [`init_cache`]（feature `redis`）：Redis 缓存 + 分布式锁。
-//! - [`register_pg_datasources`]：tokio-postgres 数据源注册（flow + portal 共享）。
+//! - [`register_pg_datasources`]：tokio-postgres 数据源注册（flow + portal 共享；建池即
+//!   首连验证，库不可达返回 Err——启动钩子 fail-fast 配套）。
 //! - [`register_sqlx_datasources`]（feature `db-sqlx`）：sqlx 数据源注册（portal 专属）。
 //!
 //! 与 cmx-web-chassis（纯框架层）分层：本 crate 碰 Redis/DB/ConfigManager，feature 门控让不需要的
