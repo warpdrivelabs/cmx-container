@@ -24,8 +24,14 @@ tracing = { workspace = true }
 modql = { workspace = true }
 # 内部依赖 - 核心类型
 cmx-core = { workspace = true }
-# 内部依赖 - 数据库错误转换
-cmx-database = { workspace = true }
+# 内部依赖 - 数据库错误转换（optional：db-error feature 门控；引擎树 default-features=false 不拉 sqlx 链）
+cmx-database = { workspace = true, optional = true }
+
+[features]
+# From<cmx_database::crud::ServiceError> 错误转换桥（默认开，平台侧零感知；
+# 引擎（cmx-form / cmx-jsonstore / cmx-engine-kit）以 default-features = false 消费时不拉 sqlx 链）
+default = ["db-error"]
+db-error = ["dep:cmx-database"]
 
 [lib]
 path = "src/lib.rs"

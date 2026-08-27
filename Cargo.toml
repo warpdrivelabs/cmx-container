@@ -49,6 +49,7 @@ members = [
     "crates/libs/cmx-debug",
     "crates/libs/cmx-jsonstore",
     "crates/libs/cmx-form",
+    "crates/libs/cmx-engine-kit",
     "crates/libs/cmx-model/cmx-model-proxy",
     "crates/libs/cmx-meta/cmx-meta-proxy",
     "crates/libs/cmx-rpc-gen",
@@ -112,8 +113,9 @@ cmx-biz-api = { path = "crates/libs/cmx-apis/cmx-biz-api", version = "0.1.12", r
 cmx-plugin-api = { path = "crates/libs/cmx-apis/cmx-plugin-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - IAM/认证 HTTP 层
 cmx-iam-api = { path = "crates/libs/cmx-apis/cmx-iam-api", version = "0.1.12", registry = "nora" }
-# 内部依赖 - API 通用类型
-cmx-api-types = { path = "crates/libs/cmx-apis/cmx-api-types", version = "0.1.12", registry = "nora" }
+# 内部依赖 - API 通用类型（default-features=false：db-error 桥（From<sqlx ServiceError>）不默认
+# 编译，引擎树经 form/jsonstore/engine-kit 消费时不拉 sqlx 链；需要该桥的 crate 显式开 feature）
+cmx-api-types = { path = "crates/libs/cmx-apis/cmx-api-types", version = "0.1.12", registry = "nora", default-features = false }
 # 内部依赖 - 业务模型
 cmx-biz = { path = "crates/libs/cmx-biz", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 数据库
@@ -182,6 +184,8 @@ cmx-portal = { path = "../cmx-portalservice/crates/cmx-portal", version = "0.1.1
 cmx-jsonstore = { path = "crates/libs/cmx-jsonstore", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 表单中心（html_pages 相关：form / html / native 页面）
 cmx-form = { path = "crates/libs/cmx-form", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 引擎应用层横切件单源（tenant 上下文 / dbid 路由 / 两族 auth 中间件 / resp 别名，五引擎 app 层共用）
+cmx-engine-kit = { path = "crates/libs/cmx-engine-kit", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 模型中心元数据层（定义/FC/dict 读写，JSON 存储）
 # 内部依赖 - 过程宏
 cmx-macros = { path = "crates/libs/cmx-macros", version = "0.1.12", registry = "nora" }

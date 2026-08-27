@@ -14,7 +14,8 @@ authors.workspace = true
 testing = []
 
 [dependencies]
-# 内部依赖 - API 通用类型（PortalError → cmx_api_types::Error 映射）
+# 内部依赖 - API 通用类型（PortalError → cmx_api_types::Error 映射；
+# 继承根的 default-features=false——不用 ServiceError 桥，避免把 sqlx 链传回引擎树）
 cmx-api-types = { workspace = true }
 # 内部依赖 - 工具库（ConfigManager 读取 assets.root）
 cmx-utils = { workspace = true }

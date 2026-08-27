@@ -1307,6 +1307,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-engine-kit"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api-types",
+ "cmx-core",
+ "cmx-database-pg",
+ "cmx-traits",
+ "cmx-utils",
+ "cmx-web-monitor",
+ "jsonwebtoken",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "cmx-flow-api"
 version = "0.1.12"
 dependencies = [
@@ -1922,6 +1940,7 @@ dependencies = [
  "cmx-utils",
  "local-ip-address",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "toml 0.8.23",

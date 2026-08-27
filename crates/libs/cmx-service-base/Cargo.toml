@@ -73,3 +73,7 @@ cmx-rpc = { workspace = true, optional = true }             # rpc
 local-ip-address = { workspace = true, optional = true }    # registry-config
 tokio = { workspace = true, optional = true }               # registry-config / rpc
 
+[dev-dependencies]
+# boot.rs 测试构造 DbConfig（JSON 反序列化走 serde default 兜底其余字段）
+serde_json = { workspace = true }
+

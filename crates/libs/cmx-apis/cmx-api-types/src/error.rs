@@ -324,6 +324,9 @@ impl Error {
     }
 }
 
+/// sqlx 链错误转换桥（`db-error` feature 门控，默认开——平台侧零感知；引擎树经
+/// `default-features = false` 消费本 crate 时不拉 sqlx 链）。
+#[cfg(feature = "db-error")]
 impl From<cmx_database::crud::ServiceError> for Error {
     fn from(e: cmx_database::crud::ServiceError) -> Self {
         match e {
