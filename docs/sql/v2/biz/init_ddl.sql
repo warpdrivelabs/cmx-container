@@ -733,11 +733,16 @@ CREATE TABLE IF NOT EXISTS cmx_flow_task_comment (
     task_id      VARCHAR(64)  NOT NULL,
     node_bpmn_id VARCHAR(128),
     user_id      VARCHAR(64),
+    user_name    VARCHAR(128),
+    nick_name    VARCHAR(128),
     decision     VARCHAR(32),
     comment      TEXT,
     created_at   TIMESTAMPTZ  NOT NULL
 );
 COMMENT ON TABLE  cmx_flow_task_comment          IS '审批意见留痕（F3；办结时按环节记，供表单审批区展示历史）';
+COMMENT ON COLUMN cmx_flow_task_comment.user_id  IS '办理人（谁办结/审批的，用户 id）';
+COMMENT ON COLUMN cmx_flow_task_comment.user_name IS '办理人用户名快照（写入时点 username 口径展示名）';
+COMMENT ON COLUMN cmx_flow_task_comment.nick_name IS '办理人昵称快照（写入时点 nickname 优先、username 兜底）';
 COMMENT ON COLUMN cmx_flow_task_comment.decision IS '决策：approve / reject 等';
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_comment_instance ON cmx_flow_task_comment (instance_id);
 
