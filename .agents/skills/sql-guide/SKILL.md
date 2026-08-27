@@ -21,6 +21,7 @@ docs/sql/v2/
 │   └── migrations/               # 引擎启动时自动执行（先跑）
 └── biz/                          # → 业务库（source_type = "biz" 的数据源）
     ├── init_ddl.sql              # md_* 治理表 + mdm_activation + cmx_code_* + cmx_flow_*
+    │                             #   + 单据版本化 cmx_doc_revision / cmx_doc_change
     ├── init_dml.sql              # 业务库种子
     ├── migrations/               # 引擎启动时自动执行（后跑）
     └── seeds/                    # 手工种子（引擎不执行；表由模型中心部署后手工跑）
@@ -34,9 +35,11 @@ docs/sql/v2/
 
 **前缀归属规则（默认参考 / 事后校验）：**
 
-- `cmx_` 前缀表 → `platform/`（主库）；**两组例外前缀 → `biz/`（业务库）**：
+- `cmx_` 前缀表 → `platform/`（主库）；**两组例外前缀 + 一组具名例外 → `biz/`（业务库）**：
   - `cmx_flow_*` 流程运行态表（与流程引擎运行时一致，`FLOW_DB_ID = "fico-db"` 即业务库）
   - `cmx_code_*` 编码引擎表（rule/gap/seq；运行时 code API 经 `resolve_db_id` 回退业务库）
+  - `cmx_doc_revision` / `cmx_doc_change` 业务单据版本化表（整单快照 + 字段级变更
+    明细；模型中心 DOC 存储运行时写业务库）
 - 其余前缀（`md_*`、`mdm_*`、`cf_*`、`cr_*`、`cm_*` 等业务表）→ `biz/`（业务库）
 - 流程 IAM 侧表（`cmx_org`/`cmx_position`/`cmx_user_position`，候选人解析用）留
   `platform/`（引擎 `IAM_DB_ID = "primary"`）
@@ -208,7 +211,8 @@ COMMENT ON COLUMN cmx_user.phone IS '手机号';
 ## 六、快速检查清单
 
 - [ ] **新建表已询问用户归属**（主库 platform / 业务库 biz），并按答复落对应目录
-- [ ] 表归属与前缀规则一致：`cmx_` → platform/（例外 `cmx_flow_*`/`cmx_code_*` 与非 `cmx_` → biz/）；跨库变更已拆分两文件
+- [ ] 表归属与前缀规则一致：`cmx_` → platform/（例外 `cmx_flow_*`/`cmx_code_*`/
+      `cmx_doc_revision`/`cmx_doc_change` 与非 `cmx_` → biz/）；跨库变更已拆分两文件
 - [ ] 命名规范 + version 在库内唯一；同日未提交变更已合并（未新建序号）
 - [ ] 文件头四行注释块齐全；up 无 DROP TABLE、无裸 INSERT
 - [ ] DDL 全部 IF NOT EXISTS；种子全部 ON CONFLICT / NOT EXISTS
