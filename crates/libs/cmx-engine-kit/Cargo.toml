@@ -1,0 +1,35 @@
+[package]
+name = "cmx-engine-kit"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+
+[dependencies]
+# 核心库（AuthContext——族 A 委托令牌解票产物）
+cmx-core = { workspace = true }
+# 特征定义（auth::context_scope::scope_full——请求级身份 task_local）
+cmx-traits = { workspace = true }
+# 配置中台（ConfigManager：[auth] 段直读）
+cmx-utils = { workspace = true }
+# 内部依赖 - tokio-postgres 数据库门面（dbid 请求库路由回退业务库）
+cmx-database-pg = { workspace = true }
+# 内部依赖 - 通用监控（tenant 身份快照 Identity 类型）
+cmx-web-monitor = { workspace = true }
+# JWT 验签（族 A 委托令牌 HS256 / 族 B RS256）
+jsonwebtoken = { workspace = true }
+# API 通用类型（ApiResp/Error/Result 信封 re-export；继承根的 default-features=false 不拉 sqlx 链）
+cmx-api-types = { workspace = true }
+# 异步运行时 - task_local 租户上下文作用域
+tokio = { workspace = true }
+# Web 框架 - HeaderMap / Response / Json
+axum = { workspace = true }
+# JSON 序列化/反序列化（401 响应体）
+serde_json = { workspace = true }
+# 序列化框架（DelegatedClaims 等 claims 结构 derive）
+serde = { workspace = true }
+# 日志追踪（委托令牌降级/验签失败日志）
+tracing = { workspace = true }
+
+[lib]
+path = "src/lib.rs"

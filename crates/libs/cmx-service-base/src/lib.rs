@@ -2,6 +2,7 @@
 //!
 //! 把「一个微服务起服前要初始化的基础设施」收成可复用原语，供各微服务 main 按需调用：
 //! - [`BaseConfig`]：配置加载（轻量 toml 直读 / 重量 ConfigManager façade）。
+//! - [`validate_databases`]：`[[databases]]` 规则校验（五引擎 datasources 钩子共享单源）。
 //! - [`init_cache`]（feature `redis`）：Redis 缓存 + 分布式锁。
 //! - [`register_pg_datasources`]：tokio-postgres 数据源注册（flow + portal 共享；建池即
 //!   首连验证，库不可达返回 Err——启动钩子 fail-fast 配套）。
@@ -11,9 +12,11 @@
 //! 服务干净 opt-out（`default-features = false`）。各微服务 main 把自己的配置文件路径交给本库
 //! （`from_toml_path` / `from_config_manager`），本库解析并驱动基础设施初始化。
 
+mod boot;
 mod config;
 mod datasource;
 
+pub use boot::{DatasourceRules, validate_databases};
 pub use config::BaseConfig;
 #[cfg(feature = "config-manager")]
 pub use config::init_config_manager;

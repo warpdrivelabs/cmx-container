@@ -11,7 +11,8 @@ authors.workspace = true
 # 内部依赖 - 共享基础设施（config / error / fsutil / cache / util，再导出）
 cmx-jsonstore = { workspace = true }
 
-# 内部依赖 - 平台统一响应信封（serve 成功体 ApiResp + 默认错误映射 Error）
+# 内部依赖 - 平台统一响应信封（serve 成功体 ApiResp + 默认错误映射 Error；
+# 继承根的 default-features=false——不用 ServiceError 桥，避免把 sqlx 链传回引擎树）
 cmx-api-types = { workspace = true }
 # 内部依赖 - [assets] 段目录解析（serve 配置兜底）
 cmx-utils = { workspace = true }
