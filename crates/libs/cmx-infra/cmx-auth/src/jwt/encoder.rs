@@ -82,6 +82,7 @@ impl JwtManager {
     /// * `roles` - 角色列表。
     /// * `permissions` - 权限列表。
     /// * `org_id` - 组织 ID（可选）。
+    /// * `nickname` - 用户昵称（可选；缺省时 claim 为 null，兼容旧令牌消费者）。
     /// * `session_id` - 会话 ID。
     /// * `device` - 设备类型。
     ///
@@ -100,6 +101,7 @@ impl JwtManager {
         roles: &[String],
         permissions: &[String],
         org_id: Option<&str>,
+        nickname: Option<&str>,
         session_id: &str,
         device: &str,
     ) -> Result<String> {
@@ -114,6 +116,10 @@ impl JwtManager {
             iss: self.config.jwt.issuer.clone(),
             aud: self.config.jwt.audience.clone(),
             username: username.to_string(),
+            nickname: nickname
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string()),
             roles: roles.to_vec(),
             permissions: permissions.to_vec(),
             org_id: org_id.map(|s| s.to_string()),
@@ -375,6 +381,7 @@ mod tests {
                 &roles,
                 &perms,
                 Some("org-001"),
+                Some("爱丽丝"),
                 "session-001",
                 "web",
             )
@@ -390,6 +397,7 @@ mod tests {
 
         assert_eq!(claims.sub, "user-001");
         assert_eq!(claims.username, "alice");
+        assert_eq!(claims.nickname.as_deref(), Some("爱丽丝"));
         assert_eq!(claims.roles, roles);
         assert_eq!(claims.permissions, perms);
         assert_eq!(claims.org_id.as_deref(), Some("org-001"));
@@ -443,6 +451,7 @@ mod tests {
             iss: "cmx-auth-test".to_string(),
             aud: "cmx-platform-test".to_string(),
             username: "bob".to_string(),
+            nickname: None,
             roles: vec![],
             permissions: vec![],
             org_id: None,
@@ -503,7 +512,16 @@ mod tests {
         let decoder = make_manager("secret-b-different");
 
         let token = encoder
-            .encode_access_token("user-sig", "carol", &[], &[], None, "session-sig", "web")
+            .encode_access_token(
+                "user-sig",
+                "carol",
+                &[],
+                &[],
+                None,
+                None,
+                "session-sig",
+                "web",
+            )
             .expect("编码 Access Token 失败");
 
         let result = decoder.decode_access_token(&token);
@@ -558,6 +576,7 @@ mod tests {
                 &[],
                 &[],
                 None,
+                None,
                 "session-tamper",
                 "web",
             )
@@ -593,10 +612,28 @@ mod tests {
         let mgr = make_manager("unique-jti-secret");
 
         let token1 = mgr
-            .encode_access_token("user-u", "eve", &[], &[], None, "session-u", "web")
+            .encode_access_token(
+                "user-u",
+                "eve",
+                &[],
+                &[],
+                None,
+                None,
+                "session-u",
+                "web",
+            )
             .expect("编码 Token 1 失败");
         let token2 = mgr
-            .encode_access_token("user-u", "eve", &[], &[], None, "session-u", "web")
+            .encode_access_token(
+                "user-u",
+                "eve",
+                &[],
+                &[],
+                None,
+                None,
+                "session-u",
+                "web",
+            )
             .expect("编码 Token 2 失败");
 
         let claims1 = mgr.decode_access_token(&token1).expect("解码 Token 1 失败");

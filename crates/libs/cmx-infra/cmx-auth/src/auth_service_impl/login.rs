@@ -108,6 +108,7 @@ impl AuthServiceImpl {
             .issue_token_pair(
                 &user.user_id,
                 &user.username,
+                user.nickname.as_deref(),
                 &roles,
                 &permissions,
                 None,
@@ -247,6 +248,7 @@ impl AuthServiceImpl {
                 self.issue_token_pair(
                     &user_id,
                     &user.username,
+                    user.nickname.as_deref(),
                     &roles,
                     &permissions,
                     None,
@@ -304,6 +306,7 @@ impl AuthServiceImpl {
                     .issue_token_pair(
                         &user_id,
                         &user.username,
+                        user.nickname.as_deref(),
                         &roles,
                         &permissions,
                         None,

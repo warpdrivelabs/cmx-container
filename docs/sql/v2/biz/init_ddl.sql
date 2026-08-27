@@ -2,13 +2,15 @@
 -- CMX 业务库全量 DDL — docs/sql/v2/biz/init_ddl.sql
 --
 -- 目标库：业务数据源（source_type = "biz"）
--- 归属规则：非 cmx_ 业务表 + 两组 cmx_ 例外前缀建业务库：
+-- 归属规则：非 cmx_ 业务表 + 三组 cmx_ 例外建业务库：
 --   · md_*  11 张 —— MDM 治理表
 --   · mdm_activation —— MDM 激活映射（原 cmx_mdm_activation，归业务库侧）
 --   · cmx_code_* 3 张 —— 编码引擎（rule/gap/seq；运行时 code API 经
 --     resolve_db_id 回退业务库）
 --   · cmx_flow_* 15 张 —— 流程运行态（与流程引擎 FLOW_DB_ID=业务库一致；
 --     IAM 侧 cmx_org/cmx_position/cmx_user_position 留主库，见 ../platform/）
+--   · cmx_doc_revision / cmx_doc_change 2 张 —— 业务单据版本化（整单快照 +
+--     字段级变更明细；模型中心 DOC 存储运行时写入；20260827 自主库迁入）
 -- 风格：表定义即终态（无 ALTER）；无损幂等；每表区块：CREATE TABLE → COMMENT → 索引
 -- 面向：新库手工重建与结构参考；存量库升级走 migrations 基线迁移
 -- 注意：cf_*/cr_*/cm_* 等业务表 DDL 由模型中心/插件运行时部署，不在本文件
@@ -731,10 +733,95 @@ CREATE TABLE IF NOT EXISTS cmx_flow_task_comment (
     task_id      VARCHAR(64)  NOT NULL,
     node_bpmn_id VARCHAR(128),
     user_id      VARCHAR(64),
+    user_name    VARCHAR(128),
+    nick_name    VARCHAR(128),
     decision     VARCHAR(32),
     comment      TEXT,
     created_at   TIMESTAMPTZ  NOT NULL
 );
 COMMENT ON TABLE  cmx_flow_task_comment          IS '审批意见留痕（F3；办结时按环节记，供表单审批区展示历史）';
+COMMENT ON COLUMN cmx_flow_task_comment.user_id  IS '办理人（谁办结/审批的，用户 id）';
+COMMENT ON COLUMN cmx_flow_task_comment.user_name IS '办理人用户名快照（写入时点 username 口径展示名）';
+COMMENT ON COLUMN cmx_flow_task_comment.nick_name IS '办理人昵称快照（写入时点 nickname 优先、username 兜底）';
 COMMENT ON COLUMN cmx_flow_task_comment.decision IS '决策：approve / reject 等';
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_comment_instance ON cmx_flow_task_comment (instance_id);
+
+-- ============================================================
+-- 业务单据版本化（DOC 单据版本审计）：整单快照 + 字段级变更明细
+-- 原在 ../platform/ 42/43 号区块，20260827 迁入业务库。
+-- append-only：不更新旧行，回滚/换版一律追加新版本记录；
+-- 运行时 cmx-model cmx-doc-store-pg DocRevision 写入（FOR UPDATE 防并发）。
+-- ============================================================
+
+-- 整单 JSONB 快照表（同 root 仅一行为当前版 is_current=1）
+CREATE TABLE IF NOT EXISTS cmx_doc_revision
+(
+    id             BIGINT       NOT NULL,
+    doc_file       VARCHAR(200) NOT NULL,
+    root_table     VARCHAR(100) NOT NULL,
+    root_id        VARCHAR(64)  NOT NULL,
+    rev_no         INT4         NOT NULL,
+    is_current     INT4         NOT NULL DEFAULT 1,
+    op             VARCHAR(16),
+    snapshot       JSONB        NOT NULL,
+    change_summary JSONB,
+    reason         VARCHAR(500),
+    actor_id       VARCHAR(64),
+    actor_name     VARCHAR(100),
+    biz_status     VARCHAR(32),
+    created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE  cmx_doc_revision            IS '业务单据版本化：整单 JSONB 快照（append-only，方案 §6A）';
+COMMENT ON COLUMN cmx_doc_revision.id          IS '版本记录主键（雪花）';
+COMMENT ON COLUMN cmx_doc_revision.doc_file    IS '单据定义（哪种单据）';
+COMMENT ON COLUMN cmx_doc_revision.root_table  IS '根层表名（如 cv_batch）';
+COMMENT ON COLUMN cmx_doc_revision.root_id     IS '单据根行 id（字符串化）';
+COMMENT ON COLUMN cmx_doc_revision.rev_no      IS '该单第几版（1,2,3...）';
+COMMENT ON COLUMN cmx_doc_revision.is_current  IS '是否当前版（同 root 仅一行为 1）';
+COMMENT ON COLUMN cmx_doc_revision.op          IS '操作: create/update/delete/restore';
+COMMENT ON COLUMN cmx_doc_revision.snapshot    IS '整单列式包快照（前端 fromJSON 可直接还原）';
+COMMENT ON COLUMN cmx_doc_revision.change_summary IS '本版变更摘要';
+COMMENT ON COLUMN cmx_doc_revision.reason      IS '变更原因（reason_required 时必填）';
+COMMENT ON COLUMN cmx_doc_revision.actor_id    IS '操作者 id';
+COMMENT ON COLUMN cmx_doc_revision.actor_name  IS '操作者名';
+COMMENT ON COLUMN cmx_doc_revision.biz_status  IS '冗余当时单据状态，便于按态检索';
+COMMENT ON COLUMN cmx_doc_revision.created_at  IS '创建时间';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_doc_rev     ON cmx_doc_revision (doc_file, root_id, rev_no);
+CREATE INDEX IF NOT EXISTS        idx_doc_rev_cur ON cmx_doc_revision (doc_file, root_id, is_current);
+CREATE INDEX IF NOT EXISTS        idx_doc_rev_time ON cmx_doc_revision (root_id, created_at);
+
+-- 字段级变更明细表（U 时逐字段一行，审计用）
+CREATE TABLE IF NOT EXISTS cmx_doc_change
+(
+    id         BIGINT       NOT NULL,
+    rev_id     BIGINT       NOT NULL,
+    root_id    VARCHAR(64)  NOT NULL,
+    layer      VARCHAR(100),
+    row_id     VARCHAR(64),
+    op         VARCHAR(8),
+    field      VARCHAR(100),
+    old_value  JSONB,
+    new_value  JSONB,
+    actor_id   VARCHAR(64),
+    created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE  cmx_doc_change       IS '业务单据字段级变更明细（审计，方案 §6A.3）';
+COMMENT ON COLUMN cmx_doc_change.id     IS '主键ID（雪花）';
+COMMENT ON COLUMN cmx_doc_change.rev_id  IS '所属版本 cmx_doc_revision.id';
+COMMENT ON COLUMN cmx_doc_change.root_id IS '单据根行 id（字符串化）';
+COMMENT ON COLUMN cmx_doc_change.layer   IS '层表名';
+COMMENT ON COLUMN cmx_doc_change.row_id  IS '变更的行';
+COMMENT ON COLUMN cmx_doc_change.op      IS 'I/U/D';
+COMMENT ON COLUMN cmx_doc_change.field   IS '变更字段（U 时逐字段一行）';
+COMMENT ON COLUMN cmx_doc_change.old_value IS '旧值';
+COMMENT ON COLUMN cmx_doc_change.new_value IS '新值';
+COMMENT ON COLUMN cmx_doc_change.actor_id  IS '操作者 id';
+COMMENT ON COLUMN cmx_doc_change.created_at IS '创建时间';
+
+CREATE INDEX IF NOT EXISTS idx_doc_change_rev ON cmx_doc_change (rev_id);
+CREATE INDEX IF NOT EXISTS idx_doc_change_row ON cmx_doc_change (root_id, row_id, field);

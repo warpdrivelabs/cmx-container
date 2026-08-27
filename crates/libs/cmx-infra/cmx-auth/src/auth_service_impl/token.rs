@@ -20,6 +20,7 @@ impl AuthServiceImpl {
         &self,
         user_id: &str,
         username: &str,
+        nickname: Option<&str>,
         roles: &[String],
         permissions: &[String],
         org_id: Option<&str>,
@@ -76,6 +77,7 @@ impl AuthServiceImpl {
                 roles,
                 permissions,
                 org_id,
+                nickname,
                 &session_id,
                 &device_type,
             )
@@ -284,6 +286,7 @@ impl AuthServiceImpl {
         self.issue_token_pair(
             &claims.sub,
             &user.username,
+            user.nickname.as_deref(),
             &roles,
             &permissions,
             None,

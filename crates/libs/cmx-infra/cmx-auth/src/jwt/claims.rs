@@ -19,6 +19,9 @@ pub struct AccessClaims {
     pub aud: String,
     /// 用户名。
     pub username: String,
+    /// 用户昵称（展示用；`#[serde(default)]` 兼容旧令牌缺失该 claim）。
+    #[serde(default)]
+    pub nickname: Option<String>,
     /// 角色列表。
     #[serde(default)]
     pub roles: Vec<String>,

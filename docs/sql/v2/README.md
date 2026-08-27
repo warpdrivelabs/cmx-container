@@ -14,6 +14,7 @@ docs/sql/v2/
 │       └── 20260819_001_baseline.up.sql
 └── biz/                          # → 业务库（source_type = "biz" 的数据源）
     ├── init_ddl.sql              # md_* 11 张 + mdm_activation + cmx_code_* 3 张 + cmx_flow_* 15 张
+    │                             #   + 单据版本化 2 张（cmx_doc_revision / cmx_doc_change）
     ├── init_dml.sql              # MDM 治理种子
     ├── migrations/               # 引擎启动时自动执行（后跑）
     │   └── 20260819_001_baseline.up.sql
@@ -27,12 +28,14 @@ docs/sql/v2/
 
 **表归属规则**：
 
-- `cmx_` 前缀表 → `platform/`（主库）；**两组例外前缀 → `biz/`（业务库）**：
+- `cmx_` 前缀表 → `platform/`（主库）；**两组例外前缀 + 一组具名例外 → `biz/`（业务库）**：
   - `cmx_flow_*` 流程运行态表（与流程引擎运行时一致——`cmx-flowengine` 的
     `FLOW_DB_ID = "fico-db"` 即业务库；流程引擎启动时还会在业务库 `ensure_schema`
     自建这套表）；
   - `cmx_code_*` 编码引擎表（rule/gap/seq；运行时 code API 经 `resolve_db_id`
-    回退业务库）。
+    回退业务库）；
+  - `cmx_doc_revision` / `cmx_doc_change` 业务单据版本化表（整单快照 + 字段级变更
+    明细；模型中心 DOC 存储运行时写业务库。2026-08-27 自 platform 迁出）。
 - 其余前缀（`md_*`、`mdm_*`、`cf_*`、`cr_*`、`cm_*` 等）→ `biz/`（业务库）。
 - 流程的 IAM 侧表（`cmx_org` / `cmx_position` / `cmx_user_position`，候选人解析用）
   与 `cmx_user`/`cmx_role` 同库，留 `platform/`（引擎 `IAM_DB_ID = "primary"`）。
@@ -98,6 +101,15 @@ docs/sql/v2/
     搬运后核对行数，再酌情归档主库旧表）；
   - 主库遗留的 `cmx_flow_*` 旧表确认业务库数据完整后可手工 `DROP`（platform 基线
     不再触碰它们）。
+- **单据版本化 2 表迁库**：v2 初版曾把 `cmx_doc_revision` / `cmx_doc_change` 建在
+  主库（platform 基线 42/43 号区块）；20260827 起归**业务库**（biz 基线 + biz
+  init_ddl 尾部区块）。存量环境若已在主库产生版本化数据，按上面同样方式搬运到
+  业务库并核对行数，再酌情归档主库旧表。
+- **改基线的校验和提醒**：本次两处基线均为就地修改（未新增迁移序号），文件内容
+  变化即校验和变化。`validate_checksum = true` 的存量环境（config_template 默认开）
+  重放时会因校验和不符报错——先清台账再放行：
+  `DELETE FROM cmx_schema_migrations WHERE version IN ('20260819_001')`
+  （两个库各自的台账都要清），或临时关掉校验；基线全量幂等，重放安全。
 - 主库跑 v2 platform 基线：全部 `IF NOT EXISTS` / `ON CONFLICT` + 区块内对齐 ALTER，
   对已有库为幂等 no-op / 结构补齐，安全。
 - 旧索引名差异：线上库由旧链建的索引名（如 `uk_cmx_core_application_code`）与 v2 终态名
@@ -105,7 +117,8 @@ docs/sql/v2/
 
 ## 六、基线构成溯源
 
-platform 基线 = 旧 `init/init_ddl.sql` 终态（cmx_ 平台表 48 张，不含流程/编码引擎表）
+platform 基线 = 旧 `init/init_ddl.sql` 终态（cmx_ 平台表 48 张，不含流程/编码引擎表；
+其中单据版本化 2 表 cmx_doc_revision / cmx_doc_change 已于 2026-08-27 移入 biz 基线）
 + 补丁（20260501 的 idx_version_current）
 + 每表区块内结构对齐（迁移链历史 ALTER / 部分唯一索引重建）
 + 种子（dam注册 7/11/10 + 角色 3 + 权限 24 + 菜单 147+5）。
@@ -114,6 +127,8 @@ biz 基线 = `md_*` 11 表 + `mdm_activation`（MDM 激活映射，原 cmx_mdm_a
 归业务库侧）+ `cmx_code_*` 3 表（编码引擎 rule/gap/seq）
 + `cmx_flow_*` 15 表（13 张来自旧 init_ddl 流程段 +
 补丁 2 张 cmx_flow_biz_link / cmx_flow_task_comment）
++ 单据版本化 2 表（`cmx_doc_revision` / `cmx_doc_change`，原在平台库基线，
+2026-08-27 移入；新入库即建，无历史结构对齐需求）
 + 治理种子（激活映射 26+、编码规则 15、查重规则 1+13、分发水位 1）
 + cr_report_sheet 索引修正（原 20260720_001）。
 

@@ -65,6 +65,7 @@ impl AuthServiceImpl {
             .issue_token_pair(
                 user_id,
                 &user.username,
+                user.nickname.as_deref(),
                 &roles,
                 &permissions,
                 None,
