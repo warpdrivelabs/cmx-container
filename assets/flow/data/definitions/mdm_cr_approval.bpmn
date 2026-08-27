@@ -13,9 +13,23 @@
     - apply 节点 cmx:candidates="initiator"：普通 userTask 的 flowable:assignee 不做
       ${} 插值（仅多实例路径插值），写 "${initiator}" 会落成字面量——必须用关系型候选
       表达式经 resolver 解析为 [initiator] 单人直派。
+
+  ★ 变量契约（强校验 D2/D3）：cmx:varValidation="strict" + required 四变量是发布闸
+    （publish/activate 拒绝 lenient+required 组合）与发起边界硬校验的载体——缺
+    initiator / docNo / bizTable / bizId 任一发起即被拒。initiatorName 为展示快照
+    （可回退按 initiator 回查），故意不声明 required。
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn" xmlns:cmx="http://cmx/flow">
-  <process id="mdm_cr_approval" name="主数据变更审批" isExecutable="true" cmx:withdrawPolicy="lenient">
+  <process id="mdm_cr_approval" name="主数据变更审批" isExecutable="true" cmx:withdrawPolicy="lenient" cmx:varValidation="strict">
+    <!-- 发起参数契约（required 缺一拒发；schema 为 VarSchema 透明数组，见 cmx-flow-model var_schema.rs） -->
+    <extensionElements>
+      <cmx:varSchema>[
+        {"name": "initiator", "type": "STRING", "required": true, "source": "START_PARAM", "description": "发起人 id（撤回护栏、「我发起的」过滤）"},
+        {"name": "docNo", "type": "STRING", "required": true, "description": "CR 业务单号"},
+        {"name": "bizTable", "type": "STRING", "required": true, "description": "待办中心单据坐标投影：表名"},
+        {"name": "bizId", "type": "STRING", "required": true, "description": "待办中心单据坐标投影：主键"}
+      ]</cmx:varSchema>
+    </extensionElements>
     <startEvent id="s"/>
     <sequenceFlow id="f0" sourceRef="s" targetRef="apply"/>
     <!-- 发起人确认：MDM submit 后端代确认（以发起人身份 complete），撤回/取回的落点 -->
