@@ -28,9 +28,10 @@ fn publish_ctx(c: &cmx_core::model::service::context::SVRContext) -> cmx_portal:
     }
 }
 
-/// `GET /api/notifications` 通知列表过滤 + keyset 分页参数。
+/// `GET /api/notifications` 通知列表过滤 + 分页参数(cursor 游标 / offset 页码两模式)。
 #[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
+#[serde(rename_all = "camelCase")]
 pub struct NotifyListQuery {
     /// 通知中心:task / message / log;缺省查全部中心。
     #[serde(default)]
@@ -42,14 +43,18 @@ pub struct NotifyListQuery {
     #[serde(default)]
     pub level: Option<String>,
     /// 已读状态过滤(true 仅已读 / false 仅未读);缺省全部。
-    #[serde(default)]
+    #[serde(default, alias = "is_read")]
     pub is_read: Option<bool>,
     /// 页大小(1..=200,缺省 50)。
     #[serde(default)]
     pub limit: Option<i64>,
-    /// 分页游标(上一页响应的 nextCursor;首页不传)。
+    /// 分页游标(上一页响应的 nextCursor;首页不传)。与 offset 二选一,同时传时游标优先。
     #[serde(default)]
     pub cursor: Option<String>,
+    /// 页码分页偏移(0 起,即 (页码-1)*页大小);传了 cursor 时忽略。页码模式下
+    /// 响应恒带 total,供前端分页条计算总页数。
+    #[serde(default)]
+    pub offset: Option<i64>,
 }
 
 /// 通知中心元信息。
@@ -91,10 +96,11 @@ pub async fn notify_counts(
     )))
 }
 
-/// 列出用户通知(过滤 + keyset 分页)。
+/// 列出用户通知(过滤 + 分页)。
 ///
-/// `GET /api/notifications?center=&type=&level=&isRead=&limit=&cursor=` —— 当前用户
-/// 通知列表(按用户隔离);响应 `{items, nextCursor, total(仅首页)}`;旧前端只读 items 兼容。
+/// `GET /api/notifications?center=&type=&level=&isRead=&limit=&cursor=&offset=` —— 当前用户
+/// 通知列表(按用户隔离);响应 `{items, nextCursor, total}`——游标模式仅首页带 total,
+/// offset 页码模式每页都带 total(分页条计算总页数);旧前端只读 items 兼容。
 #[utoipa::path(
     get,
     path = "/api/notifications",
@@ -124,6 +130,7 @@ pub async fn notify_list(
         is_read: q.is_read,
         limit: q.limit,
         cursor: q.cursor,
+        offset: q.offset,
     };
     let result = cmx_portal::notify::store::list(&uid, &filter).await?;
     Ok(Json(ApiResp::ok(
@@ -319,9 +326,34 @@ pub async fn notify_stream(
 
     let stream = futures::stream::unfold(
         rx,
-        |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) },
+        |mut rx| async { rx.recv().await.map(|ev| (ev, rx)) },
     );
     Sse::new(stream)
         .keep_alive(KeepAlive::default())
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NotifyListQuery;
+
+    /// 前端契约是 camelCase(isRead / offset);rename_all 之后 snake_case 入参仍兼容。
+    /// (回归:此前 is_read 无 camelCase 重命名,前端传 isRead 被 serde 静默忽略,
+    /// 「仅看未读」过滤失效。)
+    #[test]
+    fn notify_list_query_accepts_camel_and_snake() {
+        let q: NotifyListQuery = serde_json::from_value(serde_json::json!({
+            "center": "message", "isRead": false, "limit": 20, "offset": 40
+        }))
+        .unwrap();
+        assert_eq!(q.center.as_deref(), Some("message"));
+        assert_eq!(q.is_read, Some(false));
+        assert_eq!(q.limit, Some(20));
+        assert_eq!(q.offset, Some(40));
+
+        let q: NotifyListQuery =
+            serde_json::from_value(serde_json::json!({ "is_read": true })).unwrap();
+        assert_eq!(q.is_read, Some(true));
+        assert_eq!(q.offset, None);
+    }
 }
