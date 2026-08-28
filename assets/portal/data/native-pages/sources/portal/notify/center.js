@@ -1,6 +1,7 @@
 // 通知中心 native_pages 页面：单 content 视图，按 props.center 展示 任务/消息/日志 通知列表。
-// 支持：列表(未读高亮)、点击单条标记已读 + link 跳转(node:/menu: → portal-help-action，
-// https → window.open)、type/level 筛选、仅看未读、nextCursor 分页「加载更多」、全部已读；
+// 支持：列表(未读高亮 + 已读/未读状态标签)、点击单条标记已读 + link 跳转(node:/menu: →
+// portal-help-action，https → window.open)、type/level 筛选、仅看未读、cmx-pager 页码分页
+// (offset 模式，每页 20/50/100)、全部已读(后端广播 counts，shellbar 铃铛联动刷新)；
 // 未读角标取 /api/notifications/counts（不随分页失真）；centers 元信息消费后端接口。
 // 由 shellbar 铃铛下拉选中某中心后打开（每个中心一个 tab，props.center 区分）。
 
@@ -84,10 +85,11 @@ function styleCss () {
     .nc-level[data-l="success"]{color:var(--neo-mint)} .nc-level[data-l="info"]{color:var(--neo-cyan)}
     .nc-tag{font-size:10px;border-radius:4px;padding:0 5px;border:1px solid color-mix(in srgb,var(--neo-cyan) 35%,transparent);color:var(--neo-cyan)}
     .nc-agg{font-size:10px;font-weight:700;color:var(--neo-red)}
-    .nc-more{flex:0 0 auto;display:flex;justify-content:center;padding:6px 0 10px}
-    .nc-more button{border:1px solid color-mix(in srgb,var(--neo-cyan) 20%,transparent);border-radius:6px;
-      background:var(--sapList_Background,#fff);color:var(--neo-cyan);font:inherit;font-size:12px;padding:4px 16px;cursor:pointer}
-    .nc-more button:hover{background:color-mix(in srgb,var(--neo-cyan) 12%,var(--sapList_Background,#fff))}
+    .nc-state{font-size:10px;font-weight:700;border-radius:4px;padding:0 6px;border:1px solid currentColor;flex:0 0 auto}
+    .nc-state.unread{color:var(--neo-red)}
+    .nc-state.read{color:var(--sapContent_LabelColor,#6a6d70);border-color:var(--sapList_BorderColor,#e5e5e5)}
+    .nc-pager{flex:0 0 auto;display:flex;justify-content:center;align-items:center;box-sizing:border-box;
+      padding:4px 10px 10px;border-top:1px solid color-mix(in srgb,var(--neo-cyan) 10%,var(--sapList_BorderColor,#e5e5e5))}
     .nc-empty{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--sapContent_LabelColor,#6a6d70)}
     .nc-empty ui5-icon{width:1.6rem;height:1.6rem;color:color-mix(in srgb,var(--neo-cyan) 55%,var(--sapContent_LabelColor,#6a6d70))}
   `
@@ -96,11 +98,11 @@ function styleCss () {
 function itemHtml (it) {
   const lvl = it.level || 'info'
   const meta = [
+    `<span class="nc-state ${it.read ? 'read' : 'unread'}">${it.read ? '已读' : '未读'}</span>`,
     `<span class="nc-level" data-l="${esc(lvl)}">${esc(lvl)}</span>`,
     it.type ? `<span class="nc-tag">${esc(it.type)}</span>` : '',
     it.aggCount > 1 ? `<span class="nc-agg">×${esc(it.aggCount)}</span>` : '',
     `<span>${esc(fmtTime(it.createdAt))}</span>`,
-    it.read ? '' : '<span style="color:var(--neo-red)">● 未读</span>',
   ].filter(Boolean).join('')
   return `<div class="nc-item ${it.read ? '' : 'unread'}" role="button" tabindex="0" data-id="${esc(it.id)}" data-link="${esc(it.link || '')}">
     <span class="nc-dot"></span>
@@ -119,8 +121,9 @@ function viewHtml (st) {
   const body = st.items.length
     ? st.items.map(itemHtml).join('')
     : `<cmx-empty-state icon="${esc(meta.icon || 'bell')}" title="暂无通知" size="sm"></cmx-empty-state>`
-  const more = st.nextCursor
-    ? `<div class="nc-more"><button type="button" data-act="more">加载更多${st.total ? `（共 ${esc(st.total)} 条）` : ''}</button></div>`
+  // 有数据才渲染分页条；total 未知(首帧/加载失败)时省略属性，cmx-pager 显示「第 N 页」。
+  const pager = st.items.length
+    ? `<div class="nc-pager"><cmx-pager page="${st.page}" page-size="${st.pageSize}" page-sizes="20,50,100"${st.total != null ? ` total="${st.total}"` : ''}></cmx-pager></div>`
     : ''
   return `<div class="nc" data-center="${esc(st.center)}">
     <div class="nc-head">
@@ -144,7 +147,7 @@ function viewHtml (st) {
       <label><input type="checkbox" data-filter="unread" ${st.filters.unread ? 'checked' : ''}/>仅看未读</label>
     </div>
     <div class="nc-list">${body}</div>
-    ${more}
+    ${pager}
   </div>`
 }
 
@@ -159,19 +162,18 @@ async function loadCounts () {
   try { return await apiJson('/api/notifications/counts') } catch { return null }
 }
 
-async function loadItems (st, reset) {
+async function loadItems (st) {
   const q = new URLSearchParams()
   q.set('center', st.center)
   if (st.filters.type) q.set('type', st.filters.type)
   if (st.filters.level) q.set('level', st.filters.level)
   if (st.filters.unread) q.set('isRead', 'false')
-  q.set('limit', '50')
-  if (!reset && st.nextCursor) q.set('cursor', st.nextCursor)
+  q.set('limit', String(st.pageSize))
+  q.set('offset', String((st.page - 1) * st.pageSize))
   const d = await apiJson(`/api/notifications?${q.toString()}`)
-  const items = (d && d.items) || []
-  st.items = reset ? items : st.items.concat(items)
-  st.nextCursor = (d && d.nextCursor) || null
-  if (reset) st.total = (d && d.total) || 0
+  st.items = (d && d.items) || []
+  // offset 页码模式后端每页都回 total；异常缺省时保持 null（分页条显示「第 N 页」）。
+  st.total = d && typeof d.total === 'number' ? d.total : null
 }
 
 /** link 跳转：node:/menu: → portal-help-action 组合事件（与帮助中心同通道）；URL → window.open。 */
@@ -208,8 +210,15 @@ function bind (root, st, rerender) {
     el.addEventListener('click', open)
     el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open() } })
   })
-  root.querySelector('[data-act="refresh"]')?.addEventListener('click', () => { st.nextCursor = null; rerender() })
-  root.querySelector('[data-act="more"]')?.addEventListener('click', () => rerender(false))
+  root.querySelector('[data-act="refresh"]')?.addEventListener('click', () => rerender())
+  // cmx-pager 页码/页大小变化 → 重新拉当前页（页大小变化时组件已重置到第 1 页）。
+  root.querySelector('cmx-pager')?.addEventListener('page-change', (e) => {
+    const { page, pageSize } = e.detail || {}
+    if (page === st.page && pageSize === st.pageSize) return
+    st.page = page || 1
+    st.pageSize = pageSize || st.pageSize
+    rerender()
+  })
   root.querySelector('[data-act="read-all"]')?.addEventListener('click', async () => {
     try {
       await apiJson('/api/notifications/mark-read', {
@@ -217,7 +226,7 @@ function bind (root, st, rerender) {
         body: JSON.stringify({ all: true, center: st.center }),
       })
     } catch (e) { console.warn('[notify-center] 全部已读失败:', e && e.message || e) }
-    st.nextCursor = null
+    st.page = 1
     await rerender()
   })
   root.querySelectorAll('[data-filter]').forEach((el) => {
@@ -226,7 +235,7 @@ function bind (root, st, rerender) {
     el.addEventListener(evt, async () => {
       const v = el.type === 'checkbox' ? el.checked : el.value
       st.filters[key] = v
-      st.nextCursor = null
+      st.page = 1 // 过滤变化回到第 1 页
       await rerender()
     })
   })
@@ -239,17 +248,18 @@ async function mount (ctx) {
     centers: FALLBACK_CENTERS,
     filters: { type: '', level: '', unread: false },
     items: [],
-    nextCursor: null,
-    total: 0,
+    page: 1,
+    pageSize: 20,
+    total: null,
     counts: null,
   }
-  const render = async (reset = true) => {
+  const render = async () => {
     const root = host?.renderRoot || host?.shadowRoot?.querySelector('.native-page-root')
     if (!root || !root.isConnected) return
-    try { await loadItems(st, reset) } catch (e) {
+    try { await loadItems(st) } catch (e) {
       console.warn('[notify-center] 加载通知失败:', e && e.message || e)
-      st.items = reset ? [] : st.items
-      st.nextCursor = null
+      st.items = []
+      st.total = null
     }
     st.counts = await loadCounts()
     root.innerHTML = `<style>${styleCss()}</style>${viewHtml(st)}`
