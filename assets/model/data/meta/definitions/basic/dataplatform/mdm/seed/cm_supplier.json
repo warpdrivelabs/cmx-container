@@ -15,7 +15,18 @@
     "update_time": "2024-11-20 14:30:00",
     "lifecycle_status": "published",
     "published_version": 1,
-    "effective_date": "2023-03-15"
+    "effective_date": "2023-03-15",
+    "supplier_type": "manufacturer",
+    "supplier_category": "strategic",
+    "industry": "重型机械制造",
+    "legal_person": "俞章法",
+    "address": "河南省洛阳市涧西区建设路154号",
+    "taxpayer_type": "general",
+    "payment_term": "net60",
+    "invoice_type": "vat_special",
+    "settle_currency_id": 1,
+    "buyer_id": 1,
+    "risk_level": "low"
   },
   {
     "id": 2,
@@ -33,7 +44,18 @@
     "update_time": null,
     "lifecycle_status": "published",
     "published_version": 1,
-    "effective_date": "2023-04-02"
+    "effective_date": "2023-04-02",
+    "supplier_type": "service",
+    "supplier_category": "strategic",
+    "industry": "现代物流服务",
+    "legal_person": "王卫",
+    "address": "广东省深圳市福田区新洲十一街万基商务大厦",
+    "taxpayer_type": "general",
+    "payment_term": "net30",
+    "invoice_type": "vat_special",
+    "settle_currency_id": 1,
+    "buyer_id": 2,
+    "risk_level": "low"
   },
   {
     "id": 3,
@@ -51,7 +73,18 @@
     "update_time": "2025-02-10 09:20:00",
     "lifecycle_status": "published",
     "published_version": 2,
-    "effective_date": "2023-05-18"
+    "effective_date": "2023-05-18",
+    "supplier_type": "service",
+    "supplier_category": "normal",
+    "industry": "信息技术服务",
+    "legal_person": "王继平",
+    "address": "北京市海淀区北四环西路56号辉煌时代大厦",
+    "taxpayer_type": "general",
+    "payment_term": "net30",
+    "invoice_type": "vat_special",
+    "settle_currency_id": 1,
+    "buyer_id": 3,
+    "risk_level": "low"
   },
   {
     "id": 4,
@@ -69,7 +102,18 @@
     "update_time": null,
     "lifecycle_status": "published",
     "published_version": 1,
-    "effective_date": "2023-06-20"
+    "effective_date": "2023-06-20",
+    "supplier_type": "trader",
+    "supplier_category": "normal",
+    "industry": "文教办公用品",
+    "legal_person": "陈湖文",
+    "address": "上海市奉贤区光明经济园区A区",
+    "taxpayer_type": "general",
+    "payment_term": "net30",
+    "invoice_type": "vat_common",
+    "settle_currency_id": 1,
+    "buyer_id": 4,
+    "risk_level": "low"
   },
   {
     "id": 5,
@@ -87,7 +131,18 @@
     "update_time": null,
     "lifecycle_status": "published",
     "published_version": 1,
-    "effective_date": "2023-07-11"
+    "effective_date": "2023-07-11",
+    "supplier_type": "manufacturer",
+    "supplier_category": "strategic",
+    "industry": "发电设备制造",
+    "legal_person": "王军",
+    "address": "四川省德阳市黄河西路188号",
+    "taxpayer_type": "general",
+    "payment_term": "net60",
+    "invoice_type": "vat_special",
+    "settle_currency_id": 1,
+    "buyer_id": 5,
+    "risk_level": "medium"
   },
   {
     "id": 6,
@@ -105,7 +160,18 @@
     "update_time": "2024-06-18 10:05:00",
     "lifecycle_status": "published",
     "published_version": 1,
-    "effective_date": "2023-08-05"
+    "effective_date": "2023-08-05",
+    "supplier_type": "trader",
+    "supplier_category": "normal",
+    "industry": "进出口贸易",
+    "legal_person": "李宁",
+    "address": "北京市朝阳区建国门外大街甲6号",
+    "taxpayer_type": "general",
+    "payment_term": "net90",
+    "invoice_type": "vat_special",
+    "settle_currency_id": 1,
+    "buyer_id": 6,
+    "risk_level": "medium"
   },
   {
     "id": 7,
@@ -123,7 +189,18 @@
     "update_time": null,
     "lifecycle_status": "published",
     "published_version": 1,
-    "effective_date": "2023-09-14"
+    "effective_date": "2023-09-14",
+    "supplier_type": "service",
+    "supplier_category": "normal",
+    "industry": "专业咨询服务",
+    "legal_person": "付毅超",
+    "address": "上海市黄浦区南京西路288号",
+    "taxpayer_type": "general",
+    "payment_term": "net30",
+    "invoice_type": "vat_special",
+    "settle_currency_id": 1,
+    "buyer_id": 7,
+    "risk_level": "low"
   },
   {
     "id": 8,
@@ -141,6 +218,17 @@
     "update_time": null,
     "lifecycle_status": "published",
     "published_version": 1,
-    "effective_date": "2023-10-22"
+    "effective_date": "2023-10-22",
+    "supplier_type": "manufacturer",
+    "supplier_category": "normal",
+    "industry": "包装材料制造",
+    "legal_person": "吴建国",
+    "address": "江苏省苏州市吴江区同里镇屯村社区",
+    "taxpayer_type": "general",
+    "payment_term": "cod",
+    "invoice_type": "vat_common",
+    "settle_currency_id": 1,
+    "buyer_id": 8,
+    "risk_level": "low"
   }
 ]

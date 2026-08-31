@@ -444,7 +444,7 @@ ON CONFLICT (activation_code) DO UPDATE SET
 
 -- 2.5 供应商（gys）激活映射补缺：M3 时代靠 UI 配置存于旧运行库，库重建后缺失
 --     （MDM_GYS 编码规则兜底同因）。字段对齐现行 supplier 字典：
---     头 name/short_name/tax_no/credit_code/phone + supplier_bank（cm_bank_account）明细。
+--     头 name/short_name/类型分类/资质联系/商务结算/风险治理字段 + supplier_bank（cm_bank_account）/supplier_contact（cm_supplier_contact）明细。
 -- ─────────────────────────────────────────────
 
 -- supplier · 新建
@@ -453,12 +453,12 @@ INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, targe
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_gys_create', 'gys__create', 'gys', 'create', 'supplier', 'cm_supplier',
-        '{"name":"name","short_name":"short_name","tax_no":"tax_no","credit_code":"credit_code","phone":"phone"}'::jsonb,
-        '[{"lineType":"bank","targetDict":"supplier_bank","targetTable":"cm_bank_account","parentIdField":"supplier_id","fields":{"account_no":"account_no","bank_name":"bank_name"},"fieldOrder":["account_no","bank_name"]}]'::jsonb,
+        '{"name":"name","short_name":"short_name","supplier_type":"supplier_type","supplier_category":"supplier_category","tax_no":"tax_no","credit_code":"credit_code","legal_person":"legal_person","taxpayer_type":"taxpayer_type","address":"address","phone":"phone","industry":"industry","payment_term":"payment_term","invoice_type":"invoice_type","settle_currency_id":"settle_currency_id","buyer_id":"buyer_id","risk_level":"risk_level","status":"status"}'::jsonb,
+        '[{"lineType":"bank","targetDict":"supplier_bank","targetTable":"cm_bank_account","parentIdField":"supplier_id","fields":{"account_no":"account_no","account_name":"account_name","bank_name":"bank_name","account_type":"account_type","currency_id":"currency_id","bank_code":"bank_code","is_default":"is_default"},"fieldOrder":["account_no","account_name","bank_name","account_type","currency_id","bank_code","is_default"]},{"lineType":"contact","targetDict":"supplier_contact","targetTable":"cm_supplier_contact","parentIdField":"supplier_id","fields":{"contact_name":"contact_name","department":"department","position":"position","phone":"phone","email":"email","is_default":"is_default"},"fieldOrder":["contact_name","department","position","phone","email","is_default"]}]'::jsonb,
         'name',
         '[{"field":"credit_code","weight":40,"kind":"Exact","dedup":true},{"field":"tax_no","weight":20,"kind":"Exact","dedup":true},{"field":"name","weight":40,"kind":"EditDistance","dedup":true}]'::jsonb,
         '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name"]},{"groupCode":"qual","groupName":"资质与联系","fields":["tax_no","credit_code","phone"]}]'::jsonb,
+        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name","supplier_type","supplier_category"]},{"groupCode":"qual","groupName":"资质与联系","fields":["tax_no","credit_code","legal_person","taxpayer_type","address","phone"]},{"groupCode":"biz","groupName":"商务信息","fields":["industry","payment_term","invoice_type","settle_currency_id"]},{"groupCode":"gov","groupName":"治理与归属","fields":["buyer_id","risk_level","status"]}]'::jsonb,
         TRUE)
 ON CONFLICT (activation_code) DO UPDATE SET
     source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,
@@ -474,12 +474,12 @@ INSERT INTO mdm_activation (id, activation_code, source_doc_type, cr_type, targe
                                 header_mapping, line_mappings, subject_name_field, key_fields, doc_code_rules,
                                 header_groups, is_active)
 VALUES ('mdm_act_gys_update', 'gys__update', 'gys', 'update', 'supplier', 'cm_supplier',
-        '{"name":"name","short_name":"short_name","tax_no":"tax_no","credit_code":"credit_code","phone":"phone"}'::jsonb,
-        '[{"lineType":"bank","targetDict":"supplier_bank","targetTable":"cm_bank_account","parentIdField":"supplier_id","fields":{"account_no":"account_no","bank_name":"bank_name"},"fieldOrder":["account_no","bank_name"]}]'::jsonb,
+        '{"name":"name","short_name":"short_name","supplier_type":"supplier_type","supplier_category":"supplier_category","tax_no":"tax_no","credit_code":"credit_code","legal_person":"legal_person","taxpayer_type":"taxpayer_type","address":"address","phone":"phone","industry":"industry","payment_term":"payment_term","invoice_type":"invoice_type","settle_currency_id":"settle_currency_id","buyer_id":"buyer_id","risk_level":"risk_level","status":"status"}'::jsonb,
+        '[{"lineType":"bank","targetDict":"supplier_bank","targetTable":"cm_bank_account","parentIdField":"supplier_id","fields":{"account_no":"account_no","account_name":"account_name","bank_name":"bank_name","account_type":"account_type","currency_id":"currency_id","bank_code":"bank_code","is_default":"is_default"},"fieldOrder":["account_no","account_name","bank_name","account_type","currency_id","bank_code","is_default"]},{"lineType":"contact","targetDict":"supplier_contact","targetTable":"cm_supplier_contact","parentIdField":"supplier_id","fields":{"contact_name":"contact_name","department":"department","position":"position","phone":"phone","email":"email","is_default":"is_default"},"fieldOrder":["contact_name","department","position","phone","email","is_default"]}]'::jsonb,
         'name',
         '[]'::jsonb,
         '{}'::jsonb,
-        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name"]},{"groupCode":"qual","groupName":"资质与联系","fields":["tax_no","credit_code","phone"]}]'::jsonb,
+        '[{"groupCode":"base","groupName":"基本信息","fields":["name","short_name","supplier_type","supplier_category"]},{"groupCode":"qual","groupName":"资质与联系","fields":["tax_no","credit_code","legal_person","taxpayer_type","address","phone"]},{"groupCode":"biz","groupName":"商务信息","fields":["industry","payment_term","invoice_type","settle_currency_id"]},{"groupCode":"gov","groupName":"治理与归属","fields":["buyer_id","risk_level","status"]}]'::jsonb,
         TRUE)
 ON CONFLICT (activation_code) DO UPDATE SET
     source_doc_type = EXCLUDED.source_doc_type, cr_type = EXCLUDED.cr_type,

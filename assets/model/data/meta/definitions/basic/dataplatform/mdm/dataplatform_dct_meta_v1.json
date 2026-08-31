@@ -4,8 +4,8 @@
     "metaKind": "DCT",
     "moduleCode": "MDM",
     "moduleName": "企业主数据",
-    "version": 2,
-    "versionName": "v2 帮助字典化：客户分类/付款条件/发票类型",
+    "version": 3,
+    "versionName": "v3 供应商主数据扩展：商务/资质/风险/联系人",
     "designStyle": "separate-dictionary-tables",
     "isDefault": true,
     "remark": "MDM 独立新域主数据(cm_*),只存 published,草稿走 CR 单据。明细表通过业务命名外键(如 supplier_id)挂头表,无物理 FK。"
@@ -34,7 +34,7 @@
         "idField": "id",
         "codeField": "code",
         "labelField": "name",
-        "remark": "供应商主数据头表(激活区,只 published)",
+        "remark": "供应商主数据头表(激活区,只 published)。依赖:employee(buyer_id 采购负责人)/currency(settle_currency_id 结算币种);明细:supplier_bank/supplier_contact",
         "codeLength": 32,
         "codeRule": {
           "mode": "auto",
@@ -145,6 +145,332 @@
           },
           "width": "120px",
           "align": "left"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "supplier_type",
+          "name": "supplier_type",
+          "caption": {
+            "zh_CN": "供应商类型"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 16,
+          "defaultValue": "manufacturer",
+          "enumValues": [
+            {
+              "value": "manufacturer",
+              "label": "生产厂商"
+            },
+            {
+              "value": "trader",
+              "label": "贸易商"
+            },
+            {
+              "value": "service",
+              "label": "服务商"
+            },
+            {
+              "value": "other",
+              "label": "其他"
+            }
+          ]
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "supplier_category",
+          "name": "supplier_category",
+          "caption": {
+            "zh_CN": "供应商分类"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 16,
+          "defaultValue": "normal",
+          "enumValues": [
+            {
+              "value": "strategic",
+              "label": "战略供应商"
+            },
+            {
+              "value": "normal",
+              "label": "普通供应商"
+            },
+            {
+              "value": "temporary",
+              "label": "临时供应商"
+            },
+            {
+              "value": "restricted",
+              "label": "受限供应商"
+            }
+          ]
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "industry",
+          "name": "industry",
+          "caption": {
+            "zh_CN": "所属行业"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "150px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 64,
+          "searchable": true
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "legal_person",
+          "name": "legal_person",
+          "caption": {
+            "zh_CN": "法定代表人"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 64
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "address",
+          "name": "address",
+          "caption": {
+            "zh_CN": "注册地址"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "240px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 256
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "taxpayer_type",
+          "name": "taxpayer_type",
+          "caption": {
+            "zh_CN": "纳税人资质"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 16,
+          "defaultValue": "general",
+          "enumValues": [
+            {
+              "value": "general",
+              "label": "一般纳税人"
+            },
+            {
+              "value": "small",
+              "label": "小规模纳税人"
+            },
+            {
+              "value": "none",
+              "label": "非增值税纳税人"
+            }
+          ]
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "payment_term",
+          "name": "payment_term",
+          "caption": {
+            "zh_CN": "付款条件"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "110px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 16,
+          "refDict": "payment_term",
+          "displayField": "name",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择付款条件",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "invoice_type",
+          "name": "invoice_type",
+          "caption": {
+            "zh_CN": "发票类型"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 16,
+          "refDict": "invoice_type",
+          "displayField": "name",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择发票类型",
+            "showClear": true,
+            "idCol": "code"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "id": "settle_currency_id",
+          "name": "settle_currency_id",
+          "caption": {
+            "zh_CN": "结算币种"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "120px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "refDict": "currency",
+          "refField": "id",
+          "displayField": "name"
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "id": "buyer_id",
+          "name": "buyer_id",
+          "caption": {
+            "zh_CN": "采购负责人"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "refDict": "employee",
+          "refField": "id",
+          "displayField": "name"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "risk_level",
+          "name": "risk_level",
+          "caption": {
+            "zh_CN": "风险等级"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 16,
+          "defaultValue": "low",
+          "enumValues": [
+            {
+              "value": "low",
+              "label": "低"
+            },
+            {
+              "value": "medium",
+              "label": "中"
+            },
+            {
+              "value": "high",
+              "label": "高"
+            }
+          ]
         },
         {
           "dataType": "TINYINT",
@@ -264,6 +590,148 @@
         },
         {
           "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "account_name",
+          "name": "account_name",
+          "caption": {
+            "zh_CN": "户名"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "170px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 64
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "account_type",
+          "name": "account_type",
+          "caption": {
+            "zh_CN": "账户类型"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "110px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 16,
+          "defaultValue": "general",
+          "enumValues": [
+            {
+              "value": "basic",
+              "label": "基本户"
+            },
+            {
+              "value": "general",
+              "label": "一般户"
+            },
+            {
+              "value": "dedicated",
+              "label": "专用户"
+            },
+            {
+              "value": "foreign",
+              "label": "外币户"
+            }
+          ]
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "id": "currency_id",
+          "name": "currency_id",
+          "caption": {
+            "zh_CN": "币种"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-dict-select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "100px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "refDict": "currency",
+          "refField": "id",
+          "displayField": "name"
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "bank_code",
+          "name": "bank_code",
+          "caption": {
+            "zh_CN": "联行号"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "130px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 32
+        },
+        {
+          "dataType": "TINYINT",
+          "nullable": false,
+          "id": "is_default",
+          "name": "is_default",
+          "caption": {
+            "zh_CN": "默认账户(1是0否)"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "95px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "defaultValue": "0",
+          "enumValues": [
+            {
+              "value": "1",
+              "label": "是"
+            },
+            {
+              "value": "0",
+              "label": "否"
+            }
+          ]
+        },
+        {
+          "dataType": "VARCHAR",
           "fieldLength": 64,
           "nullable": true,
           "id": "bank_name",
@@ -296,6 +764,206 @@
         [
           "supplier_id",
           "account_no"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "supplier_contact",
+        "dictName": "供应商联系人",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "cm_supplier_contact",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "contact_name",
+        "remark": "供应商联系人明细(独立 DCT,通过 supplier_id 关联 cm_supplier,无物理 FK)",
+        "codeLength": 32,
+        "codeRule": {
+          "mode": "auto",
+          "field": "code",
+          "ruleCode": "MDM_GYS"
+        }
+      },
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "id": "supplier_id",
+          "name": "supplier_id",
+          "caption": {
+            "zh_CN": "所属供应商ID"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "readonly"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "140px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 20,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "visible": false
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": false,
+          "id": "contact_name",
+          "name": "contact_name",
+          "caption": {
+            "zh_CN": "联系人姓名"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input",
+            "required": true
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "130px",
+          "required": true,
+          "align": "left",
+          "fieldLength": 64
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "department",
+          "name": "department",
+          "caption": {
+            "zh_CN": "部门"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "130px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 64
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "position",
+          "name": "position",
+          "caption": {
+            "zh_CN": "职务"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "130px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 64
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "phone",
+          "name": "phone",
+          "caption": {
+            "zh_CN": "手机"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "130px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 32
+        },
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "id": "email",
+          "name": "email",
+          "caption": {
+            "zh_CN": "邮箱"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "cmx-text-input"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "160px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 64
+        },
+        {
+          "dataType": "TINYINT",
+          "nullable": false,
+          "id": "is_default",
+          "name": "is_default",
+          "caption": {
+            "zh_CN": "默认联系人(1是0否)"
+          },
+          "dimType": "attribute",
+          "edit": {
+            "mode": "select"
+          },
+          "display": {
+            "mode": "text",
+            "align": "left"
+          },
+          "width": "95px",
+          "required": false,
+          "align": "left",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "defaultValue": "0",
+          "enumValues": [
+            {
+              "value": "1",
+              "label": "是"
+            },
+            {
+              "value": "0",
+              "label": "否"
+            }
+          ]
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "mdmGovernanceFieldSet": "mdmGovernanceFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "supplier_id",
+          "contact_name"
         ]
       ]
     },
@@ -382,7 +1050,13 @@
           "align": "left",
           "defaultValue": "direct",
           "refDict": "customer_type",
-          "displayField": "name"
+          "displayField": "name",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择客户分类",
+            "showClear": true,
+            "idCol": "code"
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -545,7 +1219,13 @@
           "width": "100px",
           "align": "left",
           "refDict": "payment_term",
-          "displayField": "name"
+          "displayField": "name",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择付款条件",
+            "showClear": true,
+            "idCol": "code"
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -567,7 +1247,13 @@
           "width": "110px",
           "align": "left",
           "refDict": "invoice_type",
-          "displayField": "name"
+          "displayField": "name",
+          "editSettings": {
+            "helpLayout": "classify",
+            "dictTitle": "选择发票类型",
+            "showClear": true,
+            "idCol": "code"
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -3806,5 +4492,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-19T00:00:00.000Z"
+  "updatedAt": "2026-08-31T00:00:00.000Z"
 }
