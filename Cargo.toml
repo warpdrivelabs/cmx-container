@@ -68,6 +68,8 @@ members = [
     "crates/libs/cmx-rpt/cmx-rpt-api",
     # 决策规则引擎（独立 workspace ../cmx-rulesengine/）的平台反代薄壳（proxy-only，无内嵌）。
     "crates/libs/cmx-rule/cmx-rule-api",
+    # 本体平台（独立 workspace ../cmx-ontology/）的平台反代薄壳（proxy-only，无内嵌；与 rules 同构）。
+    "crates/libs/cmx-onto/cmx-onto-api",
     "crates/libs/cmx-job/cmx-job-core",
     "crates/libs/cmx-job/cmx-job-store-pg",
     "crates/libs/cmx-job/cmx-job-api",
@@ -201,6 +203,8 @@ cmx-flow-api = { path = "crates/libs/cmx-flow/cmx-flow-api", version = "0.1.12",
 cmx-rpt-api = { path = "crates/libs/cmx-rpt/cmx-rpt-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 决策规则引擎平台反代薄壳（proxy-only：RulesProxyModule + 页面反代；无内嵌，规则始终独立微服务）
 cmx-rule-api = { path = "crates/libs/cmx-rule/cmx-rule-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 本体平台平台反代薄壳（proxy-only：OntoProxyModule + 页面反代；无内嵌，与 rules 同构）
+cmx-onto-api = { path = "crates/libs/cmx-onto/cmx-onto-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 异步任务中心内核（作业状态机 + JobHandler/JobContext + JobManager + SSE 扇出，语义中立无 DB）
 cmx-job-core = { path = "crates/libs/cmx-job/cmx-job-core", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 异步任务中心 PG 持久化（cmx_job_* 三表读写 + 崩溃恢复 + 历史查询）
