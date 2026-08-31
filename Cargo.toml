@@ -52,6 +52,7 @@ members = [
     "crates/libs/cmx-engine-kit",
     "crates/libs/cmx-model/cmx-model-proxy",
     "crates/libs/cmx-meta/cmx-meta-proxy",
+    "crates/libs/cmx-dataauth/cmx-dataauth-proxy",
     "crates/libs/cmx-rpc-gen",
     "crates/libs/cmx-infra/cmx-rpc",
     # —— RPC 皮肤薄 crate（gRPC 服务归域，集中 cmx-rpcs/，对称 cmx-apis/）——
@@ -228,6 +229,7 @@ cmx-mdm-proxy = { path = "crates/libs/cmx-mdm/cmx-mdm-proxy", version = "0.1.12"
 cmx-model-proxy = { path = "crates/libs/cmx-model/cmx-model-proxy", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 元数据管理平台反代薄壳（MetaProxyModule，proxy-only；反代到独立 cmx-meta-server :8096）
 cmx-meta-proxy = { path = "crates/libs/cmx-meta/cmx-meta-proxy", version = "0.1.12", registry = "nora" }
+cmx-dataauth-proxy = { path = "crates/libs/cmx-dataauth/cmx-dataauth-proxy", version = "0.1.12", registry = "nora" }
 # 编译期全局注册
 inventory = "0.3"
 # 对象存储访问层

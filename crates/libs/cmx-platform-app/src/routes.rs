@@ -25,6 +25,7 @@ use cmx_onto_api::OntoProxyModule;
 use cmx_model_proxy::ModelProxyModule;
 use cmx_mdm_proxy::MdmProxyModule;
 use cmx_meta_proxy::MetaProxyModule;
+use cmx_dataauth_proxy::DataAuthProxyModule;
 use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -43,6 +44,8 @@ const MODEL_UPSTREAM_KEY: &str = "model";
 const MDM_UPSTREAM_KEY: &str = "mdm";
 /// 服务定位键：元数据管理（`[center_client.services].meta`）。
 const META_UPSTREAM_KEY: &str = "meta";
+/// 服务定位键：数据权限（`[center_client.services].dataauth`）。
+const DATAAUTH_UPSTREAM_KEY: &str = "dataauth";
 
 /// 解析流程引擎反代目标（per-key 定位，见 `cmx_plugin::center_client::upstream`）。
 ///
@@ -104,6 +107,12 @@ pub(crate) fn mdm_upstream() -> Option<ProxyUpstream> {
 /// `/api/meta/*` 路由。
 pub(crate) fn meta_upstream() -> Option<ProxyUpstream> {
     cmx_plugin::center_client::proxy_upstream(META_UPSTREAM_KEY)
+}
+
+/// 解析数据权限引擎反代目标。配了 `[center_client.services].dataauth` = 反代到独立 cmx-dataauth-server；
+/// 没配 = 门户不挂 `/api/dataauth/*` 与 `/console`。
+pub(crate) fn dataauth_upstream() -> Option<ProxyUpstream> {
+    cmx_plugin::center_client::proxy_upstream(DATAAUTH_UPSTREAM_KEY)
 }
 
 /// 平台服务依赖拓扑：枚举各已挂载能力当前挂的是「进程内内嵌」还是「反代独立微服务」。
@@ -387,6 +396,25 @@ fn merge_meta(router: Router<CmxAppState>) -> Router<CmxAppState> {
         }
     }
 }
+
+/// 数据权限：按 `[center_client.services].dataauth` 反代到独立 cmx-dataauth-server（无进程内嵌兜底，与
+/// flow/report/rules/meta 同构）。前端零改：浏览器请求同源 `/api/dataauth/*`。`/console` 工作台整页
+/// 由 router.rs 顶层单独反代（非 `/api`）。
+fn merge_dataauth(router: Router<CmxAppState>) -> Router<CmxAppState> {
+    match dataauth_upstream() {
+        Some(upstream) => {
+            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            tracing::info!(upstream = %upstream.describe(), "数据权限：独立微服务模式（DataAuthProxy 转发 /api/dataauth/*）");
+            router.merge(
+                DataAuthProxyModule::with_resolver(upstream.resolver_fn(), api_key).routes(),
+            )
+        }
+        None => {
+            tracing::warn!("数据权限：未配置反代目标（[center_client.services] 未配 dataauth）→ 门户不挂 /api/dataauth/* 路由；请启动独立 cmx-dataauth-server 并配置其地址");
+            router
+        }
+    }
+}
 ///
 /// 直接调用 cmx-api 的统一路由注册，返回配置好的 Axum Router。
 /// 外部模块路由（报表 ReportProxyModule、流程 FlowProxyModule、规则 RulesProxyModule、业务单据
@@ -423,7 +451,7 @@ pub fn routes() -> Router<CmxAppState> {
     // （Dct/Doc/Model/Code 四模块，见 merge_model 的 None 分支——故已从 base 移出）。
     // 主数据按 [center_client.services].mdm：配了=反代到独立 cmx-mdm-server，没配=不挂
     // /api/mdm/* 路由（无进程内嵌，见 merge_mdm 的 None 分支——故已从 base 移出）。
-    merge_meta(merge_mdm(merge_model(merge_flow(merge_report(merge_rules(merge_onto(base)))))))
+    merge_dataauth(merge_meta(merge_mdm(merge_model(merge_flow(merge_report(merge_rules(merge_onto(base))))))))
 }
 
 /// 获取 Swagger 文档路由

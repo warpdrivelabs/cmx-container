@@ -548,6 +548,7 @@ async function doRunAction(root, id, dryRun) {
 // ══════════════ UI5 动能层：动作类型 Inspector ══════════════
 function actionInspectorHtml() {
   const d = state.detail || {};
+  if (!state.flowDefsLoaded) loadFlowDefs(); // 惰性拉已发布流程（「起流程」副作用选择器数据源）
   const params = d.parameters || [];
   const logic = d.logic || [];
   const vals = d.validations || [];
@@ -570,11 +571,16 @@ function actionInspectorHtml() {
     <input class="o-cin xs" data-vaf="message" value="${esc(v.message || '')}" placeholder="错误提示"/>
     <button class="o-btn xs danger" data-act="ac-del-val" data-i="${i}">✕</button>
   </div>`).join('');
-  const fxRows = fx.map((s, i) => `<div class="o-fnrow" data-i="${i}">
-    <select class="o-csel xs" data-sef="kind">${SIDE_KINDS.map(k => `<option value="${k}" ${k === (s.kind || 'notification') ? 'selected' : ''}>${SIDE_KIND_LABEL[k]}</option>`).join('')}</select>
-    <input class="o-cin xs" data-sef="ref" value="${esc(s.flowDefKey || s.function || s.url || s.topic || s.template || '')}" placeholder="目标（流程键/函数/URL/主题）"/>
-    <button class="o-btn xs danger" data-act="ac-del-fx" data-i="${i}">✕</button>
-  </div>`).join('');
+  const RICH_KINDS = ['startBusinessProcess', 'webhook', 'notification'];
+  const FX_TAG = { startBusinessProcess: '🔀 起流程', webhook: '🪝 Webhook', notification: '🔔 通知' };
+  const fxRows = fx.map((s, i) => {
+    const kindSel = `<select class="o-csel xs" data-sef="kind">${SIDE_KINDS.map(k => `<option value="${k}" ${k === (s.kind || 'notification') ? 'selected' : ''}>${SIDE_KIND_LABEL[k]}</option>`).join('')}</select>`;
+    const del = `<button class="o-btn xs danger" data-act="ac-del-fx" data-i="${i}">✕</button>`;
+    if (RICH_KINDS.includes(s.kind)) {
+      return `<div class="o-fxblock" data-i="${i}"><div class="o-fnrow">${kindSel}<span class="o-fxtag">${FX_TAG[s.kind]}</span>${del}</div>${richSideEffectHtml(s, i, params)}</div>`;
+    }
+    return `<div class="o-fxblock" data-i="${i}"><div class="o-fnrow">${kindSel}<input class="o-cin xs" data-sef="ref" value="${esc(s.function || s.topic || '')}" placeholder="目标（函数/主题）"/>${del}</div></div>`;
+  }).join('');
   return `<div class="o o-prop">
     <div class="o-phd">⚡ ${esc(d.displayName || d.apiName)} <code>${esc(d.apiName)}</code></div>
     <div class="o-row2">
@@ -595,6 +601,76 @@ function actionInspectorHtml() {
     <div class="o-runbox" data-role="ac-result">${state.acResult || ''}</div>
   </div>`;
 }
+// 副作用可视化配置（起流程 / Webhook / 通知）——
+const SE_RESERVED = ['kind', 'flowDefKey', 'businessKey', 'function', 'url', 'topic', 'template', '_vars'];
+// 惰性拉 flowengine 已发布流程定义（经 onto /flow/definitions 代理；flow 不可达则空，降级为自由输入）。
+async function loadFlowDefs() {
+  if (state.flowDefsLoaded || state._flowDefsLoading) return;
+  state._flowDefsLoading = true;
+  try { const r = await apiJson(API + '/flow/definitions'); state.flowDefs = (r && r.definitions) || []; }
+  catch (e) { state.flowDefs = []; }
+  state.flowDefsLoaded = true; state._flowDefsLoading = false;
+  refresh('property');
+}
+// 副作用对象的内联额外字段 → 键值映射编辑模型（{name,value}[]；流程变量 / Webhook 请求体 / 通知数据）。
+function seVars(s) {
+  if (Array.isArray(s._vars)) return s._vars;
+  s._vars = Object.keys(s).filter(k => !SE_RESERVED.includes(k))
+    .map(k => ({ name: k, value: typeof s[k] === 'string' ? s[k] : JSON.stringify(s[k]) }));
+  return s._vars;
+}
+// 从富配置块 DOM 收集键值映射行。
+function collectSeVars(block) {
+  const vars = [];
+  block.querySelectorAll('.o-sevar').forEach(vr => { const n = vr.querySelector('[data-sev="name"]'); const val = vr.querySelector('[data-sev="value"]'); const nm = n ? n.value.trim() : ''; if (nm) vars.push({ name: nm, value: val ? val.value.trim() : '' }); });
+  return vars;
+}
+// 富配置块：起流程（flowDefKey 选择器 + businessKey）/ Webhook（URL）/ 通知（模板），三者共用「参数→载荷」键值映射。
+function richSideEffectHtml(s, i, params) {
+  const kind = s.kind;
+  const dlPars = (params || []).map(p => `<option value="$${esc(p.name)}"></option>`).join('');
+  const vars = seVars(s);
+  const mapLabel = kind === 'startBusinessProcess' ? '流程变量映射' : kind === 'webhook' ? '请求体字段' : '通知数据字段';
+  const mapEmpty = kind === 'startBusinessProcess' ? '无映射（仅传 businessKey）' : '无字段（仅传固定载荷）';
+  const nameHint = kind === 'startBusinessProcess' ? '流程变量名' : '字段名';
+  const varRows = vars.map((v, j) => `<div class="o-fnrow o-sevar" data-i="${i}" data-j="${j}">
+    <input class="o-cin xs" data-sev="name" value="${esc(v.name || '')}" placeholder="${nameHint}"/>
+    <input class="o-cin xs" data-sev="value" list="opar-${i}" value="${esc(v.value || '')}" placeholder="$参数 或 字面量"/>
+    <button class="o-btn xs danger" data-act="ac-del-sevar" data-i="${i}" data-j="${j}">✕</button>
+  </div>`).join('');
+  let head = '';
+  if (kind === 'startBusinessProcess') {
+    const defs = state.flowDefs || [];
+    const dlDefs = defs.map(d => `<option value="${esc(d.key)}">${esc(d.name || d.key)}</option>`).join('');
+    const note = !state.flowDefsLoaded ? '加载中…' : (defs.length ? `${defs.length} 个已发布流程` : '（flowengine 未连/无已发布流程，可直接输入键）');
+    head = `<label>流程定义 flowDefKey <span class="o-hint">${note}</span></label>
+      <input class="o-cin" data-sef="flowDefKey" list="ofd-${i}" value="${esc(s.flowDefKey || '')}" placeholder="选已发布流程 / 输入键（支持 $参数 插值）"/>
+      <datalist id="ofd-${i}">${dlDefs}</datalist>
+      <label>业务键 businessKey <span class="o-hint">可选，回查/单据关联</span></label>
+      <input class="o-cin" data-sef="businessKey" list="opar-${i}" value="${esc(s.businessKey || '')}" placeholder="如 $orderId 或 PO-2024"/>`;
+  } else if (kind === 'webhook') {
+    head = `<label>Webhook URL <span class="o-hint">POST；host 须在白名单 ONTO_WEBHOOK_ALLOW</span></label>
+      <input class="o-cin" data-sef="url" list="opar-${i}" value="${esc(s.url || '')}" placeholder="http(s)://host/path（支持 $参数 插值）"/>`;
+  } else { // notification
+    head = `<label>通知模板 template</label>
+      <input class="o-cin" data-sef="template" list="opar-${i}" value="${esc(s.template || '')}" placeholder="模板键（如 orderClosed，支持 $参数）"/>`;
+  }
+  return `<div class="o-fxflow">
+    ${head}
+    <div class="o-phd3">${mapLabel} <span class="o-pn">${vars.length}</span><span class="o-sp"></span><button class="o-btn xs" data-act="ac-add-sevar" data-i="${i}">+ 字段</button></div>
+    <div class="o-fnlist">${varRows || `<div class="o-empty2">${mapEmpty}</div>`}</div>
+    <datalist id="opar-${i}">${dlPars}</datalist>
+  </div>`;
+}
+// 存前序列化：把每个富副作用（起流程/Webhook/通知）的 _vars 折成内联字段（→ 载荷/变量），并剥除 _vars 编辑态。
+function serializeActionForSave(d) {
+  const clone = JSON.parse(JSON.stringify(d));
+  (clone.sideEffects || []).forEach(s => {
+    if (Array.isArray(s._vars)) { s._vars.forEach(v => { if (v.name) s[v.name] = v.value; }); }
+    delete s._vars;
+  });
+  return clone;
+}
 function collectAction(root) {
   const d = state.detail; if (!d) return;
   const g = (s) => { const el = root.querySelector(s); return el ? el.value : undefined; };
@@ -609,13 +685,32 @@ function collectAction(root) {
   d.validations = [];
   root.querySelectorAll('[data-vaf="expression"]').forEach(ex => { const r = ex.closest('.o-fnrow2'); const m = r.querySelector('[data-vaf="message"]'); if (ex.value.trim()) d.validations.push({ expression: ex.value.trim(), message: m ? m.value.trim() : '' }); });
   d.sideEffects = [];
-  root.querySelectorAll('[data-sef="kind"]').forEach(k => { const r = k.closest('.o-fnrow'); const ref = r.querySelector('[data-sef="ref"]'); const s = { kind: k.value }; const v = ref ? ref.value.trim() : ''; if (v) { const key = k.value === 'startBusinessProcess' ? 'flowDefKey' : k.value === 'callFunction' ? 'function' : k.value === 'webhook' ? 'url' : k.value === 'emitEvent' ? 'topic' : 'template'; s[key] = v; } d.sideEffects.push(s); });
+  root.querySelectorAll('.o-fxblock').forEach(block => {
+    const k = block.querySelector('[data-sef="kind"]'); if (!k) return;
+    const kind = k.value; const s = { kind };
+    if (kind === 'startBusinessProcess') {
+      const fd = block.querySelector('[data-sef="flowDefKey"]'); if (fd && fd.value.trim()) s.flowDefKey = fd.value.trim();
+      const bk = block.querySelector('[data-sef="businessKey"]'); if (bk && bk.value.trim()) s.businessKey = bk.value.trim();
+      s._vars = collectSeVars(block);
+    } else if (kind === 'webhook') {
+      const u = block.querySelector('[data-sef="url"]'); if (u && u.value.trim()) s.url = u.value.trim();
+      s._vars = collectSeVars(block);
+    } else if (kind === 'notification') {
+      const t = block.querySelector('[data-sef="template"]'); if (t && t.value.trim()) s.template = t.value.trim();
+      s._vars = collectSeVars(block);
+    } else {
+      const ref = block.querySelector('[data-sef="ref"]'); const v = ref ? ref.value.trim() : '';
+      if (v) { const key = kind === 'callFunction' ? 'function' : 'topic'; s[key] = v; }
+    }
+    d.sideEffects.push(s);
+  });
 }
 function acAdd(root, field, seed) { collectAction(root); state.detail[field] = state.detail[field] || []; state.detail[field].push(seed); refresh('property'); }
 function acDel(root, field, i) { collectAction(root); (state.detail[field] || []).splice(i, 1); refresh('property'); }
 async function doSaveAction(root) {
   collectAction(root);
-  try { await apiJson(API + '/action-types', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.detail) }); flashAll('已保存动作 ' + state.detail.apiName); await loadAll(); refreshAll(); selectElement('action', state.detail.apiName, true); }
+  const payload = serializeActionForSave(state.detail);
+  try { await apiJson(API + '/action-types', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); flashAll('已保存动作 ' + state.detail.apiName); await loadAll(); refreshAll(); selectElement('action', state.detail.apiName, true); }
   catch (e) { flashAll('保存动作失败：' + e.message, true); }
 }
 async function doDelAction(id) {
@@ -776,6 +871,8 @@ function bind(root, view, host) {
     if (a === 'ac-del-val') return acDel(root, 'validations', +act.getAttribute('data-i'));
     if (a === 'ac-add-fx') return acAdd(root, 'sideEffects', { kind: 'notification' });
     if (a === 'ac-del-fx') return acDel(root, 'sideEffects', +act.getAttribute('data-i'));
+    if (a === 'ac-add-sevar') { collectAction(root); const i = +act.getAttribute('data-i'); const s = (state.detail.sideEffects || [])[i]; if (s) { s._vars = s._vars || []; s._vars.push({ name: '', value: '' }); } return refresh('property'); }
+    if (a === 'ac-del-sevar') { collectAction(root); const i = +act.getAttribute('data-i'), j = +act.getAttribute('data-j'); const s = (state.detail.sideEffects || [])[i]; if (s && s._vars) s._vars.splice(j, 1); return refresh('property'); }
     if (a === 'dryrun-action') return doRunAction(root, act.getAttribute('data-id'), true);
     if (a === 'exec-action') return doRunAction(root, act.getAttribute('data-id'), false);
     if (a === 'save-action') return doSaveAction(root);
@@ -784,7 +881,7 @@ function bind(root, view, host) {
   // 属性区：input（apiName 即时校验）+ change（下拉/勾选即时入 state.detail）——只在 property 区绑。
   if (view === 'property') {
     root.addEventListener('input', (ev) => { if (syncKinetic(root)) return; onPropInput(ev, root); });
-    root.addEventListener('change', (ev) => { if (syncKinetic(root)) return; onPropChange(ev, root); });
+    root.addEventListener('change', (ev) => { const kindSel = ev.target.closest && ev.target.closest('[data-sef="kind"]'); if (syncKinetic(root)) { if (kindSel) refresh('property'); return; } onPropChange(ev, root); });
     bindDragReorder(root);
   }
 }
@@ -1139,6 +1236,13 @@ function css() {
   .o-feelhint{font-size:10px;color:var(--o-accent2,#a78bfa);border:1px solid var(--o-accent2,#a78bfa);border-radius:9px;padding:0 6px;font-weight:400}
   .o-fnlist{display:flex;flex-direction:column;gap:5px;margin-bottom:4px}
   .o-fnrow{display:flex;gap:5px;align-items:center}
+  .o-fxblock{border:1px solid var(--o-border,#243049);border-radius:8px;padding:6px 7px;margin-bottom:7px}
+  .o-fxtag{flex:1;font-size:11.5px;color:var(--o-accent,#22d3ee);font-weight:700}
+  .o-fxflow{margin-top:7px;padding:7px 8px;border-left:2px solid var(--o-accent,#22d3ee);background:rgba(34,211,238,.05);border-radius:0 6px 6px 0}
+  .o-fxflow>label{display:block;font-size:11px;color:var(--o-muted,#94a3b8);margin:6px 0 3px}
+  .o-fxflow .o-hint{color:var(--o-muted,#94a3b8);font-weight:400;margin-left:4px}
+  .o-phd3{font-size:11.5px;font-weight:700;margin:9px 0 5px;display:flex;align-items:center;gap:6px}
+  .o-sevar{margin-bottom:4px}
   .o-fnrow>input,.o-fnrow>select{flex:1;min-width:0}
   .o-fnrow2{display:flex;gap:5px;align-items:center}
   .o-fnrow2>.o-codein{flex:2;min-width:0}

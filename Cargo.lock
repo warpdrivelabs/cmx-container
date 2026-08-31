@@ -1179,6 +1179,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-dataauth-proxy"
+version = "0.1.12"
+dependencies = [
+ "axum",
+ "cmx-api-core",
+ "cmx-proxy-core",
+]
+
+[[package]]
 name = "cmx-database"
 version = "0.1.12"
 dependencies = [
@@ -1589,6 +1598,7 @@ dependencies = [
  "cmx-build-store-pg",
  "cmx-common-api",
  "cmx-core",
+ "cmx-dataauth-proxy",
  "cmx-database",
  "cmx-database-pg",
  "cmx-debug",

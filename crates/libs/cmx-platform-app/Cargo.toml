@@ -40,6 +40,7 @@ cmx-flow-api = { workspace = true }
 cmx-model-proxy = { workspace = true }
 cmx-mdm-proxy = { workspace = true }
 cmx-meta-proxy = { workspace = true }
+cmx-dataauth-proxy = { workspace = true }
 cmx-storage-api = { workspace = true }
 cmx-ai-api = { workspace = true }
 cmx-biz-api = { workspace = true }
