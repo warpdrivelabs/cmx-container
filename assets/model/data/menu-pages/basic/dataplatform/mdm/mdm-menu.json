@@ -51,10 +51,13 @@
                                                         "columns": [
                                                             "code",
                                                             "name",
+                                                            "supplier_type",
+                                                            "supplier_category",
+                                                            "status",
                                                             "tax_no",
                                                             "credit_code",
-                                                            "short_name",
-                                                            "published_version"
+                                                            "phone",
+                                                            "risk_level"
                                                         ]
                                                     }
                                                 }
