@@ -1,6 +1,6 @@
 //! OntoProxyModule —— 平台→独立本体平台微服务的**反向代理壳**（对标 cmx-rule-api 的 RulesProxyModule）。
 //!
-//! 本体平台无进程内嵌壳（始终独立微服务，与 rules 同构）：`[center_client]` 的服务定位配置了 `onto`
+//! 本体平台无进程内嵌壳（始终独立微服务，与 rules 同构）：[service_rpc] 的服务定位配置了 `onto`
 //! 键 → 挂本反代，平台 `/api/onto/*` 透明转发到远程 cmx-onto-server；没配 → 平台无本体路由
 //!（本体页无法加载）。per-key 定位：`services.onto` 配 url 静态基址或 discovery Nacos 选例。
 //!
@@ -78,7 +78,7 @@ fn onto_target(onto_base: &str, uri: &Uri) -> String {
 }
 
 // ============================================================================
-// 页面反代：native 页也「一芯双壳」——门户按 [center_client] 的服务定位配置把**本体拥有的**页面取页
+// 页面反代：native 页也「一芯双壳」——门户按 [service_rpc] 的服务定位配置把**本体拥有的**页面取页
 // 请求反代到独立 cmx-onto-server（它自暴同款字节对齐 API）。
 // ----------------------------------------------------------------------------
 // native-pages 是**共享端点**（/api/native-pages/{id}），只有 `portal.onto.*` 属本体，其余是门户

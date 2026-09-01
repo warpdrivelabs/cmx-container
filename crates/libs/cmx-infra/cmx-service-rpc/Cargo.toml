@@ -1,0 +1,43 @@
+[package]
+name = "cmx-service-rpc"
+version.workspace = true
+edition.workspace = true
+
+# 微服务间统一调用基座：
+# - default = ["http"]：目录 + 定位 + 门面 + 鉴权注入 + 超时/重试/熔断/可观测（reqwest，零 volo 依赖）；
+# - grpc-client（optional）：gRPC 客户端设施（volo 发现/重试/出站鉴权），需要按 gRPC 调用的服务开启；
+# - grpc-server（optional，蕴含 grpc-client）：gRPC 服务端设施（auth_layer/bundle/server_runner），
+#   提供 gRPC 服务的服务（现仅门户）开启。
+#
+# 六服务各自独立 workspace 构建，feature unification 不跨仓生效——纯 REST 服务不开
+# grpc feature，volo 全家桶完全不进依赖图（`cargo tree -i volo` 可守卫）。
+[features]
+default = ["http"]
+http = ["dep:reqwest"]
+grpc-client = ["dep:volo", "dep:volo-grpc", "dep:async-broadcast"]
+grpc-server = ["grpc-client"]
+
+[dependencies]
+cmx-traits = { workspace = true }
+cmx-core = { workspace = true }
+cmx-utils = { workspace = true }
+cmx-registry-config = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+rand = { workspace = true }
+async-trait = { workspace = true }
+
+reqwest = { workspace = true, optional = true, features = ["multipart"] }
+
+# gRPC 设施（feature 门控；吸收自退役的 cmx-rpc）
+volo = { workspace = true, optional = true }
+volo-grpc = { workspace = true, optional = true }
+async-broadcast = { workspace = true, optional = true }
+anyhow = { workspace = true, optional = true }
+
+[dev-dependencies]
+toml = { workspace = true }

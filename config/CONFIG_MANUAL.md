@@ -18,8 +18,8 @@
 - [文件存储配置](#文件存储配置)
 - [模板配置](#模板配置)
 - [Code Server 配置](#code-server-配置)
-- [基础服务中心配置](#基础服务中心配置)
-- [RPC 配置](#rpc-配置)
+- [服务间统一调用目录（service_rpc）](#服务间统一调用目录service_rpc)
+- [gRPC 服务端设施（service_rpc.server）](#grpc-服务端设施原-rpc-配置并入-service_rpcserver)
 - [服务对外身份配置](#服务对外身份配置)
 - [注册中心 Metadata 配置](#注册中心-metadata-配置)
 - [认证配置](#认证配置)
@@ -735,26 +735,43 @@ is_critical = true
 ---
 
 
-## 基础服务中心配置
+## 服务间统一调用目录（service_rpc）
 
-插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）之间的数据交互配置。
-**服务定位与传输均按服务键独立配置（per-key）**：`[center_client.services]` 单表，每个服务键自带
+微服务间**东西向调用**的统一目录（取代旧 `[center_client]`；gRPC 服务端设施由
+`[service_rpc.server]` 承载——原 `[rpc]` 段并入）。目录覆盖：远程定义导入（菜单/权限/表单）、
+反向代理目标（flow/report/rules/model/mdm/meta）、契约 SDK 调用（如 mdm→flow 审批、
+flow→mdm webhook）。
+**服务定位与传输均按服务键独立配置（per-key）**：`[service_rpc.services]` 单表，每个服务键自带
 定位方式与可选传输覆盖——不同服务键可混用（如 `flow` 静态基址调试、`report` 走 Nacos；
 `menu` 中心 gRPC、`form` 中心 HTTP）。
 
-### `[center_client]`
+消费基座：`cmx-service-rpc`（默认 feature `http`：目录 + 定位 + 门面 + 鉴权注入 + 超时/重试/
+熔断/可观测；`grpc-client` / `grpc-server` optional——纯 REST 服务不背 volo 依赖树）。
+出站鉴权链：`X-API-Key`（`[service_auth].outgoing_api_key`）+ `X-Delegated-User-Token`（OBO
+委托令牌，task-local 自动透传）+ `X-Request-Id`。
+
+**Fail-fast 判定矩阵（启动时）**：
+
+| 情形 | 行为 |
+| --- | --- |
+| `[service_rpc]` 段缺失 | 合法空目录（全内嵌 / 零出站形态） |
+| 键仅配 `discovery` 但注册中心未启用且无 `url` | 启动报错并列键清单（补 url 或开 Nacos） |
+| 旧段 `[center_client]` / `[rpc]` 残留 | 启动报错提示迁移（不做兼容读取） |
+| 键配 `transport = "grpc"` 但进程未编译 grpc feature | 启动报错 NoBinding + 提示开 feature |
+
+### `[service_rpc]`
 
 #### `default_transport`
 
 - **类型**: String (enum)
 - **必需**: 否
 - **默认值**: `"http"`
-- **说明**: **服务间调用**（模块资源导入/导出）的全局传输缺省；键级 `transport` 可覆盖。值域
+- **说明**: **服务间调用**的全局传输缺省；键级 `transport` 可覆盖。值域
   `http` / `grpc`，值域外的值回退 `http`（启动时打 warn）
-    - `http`（默认）- HTTP multipart form-data POST 到统一导入端点 `/api/plugin/data/import`，
+    - `http`（默认）- HTTP 传输（契约 SDK 与统一导入端点 `/api/plugin/data/import`），
       定位用该键的 `url` 静态基址或 `discovery` 服务发现选例
-    - `grpc` - 经 gRPC 调用专门中心（CmxResourceDataService），需启用 `[rpc]` 且走 gRPC 的键
-      **必配 `discovery`** 服务名（gRPC 经全局 RPC 客户端按服务名路由，不支持静态地址直连）
+    - `grpc` - 经 gRPC 调用专门中心（CmxResourceDataService），需启用 `[service_rpc.server]`
+      且走 gRPC 的键**必配 `discovery`** 服务名（gRPC 按服务名路由，不支持静态地址直连）
 - **注意**: 传输协议**对反向代理无效**（反代恒 HTTP 透明转发）；给 `flow`/`report`/`rules`
   配 `transport = "grpc"` 会打 warn 提示
 
@@ -770,35 +787,45 @@ is_critical = true
 - **类型**: Integer (毫秒)
 - **必需**: 否
 - **默认值**: `30000`
-- **说明**: 各基础服务中心 HTTP 请求的超时时间（http 传输生效）
+- **说明**: 服务间 HTTP 请求总超时（键级 `timeout_ms` 可覆盖）
+
+#### `retry_max`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `1`
+- **说明**: 幂等调用重试上限——仅 `idempotent` 请求（GET / 显式标记幂等的查询）在**连接级**
+  失败（不可达）时换实例重试；超时与业务级错误不重试。键级 `retry_max` 可覆盖
 
 ---
 
-### `[center_client.services]`
+### `[service_rpc.services]`
 
 服务键 → 服务描述。**自由键值表**——新增微服务只在 toml 加一行键值，无需改代码。
 
 - **类型**: `HashMap<String, ServiceEntry>`（自由表，值为内联 table）
 - **字段**（每个键的值）:
-    - `url` - 静态基址，**纯基址不含路径**（统一导入端点与反代路径由消费方拼接；值含 `/api/`
-      时加载告警提示旧写法）。与 `discovery` 并存时 **url 优先**（非主备兜底：url 不可达即 502，
-      不会切 discovery，并存时启动打 warn）——删掉 `url` 即切服务发现选例
+    - `url` - 静态基址，**纯基址不含路径**（端点路径由消费方 / 契约 SDK 拼接；值含 `/api/`
+      时加载告警提示旧写法）。与 `discovery` 并存时 **url 优先**（非主备兜底：url 不可达即失败，
+      不会切 discovery）——删掉 `url` 即切服务发现选例。**无注册中心的回滚形态**
     - `discovery` - Nacos 服务名（选例规则：healthy 过滤 + 按 Nacos `weight` 加权随机 +
       `http_port` 元数据优先，缺省用实例注册端口）。`transport = "grpc"` 时必配
-    - `transport` - 该键的传输覆盖（`http` / `grpc`，仅服务间导入调用生效；缺省取全局
+    - `transport` - 该键的传输覆盖（`http` / `grpc`，仅服务间调用生效；缺省取全局
       `default_transport`）
+    - `timeout_ms` - 键级请求总超时覆盖（可选，缺省取全局）
+    - `retry_max` - 键级幂等重试上限覆盖（可选，缺省取全局）
 - **键所有权约定**:
     - `menu` / `perm` / `form` - 归远程导入器（目标 = 门户/能力中心；任一键存在即启用远程导入器）
-    - `flow` / `report` / `rules` - 归反向代理（目标 = 独立微服务；`flow` 亦兼作 http 传输流程
-      定义导入的接收方）
+    - `flow` / `report` / `rules` / `model` / `mdm` / `meta` - 归反向代理与契约 SDK 调用
+      （目标 = 独立微服务；如 mdm 的审批调用 / flow 的 webhook 回调 / 死信通知的 `portal` 键）
     - 全表为空（默认）- 本地模式：导入器直调本地 Service，无网络开销；反代目标不挂
 - **示例**:
 
 ```toml
-[center_client.services]
+[service_rpc.services]
 # 静态基址 + 服务发现备用（url 优先生效，删 url 即切 Nacos 选例）
 menu   = { url = "http://portal-center:8080", discovery = "cmx-portal-center" }
-# gRPC 传输（需启用 [rpc]；gRPC 键必须配 discovery，url 无效）
+# gRPC 传输（需启用 [service_rpc.server]；gRPC 键必须配 discovery，url 无效）
 perm   = { discovery = "cmx-perm-center", transport = "grpc" }
 # 纯服务发现定位（HTTP，缺省传输）
 form   = { discovery = "cmx-form-center" }
@@ -806,39 +833,42 @@ form   = { discovery = "cmx-form-center" }
 flow   = { url = "http://127.0.0.1:8091", discovery = "cmx-flow-server" }
 report = { url = "http://127.0.0.1:8092", discovery = "cmx-rpt-server" }
 rules  = { url = "http://127.0.0.1:8094", discovery = "cmx-rule-server" }
+# 键级超时覆盖（mdm 审批保持 10s 语义；缺省全局 30s）
+# flow = { url = "http://127.0.0.1:8091", timeout_ms = 10000 }
 ```
 
 ---
 
-### 旧配置形态（v2 已废弃）
+### 旧配置形态（已废弃，启动报错）
 
-`mode` / `[center_client.urls]` / `[center_client.discovery]`（含 `discovery.services`）三段为
-v1 形态，已被 `[center_client.services]` 单表取代。旧字段出现时**被忽略**（不报错），启动日志打
-迁移 warn。对应关系：`mode = "http_url"` → 各键改配 `url`；`mode = "http_discovery"` / `"grpc"`
-→ 各键改配 `discovery`（grpc 传输另加 `transport = "grpc"` 或全局 `default_transport = "grpc"`）。
+`[center_client]` 已更名为 `[service_rpc]`（字段对应：`default_transport` / `nacos_group` /
+`timeout_ms` / `services` 单表不变，新增 `retry_max` 与键级 `timeout_ms` / `retry_max`）；
+`[rpc]` 已并入 `[service_rpc.server]`。**旧段残留时启动 fail-fast 报错**（错误信息带迁移提示，
+不做兼容读取）。更早的 v1 形态（`mode` / `[center_client.urls]` / `[center_client.discovery]`）
+同样废弃。
 
 ---
 
 ### 环境变量覆盖
 
-`center_client` 配置节支持通过环境变量覆盖，格式为 `CENTER_CLIENT__SERVICES__<KEY>__<FIELD>`
-（如 `CENTER_CLIENT__SERVICES__FLOW__URL`、`CENTER_CLIENT__SERVICES__MENU__TRANSPORT`）与
-`CENTER_CLIENT__DEFAULT_TRANSPORT`；`url` 值需带 scheme（如 `http://...`，纯数字值会被环境变量
+`service_rpc` 配置节支持通过环境变量覆盖，格式为 `SERVICE_RPC__SERVICES__<KEY>__<FIELD>`
+（如 `SERVICE_RPC__SERVICES__FLOW__URL`、`SERVICE_RPC__SERVICES__MENU__TRANSPORT`）与
+`SERVICE_RPC__DEFAULT_TRANSPORT`；`url` 值需带 scheme（如 `http://...`，纯数字值会被环境变量
 层解析为整数导致反序列化失败）。详见
-[ENV_MANUAL.md](ENV_MANUAL.md#基础服务中心环境变量)。
+[ENV_MANUAL.md](ENV_MANUAL.md#服务间统一调用目录环境变量)。
 
 ---
 
-## RPC 配置
+## gRPC 服务端设施（原 RPC 配置，并入 service_rpc.server）
 
-### `[rpc]`
+### `[service_rpc.server]`
 
 #### `enabled`
 
 - **类型**: Boolean
 - **必需**: 否
 - **默认值**: `false`
-- **说明**: 是否启用 RPC 功能
+- **说明**: 是否启用 gRPC 服务端（启用需编译 grpc feature——门户默认已开）
 
 #### `protocol`
 
@@ -854,7 +884,7 @@ v1 形态，已被 `[center_client.services]` 单表取代。旧字段出现时*
 - **默认值**: `[]`
 - **说明**: 启动时预先发现的服务名列表，对这些服务会主动拉取实例并缓存
 
-### `[rpc.grpc]`
+### `[service_rpc.server.grpc]`
 
 #### `port`
 
@@ -915,7 +945,7 @@ v1 形态，已被 `[center_client.services]` 单表取代。旧字段出现时*
 
 metadata 中的键值对会随服务实例一起注册到注册中心，服务消费者可通过服务发现获取这些信息。
 
-**注意**：`grpc_port` 由 `[rpc.grpc].port` 自动注入，无需手动配置。RPC 自动注入的 key 优先级高于配置文件中的值。
+**注意**：`grpc_port` 由 `[service_rpc.server.grpc].port` 自动注入，无需手动配置。自动注入的 key 优先级高于配置文件中的值。
 
 #### 自定义 metadata 示例
 
@@ -936,7 +966,7 @@ env = "production"
 
 | Key | 说明 | 来源 |
 |-----|------|------|
-| `grpc_port` | gRPC 服务端口 | 由 `[rpc.grpc].port` 自动注入 |
+| `grpc_port` | gRPC 服务端口 | 由 `[service_rpc.server.grpc].port` 自动注入 |
 | `version` | 服务版本号（预留） | 用户自定义 |
 | `protocol` | 支持的协议列表（预留） | 用户自定义 |
 

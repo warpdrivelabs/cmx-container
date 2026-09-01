@@ -1,0 +1,23 @@
+[package]
+name = "cmx-mdm-sdk"
+version.workspace = true
+edition.workspace = true
+
+# mdm 契约 SDK：flow → mdm 的生命周期 webhook 回调契约（路径常量 + HMAC 签名约定 +
+# 事件 wire DTO + 投递客户端）。完全自包含，不引用 cmx-mdm 仓任何类型。
+#
+# 契约只约定「路径 + 算法 + 头名 + 载荷形状」；共享密钥（secret）由双方部署侧各自配置，
+# 不进 SDK、不进版本库。
+[dependencies]
+cmx-service-rpc = { path = "../../cmx-infra/cmx-service-rpc", default-features = false }
+
+serde = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -1,6 +1,6 @@
 # Volo 框架使用教程
 
-> 基于 cmx-rpc-gen 与 cmx-rpc 实战经验的 Volo / Volo-gRPC 新手入门文档。
+> 基于 cmx-rpc-gen 与 cmx-service-rpc 实战经验的 Volo / Volo-gRPC 新手入门文档。
 >
 > 适用版本：`volo 0.12.x`、`volo-grpc 0.12.x`、`pilota 0.13.x`
 >
@@ -26,7 +26,7 @@
 - [十四、超时、重试、连接池](#十四超时重试连接池)
 - [十五、错误处理](#十五错误处理)
 - [十六、cmx-rpc-gen 实战解读](#十六cmx-rpc-gen-实战解读)
-- [十七、cmx-rpc 实战解读](#十七cmx-rpc-实战解读)
+- [十七、cmx-service-rpc 实战解读](#十七cmx-service-rpc-实战解读)
 - [十八、整体串联：从 IDL 到全链路调用](#十八整体串联从-idl-到全链路调用)
 - [十九、调试与排错](#十九调试与排错)
 - [二十、常见问题 FAQ](#二十常见问题-faq)
@@ -47,10 +47,10 @@ Volo 是字节跳动服务框架团队开源的 Rust RPC 框架，最大的特�
 
 **volo-grpc** 是 Volo 框架的 gRPC 协议实现，对应 Thrift 版本叫 `volo-thrift`。本教程聚焦在 gRPC。
 
-**cmx-rpc-gen** 与 **cmx-rpc** 是本项目对 Volo 的工程化封装：
+**cmx-rpc-gen** 与 **cmx-service-rpc** 是本项目对 Volo 的工程化封装：
 
 - `cmx-rpc-gen`：从 Protobuf IDL 生成 Rust 类型和服务 trait。
-- `cmx-rpc`：在生成的代码之上封装服务发现、负载均衡、客户端工厂、全局单例、桥接 ServiceInvoker 等。
+- `cmx-service-rpc`：在生成的代码之上封装服务发现、负载均衡、客户端工厂、全局单例、桥接 ServiceInvoker 等。
 
 阅读完本教程，你将掌握：
 
@@ -58,7 +58,7 @@ Volo 是字节跳动服务框架团队开源的 Rust RPC 框架，最大的特�
 - 如何让 Volo 在编译期生成 Rust 代码。
 - 如何实现一个 gRPC Server 和 Client。
 - 如何在微服务架构下让 Client 自动从注册中心发现服务并负载均衡。
-- 如何阅读和扩展 cmx-rpc / cmx-rpc-gen。
+- 如何阅读和扩展 cmx-service-rpc / cmx-rpc-gen。
 
 ---
 
@@ -360,7 +360,7 @@ Cargo 会：
 1. 编译 `build.rs`。
 2. `build.rs` 调用 `volo_build`，生成 `target/debug/build/cmx-rpc-gen-xxx/out/cmx_service_orchestrator.rs`。
 3. 编译 `lib.rs` 时通过 `include!` 把生成文件嵌入。
-4. 编译 `cmx-rpc`，后者 `use` 上面这些模块。
+4. 编译 `cmx-service-rpc`，后者 `use` 上面这些模块。
 
 ### 6.7 生成代码长什么样？
 
@@ -453,11 +453,11 @@ message CallServiceRequest {
 }
 ```
 
-这是 **cmx-rpc 项目的实际做法**。优点是简单、跨语言；缺点是没有类型校验。
+这是 **cmx-service-rpc 项目的实际做法**。优点是简单、跨语言；缺点是没有类型校验。
 
 ### 7.4 注释
 
-`//` 单行注释会**保留到生成代码**中，作为生成的 Rust 结构体的文档注释。cmx-rpc 的 IDL 全部写了方法注释，对应 HTTP API。
+`//` 单行注释会**保留到生成代码**中，作为生成的 Rust 结构体的文档注释。cmx-service-rpc 的 IDL 全部写了方法注释，对应 HTTP API。
 
 ---
 
@@ -493,7 +493,7 @@ Cargo 检测到 `build.rs`、`volo.yml`、IDL 文件变更时，会重新执行 
 
 ### 8.5 在子 crate 中使用
 
-`cmx-rpc` 直接 `use cmx_rpc_gen::cmx::cmx_service_orchestrator::*;` 即可，就像普通模块一样。
+`cmx-service-rpc` 直接 `use cmx_rpc_gen::cmx::cmx_service_orchestrator::*;` 即可，就像普通模块一样。
 
 ---
 
@@ -543,7 +543,7 @@ impl CmxServiceOrchestrator for MyService {
 
 ### 9.2 cmx 风格：注入业务依赖
 
-参考 `cmx-rpc/src/server.rs` 的 `CmxOrchestratorServiceImpl`：
+参考 `cmx-service-rpc/src/server.rs` 的 `CmxOrchestratorServiceImpl`：
 
 ```rust
 pub struct CmxOrchestratorServiceImpl {
@@ -563,7 +563,7 @@ impl CmxOrchestratorServiceImpl {
 
 ### 9.3 启动服务
 
-参考 `cmx-rpc/src/server_runner.rs`：
+参考 `cmx-service-rpc/src/server_runner.rs`：
 
 ```rust
 use volo::net::Address;
@@ -665,7 +665,7 @@ async fn main() {
 
 ### 10.2 动态创建客户端
 
-如果目标服务名是变量（cmx 的实际场景），参考 `cmx-rpc/src/client.rs`：
+如果目标服务名是变量（cmx 的实际场景），参考 `cmx-service-rpc/src/client.rs`：
 
 ```rust
 async fn get_client(&self, service_name: &str)
@@ -724,10 +724,10 @@ client.execute_service_with_callopt(
 
 ### 10.5 cmx 的全局客户端
 
-cmx-rpc 把"通过 service_name 找实例 + 超时控制 + 重试"封装成了 `RpcClient` trait，业务层完全不感知 volo 的存在：
+cmx-service-rpc 把"通过 service_name 找实例 + 超时控制 + 重试"封装成了 `RpcClient` trait，业务层完全不感知 volo 的存在：
 
 ```rust
-use cmx_rpc::GlobalRpcClient;
+use cmx_service_rpc::grpc::GlobalRpcClient;
 use cmx_traits::RpcClient;
 
 let client = GlobalRpcClient::get();
@@ -739,7 +739,7 @@ let resp = client.call_service(
 ).await?;
 ```
 
-详见 `cmx-rpc/src/factory.rs` 和 `cmx-rpc/src/global.rs`。
+详见 `cmx-service-rpc/src/factory.rs` 和 `cmx-service-rpc/src/global.rs`。
 
 ---
 
@@ -771,7 +771,7 @@ pub trait Discover: Send + Sync + 'static {
 
 ### 11.2 cmx 的实现：`RegistryAwareDiscover`
 
-`cmx-rpc/src/discover.rs` 把 `ServiceInstanceCache`（来自 `cmx-registry-config`）桥接到 volo 的 Discover。它的核心在于**算 diff**——把新旧实例列表对比，精确地告诉 volo "哪些新增、哪些删除、哪些变化"。
+`cmx-service-rpc/src/discover.rs` 把 `ServiceInstanceCache`（来自 `cmx-registry-config`）桥接到 volo 的 Discover。它的核心在于**算 diff**——把新旧实例列表对比，精确地告诉 volo "哪些新增、哪些删除、哪些变化"。
 
 ```rust
 pub struct RegistryAwareDiscover {
@@ -998,7 +998,7 @@ let client = CmxServiceOrchestratorClientBuilder::new("cmx-orchestrator")
 
 ### 12.4 cmx 怎么做
 
-cmx-rpc **不显式指定** 负载均衡，使用 volo 默认（随机+权重）。后续可改为一致性哈希（按 service_key 分片）或金丝雀（按 tag 路由）。
+cmx-service-rpc **不显式指定** 负载均衡，使用 volo 默认（随机+权重）。后续可改为一致性哈希（按 service_key 分片）或金丝雀（按 tag 路由）。
 
 ---
 
@@ -1072,7 +1072,7 @@ let service = ServiceBuilder::new(impl)
 
 ### 13.4 cmx 中的中间件
 
-cmx-rpc **没有用 volo 的 `Layer` 体系**做重试/超时，而是在 `VoloGrpcClient` 内部**手动实现**了：
+cmx-service-rpc **没有用 volo 的 `Layer` 体系**做重试/超时，而是在 `VoloGrpcClient` 内部**手动实现**了：
 
 - **重试 + 指数退避**：见 §14.3，循环 + `is_retryable_error` + `retry_backoff`。
 - **总时间预算**：见 §14.2，`deadline` 机制。
@@ -1090,11 +1090,11 @@ cmx-rpc **没有用 volo 的 `Layer` 体系**做重试/超时，而是在 `VoloG
 
 ## 十四、超时、重试、连接池
 
-cmx-rpc 在这一块的实现已经从最初版本迭代到**带重试预算、指数退避、客户端缓存、缓存穿透主动拉取**的生产级实现。下面按四个子主题分别讲。
+cmx-service-rpc 在这一块的实现已经从最初版本迭代到**带重试预算、指数退避、客户端缓存、缓存穿透主动拉取**的生产级实现。下面按四个子主题分别讲。
 
 ### 14.1 三种超时：RPC 超时、连接超时、总预算
 
-cmx-rpc 使用 **volo 原生的双超时配置**：
+cmx-service-rpc 使用 **volo 原生的双超时配置**：
 
 ```rust
 let rpc_timeout = Duration::from_millis(self.config.timeout_ms);
@@ -1114,7 +1114,7 @@ let client = CmxServiceOrchestratorClientBuilder::new(service_name)
 
 ### 14.2 总时间预算（含重试）
 
-cmx-rpc 的客户端**不是简单的"超时一次"**，而是把整次调用视为一个**总预算**：
+cmx-service-rpc 的客户端**不是简单的"超时一次"**，而是把整次调用视为一个**总预算**：
 
 ```rust
 let start = std::time::Instant::now();
@@ -1337,7 +1337,7 @@ pub enum Code {
 volo_grpc::Status::new(volo_grpc::Code::InvalidArgument, "输入 JSON 解析失败")
 ```
 
-注意：**业务错误不要用 Status 返回**（会中断 gRPC 流）。cmx-rpc 服务端在 `error` 字段返回业务错误：
+注意：**业务错误不要用 Status 返回**（会中断 gRPC 流）。cmx-service-rpc 服务端在 `error` 字段返回业务错误：
 
 ```rust
 let mut pb_resp = ExecuteServiceResponse::default();
@@ -1348,7 +1348,7 @@ Ok(volo_grpc::Response::new(pb_resp))
 
 ### 15.2 业务层错误：thiserror
 
-cmx 项目规范要求**所有自定义 Error 使用 `thiserror`**。例如 `cmx-rpc/src/error.rs`：
+cmx 项目规范要求**所有自定义 Error 使用 `thiserror`**。例如 `cmx-service-rpc/src/error.rs`：
 
 ```rust
 use thiserror::Error;
@@ -1437,8 +1437,8 @@ Volo 官方文档也建议把生成代码独立成一个 crate。
 
 1. 编辑 `idl/cmx_service.proto`，新增 rpc 方法和消息。
 2. `cargo build -p cmx-rpc-gen`。
-3. 在 `cmx-rpc` 的 `server.rs` 中实现新方法。
-4. 在 `cmx-rpc` 的 `client.rs` 中调用新方法。
+3. 在 `cmx-service-rpc` 的 `server.rs` 中实现新方法。
+4. 在 `cmx-service-rpc` 的 `client.rs` 中调用新方法。
 
 修改 proto 字段（**已存在的字段**）要小心：
 
@@ -1458,14 +1458,14 @@ cargo expand -p cmx-rpc-gen
 
 ---
 
-## 十七、cmx-rpc 实战解读
+## 十七、cmx-service-rpc 实战解读
 
-`crates/libs/cmx-infra/cmx-rpc/` 提供了 cmx 对 Volo 的工程化封装，下面拆解每个模块。
+`crates/libs/cmx-infra/cmx-service-rpc/` 提供了 cmx 对 Volo 的工程化封装，下面拆解每个模块。
 
 ### 17.1 模块结构
 
 ```
-cmx-rpc
+cmx-service-rpc
 ├── client           # VoloGrpcClient（RpcClient trait 实现，含重试 + 客户端缓存）
 ├── config           # RpcConfig / GrpcConfig / HttpRestConfig
 ├── discover         # RegistryAwareDiscover（volo Discover trait 实现，带 diff 通知）
@@ -1881,7 +1881,7 @@ pub async fn init_rpc(
 ### 18.2 业务层调用（完全感知不到 volo）
 
 ```rust
-use cmx_rpc::GlobalRpcClient;
+use cmx_service_rpc::grpc::GlobalRpcClient;
 use cmx_traits::{RpcClient, ServiceInvokeOptions};
 
 async fn execute_remote_service() -> anyhow::Result<()> {
@@ -1961,7 +1961,7 @@ JSON 字符串
 业务层 Value（服务端）
 ```
 
-> 为什么用 string 传 JSON？——Protobuf 没有原生 JSON 值类型，嵌套 message 也可以但定义繁琐。cmx-rpc 选择 string 简化 IDL。
+> 为什么用 string 传 JSON？——Protobuf 没有原生 JSON 值类型，嵌套 message 也可以但定义繁琐。cmx-service-rpc 选择 string 简化 IDL。
 
 ### 18.6 启动时序图
 
@@ -2043,7 +2043,7 @@ volo-grpc **默认不开启反射**，grpcurl 无法枚举服务。两种办法�
 
 ### 19.4 用 tracing 跟踪调用
 
-`cmx-rpc/src/client.rs` 已经用 `#[instrument]` 装饰了 `call_service` / `call_function`：
+`cmx-service-rpc/src/client.rs` 已经用 `#[instrument]` 装饰了 `call_service` / `call_function`：
 
 ```rust
 #[instrument(target = "cmx_rpc", skip(self, input), fields(service_name, service_key))]
@@ -2101,7 +2101,7 @@ A：端口被占用。`lsof -i :9090`（Linux）查看，`kill <pid>` 或换端�
 
 ### Q5：如何同时支持 gRPC + HTTP REST？
 
-A：当前 cmx-rpc **只支持 gRPC**。HTTP REST 在 web-server 单独用 axum 暴露（`/api/service/execute`），内部走相同的 `ServiceInvoker` / `RuntimeInvoker`。`RpcConfig.http_rest` 字段已预留，等 `factory::create_rpc_client` 加 `match` 分支即可启用。如果需要用 gRPC-Web 调浏览器，可以用 volo-grpc 的 `grpc-web` feature（`Cargo.toml` 中 `volo-grpc = { features = ["grpc-web"] }`）。
+A：当前 cmx-service-rpc **只支持 gRPC**。HTTP REST 在 web-server 单独用 axum 暴露（`/api/service/execute`），内部走相同的 `ServiceInvoker` / `RuntimeInvoker`。`RpcConfig.http_rest` 字段已预留，等 `factory::create_rpc_client` 加 `match` 分支即可启用。如果需要用 gRPC-Web 调浏览器，可以用 volo-grpc 的 `grpc-web` feature（`Cargo.toml` 中 `volo-grpc = { features = ["grpc-web"] }`）。
 
 ### Q6：怎么把生成的代码提交到 Git？
 
@@ -2144,7 +2144,7 @@ A：**要**。`VoloGrpcClient` 内部已经按 `service_name` 缓存了 volo Cli
 
 ### Q11：重试为什么只重试 UNAVAILABLE/DEADLINE_EXCEEDED/RESOURCE_EXHAUSTED/ABORTED？
 
-A：这是 cmx-rpc 的**白名单策略**：
+A：这是 cmx-service-rpc 的**白名单策略**：
 
 - ✅ **UNAVAILABLE / DEADLINE_EXCEEDED**：临时性网络/超时问题，重试大概率成功。
 - ✅ **RESOURCE_EXHAUSTED**：限流场景，间隔后大概率能过。
@@ -2156,7 +2156,7 @@ A：这是 cmx-rpc 的**白名单策略**：
 
 ### Q12：总时间预算 vs 每次超时，如何选择？
 
-A：cmx-rpc 用**总时间预算**。优点是**总耗时可控**（即使 N 次重试 + 退避，总耗时也不会超过 `timeout_ms`），适合 SLO 严格的场景。缺点是单次重试的 timeout 不固定（如果第一次用掉 4.9s，重试时预算只剩 100ms）。
+A：cmx-service-rpc 用**总时间预算**。优点是**总耗时可控**（即使 N 次重试 + 退避，总耗时也不会超过 `timeout_ms`），适合 SLO 严格的场景。缺点是单次重试的 timeout 不固定（如果第一次用掉 4.9s，重试时预算只剩 100ms）。
 
 如果业务希望"每次调用都有固定的 5s 超时"，可以改写为：
 
@@ -2170,7 +2170,7 @@ for attempt in 0..=max_retries {
 }
 ```
 
-### Q13：如何用 grpcurl 调试 cmx-rpc 服务？
+### Q13：如何用 grpcurl 调试 cmx-service-rpc 服务？
 
 A：volo-grpc **默认不开启反射**，grpcurl 无法枚举服务。两种办法：
 
@@ -2220,12 +2220,12 @@ A：`_discover` 字段以 `_` 前缀表示"故意不使用"，实际作用是**�
 2. `cmx-rpc-gen/volo.yml` —— 生成配置。
 3. `cmx-rpc-gen/idl/cmx_service.proto` —— IDL 定义。
 4. `target/debug/build/cmx-rpc-gen-*/out/cmx_service_orchestrator.rs` —— 生成代码（重点看 Service trait、ClientBuilder）。
-5. `cmx-rpc/src/server.rs` —— 服务端实现。
-6. `cmx-rpc/src/server_runner.rs` —— 服务端启动。
-7. `cmx-rpc/src/client.rs` —— 客户端实现。
-8. `cmx-rpc/src/discover.rs` —— 服务发现桥接。
-9. `cmx-rpc/src/factory.rs` —— 客户端工厂。
-10. `cmx-rpc/src/global.rs` —— 全局单例。
+5. `cmx-service-rpc/src/server.rs` —— 服务端实现。
+6. `cmx-service-rpc/src/server_runner.rs` —— 服务端启动。
+7. `cmx-service-rpc/src/client.rs` —— 客户端实现。
+8. `cmx-service-rpc/src/discover.rs` —— 服务发现桥接。
+9. `cmx-service-rpc/src/factory.rs` —— 客户端工厂。
+10. `cmx-service-rpc/src/global.rs` —— 全局单例。
 11. `crates/web/web-server/src/config/rpc.rs` —— 真实集成入口。
 
 ### 推荐阅读顺序（Volo 源码）
@@ -2248,7 +2248,7 @@ Volo 的学习曲线比 tonic 略陡（多了 Service/Layer/Discover/LB 等抽�
 - **零外部依赖**：纯 Rust 实现 IDL 编译，不依赖 `protoc`。
 - **极高性能**：AFIT/RPITIT + 静态分发 + 零拷贝 FastStr。
 
-对 cmx 项目来说，cmx-rpc 已经在 Volo 之上做了足够多的封装（`RpcClient` trait、`GlobalRpcClient`、`RegistryAwareDiscover`），**业务层基本不需要关心 volo**。但理解 Volo 的核心机制（IDL 生成、Discover、Service trait）能帮助你：
+对 cmx 项目来说，cmx-service-rpc 已经在 Volo 之上做了足够多的封装（`RpcClient` trait、`GlobalRpcClient`、`RegistryAwareDiscover`），**业务层基本不需要关心 volo**。但理解 Volo 的核心机制（IDL 生成、Discover、Service trait）能帮助你：
 
 - 排查 RPC 调用问题。
 - 扩展新协议（如 HTTP REST）。

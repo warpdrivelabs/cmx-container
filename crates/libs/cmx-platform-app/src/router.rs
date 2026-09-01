@@ -63,10 +63,10 @@ pub fn build_router(app_state: CmxAppState, web_config: &WebConfig) -> Router {
 
     // 数据权限管理工作台 /console：顶层反代到独立 cmx-dataauth-server（非 /api，故不剥前缀）。
     // 免认证边缘页（与引擎一致）；其内部 API 调用走 /api/dataauth/*，由 DataAuthProxyModule 认证转发。
-    // 仅当 [center_client.services].dataauth 配置了才挂。
+    // 仅当 [service_rpc.services].dataauth 配置了才挂。
     let routes_all = match crate::routes::dataauth_upstream() {
         Some(up) => {
-            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            let api_key = crate::config::rpc::load_outgoing_credential();
             routes_all.merge(cmx_dataauth_proxy::console_routes(up.resolver_fn(), api_key))
         }
         None => routes_all,

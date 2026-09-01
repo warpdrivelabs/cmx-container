@@ -3,9 +3,9 @@
 //! 「后端一芯双壳」：`ReportModule`（进程内嵌，`/api/report-design/*` 由本进程 handler 处理）
 //! ↔ `ReportProxyModule`（引擎在**远程独立 cmx-rpt-server**，`/api/report-design/*` 透明转发到它）。
 //! 二者对 web-server 是同一个 `impl ModuleRoutes` 契约、同一批报表前缀——**前端零改**（浏览器仍
-//! 请求同源 `/api/report-design/...`），切换只看 `[center_client]` 的服务定位配置（per-key：
+//! 请求同源 `/api/report-design/...`），切换只看 `[service_rpc]` 的服务定位配置（per-key：
 //! `services.report` 配 url 静态基址或 discovery Nacos 选例，见
-//! `cmx_plugin::center_client::upstream::proxy_upstream`）。
+//! `cmx_service_rpc::locator`）。
 //!
 //! 与 flow 的差异：报表微服务的对外 URL 与平台**完全一致**（`/api/report-design/*`、
 //! `/api/report-source-bindings*`、`/api/rpt/compute`、`/api/consol/*`（合并报表），
@@ -91,7 +91,7 @@ fn report_target(report_base: &str, uri: &Uri) -> String {
 }
 
 // ============================================================================
-// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 [center_client] 的服务定位配置
+// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 [service_rpc] 的服务定位配置
 // 把**报表拥有的**页面取页请求反代到独立 cmx-rpt-server（它自暴同款字节对齐 API）。
 // ----------------------------------------------------------------------------
 // 与 API 反代的差异：native/html-pages 是**共享端点**（/api/native-pages/{id}），只有**部分 id**

@@ -43,7 +43,7 @@ impl TableDefinitionImporter for RemoteTableDefinitionImporter {
         // 表结构打包为 { "tables": [...] } 单文件 ZIP(对齐模块包格式)
         let payload = json!({ "tables": definitions, "app_id": app_id });
         let zip_data =
-            crate::center_client::packer::pack_payload_to_zip(&payload, "module_tables.json")
+            crate::service::remote_importers::packer::pack_payload_to_zip(&payload, "module_tables.json")
                 .map_err(|e| TraitError::Business(format!("打包表结构定义失败: {e}")))?;
 
         // 表结构归类到 Form 中心传输(元数据登记与表单共用基础设施);
@@ -61,7 +61,7 @@ impl TableDefinitionImporter for RemoteTableDefinitionImporter {
 
         let result = self
             .ctx
-            .send(crate::center_client::types::DataCategory::Form, req)
+            .send(crate::service::remote_importers::types::DataCategory::Form, req)
             .await
             .map_err(plugin_err_to_trait)?;
         info!(
@@ -89,7 +89,7 @@ impl TableDefinitionImporter for RemoteTableDefinitionImporter {
         };
         let result = self
             .ctx
-            .send_list(crate::center_client::types::DataCategory::Form, req)
+            .send_list(crate::service::remote_importers::types::DataCategory::Form, req)
             .await
             .map_err(plugin_err_to_trait)?;
         // 远程返回的是 JSON 数组,但 TableDefineImporter.list 返回的是 Vec<TableDefine>

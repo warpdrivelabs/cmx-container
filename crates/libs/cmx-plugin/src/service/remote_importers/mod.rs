@@ -2,16 +2,17 @@
 //!
 //! 把结构化定义序列化为 ZIP 后发送到远程中心,远程接收端解压 → 解析 → 调用 Local 实现入库。
 //!
-//! # 传输方式(按服务键 per-key,见 `center_client.services.{key}.transport`)
+//! # 传输方式(按服务键 per-key,见 `[service_rpc.services.{key}.transport`)
 //!
-//! - `grpc`:经 gRPC(`ResourceDataClient` → `CmxResourceDataService`)传输,需配 `discovery`
-//!   服务名(gRPC 经全局 RPC 客户端按服务名路由)
 //! - `http`(缺省,取全局 `default_transport`):经 HTTP multipart form-data 传输(POST 到各中心
-//!   `/import` 端点),定位用 `url` 静态基址或 `discovery` 服务发现选例
+//!   统一导入端点 `/api/plugin/data/import`),定位用 `url` 静态基址或 `discovery` 服务发现选例;
+//! - `grpc`:经 gRPC(`ResourceDataClient` → `CmxResourceDataService`)传输,需配 `discovery`
+//!   服务名(gRPC 经全局 RPC 客户端按服务名路由)。**需启用本 crate 的 `grpc` feature**
+//!   (默认不启用——五引擎消费链不背 volo 依赖树)。
 //!
-//! 不同数据类别(menu/perm/form)可混用传输——两路传输对 importer 透明:
-//! `RemoteImporterContext::send` 内部按该键的生效 transport 分发,
-//! 各 Remote importer 只调 `ctx.send(category, request)`,不感知传输细节。
+//! 传输 / 定位 / 鉴权链(`X-API-Key` + `X-Delegated-User-Token` + `X-Request-Id`) / 超时 /
+//! 重试 / 熔断全部由 `cmx-service-rpc` 基座承担;本模块只保留**接收端旧信封方言**
+//! (`{code:200,message}`)的自解析(标准 ApiResp 信封的解包在基座 `call_api`)。
 //!
 //! 与 Local 实现的关系:调用方(ModuleInstallService)持有 trait 对象,
 //! Local/Remote 切换时调用代码完全一致(透明)。
@@ -20,24 +21,31 @@
 
 pub mod form;
 pub mod menu;
+pub mod packer;
 pub mod permission;
 pub mod table;
+pub mod types;
 
 pub use form::RemoteFormDefinitionImporter;
 pub use menu::RemoteMenuDefinitionImporter;
 pub use permission::RemotePermissionDefinitionImporter;
 pub use table::RemoteTableDefinitionImporter;
+pub use types::DataCategory;
 
-use std::time::Duration;
+use std::sync::Arc;
 
-use crate::center_client::config::CenterClientConfig;
-use crate::center_client::types::DataCategory;
 use crate::error::{PluginError, PluginResult};
-use cmx_traits::auth::context_scope;
+use cmx_service_rpc::{RpcRequest, ServiceRpcConfig, ServiceRpcError, ServiceRpcHandle, TransportKind};
 use cmx_traits::error::TraitError;
 use cmx_traits::resource::{
     ResourceDataImportRequest, ResourceDataImportResult, ResourceDataListResult,
 };
+
+/// 统一导入端点(所有类别共用,接收端按 multipart 的 `category` 字段路由)。
+const HTTP_IMPORT_PATH: &str = "/api/plugin/data/import";
+
+/// 统一导出端点(导入端点的伴生查询)。
+const HTTP_LIST_PATH: &str = "/api/plugin/data/list";
 
 /// 将 [`PluginError`] 结构化映射为 [`TraitError`],保留远程/网络类别(避免全部坍缩为 Business 字符串)。
 ///
@@ -51,87 +59,55 @@ pub(crate) fn plugin_err_to_trait(e: PluginError) -> TraitError {
     }
 }
 
-/// 出站服务凭证（服务级 API Key，统一走 `X-API-Key`）。
-#[derive(Clone, Debug)]
-pub struct Credential {
-    /// 载荷（API Key 明文，`cmx_sk_xxx`）。
-    pub value: String,
+impl Default for RemoteImporterContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-/// 远程导入器共享上下文(服务定位配置 + 双传输通道)。
+/// 基座错误 → 插件错误(网络类保真,业务类进 CenterData)。
+fn rpc_err_to_plugin(e: ServiceRpcError) -> PluginError {
+    match e {
+        ServiceRpcError::Timeout { key, timeout_ms } => {
+            PluginError::Timeout(format!("服务 {key} 调用超时({timeout_ms}ms)"))
+        }
+        ServiceRpcError::Unavailable { key, cause } => {
+            PluginError::Network(format!("服务 {key} 不可达: {cause}"))
+        }
+        other => PluginError::CenterData(other.to_string()),
+    }
+}
+
+/// 远程导入器共享上下文(服务间统一调用基座句柄)。
 #[derive(Clone)]
 pub struct RemoteImporterContext {
-    /// 服务中心客户端配置(services 单表 + default_transport)
-    config: CenterClientConfig,
-    /// HTTP 客户端(transport=http 的键使用;无条件构造——reqwest 惰性连接,grpc-only 场景零开销)
-    http_client: Option<reqwest::Client>,
-    /// 本服务对外的服务级凭证（cmx_sk_xxx），出站请求统一注入。
-    outgoing_credential: Option<Credential>,
+    /// 基座句柄(目录 / 传输 / 鉴权 / 熔断)。
+    rpc: Arc<ServiceRpcHandle>,
 }
 
 impl RemoteImporterContext {
     /// 创建远程导入器上下文。
     ///
-    /// HTTP 客户端无条件构造(per-key 传输下 http/grpc 键可混存,构造期不预判哪些键走哪路;
-    /// reqwest 连接惰性建立,纯 gRPC 键不产生任何连接开销)。
-    pub fn new(config: CenterClientConfig) -> Self {
-        let timeout = Duration::from_millis(config.timeout_ms);
-        let http_client = Some(
-            reqwest::Client::builder()
-                .timeout(timeout)
-                .build()
-                .unwrap_or_else(|e| {
-                    tracing::error!(error = %e, "构建 reqwest Client 失败,降级默认客户端");
-                    reqwest::Client::new()
-                }),
-        );
-        Self {
-            config,
-            http_client,
-            outgoing_credential: None,
-        }
+    /// 优先取全局基座句柄(`init_infra` 已初始化);未初始化场景(单测 / 特殊装配)回退
+    /// 现场 load 配置构造——出站鉴权(`[service_auth].outgoing_api_key`)由基座统一注入,
+    /// 不再需要调用方手工传凭证。
+    pub fn new() -> Self {
+        let rpc = cmx_service_rpc::global_arc()
+            .unwrap_or_else(|| Arc::new(ServiceRpcHandle::new(ServiceRpcConfig::load())));
+        Self { rpc }
     }
 
-    /// 注入本服务对外的服务级凭证（来源：`[service_auth].outgoing_api_key`）。
-    ///
-    /// 构造后所有出站 HTTP 请求都会自动携带三层鉴权 header（服务身份 +
-    /// 委托用户 + 追踪）。委托用户与追踪信息从 task_local 读取。
-    pub fn with_credential(mut self, cred: Credential) -> Self {
-        self.outgoing_credential = Some(cred);
-        self
-    }
-
-    /// 统一给 reqwest 请求打上三层鉴权 header。
-    fn apply_auth_headers(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        let mut req = req;
-        // ① 服务身份层：X-API-Key（服务 key 不占用 Authorization，保持 Bearer 专用于 JWT）
-        if let Some(cred) = &self.outgoing_credential {
-            req = req.header("X-API-Key", &cred.value);
-        }
-        // ② 委托用户层：从 task_local 取当前请求的原始终端用户 JWT
-        if let Some(user_jwt) = context_scope::current_original_token() {
-            req = req.header("X-Delegated-User-Token", format!("Bearer {user_jwt}"));
-        }
-        // ③ 追踪层：请求 ID
-        if let Some(request_id) = context_scope::current_request_id() {
-            req = req.header("X-Request-Id", request_id);
-        }
-        req
-    }
-
-    /// 解析指定数据类别对应的服务名(discovery 定位 / grpc 传输使用,查 `services.{key}.discovery`)。
+    /// 解析指定数据类别对应的服务发现名(gRPC 传输使用,查 `services.{key}.discovery`)。
     pub fn resolve_service_name(&self, category: DataCategory) -> PluginResult<String> {
-        self.config
-            .services
-            .get(category.as_str())
-            .and_then(|e| e.discovery.as_deref())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
+        let key = category.as_str();
+        self.rpc
+            .directory()
+            .grpc_service_name(key)
+            .map(|(service, _group)| service)
             .ok_or_else(|| {
                 PluginError::CenterData(format!(
-                    "未配置 {} 的服务名(center_client.services.{}.discovery)",
+                    "未配置 {} 的服务名([service_rpc.services.{key}].discovery)",
                     category.center_name(),
-                    category.as_str()
                 ))
             })
     }
@@ -145,9 +121,9 @@ impl RemoteImporterContext {
         category: DataCategory,
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataImportResult> {
-        match self.config.transport_of(category.as_str()) {
-            "grpc" => self.send_via_grpc(category, request).await,
-            _ => self.send_via_http(category, request).await,
+        match self.rpc.directory().transport_of(category.as_str()) {
+            TransportKind::Grpc => self.send_via_grpc(category, request).await,
+            TransportKind::Http => self.send_via_http(category, request).await,
         }
     }
 
@@ -160,21 +136,22 @@ impl RemoteImporterContext {
         category: DataCategory,
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataListResult> {
-        match self.config.transport_of(category.as_str()) {
-            "grpc" => self.list_via_grpc(category, request).await,
-            _ => self.list_via_http(category, request).await,
+        match self.rpc.directory().transport_of(category.as_str()) {
+            TransportKind::Grpc => self.list_via_grpc(category, request).await,
+            TransportKind::Http => self.list_via_http(category, request).await,
         }
     }
 
     /// gRPC 查询:经 `cmx_resource_rpc::resource_data_client()` 调用远程 `ListResourceData`。
+    #[cfg(feature = "grpc")]
     async fn list_via_grpc(
         &self,
         category: DataCategory,
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataListResult> {
-        if !cmx_rpc::global::GlobalRpcClient::is_initialized() {
+        if !cmx_service_rpc::grpc::GlobalRpcClient::is_initialized() {
             return Err(PluginError::CenterData(format!(
-                "RPC 未初始化,无法远程导出 {} (transport=grpc 需启用 [rpc])",
+                "RPC 未初始化,无法远程导出 {} (transport=grpc 需启用 [service_rpc.server])",
                 category.center_name()
             )));
         }
@@ -191,66 +168,44 @@ impl RemoteImporterContext {
             })
     }
 
-    /// HTTP 查询:GET 到各中心 `/api/plugin/data/list` 端点,返回 JSON。
+    /// gRPC 未编译(feature 未启用)时的占位:显式报错而非静默回退。
+    #[cfg(not(feature = "grpc"))]
+    async fn list_via_grpc(
+        &self,
+        category: DataCategory,
+        _request: ResourceDataImportRequest,
+    ) -> PluginResult<ResourceDataListResult> {
+        Err(PluginError::CenterData(format!(
+            "transport=grpc 但 cmx-plugin 未启用 grpc feature,无法远程导出 {}",
+            category.center_name()
+        )))
+    }
+
+    /// HTTP 查询:GET 到各中心统一导出端点,返回 JSON。
     async fn list_via_http(
         &self,
         category: DataCategory,
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataListResult> {
-        let http_client = self.http_client.as_ref().ok_or_else(|| {
-            PluginError::CenterData("HTTP 客户端未初始化".to_string())
-        })?;
-
-        let url = self.resolve_http_url_for_list(category).await?;
-        tracing::info!(
-            category = category.as_str(),
-            %url,
-            "HTTP 远程导出"
-        );
-
-        // GET 查询参数
+        let key = category.as_str().to_string();
+        let req = RpcRequest::get(key.clone(), HTTP_LIST_PATH)
+            .query("category", request.category.as_str())
+            .query("domain_code", request.domain_code.as_str())
+            .query("application_code", request.application_code.as_str())
+            .query("module_code", request.module_code.as_str());
         let resp = self
-            .apply_auth_headers(http_client.get(&url).query(&[
-                ("category", request.category.as_str()),
-                ("domain_code", request.domain_code.as_str()),
-                ("application_code", request.application_code.as_str()),
-                ("module_code", request.module_code.as_str()),
-            ]))
-            .send()
+            .rpc
+            .execute(req)
             .await
-            .map_err(|e| {
-                PluginError::CenterData(format!(
-                    "HTTP 查询 {} 中心失败 ({}): {e}",
-                    category.center_name(),
-                    url
-                ))
-            })?;
+            .map_err(|e| annotate(rpc_err_to_plugin(e), category, "导出"))?;
 
-        let status = resp.status();
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| PluginError::CenterData(format!("读取 HTTP 响应体失败: {e}")))?;
-        if !status.is_success() {
-            return Err(PluginError::CenterData(format!(
-                "{} 中心返回 HTTP {}: {}",
-                category.center_name(),
-                status,
-                body
-            )));
-        }
-
-        // 解析 ApiResp { code, data: { json_data: "..." } } 响应
-        let json: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            PluginError::CenterData(format!(
-                "解析 {} 中心响应 JSON 失败: {e}",
-                category.center_name()
-            ))
-        })?;
-        let code = json.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
+        // 解析接收端旧信封 { code: 200, data: { json_data } }(code!=200 → 业务失败)。
+        let code = resp.body.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
         if code != 200 {
-            let msg = json
+            let msg = resp
+                .body
                 .get("message")
+                .or_else(|| resp.body.get("msg"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("未知错误");
             return Err(PluginError::CenterData(format!(
@@ -258,9 +213,9 @@ impl RemoteImporterContext {
                 category.center_name()
             )));
         }
-        let data = json.get("data").cloned().unwrap_or_default();
-        // 接收端返回 { json_data: "base64或JSON字符串" } 或直接是 JSON 数组
-        // 这里兼容两种格式:优先取 json_data 字段,否则把 data 本身作为 JSON
+        let data = resp.body.get("data").cloned().unwrap_or_default();
+        // 接收端返回 { json_data: "..." } 或直接是 JSON 数组,兼容两种格式:
+        // 优先取 json_data 字段,否则把 data 本身作为 JSON。
         let json_data = if let Some(jd) = data.get("jsonData").or_else(|| data.get("json_data")) {
             match jd {
                 serde_json::Value::String(s) => s.as_bytes().to_vec(),
@@ -276,26 +231,16 @@ impl RemoteImporterContext {
         })
     }
 
-    /// 解析 HTTP list 端点 URL(import 端点的 /import 替换为 /list)。
-    async fn resolve_http_url_for_list(&self, category: DataCategory) -> PluginResult<String> {
-        let import_url = self.resolve_http_url(category).await?;
-        // 把末尾 /import 替换为 /list;不以 /import 结尾则追加 /list
-        if import_url.ends_with("/import") {
-            Ok(format!("{}list", &import_url[..import_url.len() - 6]))
-        } else {
-            Ok(format!("{import_url}/list"))
-        }
-    }
-
     /// gRPC 传输:经 `cmx_resource_rpc::resource_data_client()` 调用远程 `CmxResourceDataService`。
+    #[cfg(feature = "grpc")]
     async fn send_via_grpc(
         &self,
         category: DataCategory,
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataImportResult> {
-        if !cmx_rpc::global::GlobalRpcClient::is_initialized() {
+        if !cmx_service_rpc::grpc::GlobalRpcClient::is_initialized() {
             return Err(PluginError::CenterData(format!(
-                "RPC 未初始化,无法远程导入 {} (transport=grpc 需启用 [rpc])",
+                "RPC 未初始化,无法远程导入 {} (transport=grpc 需启用 [service_rpc.server])",
                 category.center_name()
             )));
         }
@@ -312,115 +257,74 @@ impl RemoteImporterContext {
             })
     }
 
-    /// HTTP 传输:经 multipart form-data POST 到统一导入端点 `/api/plugin/data/import`。
+    /// gRPC 未编译(feature 未启用)时的占位:显式报错而非静默回退。
+    #[cfg(not(feature = "grpc"))]
+    async fn send_via_grpc(
+        &self,
+        category: DataCategory,
+        _request: ResourceDataImportRequest,
+    ) -> PluginResult<ResourceDataImportResult> {
+        Err(PluginError::CenterData(format!(
+            "transport=grpc 但 cmx-plugin 未启用 grpc feature,无法远程导入 {}",
+            category.center_name()
+        )))
+    }
+
+    /// HTTP 传输:经 multipart form-data POST 到统一导入端点(基座负责定位/鉴权/超时)。
     async fn send_via_http(
         &self,
         category: DataCategory,
         request: ResourceDataImportRequest,
     ) -> PluginResult<ResourceDataImportResult> {
-        let http_client = self.http_client.as_ref().ok_or_else(|| {
-            PluginError::CenterData("HTTP 客户端未初始化".to_string())
-        })?;
-
-        let url = self.resolve_http_url(category).await?;
-        tracing::info!(
-            category = category.as_str(),
-            %url,
-            "HTTP 远程导入"
-        );
-
-        // 构造 multipart form-data(对齐接收端 import_handler 的字段契约)
-        let part = reqwest::multipart::Part::bytes(request.zip_data.clone())
-            .file_name(format!("{}.zip", category.dir_name()))
-            .mime_str("application/zip")
-            .map_err(|e| PluginError::CenterData(format!("构造 multipart part 失败: {e}")))?;
-        let form = reqwest::multipart::Form::new()
-            .part("file", part)
-            .text("category", request.category.as_str().to_string())
-            .text("domain_code", request.domain_code.clone())
-            .text("application_code", request.application_code.clone())
-            .text("module_code", request.module_code.clone())
-            .text("plugin_id", request.plugin_id.clone())
-            .text("app_id", request.app_id.clone())
-            .text("version", request.version.clone());
-
+        let key = category.as_str().to_string();
+        let parts = vec![
+            cmx_service_rpc::FormPart::file(
+                "file",
+                format!("{}.zip", category.dir_name()),
+                "application/zip",
+                request.zip_data.clone(),
+            ),
+            cmx_service_rpc::FormPart::text("category", request.category.as_str()),
+            cmx_service_rpc::FormPart::text("domain_code", request.domain_code.clone()),
+            cmx_service_rpc::FormPart::text(
+                "application_code",
+                request.application_code.clone(),
+            ),
+            cmx_service_rpc::FormPart::text("module_code", request.module_code.clone()),
+            cmx_service_rpc::FormPart::text("plugin_id", request.plugin_id.clone()),
+            cmx_service_rpc::FormPart::text("app_id", request.app_id.clone()),
+            cmx_service_rpc::FormPart::text("version", request.version.clone()),
+        ];
+        let req = RpcRequest::post(key.clone(), HTTP_IMPORT_PATH).multipart(parts);
         let resp = self
-            .apply_auth_headers(http_client.post(&url).multipart(form))
-            .send()
+            .rpc
+            .execute(req)
             .await
-            .map_err(|e| {
-                PluginError::CenterData(format!(
-                    "HTTP 调用 {} 中心失败 ({}): {e}",
-                    category.center_name(),
-                    url
-                ))
-            })?;
-
-        let status = resp.status();
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| PluginError::CenterData(format!("读取 HTTP 响应体失败: {e}")))?;
-        if !status.is_success() {
-            return Err(PluginError::CenterData(format!(
-                "{} 中心返回 HTTP {}: {}",
-                category.center_name(),
-                status,
-                body
-            )));
-        }
-
-        // 解析响应(对接收端 ApiResp<ImportResultDto> 的 JSON)
-        parse_http_response(&body, category)
-    }
-
-    /// 解析 HTTP 端点 URL(定位 per-key:该键 url 静态基址或 discovery 服务发现选例)。
-    ///
-    /// - `services.{category}.url`:静态基址 + 统一导入端点路径(值不含路径——旧「完整端点」
-    ///   写法会在 config 加载时告警)
-    /// - `services.{category}.discovery`:复用 `center_client::upstream` 的共享选例核
-    ///   (healthy 过滤 + 随机 + `http_port` 元数据优先)解析实例基址,再拼统一端点路径
-    async fn resolve_http_url(&self, category: DataCategory) -> PluginResult<String> {
-        let entry = self.config.services.get(category.as_str());
-        // 静态基址优先(该键配了 url)。
-        if let Some(base) = entry
-            .and_then(|e| e.url.as_deref())
-            .map(|s| s.trim().trim_end_matches('/'))
-            .filter(|s| !s.is_empty())
-        {
-            return Ok(format!("{base}{}", category_to_http_import_path(category)));
-        }
-
-        // 服务发现定位:经共享选例核解析实例基址(与反代同一套负载均衡语义)。
-        let service_name = self.resolve_service_name(category)?;
-        let base = crate::center_client::upstream::resolve_service_base(&service_name).ok_or_else(
-            || {
-                PluginError::CenterData(format!(
-                    "服务发现未找到 {} 的可用实例 (service={})",
-                    category.center_name(),
-                    service_name
-                ))
-            },
-        )?;
-        Ok(format!("{base}{}", category_to_http_import_path(category)))
+            .map_err(|e| annotate(rpc_err_to_plugin(e), category, "导入"))?;
+        parse_http_response(&resp.body, category)
     }
 }
 
-/// 解析 HTTP 接收端响应(ApiResp<ImportResultDto> JSON)。
+/// 错误信息补上下文(中心名 + 动作),保留 Network/Timeout 分类(供 TraitError 映射)。
+fn annotate(e: PluginError, category: DataCategory, action: &str) -> PluginError {
+    let head = format!("HTTP {action} {} 中心失败", category.center_name());
+    match e {
+        PluginError::Network(msg) => PluginError::Network(format!("{head}: {msg}")),
+        PluginError::Timeout(msg) => PluginError::Timeout(format!("{head}: {msg}")),
+        other => other,
+    }
+}
+
+/// 解析 HTTP 接收端响应(旧信封 ApiResp<ImportResultDto> 的 JSON:`{code:200,message}`)。
 fn parse_http_response(
-    body: &str,
+    body: &serde_json::Value,
     category: DataCategory,
 ) -> PluginResult<ResourceDataImportResult> {
-    let json: serde_json::Value = serde_json::from_str(body).map_err(|e| {
-        PluginError::CenterData(format!(
-            "解析 {} 中心响应 JSON 失败: {e} (body={body})",
-            category.center_name()
-        ))
-    })?;
-    let code = json.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
+    let code = body.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
     if code != 200 {
-        let msg = json
+        let msg = body
             .get("message")
+            .or_else(|| body.get("msg"))
             .and_then(|v| v.as_str())
             .unwrap_or("未知错误");
         return Err(PluginError::CenterData(format!(
@@ -428,7 +332,7 @@ fn parse_http_response(
             category.center_name()
         )));
     }
-    let data = json.get("data").cloned().unwrap_or_default();
+    let data = body.get("data").cloned().unwrap_or_default();
     Ok(ResourceDataImportResult {
         success: data
             .get("success")
@@ -452,11 +356,4 @@ fn parse_http_response(
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as u32,
     })
-}
-
-/// 各 category 的 HTTP import 端点路径(http 传输拼接用)。
-///
-/// 所有类别统一走通用端点 `/api/plugin/data/import`,由接收端按 multipart 的 `category` 字段路由。
-fn category_to_http_import_path(_category: DataCategory) -> &'static str {
-    "/api/plugin/data/import"
 }

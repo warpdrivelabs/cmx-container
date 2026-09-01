@@ -36,7 +36,7 @@ use tracing::warn;
 
 /// 鉴权所需依赖。
 ///
-/// 注入到 [`crate::bundle::ServerDeps`]，由各领域 server impl 在构造时按需持有。
+/// 注入到 [`crate::grpc::bundle::ServerDeps`]，由各领域 server impl 在构造时按需持有。
 #[derive(Clone)]
 pub struct AuthVerifier {
     /// 认证服务（验证 API Key / JWT）。

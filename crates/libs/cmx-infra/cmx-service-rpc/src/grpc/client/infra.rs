@@ -14,7 +14,7 @@ use cmx_registry_config::registry::{ServiceInstanceCache, ServiceRegistry};
 use cmx_traits::rpc::RpcError;
 
 use crate::config::GrpcConfig;
-use crate::discover::RegistryAwareDiscover;
+use crate::grpc::discover::RegistryAwareDiscover;
 
 /// gRPC 共享基础设施。
 ///

@@ -14,7 +14,7 @@ authors.workspace = true
 
 [dependencies]
 # 内部依赖 - RPC 基础设施（Bundle trait / GrpcInfrastructure / apply_auth_metadata / 鉴权）
-cmx-rpc = { workspace = true }
+cmx-service-rpc = { workspace = true, features = ["grpc-server"] }
 # 内部依赖 - RPC proto 契约（volo-build 生成类型）
 cmx-rpc-gen = { workspace = true }
 # 内部依赖 - 特征定义（ResourceDataClient / ResourceDataImporter）

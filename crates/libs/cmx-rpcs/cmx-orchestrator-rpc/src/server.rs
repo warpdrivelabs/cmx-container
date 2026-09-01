@@ -11,7 +11,7 @@ use cmx_traits::function_invoker::FunctionInvoker;
 use cmx_traits::service::ServiceInvoker;
 use tracing::instrument;
 
-use cmx_rpc::{AuthVerifier, VerifiedAuth, verify_request};
+use cmx_service_rpc::grpc::{AuthVerifier, VerifiedAuth, verify_request};
 
 /// [`CmxServiceOrchestrator`] 的 gRPC 服务端实现。
 #[derive(Clone)]

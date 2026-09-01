@@ -17,7 +17,7 @@
 - `FlowProxyModule`：实现 `cmx-api-core` 的 `ModuleRoutes` 契约，把平台 `/api/flow/*` 透明转发到远程 flow-server。路径映射为 `/flow/{rest}` → `{flow_base}/api/flow/v1/{rest}`（**升级到 v1 正式契约**），query 原样透传，body 双向流式（SSE 逐块透传）。
 - `with_flow_page_proxy`：页面反代中间件层，把**流程拥有的** native/html 单页取页请求（如 `/api/native-pages/portal.flow.todo`）转发到 flow-server（它自暴同款字节对齐 API），其余页请求落回门户内嵌 handler。
 
-是否挂流程路由只看 `[center_client]` 的服务定位配置（per-key：`services.flow` 配 url 静态基址或 discovery Nacos 选例）——配了才挂，**前端零改**（浏览器仍请求同源 `/api/flow/...`）。目标经 `UpstreamResolver` 按请求动态解析（静态基址 / Nacos 选例），无可用实例返回 503。
+是否挂流程路由只看 `[service_rpc]` 的服务定位配置（per-key：`services.flow` 配 url 静态基址或 discovery Nacos 选例）——配了才挂，**前端零改**（浏览器仍请求同源 `/api/flow/...`）。目标经 `UpstreamResolver` 按请求动态解析（静态基址 / Nacos 选例），无可用实例返回 503。
 
 ### 三层出站鉴权
 
@@ -55,7 +55,7 @@ flow-server 的 S6 认证桥据此：API Key 验服务身份，委托令牌解�
 
 | 使用方 | 引用方式 | 实际用途 |
 |--------|---------|---------|
-| `cmx-platform-app` | `cmx-flow-api = { workspace = true }` | 门户组装层 `merge_flow`：`flow_upstream()`（`[center_client.services].flow` per-key 定位）非空时 merge `FlowProxyModule::routes()` 并叠加 `with_flow_page_proxy` 页面反代层；未配置则不挂流程路由 |
+| `cmx-platform-app` | `cmx-flow-api = { workspace = true }` | 门户组装层 `merge_flow`：`flow_upstream()`（`[service_rpc.services].flow` per-key 定位）非空时 merge `FlowProxyModule::routes()` 并叠加 `with_flow_page_proxy` 页面反代层；未配置则不挂流程路由 |
 
 被反代的微服务（本 crate 编译期不可见）：`../cmx-flowengine` 的 `cmx-flow-server`。
 
@@ -123,8 +123,8 @@ use axum::Router;
 use cmx_api_core::CmxAppState;
 use cmx_flow_api::{FlowProxyModule, with_flow_page_proxy};
 
-/// 目标来自 `[center_client]` 服务定位配置（per-key）；未配置（None）则不挂流程路由。
-fn merge_flow(router: Router<CmxAppState>, upstream: Option<cmx_plugin::center_client::ProxyUpstream>) -> Router<CmxAppState> {
+/// 目标来自 `[service_rpc]` 服务定位配置（per-key）；未配置（None）则不挂流程路由。
+fn merge_flow(router: Router<CmxAppState>, upstream: Option<cmx_service_rpc::Locator>) -> Router<CmxAppState> {
     match upstream {
         Some(upstream) => {
             // 出站服务凭证：[service_auth].outgoing_api_key（可空）

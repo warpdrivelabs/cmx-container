@@ -1,20 +1,20 @@
-//! RPC 子系统初始化（feature `rpc`）。
+//! gRPC 服务端子系统初始化（feature `rpc`）。
 //!
-//! 从 web-server `config/rpc.rs` **提取的通用部分**：`init_rpc`（gRPC 客户端 + 服务端启动 +
-//! 缓存预热）、`load_rpc_config`（读 `[rpc]` 段）、`load_service_auth_config`（读 `[service_auth]`
-//! 段）。RPC 是通用微服务能力（服务间调用），非 portal 专属。
+//! 原 `[rpc]` 段已并入 `[service_rpc.server]`（统一服务间调用目录的 server 半边）；
+//! gRPC 设施本体在 `cmx-service-rpc` 的 `grpc-server` feature（本 feature 透传启用）。
+//! `init_rpc`（gRPC 客户端 + 服务端启动 + 缓存预热）、`load_rpc_config`（读
+//! `[service_rpc.server]` 段）、`load_service_auth_config`（读 `[service_auth]` 段）。
 //!
 //! ★ 关键（trait/hook 拆分，同 [`crate::wasm`]）：`init_rpc` 本就是**注入式**——`function_invoker`
 //! 作参数由调用方在组装层构造后传入。portal 专属的 `build_function_invoker()`（绑 cmx-biz
-//! `BizFunctionInvoker`）与 `load_outgoing_credential()`（绑 cmx-plugin `Credential`）**留 portal**，
-//! 不在本库。故本模块只依赖 cmx-rpc + cmx-registry-config + cmx-traits，**不碰 cmx-biz/cmx-plugin/cmx-api**。
+//! `BizFunctionInvoker`）留 portal，不在本库。故本模块只依赖 cmx-service-rpc +
+//! cmx-registry-config + cmx-traits，**不碰 cmx-biz/cmx-plugin/cmx-api**。
 
 use std::sync::Arc;
 
 use cmx_registry_config::GlobalServiceInstanceCache;
-use cmx_rpc::bundle::{RpcServiceBundle, ServerDeps};
-use cmx_rpc::config::RpcConfig;
-use cmx_rpc::{AuthVerifier, init_rpc_clients, start_grpc_server};
+use cmx_service_rpc::ServerConfig;
+use cmx_service_rpc::grpc::{AuthVerifier, RpcServiceBundle, ServerDeps, init_rpc_clients, start_grpc_server};
 use cmx_traits::auth::AuthService;
 use cmx_traits::function_invoker::FunctionInvoker;
 use cmx_traits::resource::ResourceDataImporter;
@@ -170,12 +170,13 @@ pub async fn init_rpc(
     Ok(Some(grpc_port))
 }
 
-/// 从全局配置加载 RPC 配置。
+/// 从全局配置加载 gRPC 服务端配置（`[service_rpc.server]` 段；缺段 = 未启用）。
 ///
-/// 使用 `Option` 包裹，因为旧配置文件可能没有 `[rpc]` 段。
 /// `pub(crate)` 供 [`crate::registry_config`] 的 `inject_rpc_metadata` 读 grpc_port。
-pub(crate) fn load_rpc_config() -> Option<RpcConfig> {
-    ConfigManager::global().get_as::<RpcConfig>("rpc").ok()
+pub(crate) fn load_rpc_config() -> Option<ServerConfig> {
+    ConfigManager::global()
+        .get_as::<ServerConfig>("service_rpc.server")
+        .ok()
 }
 
 /// 从全局配置加载 `[service_auth]` 段。

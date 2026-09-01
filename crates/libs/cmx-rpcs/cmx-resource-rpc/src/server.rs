@@ -12,7 +12,7 @@ use cmx_traits::resource::{
 };
 use tracing::instrument;
 
-use cmx_rpc::{AuthVerifier, VerifiedAuth, verify_request};
+use cmx_service_rpc::grpc::{AuthVerifier, VerifiedAuth, verify_request};
 
 /// [`resource_data_proto::CmxResourceDataService`] 的 gRPC 服务端实现。
 #[derive(Clone)]

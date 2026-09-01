@@ -21,7 +21,7 @@ static INITIALIZED: OnceLock<()> = OnceLock::new();
 impl GlobalRpcClient {
     /// 标记全局 RPC 已初始化。
     ///
-    /// 由 [`crate::factory::init_rpc_clients`] 在所有 Bundle 客户端初始化完成后调用。
+    /// 由 [`crate::grpc::factory::init_rpc_clients`] 在所有 Bundle 客户端初始化完成后调用。
     /// 只能调用一次，重复调用返回 [`GlobalRpcClientAlreadySetError`]。
     pub(crate) fn mark_initialized() -> Result<(), GlobalRpcClientAlreadySetError> {
         INITIALIZED

@@ -6,7 +6,7 @@
 
 | crate | 说明 |
 | --- | --- |
-| `cmx-mdm-proxy` | 平台反代薄壳：`MdmProxyModule` 把门户 `/api/mdm/*` + `portal.mdm.*` native 页取页请求透明转发到独立 cmx-mdm-server（`[center_client.services].mdm` per-key 定位）。**无进程内嵌兜底**：没配目标 = 门户不挂 `/api/mdm/*` 路由 |
+| `cmx-mdm-proxy` | 平台反代薄壳：`MdmProxyModule` 把门户 `/api/mdm/*` + `portal.mdm.*` native 页取页请求透明转发到独立 cmx-mdm-server（`[service_rpc.services].mdm` per-key 定位）。**无进程内嵌兜底**：没配目标 = 门户不挂 `/api/mdm/*` 路由 |
 
 引擎三件套（`cmx-mdm-model` / `cmx-mdm-store-pg` / `cmx-mdm-app` 中立核）与
 `cmx-mdm-server`（:8095 chassis bin）已物理迁至独立 workspace `../../../cmx-mdm`

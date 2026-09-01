@@ -34,7 +34,7 @@ impl MenuDefinitionImporter for RemoteMenuDefinitionImporter {
             return Ok(0);
         }
         // 结构体 → ZIP(menu_0.json, menu_1.json ...)
-        let zip_data = crate::center_client::packer::pack_definitions_to_zip(definitions, "menu")
+        let zip_data = crate::service::remote_importers::packer::pack_definitions_to_zip(definitions, "menu")
             .map_err(|e| TraitError::Business(format!("打包菜单定义失败: {e}")))?;
 
         let req = ResourceDataImportRequest {
@@ -50,7 +50,7 @@ impl MenuDefinitionImporter for RemoteMenuDefinitionImporter {
 
         let result = self
             .ctx
-            .send(crate::center_client::types::DataCategory::Menu, req)
+            .send(crate::service::remote_importers::types::DataCategory::Menu, req)
             .await
             .map_err(plugin_err_to_trait)?;
         info!(
@@ -77,7 +77,7 @@ impl MenuDefinitionImporter for RemoteMenuDefinitionImporter {
         };
         let result = self
             .ctx
-            .send_list(crate::center_client::types::DataCategory::Menu, req)
+            .send_list(crate::service::remote_importers::types::DataCategory::Menu, req)
             .await
             .map_err(plugin_err_to_trait)?;
         serde_json::from_slice(&result.json_data)

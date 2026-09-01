@@ -9,10 +9,10 @@ use std::sync::Arc;
 use cmx_registry_config::registry::{ServiceInstanceCache, ServiceRegistry};
 use cmx_traits::rpc::RpcError;
 
-use crate::bundle::RpcServiceBundle;
-use crate::client::infra::GrpcInfrastructure;
-use crate::config::RpcConfig;
-use crate::global::{GlobalRpcClient, GlobalRpcClientAlreadySetError};
+use crate::grpc::bundle::RpcServiceBundle;
+use crate::grpc::client::infra::GrpcInfrastructure;
+use crate::config::ServerConfig;
+use crate::grpc::global::{GlobalRpcClient, GlobalRpcClientAlreadySetError};
 
 /// 客户端初始化错误。
 #[derive(thiserror::Error, Debug)]
@@ -28,7 +28,7 @@ pub enum ClientInitError {
 /// 初始化调用方传入的领域客户端。
 ///
 /// 返回传入的 Bundle 列表（已完成客户端初始化），调用方应将其传给
-/// [`crate::server_runner::start_grpc_server`] 以注册服务端。
+/// [`crate::grpc::server_runner::start_grpc_server`] 以注册服务端。
 ///
 /// # Arguments
 ///
@@ -43,7 +43,7 @@ pub enum ClientInitError {
 /// - [`ClientInitError::Rpc`]：协议不是 `"grpc"`。
 /// - [`ClientInitError::AlreadySet`]：重复初始化。
 pub fn init_rpc_clients(
-    config: &RpcConfig,
+    config: &ServerConfig,
     cache: Arc<ServiceInstanceCache>,
     registry: Arc<dyn ServiceRegistry>,
     outbound_service_key: Option<String>,

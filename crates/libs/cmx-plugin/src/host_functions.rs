@@ -217,13 +217,14 @@ impl PluginHostFunctions {
     //     Ok(rmp_serde::to_vec(&info).unwrap_or_default())
     // }
 
-    /// 通过 RPC 调用远程插件函数
+    /// 通过 RPC 调用远程插件函数（grpc feature 门控；未编译时返回未启用错误响应）。
+    #[cfg(feature = "grpc")]
     fn do_call_plugin_via_rpc(
         &self,
         server_name: &str,
         req: &PluginFunRequest,
     ) -> Result<Vec<u8>, HostFuncError> {
-        if !cmx_rpc::GlobalRpcClient::is_initialized() {
+        if !cmx_service_rpc::grpc::GlobalRpcClient::is_initialized() {
             return Ok(Self::err_plugin_response_msgpack(
                 "RPC 服务未启用，无法进行跨服务调用".to_string(),
             ));
@@ -258,13 +259,14 @@ impl PluginHostFunctions {
         }
     }
 
-    /// 通过 RPC 调用远程服务编排
+    /// 通过 RPC 调用远程服务编排（grpc feature 门控）。
+    #[cfg(feature = "grpc")]
     fn do_call_service_via_rpc(
         &self,
         server_name: &str,
         req: &CallServiceRequest,
     ) -> Result<Vec<u8>, HostFuncError> {
-        if !cmx_rpc::GlobalRpcClient::is_initialized() {
+        if !cmx_service_rpc::grpc::GlobalRpcClient::is_initialized() {
             return Ok(Self::err_service_response_msgpack(
                 "RPC 服务未启用，无法进行跨服务调用".to_string(),
             ));
@@ -292,6 +294,30 @@ impl PluginHostFunctions {
                 )))
             }
         }
+    }
+
+    /// [`Self::do_call_plugin_via_rpc`] 的未编译 grpc 占位。
+    #[cfg(not(feature = "grpc"))]
+    fn do_call_plugin_via_rpc(
+        &self,
+        _server_name: &str,
+        _req: &PluginFunRequest,
+    ) -> Result<Vec<u8>, HostFuncError> {
+        Ok(Self::err_plugin_response_msgpack(
+            "RPC 服务未启用（未编译 grpc feature），无法进行跨服务调用".to_string(),
+        ))
+    }
+
+    /// [`Self::do_call_service_via_rpc`] 的未编译 grpc 占位。
+    #[cfg(not(feature = "grpc"))]
+    fn do_call_service_via_rpc(
+        &self,
+        _server_name: &str,
+        _req: &CallServiceRequest,
+    ) -> Result<Vec<u8>, HostFuncError> {
+        Ok(Self::err_service_response_msgpack(
+            "RPC 服务未启用（未编译 grpc feature），无法进行跨服务调用".to_string(),
+        ))
     }
 
     fn err_plugin_response_msgpack(msg: String) -> Vec<u8> {

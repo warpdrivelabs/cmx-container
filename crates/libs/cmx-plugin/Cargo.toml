@@ -3,6 +3,10 @@ name = "cmx-plugin"
 version.workspace = true
 edition.workspace = true
 
+[features]
+# gRPC 导入传输（transport=grpc 的远程导入键需要；拉起皮肤 crate 与基座 grpc-client）
+grpc = ["dep:cmx-orchestrator-rpc", "dep:cmx-resource-rpc", "cmx-service-rpc/grpc-client"]
+
 [dependencies]
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
@@ -17,10 +21,11 @@ cmx-utils = { workspace = true }
 # 内部依赖 - 特征定义
 cmx-traits = { workspace = true }
 # 内部依赖 - RPC 通信
-cmx-rpc = { workspace = true }
-# RPC 皮肤（orchestrator/resource_data 访问器；GlobalRpcClient 守卫仍在 cmx-rpc）
-cmx-orchestrator-rpc = { workspace = true }
-cmx-resource-rpc = { workspace = true }
+# 服务间统一调用基座（目录 / 传输 / 鉴权 / 熔断；默认 http feature）
+cmx-service-rpc = { workspace = true }
+# RPC 皮肤（orchestrator/resource_data 访问器；grpc feature 门控——五引擎消费链不背 volo 依赖树）
+cmx-orchestrator-rpc = { workspace = true, optional = true }
+cmx-resource-rpc = { workspace = true, optional = true }
 # 内部依赖 - 服务注册发现
 cmx-registry-config = { workspace = true }
 # 内部依赖 - 服务

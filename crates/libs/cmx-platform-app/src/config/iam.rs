@@ -122,35 +122,23 @@ pub async fn init_iam_services(
         .with_menu_importer(receiver_menu_importer.clone()),
     );
 
-    // 按 center_client.services 是否配置远程导入键(menu/perm/form)选择 DefinitionImporterBundle
+    // 按 [service_rpc.services] 是否配置远程导入键(menu/perm/form)选择 DefinitionImporterBundle
     // 的实现(发送端):
     // - 未配置(默认): 本地实现(直调 Service,无网络开销)
     // - 配置任一键: 远程实现(传输 per-key:grpc 键走 gRPC,http 键走 HTTP,见 remote_importers)
-    let center_config = cmx_plugin::center_client::CenterClientConfig::load();
-    let is_remote = center_config.has_remote_import_keys();
-    let definition_importers: Arc<cmx_traits::resource::DefinitionImporterBundle> = if is_remote {
+    let remote_keys: Vec<&str> = ["menu", "perm", "form"]
+        .into_iter()
+        .filter(|k| {
+            cmx_service_rpc::global()
+                .is_some_and(|h| h.directory().contains(k))
+        })
+        .collect();
+    let definition_importers: Arc<cmx_traits::resource::DefinitionImporterBundle> = if !remote_keys.is_empty() {
         tracing::info!(
-            remote_keys = ?["menu", "perm", "form"]
-                .into_iter()
-                .filter(|k| center_config.services.contains_key(*k))
-                .collect::<Vec<_>>(),
+            remote_keys = ?remote_keys,
             "模块资源导入器: 远程模式(per-key 定位+传输)"
         );
-        let remote_ctx = {
-            let ctx =
-                cmx_plugin::service::remote_importers::RemoteImporterContext::new(center_config);
-            // 注入服务级凭证（来自 [service_auth].outgoing_api_key）
-            match crate::config::rpc::load_outgoing_credential() {
-                Some(cred) => ctx.with_credential(cred),
-                None => {
-                    tracing::warn!(
-                        "远程模式未配置服务对外凭证 [service_auth].outgoing_api_key，\
-                         跨服务 HTTP 调用将无法通过接收端 mw_auth 鉴权"
-                    );
-                    ctx
-                }
-            }
-        };
+        let remote_ctx = cmx_plugin::service::remote_importers::RemoteImporterContext::new();
         Arc::new(cmx_traits::resource::DefinitionImporterBundle {
             form: Arc::new(
                 cmx_plugin::service::remote_importers::RemoteFormDefinitionImporter::new(

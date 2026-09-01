@@ -26,7 +26,7 @@ authors.workspace = true
 #   plugins           插件管理器 init（拉 cmx-plugin + cmx-database）。
 #   wasm              WASM 运行时 init（拉 cmx-runtime + cmx-traits）；IAM/plugin host-fn provider 由 portal 注入。
 #   registry-config   全局配置/Nacos init_infra/shutdown_infra（拉 cmx-registry-config + cmx-utils + tokio + local-ip-address）。
-#   rpc               RPC 子系统 init_rpc（拉 cmx-rpc + cmx-registry-config + cmx-traits + cmx-utils + tokio）；
+#   rpc               gRPC 服务端子系统 init_rpc（拉 cmx-service-rpc 的 grpc-server feature）；
 #                     function_invoker 由 portal 注入（build_function_invoker 绑 cmx-biz 留 portal），本库不碰 cmx-biz。
 #
 # flow 用 default-features=false → 上述可选依赖一个不拉，跨 ws 消费不膨胀。
@@ -42,8 +42,8 @@ storage = ["dep:cmx-storage", "dep:cmx-database", "dep:cmx-utils"]
 services = ["dep:cmx-service", "dep:cmx-runtime", "dep:cmx-traits", "dep:cmx-database", "dep:cmx-utils", "dep:cmx-plugin"]
 plugins = ["dep:cmx-plugin", "dep:cmx-database", "dep:cmx-utils"]
 wasm = ["dep:cmx-runtime", "dep:cmx-traits", "dep:cmx-database", "dep:cmx-utils", "dep:cmx-buffer", "dep:cmx-http"]
-registry-config = ["dep:cmx-registry-config", "dep:cmx-utils", "dep:tokio", "dep:local-ip-address"]
-rpc = ["dep:cmx-rpc", "dep:cmx-registry-config", "dep:cmx-traits", "dep:cmx-utils", "dep:tokio"]
+registry-config = ["dep:cmx-registry-config", "dep:cmx-service-rpc", "dep:cmx-utils", "dep:tokio", "dep:local-ip-address"]
+rpc = ["cmx-service-rpc/grpc-server", "dep:cmx-registry-config", "dep:cmx-traits", "dep:cmx-utils", "dep:tokio"]
 
 [dependencies]
 # —— 轻量核（default，跨 workspace 安全）——
@@ -69,7 +69,7 @@ cmx-service = { workspace = true, optional = true }         # services
 cmx-plugin = { workspace = true, optional = true }          # plugins
 cmx-runtime = { workspace = true, optional = true }         # services / wasm
 cmx-registry-config = { workspace = true, optional = true } # registry-config / rpc
-cmx-rpc = { workspace = true, optional = true }             # rpc
+cmx-service-rpc = { workspace = true, optional = true }     # registry-config（服务间统一调用基座，默认 http feature）
 local-ip-address = { workspace = true, optional = true }    # registry-config
 tokio = { workspace = true, optional = true }               # registry-config / rpc
 

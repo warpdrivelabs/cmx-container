@@ -16,6 +16,7 @@ members = [
     "crates/libs/cmx-infra/cmx-http",
 #    "crates/libs/cmx-infra/cmx-nacos",
     "crates/libs/cmx-infra/cmx-registry-config",
+    "crates/libs/cmx-infra/cmx-service-rpc",
     "crates/libs/cmx-infra/cmx-storage",
     "crates/libs/cmx-infra/cmx-audit",
     "crates/libs/cmx-infra/cmx-auth",
@@ -54,7 +55,6 @@ members = [
     "crates/libs/cmx-meta/cmx-meta-proxy",
     "crates/libs/cmx-dataauth/cmx-dataauth-proxy",
     "crates/libs/cmx-rpc-gen",
-    "crates/libs/cmx-infra/cmx-rpc",
     # —— RPC 皮肤薄 crate（gRPC 服务归域，集中 cmx-rpcs/，对称 cmx-apis/）——
     "crates/libs/cmx-rpcs/cmx-orchestrator-rpc",
     "crates/libs/cmx-rpcs/cmx-resource-rpc",
@@ -63,6 +63,7 @@ members = [
     # 独立 workspace ../cmx-flowengine/（S0：独立流程微服务）。此处仅保留平台适配层
     # cmx-flow-api，它经 [workspace.dependencies] 跨 workspace 路径引用迁走的引擎 crate。
     "crates/libs/cmx-flow/cmx-flow-api",
+    "crates/libs/cmx-flow/cmx-flow-sdk",
     # 报表模块中立 crate（model/formula/store-pg）+ 中立核 cmx-rpt-app 已迁至独立 workspace
     # ../cmx-report/（对标 flow S0：独立报表平台微服务）。此处仅保留平台**反代**层 cmx-rpt-api
     # （proxy-only，不再依赖 cmx-rpt-app；门户编译期不碰报表引擎源码）。
@@ -75,6 +76,7 @@ members = [
     "crates/libs/cmx-job/cmx-job-store-pg",
     "crates/libs/cmx-job/cmx-job-api",
     "crates/libs/cmx-mdm/cmx-mdm-proxy",
+    "crates/libs/cmx-mdm/cmx-mdm-sdk",
     "crates/libs/modql/modql-macros",
     "crates/libs/modql",
     "sdk/cmx-cli",
@@ -163,7 +165,9 @@ cmx-ai = { path = "crates/libs/cmx-ai", version = "0.1.12", registry = "nora" }
 #cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 注册中心与配置中心
 cmx-registry-config = { path = "crates/libs/cmx-infra/cmx-registry-config", version = "0.1.12", registry = "nora" }
-cmx-rpc = { path = "crates/libs/cmx-infra/cmx-rpc", version = "0.1.12", registry = "nora" }
+cmx-service-rpc = { path = "crates/libs/cmx-infra/cmx-service-rpc", version = "0.1.12", registry = "nora" }
+cmx-flow-sdk = { path = "crates/libs/cmx-flow/cmx-flow-sdk", version = "0.1.12", registry = "nora" }
+cmx-mdm-sdk = { path = "crates/libs/cmx-mdm/cmx-mdm-sdk", version = "0.1.12", registry = "nora" }
 # 内部依赖 - RPC 代码生成
 cmx-rpc-gen = { path = "crates/libs/cmx-rpc-gen", version = "0.1.12", registry = "nora" }
 # 内部依赖 - RPC 皮肤（服务编排域 / 资源数据管理域 gRPC 皮肤）

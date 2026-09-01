@@ -17,9 +17,9 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 use tracing::instrument;
 
-use cmx_rpc::bundle::{RpcServiceBundle, ServerDeps, ServerRegistration};
+use cmx_service_rpc::grpc::bundle::{RpcServiceBundle, ServerDeps, ServerRegistration};
 // with_retry 的 RetryStats 仅由元组解构推断，不需导入类型名（避免 unused_imports）
-use cmx_rpc::{GrpcInfrastructure, safe_parse_json, with_retry};
+use cmx_service_rpc::grpc::{GrpcInfrastructure, safe_parse_json, with_retry};
 
 // ==================== 领域全局访问器 ====================
 
@@ -29,11 +29,11 @@ pub(crate) fn set_client(c: Arc<dyn ServiceOrchestrationClient>) -> Result<(), (
     ORCHESTRATOR_CLIENT.set(c).map_err(|_| ())
 }
 
-/// 获取服务编排 RPC 客户端（须先通过 [`cmx_rpc::init_rpc_clients`] 初始化）。
+/// 获取服务编排 RPC 客户端（须先通过 [`cmx_service_rpc::grpc::init_rpc_clients`] 初始化）。
 ///
 /// # Panics
 ///
-/// 未初始化时 panic。先用 [`cmx_rpc::GlobalRpcClient::is_initialized`] 守卫。
+/// 未初始化时 panic。先用 [`cmx_service_rpc::grpc::GlobalRpcClient::is_initialized`] 守卫。
 pub fn orchestrator_client() -> &'static Arc<dyn ServiceOrchestrationClient> {
     ORCHESTRATOR_CLIENT
         .get()
@@ -128,7 +128,7 @@ impl ServiceOrchestrationClient for OrchestratorGrpcClient {
             };
             let mut grpc_req = volo_grpc::Request::new(req);
             if let Some(key) = outbound_key.as_deref() {
-                cmx_rpc::apply_auth_metadata(&mut grpc_req, key);
+                cmx_service_rpc::grpc::apply_auth_metadata(&mut grpc_req, key);
             }
             let client = client.clone();
             async move { client.execute_service(grpc_req).await }
@@ -193,7 +193,7 @@ impl ServiceOrchestrationClient for OrchestratorGrpcClient {
             };
             let mut grpc_req = volo_grpc::Request::new(req);
             if let Some(key) = outbound_key.as_deref() {
-                cmx_rpc::apply_auth_metadata(&mut grpc_req, key);
+                cmx_service_rpc::grpc::apply_auth_metadata(&mut grpc_req, key);
             }
             let client = client.clone();
             async move { client.call_function(grpc_req).await }

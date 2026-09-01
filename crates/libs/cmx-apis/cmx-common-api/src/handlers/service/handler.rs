@@ -566,14 +566,38 @@ pub async fn execute_service_by_key(
 
 // ==================== 跨服务 RPC 调用辅助函数 ====================
 
+/// [`call_function_via_rpc`] 的未编译 grpc 占位。
+#[cfg(not(feature = "grpc"))]
+async fn call_function_via_rpc(
+    _server_name: &str,
+    _req: &FunctionCallRequest,
+) -> Result<Json<ApiResp<FunctionCallResponse>>, Error> {
+    Err(Error::business_error(
+        "RPC 服务未启用（未编译 grpc feature），无法进行跨服务调用",
+    ))
+}
+
+/// [`execute_service_via_rpc`] 的未编译 grpc 占位。
+#[cfg(not(feature = "grpc"))]
+async fn execute_service_via_rpc(
+    _server_name: &str,
+    _service_key: &str,
+    _req: &ServiceExecuteRequest,
+) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
+    Err(Error::business_error(
+        "RPC 服务未启用（未编译 grpc feature），无法进行跨服务调用",
+    ))
+}
+
 /// 通过 RPC 调用远程插件函数
 ///
 /// 当请求中指定了 `server_name` 时，通过 gRPC 将请求路由到远程服务执行。
+#[cfg(feature = "grpc")]
 async fn call_function_via_rpc(
     server_name: &str,
     req: &FunctionCallRequest,
 ) -> Result<Json<ApiResp<FunctionCallResponse>>, Error> {
-    if !cmx_rpc::GlobalRpcClient::is_initialized() {
+    if !cmx_service_rpc::grpc::GlobalRpcClient::is_initialized() {
         return Err(Error::business_error("RPC 服务未启用，无法进行跨服务调用"));
     }
     let result = cmx_orchestrator_rpc::orchestrator_client()
@@ -597,12 +621,13 @@ async fn call_function_via_rpc(
 /// 通过 RPC 调用远程服务编排
 ///
 /// 当请求中指定了 `server_name` 时，通过 gRPC 将服务编排请求路由到远程服务执行。
+#[cfg(feature = "grpc")]
 async fn execute_service_via_rpc(
     server_name: &str,
     service_key: &str,
     req: &ServiceExecuteRequest,
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
-    if !cmx_rpc::GlobalRpcClient::is_initialized() {
+    if !cmx_service_rpc::grpc::GlobalRpcClient::is_initialized() {
         return Err(Error::business_error("RPC 服务未启用，无法进行跨服务调用"));
     }
     let options = ServiceInvokeOptions {

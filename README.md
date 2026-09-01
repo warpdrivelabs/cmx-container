@@ -42,7 +42,7 @@
     │ 协议皮肤：cmx-apis/（HTTP：api-core + 各域 *-api）                 │
     │           cmx-rpcs/（gRPC：orchestrator-rpc · resource-rpc）       │
     │           反代薄壳：flow-api / rpt-api / rule-api /                │
-    │           model-proxy / mdm-proxy（proxy-only，核 cmx-proxy-core） │
+    │           model-proxy / mdm-proxy / meta-proxy（cmx-proxy-core） │
     ├──────────────────────────────────────────────────────────────────┤
     │ 域层：cmx-biz · cmx-iam · cmx-plugin · cmx-ai · cmx-form          │
     │       cmx-job/* · cmx-metadata                                │
@@ -53,7 +53,7 @@
     ├──────────────────────────────────────────────────────────────────┤
     │ 基础设施 cmx-infra/：cmx-database(sqlx) · cmx-database-pg          │
     │   cmx-rowsource · cmx-buffer(Redis) · cmx-storage(opendal)        │
-    │   cmx-rpc(volo gRPC) · cmx-registry-config(Nacos/Mock)            │
+    │   cmx-service-rpc(服务间调用) · cmx-registry-config(Nacos/Mock)  │
     │   cmx-auth(认证) · cmx-audit(审计) · cmx-nacos(已停用)             │
     ├──────────────────────────────────────────────────────────────────┤
     │ 基础层：cmx-core · cmx-traits · cmx-utils · cmx-macros · modql    │
@@ -119,7 +119,7 @@ cmx-container/
 | [cmx-rowsource](crates/libs/cmx-infra/cmx-rowsource/README.md) | 驱动无关行来源抽象 + 零拷贝列式编码 |
 | [cmx-buffer](crates/libs/cmx-infra/cmx-buffer/README.md) | Redis 缓存 + moka 本地缓存 + 分布式锁 |
 | [cmx-storage](crates/libs/cmx-infra/cmx-storage/README.md) | opendal 本地/S3 对象存储 + 秒传 + 缩略图 |
-| [cmx-rpc](crates/libs/cmx-infra/cmx-rpc/README.md) | volo gRPC 客户端/服务端设施 + 服务发现 + 重试 |
+| [cmx-service-rpc](crates/libs/cmx-infra/cmx-service-rpc/README.md) | 微服务间东西向调用统一基座：`[service_rpc]` 服务目录 + HTTP 传输（熔断/幂等重试/打点/鉴权注入）+ gRPC 模块（feature 门控，吸收自 cmx-rpc） |
 | [cmx-registry-config](crates/libs/cmx-infra/cmx-registry-config/README.md) | 注册中心/配置中心抽象（Nacos/Mock） |
 | [cmx-auth](crates/libs/cmx-infra/cmx-auth/README.md) | 统一认证：JWT 双令牌、OAuth2+PKCE、API Key |
 | [cmx-audit](crates/libs/cmx-infra/cmx-audit/README.md) | 统一审计：AuditLogger trait + PG/内存实现 |
@@ -164,7 +164,8 @@ cmx-container/
 | [cmx-biz-api](crates/libs/cmx-apis/cmx-biz-api/README.md) · [cmx-iam-api](crates/libs/cmx-apis/cmx-iam-api/README.md) · [cmx-plugin-api](crates/libs/cmx-apis/cmx-plugin-api/README.md) · [cmx-ai-api](crates/libs/cmx-apis/cmx-ai-api/README.md) · [cmx-storage-api](crates/libs/cmx-apis/cmx-storage-api/README.md) | 各域 HTTP 皮肤 |
 | [cmx-orchestrator-rpc](crates/libs/cmx-rpcs/cmx-orchestrator-rpc/README.md) · [cmx-resource-rpc](crates/libs/cmx-rpcs/cmx-resource-rpc/README.md) | gRPC 皮肤（编排调用 / 资源包跨服务导入） |
 | [cmx-rpc-gen](crates/libs/cmx-rpc-gen/README.md) | volo-build 编译期 gRPC 代码生成 |
-| [cmx-flow-api](crates/libs/cmx-flow/cmx-flow-api/README.md) · [cmx-rpt-api](crates/libs/cmx-rpt/cmx-rpt-api/README.md) · [cmx-rule-api](crates/libs/cmx-rule/cmx-rule-api/README.md) · [cmx-model-proxy](crates/libs/cmx-model/cmx-model-proxy/README.md) · [cmx-mdm-proxy](crates/libs/cmx-mdm/cmx-mdm-proxy/README.md) | 反代薄壳 → 独立微服务（proxy-only；公共转发核见 [cmx-proxy-core](crates/libs/cmx-proxy-core/README.md)） |
+| [cmx-flow-api](crates/libs/cmx-flow/cmx-flow-api/README.md) · [cmx-rpt-api](crates/libs/cmx-rpt/cmx-rpt-api/README.md) · [cmx-rule-api](crates/libs/cmx-rule/cmx-rule-api/README.md) · [cmx-model-proxy](crates/libs/cmx-model/cmx-model-proxy/README.md) · [cmx-mdm-proxy](crates/libs/cmx-mdm/cmx-mdm-proxy/README.md) · cmx-meta-proxy | 反代薄壳 → 独立微服务（proxy-only；公共转发核见 [cmx-proxy-core](crates/libs/cmx-proxy-core/README.md)） |
+| [cmx-flow-sdk](crates/libs/cmx-flow/cmx-flow-sdk/README.md) · [cmx-mdm-sdk](crates/libs/cmx-mdm/cmx-mdm-sdk/README.md) | 跨服务契约 SDK：flow REST 契约客户端 / mdm webhook 签名投递（两端同源，跑在 cmx-service-rpc 基座上） |
 | [cmx-platform-app](crates/libs/cmx-platform-app/README.md) | 平台总装配：聚合全域路由 + 有序初始化 |
 | [cmx-service-base](crates/libs/cmx-service-base/README.md) | 微服务起服基础设施（feature 门控 init_* 原语） |
 | [cmx-web-chassis](crates/libs/cmx-web-chassis/README.md) · [cmx-web-monitor](crates/libs/cmx-web-monitor/README.md) | HTTP 服务底盘 / 技术监控 |
