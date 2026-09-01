@@ -1,0 +1,30 @@
+[package]
+name = "cmx-model-meta"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 模型中心：meta 相关元数据建模服务，从 cmx-portal 拆出。
+# 五项元数据（BASE-DCT/BASE-DOC/DCT/DOC/FC）= definitions（定义中心）
+# + flexible_combination（弹性组合规则引擎）+ dict（字典检索引擎，被 flexible_combination 依赖）。
+# 数据为 JSON 文件存储（data/meta/{definitions,flexible-combination}、data/dict/**），不落库。
+
+[dependencies]
+# 内部依赖 - 共享基础设施（config / error / fsutil / util，再导出）
+cmx-jsonstore = { workspace = true }
+# 内部依赖 - API 通用类型（definitions::resolve 返回 cmx_api_types::Result，DOC/DCT 定义文件解析
+#   三方共享错误类型；cmx-api-types 是叶子 crate，不反向依赖 cmx-model，无环）
+cmx-api-types = { workspace = true }
+
+# 异步运行时（tokio::fs::read_dir / remove_file 等 + resolve 的 RwLock 缓存）
+tokio = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# 时间处理（版本时间戳 / 有效期）
+chrono = { workspace = true, features = ["serde"] }
+# 正则（字典/定义 ID 与编码校验）
+regex = { workspace = true }
+# 日志（definitions::resolve 检测脏状态时输出 warn；与 AGENTS §2 一致）
+tracing = { workspace = true }

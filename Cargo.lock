@@ -1091,6 +1091,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-code-api"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "cmx-code-model",
+ "cmx-core",
+ "cmx-database-pg",
+ "cmx-traits",
+ "cmx-utils",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-code-model"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "cmx-core",
+ "rand 0.8.5",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "cmx-common-api"
 version = "0.1.12"
 dependencies = [
@@ -1287,6 +1318,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-dct-model"
+version = "0.1.12"
+dependencies = [
+ "chrono",
+ "cmx-biz",
+ "cmx-core",
+ "cmx-utils",
+ "serde",
+ "serde_json",
+ "utoipa",
+]
+
+[[package]]
+name = "cmx-dct-store-pg"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "cmx-api-types",
+ "cmx-biz",
+ "cmx-core",
+ "cmx-database-pg",
+ "cmx-dct-model",
+ "cmx-master-slave",
+ "cmx-model-meta",
+ "cmx-rowsource",
+ "cmx-traits",
+ "csv",
+ "futures",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "cmx-debug"
 version = "0.1.12"
 dependencies = [
@@ -1311,6 +1378,49 @@ dependencies = [
  "cmx-database",
  "serde",
  "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-doc-model"
+version = "0.1.12"
+dependencies = [
+ "base64",
+ "chrono",
+ "cmx-biz",
+ "cmx-core",
+ "cmx-utils",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "cmx-doc-store-pg"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "cmx-api-types",
+ "cmx-biz",
+ "cmx-core",
+ "cmx-database",
+ "cmx-database-pg",
+ "cmx-doc-model",
+ "cmx-master-slave",
+ "cmx-model-meta",
+ "cmx-rowsource",
+ "cmx-traits",
+ "cmx-utils",
+ "dashmap",
+ "rmp-serde",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "time",
  "tokio",
  "tracing",
 ]
@@ -1502,6 +1612,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "cmx-master-slave"
+version = "0.1.12"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "cmx-rowsource",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
