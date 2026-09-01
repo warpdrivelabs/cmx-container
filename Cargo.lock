@@ -1639,21 +1639,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmx-mdm-sdk"
-version = "0.1.12"
-dependencies = [
- "async-trait",
- "cmx-service-rpc",
- "hex",
- "hmac 0.12.1",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "cmx-meta-proxy"
 version = "0.1.12"
 dependencies = [

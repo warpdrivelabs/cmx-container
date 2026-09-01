@@ -170,7 +170,7 @@ cmx-container/
 | [cmx-orchestrator-rpc](crates/libs/cmx-rpcs/cmx-orchestrator-rpc/README.md) · [cmx-resource-rpc](crates/libs/cmx-rpcs/cmx-resource-rpc/README.md) | gRPC 皮肤（编排调用 / 资源包跨服务导入） |
 | [cmx-rpc-gen](crates/libs/cmx-rpc-gen/README.md) | volo-build 编译期 gRPC 代码生成 |
 | [cmx-flow-api](crates/libs/cmx-flow/cmx-flow-api/README.md) · [cmx-rpt-api](crates/libs/cmx-rpt/cmx-rpt-api/README.md) · [cmx-rule-api](crates/libs/cmx-rule/cmx-rule-api/README.md) · [cmx-model-proxy](crates/libs/cmx-model/cmx-model-proxy/README.md) · [cmx-mdm-proxy](crates/libs/cmx-mdm/cmx-mdm-proxy/README.md) · cmx-meta-proxy | 反代薄壳 → 独立微服务（proxy-only；公共转发核见 [cmx-proxy-core](crates/libs/cmx-proxy-core/README.md)） |
-| [cmx-flow-sdk](crates/libs/cmx-flow/cmx-flow-sdk/README.md) · [cmx-mdm-sdk](crates/libs/cmx-mdm/cmx-mdm-sdk/README.md) | 跨服务契约 SDK：flow REST 契约客户端 / mdm webhook 签名投递（两端同源，跑在 cmx-service-rpc 基座上） |
+| [cmx-flow-sdk](crates/libs/cmx-flow/cmx-flow-sdk/README.md) | 跨服务契约 SDK：flow REST 契约客户端（跑在 cmx-service-rpc 基座上；mdm webhook 回调契约已去 SDK 化——对外 HTTP 契约走文档，见 flowengine docs/usage/08） |
 | [cmx-platform-app](crates/libs/cmx-platform-app/README.md) | 平台总装配：聚合全域路由 + 有序初始化 |
 | [cmx-service-base](crates/libs/cmx-service-base/README.md) | 微服务起服基础设施（feature 门控 init_* 原语） |
 | [cmx-web-chassis](crates/libs/cmx-web-chassis/README.md) · [cmx-web-monitor](crates/libs/cmx-web-monitor/README.md) | HTTP 服务底盘 / 技术监控 |

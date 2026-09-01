@@ -91,7 +91,6 @@ members = [
     "crates/libs/cmx-job/cmx-job-store-pg",
     "crates/libs/cmx-job/cmx-job-api",
     "crates/libs/cmx-mdm/cmx-mdm-proxy",
-    "crates/libs/cmx-mdm/cmx-mdm-sdk",
     "crates/libs/modql/modql-macros",
     "crates/libs/modql",
     "sdk/cmx-cli",
@@ -182,7 +181,6 @@ cmx-ai = { path = "crates/libs/cmx-ai", version = "0.1.12", registry = "nora" }
 cmx-registry-config = { path = "crates/libs/cmx-infra/cmx-registry-config", version = "0.1.12", registry = "nora" }
 cmx-service-rpc = { path = "crates/libs/cmx-infra/cmx-service-rpc", version = "0.1.12", registry = "nora" }
 cmx-flow-sdk = { path = "crates/libs/cmx-flow/cmx-flow-sdk", version = "0.1.12", registry = "nora" }
-cmx-mdm-sdk = { path = "crates/libs/cmx-mdm/cmx-mdm-sdk", version = "0.1.12", registry = "nora" }
 # 内部依赖 - RPC 代码生成
 cmx-rpc-gen = { path = "crates/libs/cmx-rpc-gen", version = "0.1.12", registry = "nora" }
 # 内部依赖 - RPC 皮肤（服务编排域 / 资源数据管理域 gRPC 皮肤）
