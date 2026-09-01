@@ -43,7 +43,7 @@ impl PermissionDefinitionImporter for RemotePermissionDefinitionImporter {
             description: format!("模块 {} 权限定义", module_code),
             permissions: definitions.to_vec(),
         };
-        let zip_data = crate::center_client::packer::pack_payload_to_zip(
+        let zip_data = crate::service::remote_importers::packer::pack_payload_to_zip(
             &perm_file,
             &format!("{module_code}_permissions.json"),
         )
@@ -62,7 +62,7 @@ impl PermissionDefinitionImporter for RemotePermissionDefinitionImporter {
 
         let result = self
             .ctx
-            .send(crate::center_client::types::DataCategory::Perm, req)
+            .send(crate::service::remote_importers::types::DataCategory::Perm, req)
             .await
             .map_err(plugin_err_to_trait)?;
         info!(
@@ -91,7 +91,7 @@ impl PermissionDefinitionImporter for RemotePermissionDefinitionImporter {
         };
         let result = self
             .ctx
-            .send_list(crate::center_client::types::DataCategory::Perm, req)
+            .send_list(crate::service::remote_importers::types::DataCategory::Perm, req)
             .await
             .map_err(plugin_err_to_trait)?;
         serde_json::from_slice(&result.json_data)

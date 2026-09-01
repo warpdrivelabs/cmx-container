@@ -27,6 +27,6 @@
 
 ## 相关背景
 
-- gRPC 侧对称分组：`../cmx-rpcs/`（域 gRPC 皮肤），共享设施在 `../cmx-infra/cmx-rpc/`。
+- gRPC 侧对称分组：`../cmx-rpcs/`（域 gRPC 皮肤），共享设施在 `../cmx-infra/cmx-service-rpc/`（src/grpc/）。
 - 域三件套（api + model + store-pg）分组：`../cmx-dct/`、`../cmx-doc/`、`../cmx-mdm/`，任务中心见 `../cmx-job/`。
 - 反代薄壳分组（引擎已外迁独立 workspace）：`../cmx-flow/`、`../cmx-rpt/`、`../cmx-rule/`。

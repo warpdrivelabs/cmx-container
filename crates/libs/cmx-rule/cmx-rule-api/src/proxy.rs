@@ -1,9 +1,9 @@
 //! RulesProxyModule —— 平台→独立决策规则微服务的**反向代理壳**（对标 cmx-rpt-api 的 ReportProxyModule）。
 //!
-//! 规则引擎无进程内嵌壳（始终独立微服务）：`[center_client]` 的服务定位配置了 `rules` 键 →
+//! 规则引擎无进程内嵌壳（始终独立微服务）：`[service_rpc]` 的服务定位配置了 `rules` 键 →
 //! 挂本反代，平台 `/api/rules/*` 透明转发到远程 cmx-rule-server；没配 → 平台无规则路由
 //! （规则页无法加载）。per-key 定位：`services.rules` 配 url 静态基址或 discovery Nacos 选例
-//!（见 `cmx_plugin::center_client::upstream::proxy_upstream`）。
+//!（见 `cmx_service_rpc::locator`）。
 //!
 //! 规则微服务对外 URL 与平台一致（`/api/rules/v1/*`，无路径重写），故转发是恒等映射
 //! `{rules_base}/api{原path}{query}`（与 report 同，不重写路径段）。
@@ -81,7 +81,7 @@ fn rules_target(rules_base: &str, uri: &Uri) -> String {
 }
 
 // ============================================================================
-// 页面反代：native 页也「一芯双壳」——门户按 [center_client] 的服务定位配置把**规则拥有的**页面取页
+// 页面反代：native 页也「一芯双壳」——门户按 [service_rpc] 的服务定位配置把**规则拥有的**页面取页
 // 请求反代到独立 cmx-rule-server（它自暴同款字节对齐 API）。
 // ----------------------------------------------------------------------------
 // native-pages 是**共享端点**（/api/native-pages/{id}），只有 `portal.rules.*` 属规则，其余是门户

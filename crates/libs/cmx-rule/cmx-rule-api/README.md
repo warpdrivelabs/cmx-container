@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-`cmx-rule-api` 是 cmx-container 平台中决策规则引擎域的 HTTP 反向代理壳。规则引擎整体位于独立 workspace `../cmx-rulesengine`，由那边的 `cmx-rule-server` 作为**独立规则微服务**承载。与 flow/report 不同，规则引擎**没有进程内嵌壳**（始终独立微服务）：`[center_client]` 的服务定位配置了 `rules` 键（per-key：`services.rules` 配 url 静态基址或 discovery Nacos 选例）才挂本反代，`/api/rules/*` 透明转发到远程 cmx-rule-server；不配则门户无规则路由（规则页无法加载）。目标经 `UpstreamResolver` 按请求动态解析，无可用实例返回 503。
+`cmx-rule-api` 是 cmx-container 平台中决策规则引擎域的 HTTP 反向代理壳。规则引擎整体位于独立 workspace `../cmx-rulesengine`，由那边的 `cmx-rule-server` 作为**独立规则微服务**承载。与 flow/report 不同，规则引擎**没有进程内嵌壳**（始终独立微服务）：`[service_rpc]` 的服务定位配置了 `rules` 键（per-key：`services.rules` 配 url 静态基址或 discovery Nacos 选例）才挂本反代，`/api/rules/*` 透明转发到远程 cmx-rule-server；不配则门户无规则路由（规则页无法加载）。目标经 `UpstreamResolver` 按请求动态解析，无可用实例返回 503。
 
 规则微服务对外 URL 与平台一致（`/api/rules/v1/*`，无路径重写），故转发是**恒等映射** `{rules_base}/api{原path}{query}`——与 cmx-rpt-api 同构，不重写路径段。本 crate 对外导出两件东西：
 
@@ -45,7 +45,7 @@
 
 | 使用方 | 引用方式 | 实际用途 |
 |--------|---------|---------|
-| `cmx-platform-app` | `cmx-rule-api = { workspace = true }` | 门户组装层 `merge_rules`：`rules_upstream()`（`[center_client.services].rules` per-key 定位）非空时 merge `RulesProxyModule::routes()` 并叠加 `with_rules_page_proxy` 页面反代层；未配置则不挂规则路由 |
+| `cmx-platform-app` | `cmx-rule-api = { workspace = true }` | 门户组装层 `merge_rules`：`rules_upstream()`（`[service_rpc.services].rules` per-key 定位）非空时 merge `RulesProxyModule::routes()` 并叠加 `with_rules_page_proxy` 页面反代层；未配置则不挂规则路由 |
 
 被反代的微服务（本 crate 编译期不可见）：`../cmx-rulesengine` 的 `cmx-rule-server`。
 
@@ -113,8 +113,8 @@ use axum::Router;
 use cmx_api_core::CmxAppState;
 use cmx_rule_api::{RulesProxyModule, with_rules_page_proxy};
 
-/// 目标来自 `[center_client]` 服务定位配置（per-key）；未配置（None）则不挂规则路由。
-fn merge_rules(router: Router<CmxAppState>, upstream: Option<cmx_plugin::center_client::ProxyUpstream>) -> Router<CmxAppState> {
+/// 目标来自 `[service_rpc]` 服务定位配置（per-key）；未配置（None）则不挂规则路由。
+fn merge_rules(router: Router<CmxAppState>, upstream: Option<cmx_service_rpc::Locator>) -> Router<CmxAppState> {
     match upstream {
         Some(upstream) => {
             // 出站服务凭证：[service_auth].outgoing_api_key（可空）

@@ -17,7 +17,7 @@
 - `ModelProxyModule`：实现 `cmx-api-core` 的 `ModuleRoutes` 契约，覆盖模型中心七前缀 `/dct`、`/dict`、`/doc`、`/model`、`/definitions`、`/flexible-combination`、`/code`（各自根 + `{*rest}`），全方法转发。与报表一致：模型中心微服务对外 URL 与平台**完全一致**（无 `/v1` 升级），故转发是**恒等映射** `{model_base}/api{原path}{query}`——不重写任何路径段，与 cmx-rpt-api 同构。
 - `with_model_page_proxy`：页面反代中间件层，把**模型中心拥有的** `portal.model.*` native/html 单页取页请求（如 `/api/native-pages/portal.model.definition.base-dct`、`/api/html-pages/portal.model.gl.dct-data-editor-html`）转发到 cmx-model-server（它自暴同款字节对齐 API），其余页请求落回门户内嵌 handler。
 
-是否挂模型中心路由只看 `[center_client.services].model` 的服务定位配置（per-key：`url` 静态基址或 `discovery` Nacos 选例，见 `cmx_plugin::center_client::proxy_upstream`）——配了才挂反代；**没配 = 门户不挂模型中心路由**（统一语义，与 mdm/flow/report/rules 一致，无进程内嵌兜底）。目标经 `UpstreamResolver` 按请求动态解析（静态基址固化 / Nacos 实例缓存选例），无可用实例返回 503（区别于下游不可达的 502）。
+是否挂模型中心路由只看 `[service_rpc.services].model` 的服务定位配置（per-key：`url` 静态基址或 `discovery` Nacos 选例，见 `cmx_service_rpc::locator`）——配了才挂反代；**没配 = 门户不挂模型中心路由**（统一语义，与 mdm/flow/report/rules 一致，无进程内嵌兜底）。目标经 `UpstreamResolver` 按请求动态解析（静态基址固化 / Nacos 实例缓存选例），无可用实例返回 503（区别于下游不可达的 502）。
 
 ### 三层出站鉴权
 
@@ -47,7 +47,7 @@
 
 | 使用方 | 引用方式 | 实际用途 |
 |--------|---------|---------|
-| `cmx-platform-app` | `cmx-model-proxy = { workspace = true }` | 门户组装层 `merge_model`：`model_upstream()`（`[center_client.services].model`）非空时 merge `ModelProxyModule::routes()` 并叠加 `with_model_page_proxy` 页面反代层；未配置则不挂模型中心路由 |
+| `cmx-platform-app` | `cmx-model-proxy = { workspace = true }` | 门户组装层 `merge_model`：`model_upstream()`（`[service_rpc.services].model`）非空时 merge `ModelProxyModule::routes()` 并叠加 `with_model_page_proxy` 页面反代层；未配置则不挂模型中心路由 |
 
 被反代的微服务（本 crate 编译期不可见）：`../cmx-model` 的 `cmx-model-server`（:8093）。
 
@@ -115,8 +115,8 @@ use axum::Router;
 use cmx_api_core::CmxAppState;
 use cmx_model_proxy::{ModelProxyModule, with_model_page_proxy};
 
-/// 目标来自 `[center_client.services].model` 服务定位配置（per-key）；未配置（None）则不挂模型中心路由。
-fn merge_model(router: Router<CmxAppState>, upstream: Option<cmx_plugin::center_client::ProxyUpstream>) -> Router<CmxAppState> {
+/// 目标来自 `[service_rpc.services].model` 服务定位配置（per-key）；未配置（None）则不挂模型中心路由。
+fn merge_model(router: Router<CmxAppState>, upstream: Option<cmx_service_rpc::Locator>) -> Router<CmxAppState> {
     match upstream {
         Some(upstream) => {
             // 出站服务凭证：[service_auth].outgoing_api_key（可空）

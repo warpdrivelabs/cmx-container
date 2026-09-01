@@ -1,0 +1,20 @@
+[package]
+name = "cmx-flow-sdk"
+version.workspace = true
+edition.workspace = true
+
+# flow 契约 SDK：路径常量 + wire DTO + `trait FlowClient` + HTTP 默认实现。
+# 完全自包含（不引用 cmx-flowengine 仓任何类型），消费方加一个依赖即获得类型化调用；
+# 契约变更（删方法/改字段）双方编译期立刻感知。
+#
+# 依赖铁律：SDK → 基座（default-features = false，http 实现经消费方统一启用）；
+# 未来 gRPC 绑定走本 crate 的 `grpc` feature 透传基座 grpc-client。
+[dependencies]
+cmx-service-rpc = { path = "../../cmx-infra/cmx-service-rpc", default-features = false }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

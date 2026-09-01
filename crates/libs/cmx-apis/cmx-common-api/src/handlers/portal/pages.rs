@@ -95,8 +95,8 @@ async fn fetch_remote_batch(
     ids: &[String],
     fwd: &HeaderMap,
 ) -> std::result::Result<serde_json::Value, String> {
-    let base = cmx_plugin::center_client::proxy_upstream(key)
-        .and_then(|u| u.resolve())
+    let base = cmx_service_rpc::locator(key)
+        .and_then(|l| l.resolve())
         .ok_or_else(|| format!("服务 {key} 未配置或不可达"))?;
     let url = format!("{base}/api/{kind}-pages/batch");
     let cli = reqwest::Client::builder()
@@ -133,8 +133,8 @@ async fn forward_remote_save(
     body: &Value,
     fwd: &HeaderMap,
 ) -> Result<serde_json::Value> {
-    let base = cmx_plugin::center_client::proxy_upstream(key)
-        .and_then(|u| u.resolve())
+    let base = cmx_service_rpc::locator(key)
+        .and_then(|l| l.resolve())
         .ok_or_else(|| {
             cmx_api_types::Error::business_error(format!("服务 {key} 未配置或不可达"))
         })?;

@@ -3,7 +3,7 @@
 //! 「后端一芯双壳」：进程内嵌（`/api/dct`、`/api/doc`、`/api/model`、`/api/code` 由 cmx-container 内
 //! 的 Dct/Doc/Model/Code 模块 handler 处理）↔ ModelProxyModule（引擎在**远程独立 cmx-model-server**，
 //! 同前缀透明转发过去）。二者对 web-server 是同一批模型中心前缀——**前端零改**，切换只看
-//! `[center_client.services].model` 是否配置。
+//! `[service_rpc.services].model` 是否配置。
 //!
 //! 与报表一致：模型中心微服务的对外 URL 与平台**完全一致**（无 `/v1` 升级），故转发路径是恒等映射
 //! `{model_base}/api{原path}{query}`。
@@ -90,7 +90,7 @@ fn model_target(model_base: &str, uri: &Uri) -> String {
 }
 
 // ============================================================================
-// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 `[center_client].model` 把**模型中心
+// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 `[service_rpc].model` 把**模型中心
 // 拥有的**页面取页请求反代到独立 cmx-model-server（它自暴同款字节对齐 API）。
 // ----------------------------------------------------------------------------
 // 与 API 反代的差异：native/html-pages 是**共享端点**（/api/native-pages/{id}），只有**部分 id**

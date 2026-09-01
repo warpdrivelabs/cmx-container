@@ -10,11 +10,11 @@
 
 ## 项目简介
 
-`cmx-resource-rpc` 位于 `crates/libs/cmx-rpcs/` 归域目录下（与 `cmx-apis/` HTTP 皮肤对称的 gRPC 皮肤集中地）。它实现 `cmx_traits::rpc::ResourceDataClient` trait 的 volo-grpc 版本，服务端把 gRPC 请求桥接到 `cmx_traits::resource::ResourceDataImporter` trait——**不依赖业务 service crate**，具体导入器（各服务的菜单/权限/表单/流程资源落库实现）由组装层经 `cmx_rpc::bundle::ServerDeps.data_importer` 注入。
+`cmx-resource-rpc` 位于 `crates/libs/cmx-rpcs/` 归域目录下（与 `cmx-apis/` HTTP 皮肤对称的 gRPC 皮肤集中地）。它实现 `cmx_traits::rpc::ResourceDataClient` trait 的 volo-grpc 版本，服务端把 gRPC 请求桥接到 `cmx_traits::resource::ResourceDataImporter` trait——**不依赖业务 service crate**，具体导入器（各服务的菜单/权限/表单/流程资源落库实现）由组装层经 `cmx_service_rpc::grpc::bundle::ServerDeps.data_importer` 注入。
 
 典型链路：插件安装任务把资源打成 ZIP（如 `perm` 权限包），经本 crate 的 `import_resource_data` 发往目标服务（按 `service_name` 经注册中心发现实例），目标服务的 `ResourceDataImporter` 按 upsert 语义导入并返回 created/updated/deleted 计数。
 
-**重试策略是本 crate 最重要的设计决策**：`import_resource_data` / `cleanup_resource_data` **不走 `cmx_rpc::with_retry`**（与 orchestrator-rpc 相反）。源码注释详述了三点理由：
+**重试策略是本 crate 最重要的设计决策**：`import_resource_data` / `cleanup_resource_data` **不走 `cmx_service_rpc::grpc::with_retry`**（与 orchestrator-rpc 相反）。源码注释详述了三点理由：
 
 1. 传输 ZIP 二进制大包（默认上限 4MB），重试需保证下游导入幂等；
 2. 大包重试放大带宽与下游负载，4MB 上限下网络抖动概率高，盲目重试易雪崩；
@@ -32,7 +32,7 @@
 
 | 依赖 | 用途 |
 |------|------|
-| `cmx-rpc` | 共享 RPC 基础设施：`GrpcInfrastructure`、`apply_auth_metadata`、`AuthVerifier` / `verify_request` / `VerifiedAuth`、`bundle::{RpcServiceBundle, ServerDeps, ServerRegistration}` |
+| `cmx-service-rpc`（feature `grpc-server`） | 共享 RPC 基础设施（src/grpc/）：`GrpcInfrastructure`、`apply_auth_metadata`、`AuthVerifier` / `verify_request` / `VerifiedAuth`、`bundle::{RpcServiceBundle, ServerDeps, ServerRegistration}` |
 | `cmx-rpc-gen` | proto 契约 `resource_data_proto`（`CmxResourceDataServiceClient/Server`、`ImportResourceDataRequest`、`CleanupResourceDataRequest`、`ListResourceDataRequest` 等） |
 | `cmx-traits` | trait 抽象层：`ResourceDataClient`、`ResourceDataImporter`、`ResourceDataImportRequest/CleanupRequest/ImportResult/ListResult`、`ResourceDataCategory`、`RpcError` |
 | `volo-grpc` | gRPC 框架（客户端 Builder / 服务端 ServiceBuilder / Status） |
@@ -134,7 +134,7 @@ impl CmxResourceDataServerImpl {
 use cmx_traits::resource::{ResourceDataCategory, ResourceDataImportRequest};
 
 // 守卫 + 领域全局访问器（cmx-plugin remote_importers 的真实模式）
-if cmx_rpc::GlobalRpcClient::is_initialized() {
+if cmx_service_rpc::grpc::GlobalRpcClient::is_initialized() {
     let client = cmx_resource_rpc::resource_data_client();
     let request = ResourceDataImportRequest {
         category: ResourceDataCategory::Perm,       // 插件权限包
@@ -204,4 +204,4 @@ match cmx_resource_rpc::resource_data_client()
 
 ## Features
 
-无 `[features]`，本 crate 为薄皮肤，不含可选编译特性。新增一个 gRPC 服务的标准步骤见 `cmx-rpc/README.md`。
+无 `[features]`，本 crate 为薄皮肤，不含可选编译特性。新增一个 gRPC 服务的标准步骤见 `cmx-service-rpc/README.md`。

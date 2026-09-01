@@ -25,7 +25,6 @@
 
 // 模块声明
 pub mod audit;
-pub mod center_client;
 pub mod cluster;
 pub mod common;
 pub mod config;

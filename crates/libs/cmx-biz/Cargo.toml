@@ -13,7 +13,7 @@ openapi = ["utoipa"]
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
 # 内部依赖 - API 通用类型
-cmx-api-types = { workspace = true }
+cmx-api-types = { workspace = true, features = ["db-error"] }
 # 内部依赖 - 特征定义
 cmx-traits = { workspace = true }
 # 内部依赖 - 数据库

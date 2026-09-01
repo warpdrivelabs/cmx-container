@@ -31,7 +31,7 @@ cmx-database = { workspace = true }
 # 内部依赖 - 数据库(tokio-postgres 零拷贝新链路)
 cmx-database-pg = { workspace = true }
 # 内部依赖 - API
-cmx-common-api = { workspace = true }
+cmx-common-api = { workspace = true, features = ["grpc"] }
 # 内部依赖 - 各模块 HTTP 层（在此合并进主路由，破环）
 cmx-rpt-api = { workspace = true }
 cmx-rule-api = { workspace = true }
@@ -58,7 +58,7 @@ cmx-auth = { workspace = true }
 cmx-iam = { workspace = true }
 cmx-biz = { workspace = true }
 cmx-buffer = { workspace = true }
-cmx-plugin = { workspace = true }
+cmx-plugin = { workspace = true, features = ["grpc"] }
 # 二次开发平台：全局构建执行器装配（W1）
 cmx-build = { workspace = true }
 cmx-build-store-pg = { workspace = true }
@@ -74,7 +74,6 @@ cmx-core = { workspace = true }
 cmx-service = { workspace = true }
 cmx-debug = { workspace = true }
 cmx-registry-config = { workspace = true }
-cmx-rpc = { workspace = true }
 # RPC 皮肤（组装层显式注册的 Bundle 来源；依赖哪些 *-rpc = 主应用提供哪些 gRPC 服务）
 cmx-orchestrator-rpc = { workspace = true }
 cmx-resource-rpc = { workspace = true }
@@ -83,6 +82,7 @@ local-ip-address = { workspace = true }
 # 通用 HTTP 服务骨架 + 技术监控 + 基础服务库
 cmx-web-chassis = { workspace = true }
 cmx-web-monitor = { workspace = true }
+cmx-service-rpc = { workspace = true }
 cmx-service-base = { workspace = true, features = ["redis", "config-manager", "crypto", "debug", "event-bus", "storage", "plugins", "services", "wasm", "registry-config", "rpc"] }
 # Web 框架
 axum = { workspace = true }

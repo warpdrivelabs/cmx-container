@@ -6,8 +6,8 @@
 use tracing::instrument;
 use volo::net::incoming::DefaultIncoming;
 
-use crate::bundle::{RpcServiceBundle, ServerDeps};
-use crate::error::RpcFrameworkError;
+use crate::grpc::bundle::{RpcServiceBundle, ServerDeps};
+use crate::grpc::error::RpcFrameworkError;
 
 /// 启动 gRPC 服务。
 ///
@@ -17,7 +17,7 @@ use crate::error::RpcFrameworkError;
 /// # Arguments
 ///
 /// * `port` - gRPC 监听端口。
-/// * `bundles` - 已完成客户端初始化的 Bundle 列表（由 [`crate::factory::init_rpc_clients`] 返回）。
+/// * `bundles` - 已完成客户端初始化的 Bundle 列表（由 [`crate::grpc::factory::init_rpc_clients`] 返回）。
 /// * `deps` - 服务端依赖（各 Bundle 按需取用）。
 /// * `ready_tx` - 就绪信号发送端，端口绑定成功后发送。
 ///

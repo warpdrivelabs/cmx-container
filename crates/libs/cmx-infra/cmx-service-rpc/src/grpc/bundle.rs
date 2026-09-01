@@ -23,7 +23,7 @@
 
 use std::sync::Arc;
 
-use crate::client::infra::GrpcInfrastructure;
+use crate::grpc::client::infra::GrpcInfrastructure;
 
 /// 领域依赖（服务端组装用）。各 Bundle 按需取用，互不感知。
 pub struct ServerDeps {
@@ -36,7 +36,7 @@ pub struct ServerDeps {
     pub data_importer: Option<Arc<dyn cmx_traits::resource::ResourceDataImporter>>,
     /// 服务端鉴权器（各领域 server impl 在方法入口校验 gRPC 凭证）。
     /// `None` 表示不启用 gRPC 鉴权（兼容单体无 RPC 或 loopback 部署场景）。
-    pub auth_verifier: Option<crate::server::AuthVerifier>,
+    pub auth_verifier: Option<crate::grpc::server::AuthVerifier>,
 }
 
 /// "把 service 加到 server 上"的类型擦除闭包。

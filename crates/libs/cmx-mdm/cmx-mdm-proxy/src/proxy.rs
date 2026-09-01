@@ -2,7 +2,7 @@
 //!
 //! 「后端一芯双壳」：进程内嵌壳已随引擎抽取退役（MdmModule 源码不在 cmx-container），现存唯一
 //! 形态 = MdmProxyModule（引擎在**远程独立 cmx-mdm-server**，`/api/mdm/*` 同前缀透明转发）。
-//! 对 web-server 是同一 `/mdm` 前缀——**前端零改**，切换只看 `[center_client.services].mdm`。
+//! 对 web-server 是同一 `/mdm` 前缀——**前端零改**，切换只看 `[service_rpc.services].mdm`。
 //! 恒等映射 `{mdm_base}/api{path}{query}`。
 //!
 //! 壳与核分工：本壳只管恒等路径映射与页面归属判定；头卫生/三层出站鉴权/超时/流式/502-503 兜底全在

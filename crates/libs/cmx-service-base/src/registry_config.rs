@@ -120,6 +120,12 @@ pub async fn init_infra() -> Result<()> {
     // 启动服务列表定时同步（注册中心基础设施职责，不依赖 RPC 是否启用）。
     start_service_list_syncer().await;
 
+    // 服务间统一调用基座：目录初始化 + fail-fast 校验（旧段残留 / discovery 键无注册中心
+    // 无 url / grpc 键 feature 错配均在此显性报错）+ 服务发现目标订阅预热。
+    cmx_service_rpc::init_and_warm()
+        .await
+        .map_err(|e| BaseError::Config(format!("service_rpc 基座初始化失败: {e}")))?;
+
     // 配置变更监听已在 create_config_center 时通过 change_handler 自动注册，
     // 业务模块可通过 GlobalChangeNotifier::add_listener() 注册结构化监听器。
 

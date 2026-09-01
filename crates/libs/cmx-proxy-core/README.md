@@ -51,7 +51,7 @@
 | `cmx-rpt-api` | 同上 | ReportProxyModule 的转发核 |
 | `cmx-rule-api` | 同上 | RulesProxyModule 的转发核 |
 
-目标 resolver 由 `cmx-platform-app`（装配层）从 `cmx_plugin::center_client::ProxyUpstream::resolver_fn` 构造后传入壳（`UpstreamResolver` 是结构类型别名，cmx-plugin 无需依赖本 crate）。
+目标 resolver 由 `cmx-platform-app`（装配层）从 `cmx_service_rpc::Locator::resolver_fn` 构造后传入壳（`UpstreamResolver` 是结构类型别名，cmx-plugin 无需依赖本 crate）。
 
 ---
 

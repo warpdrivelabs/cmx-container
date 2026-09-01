@@ -5,7 +5,7 @@
 //!
 //! 两层解耦，对标 [`crate::identity`]：
 //! - **拓扑来源经 [`set_topology_provider`] 注入**：各服务自报「我有哪些能力、各自 embedded/proxy + 目标 URL」
-//!   （平台从 `center_client` 配置派生，flow-server 自身则只有一条 self 记录）。monitor 不猜、不写死。
+//!   （平台从 `service_rpc` 目录派生，flow-server 自身则只有一条 self 记录）。monitor 不猜、不写死。
 //! - **活体探测由 [`spawn_topology_prober`] 后台跑**：周期性打每个 proxy 目标的 `/_mon/tech-stats`
 //!   （每个独立服务都暴露此端点，故探测**跨服务统一**），把结果缓存进进程级快照，读路径零阻塞。
 //!

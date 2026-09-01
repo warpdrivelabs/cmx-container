@@ -77,8 +77,6 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
         .map_err(|e| Error::ConfigError(format!("基础设施初始化失败: {e}")))?;
     // 服务定位配置快照（补偿 map 键拼写错误静默不挂路由的可见性）+ 服务发现目标订阅预热
     //（无 discovery 定位键或注册中心未启用时为 no-op，不产生网络行为）。
-    cmx_plugin::center_client::log_center_client_snapshot();
-    cmx_plugin::center_client::warm_proxy_upstreams().await;
     init_crypto();
 
     init_cache().await?;
@@ -93,18 +91,18 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     cmx_web_monitor::set_service_name("cmx-server 平台");
     cmx_web_monitor::set_identity_provider(web_identity);
     cmx_web_monitor::spawn_system_sampler();
-    // 服务依赖拓扑：各能力 embedded/proxy 真源来自 routes 装配决策（flow 读 center_client 配置）。
+    // 服务依赖拓扑：各能力 embedded/proxy 真源来自 routes 装配决策（flow 读 service_rpc 目录）。
     cmx_web_monitor::set_topology_provider(crate::routes::service_topology);
     // 活体探测器：对 proxy 目标（如独立 flow-server）周期打 /_mon/tech-stats 判可达/延迟/版本。
     cmx_web_monitor::spawn_topology_prober();
 
     // 流程引擎：**独立微服务**（引擎核 cmx-flow-app 在独立 ws ../cmx-flowengine，由 cmx-flow-server
-    // 承载）。门户不再进程内嵌引擎/poller——只按 [center_client] 的服务定位配置反代 /api/flow/*
+    // 承载）。门户不再进程内嵌引擎/poller——只按 [service_rpc] 的服务定位配置反代 /api/flow/*
     //（见 routes.rs merge_flow）。故此处不再调 spawn_timer_poller（那条依赖已随壳瘦身移除）。
     if routes::flow_is_proxied() {
         info!("流程引擎：独立微服务模式，本进程不启动内嵌引擎 poller（转发到远程 flow-server）");
     } else {
-        info!("流程引擎：未配置反代目标（[center_client] mode=local 或未配 flow 键）→ 门户无流程路由；请启动独立 cmx-flow-server 并配置其地址");
+        info!("流程引擎：未配置反代目标（[service_rpc] 未配 flow 键）→ 门户无流程路由；请启动独立 cmx-flow-server 并配置其地址");
     }
 
     init_web_config().map_err(|e| Error::ConfigError(format!("加载 Web 配置失败: {}", e)))?;
@@ -167,7 +165,7 @@ pub async fn run_platform(banner: cmx_web_chassis::BannerSpec) -> Result<()> {
     // ★ 主应用提供的 RPC 服务 = 此处显式收集的皮肤 crate Bundle 列表：
     //   依赖哪个域的 *-rpc crate 并在此注册其 Bundle，即对外提供哪个 gRPC 服务；
     //   裁剪能力（精简版/独立微服务形态）只需增删本列表，cmx-rpc 与皮肤 crate 零改动。
-    let rpc_bundles: Vec<Box<dyn cmx_rpc::bundle::RpcServiceBundle>> = vec![
+    let rpc_bundles: Vec<Box<dyn cmx_service_rpc::grpc::RpcServiceBundle>> = vec![
         Box::new(cmx_orchestrator_rpc::OrchestratorBundle),
         Box::new(cmx_resource_rpc::ResourceDataBundle),
     ];

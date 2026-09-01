@@ -12,7 +12,7 @@
 
 `cmx-rpt-api` 是 cmx-container 平台中报表域的 HTTP 反向代理壳。报表中立核 crate 已整体迁至独立 workspace `../cmx-report`，由那边的 `cmx-rpt-server` 作为**独立报表微服务**承载。门户不再进程内嵌报表引擎，本 crate 因此**不依赖 `cmx-rpt-app`**——这条依赖会把报表引擎源码拖进门户编译图，现已彻底切断（门户编译期不碰报表引擎源码），仅保留平台反代层。
 
-「后端一芯双壳」在报表域的形态：`ReportModule`（进程内嵌，本进程 handler 处理）↔ `ReportProxyModule`（引擎在远程 `cmx-rpt-server`，透明转发）。二者对 web-server 是同一个 `ModuleRoutes` 契约、同一批报表前缀——**前端零改**，切换只看 `[center_client]` 的服务定位配置（per-key：`services.report` 配 url 静态基址或 discovery Nacos 选例）。目标经 `UpstreamResolver` 按请求动态解析，无可用实例返回 503。
+「后端一芯双壳」在报表域的形态：`ReportModule`（进程内嵌，本进程 handler 处理）↔ `ReportProxyModule`（引擎在远程 `cmx-rpt-server`，透明转发）。二者对 web-server 是同一个 `ModuleRoutes` 契约、同一批报表前缀——**前端零改**，切换只看 `[service_rpc]` 的服务定位配置（per-key：`services.report` 配 url 静态基址或 discovery Nacos 选例）。目标经 `UpstreamResolver` 按请求动态解析，无可用实例返回 503。
 
 与 flow 壳的关键差异：报表微服务对外 URL 与平台**完全一致**（无 `/v1` 升级），故转发是**恒等映射** `{report_base}/api{原path}{query}`，不重写任何路径段。本 crate 对外导出两件东西：
 
@@ -55,7 +55,7 @@
 
 | 使用方 | 引用方式 | 实际用途 |
 |--------|---------|---------|
-| `cmx-platform-app` | `cmx-rpt-api = { workspace = true }` | 门户组装层 `merge_report`：`report_upstream()`（`[center_client.services].report` per-key 定位）非空时 merge `ReportProxyModule::routes()` 并叠加 `with_report_page_proxy` 页面反代层；未配置则不挂报表路由 |
+| `cmx-platform-app` | `cmx-rpt-api = { workspace = true }` | 门户组装层 `merge_report`：`report_upstream()`（`[service_rpc.services].report` per-key 定位）非空时 merge `ReportProxyModule::routes()` 并叠加 `with_report_page_proxy` 页面反代层；未配置则不挂报表路由 |
 
 被反代的微服务（本 crate 编译期不可见）：`../cmx-report` 的 `cmx-rpt-server`。
 
@@ -124,8 +124,8 @@ use axum::Router;
 use cmx_api_core::CmxAppState;
 use cmx_rpt_api::{ReportProxyModule, with_report_page_proxy};
 
-/// 目标来自 `[center_client]` 服务定位配置（per-key）；未配置（None）则不挂报表路由。
-fn merge_report(router: Router<CmxAppState>, upstream: Option<cmx_plugin::center_client::ProxyUpstream>) -> Router<CmxAppState> {
+/// 目标来自 `[service_rpc]` 服务定位配置（per-key）；未配置（None）则不挂报表路由。
+fn merge_report(router: Router<CmxAppState>, upstream: Option<cmx_service_rpc::Locator>) -> Router<CmxAppState> {
     match upstream {
         Some(upstream) => {
             // 出站服务凭证：[service_auth].outgoing_api_key（可空）

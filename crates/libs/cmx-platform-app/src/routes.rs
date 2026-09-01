@@ -18,7 +18,7 @@ use cmx_plugin_api::{
 use cmx_iam_api::{AuthModule, IamApiDoc, IamModule};
 use cmx_flow_api::FlowProxyModule;
 use cmx_job_api::JobModule;
-use cmx_plugin::center_client::ProxyUpstream;
+use cmx_service_rpc::Locator;
 use cmx_rpt_api::ReportProxyModule;
 use cmx_rule_api::RulesProxyModule;
 use cmx_model_proxy::ModelProxyModule;
@@ -28,25 +28,25 @@ use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-/// 服务定位键：流程引擎（`[center_client.services].flow`）。
+/// 服务定位键：流程引擎（`[service_rpc.services].flow`）。
 const FLOW_UPSTREAM_KEY: &str = "flow";
-/// 服务定位键：报表引擎（`[center_client.services].report`）。
+/// 服务定位键：报表引擎（`[service_rpc.services].report`）。
 const REPORT_UPSTREAM_KEY: &str = "report";
-/// 服务定位键：决策规则引擎（`[center_client.services].rules`）。
+/// 服务定位键：决策规则引擎（`[service_rpc.services].rules`）。
 const RULES_UPSTREAM_KEY: &str = "rules";
-/// 服务定位键：模型中心（`[center_client.services].model`）。
+/// 服务定位键：模型中心（`[service_rpc.services].model`）。
 const MODEL_UPSTREAM_KEY: &str = "model";
-/// 服务定位键：主数据中心（`[center_client.services].mdm`）。
+/// 服务定位键：主数据中心（`[service_rpc.services].mdm`）。
 const MDM_UPSTREAM_KEY: &str = "mdm";
-/// 服务定位键：元数据管理（`[center_client.services].meta`）。
+/// 服务定位键：元数据管理（`[service_rpc.services].meta`）。
 const META_UPSTREAM_KEY: &str = "meta";
 
-/// 解析流程引擎反代目标（per-key 定位，见 `cmx_plugin::center_client::upstream`）。
+/// 解析流程引擎反代目标（per-key 定位，见 `cmx_service_rpc::upstream`）。
 ///
 /// 这是「后端一芯双壳」的切换点，对偶于前端一芯三壳：同一 `/api/flow/*` 前缀、同一
 /// ModuleRoutes 契约，配了目标就转发、没配就不挂路由——**前端与其余装配全零改**。
-pub(crate) fn flow_upstream() -> Option<ProxyUpstream> {
-    cmx_plugin::center_client::proxy_upstream(FLOW_UPSTREAM_KEY)
+pub(crate) fn flow_upstream() -> Option<Locator> {
+    cmx_service_rpc::locator(FLOW_UPSTREAM_KEY)
 }
 
 /// 流程引擎是否在远程（代理态）。main 序列据此决定是否提示独立 flow-server 部署。
@@ -58,49 +58,49 @@ pub fn flow_is_proxied() -> bool {
 ///
 /// 与 [`flow_upstream`] 同构——报表侧的「后端一芯双壳」切换点。报表微服务对外 URL 与平台一致
 /// （`/api/report-design/*` 等，无 `/v1`），配了目标就转发、没配就不挂路由，前端全零改。
-pub(crate) fn report_upstream() -> Option<ProxyUpstream> {
-    cmx_plugin::center_client::proxy_upstream(REPORT_UPSTREAM_KEY)
+pub(crate) fn report_upstream() -> Option<Locator> {
+    cmx_service_rpc::locator(REPORT_UPSTREAM_KEY)
 }
 
 /// 解析决策规则引擎反代目标（per-key 定位）。
 ///
 /// 规则引擎**无进程内嵌壳**（始终独立微服务），故与 flow/report 的差异：没配目标 = 门户不挂
 /// 规则路由，而非回退内嵌。配了目标就转发 `/api/rules/*` + 规则拥有的 native 页，前端全零改。
-pub(crate) fn rules_upstream() -> Option<ProxyUpstream> {
-    cmx_plugin::center_client::proxy_upstream(RULES_UPSTREAM_KEY)
+pub(crate) fn rules_upstream() -> Option<Locator> {
+    cmx_service_rpc::locator(RULES_UPSTREAM_KEY)
 }
 
 /// 解析模型中心反代目标（per-key 定位）。
 ///
 /// 与 flow/report 的差异：模型中心**保留进程内嵌兜底**（Dct/Doc/Model/Code 模块仍在 cmx-container，
-/// 编译期保留，作平滑迁移期回退）。配了 `[center_client.services].model` = 反代到独立 cmx-model-server；
+/// 编译期保留，作平滑迁移期回退）。配了 `[service_rpc.services].model` = 反代到独立 cmx-model-server；
 /// 没配 = 门户进程内嵌（现行为不变）。这是「后端一芯双壳」在模型中心的切换点。
-pub(crate) fn model_upstream() -> Option<ProxyUpstream> {
-    cmx_plugin::center_client::proxy_upstream(MODEL_UPSTREAM_KEY)
+pub(crate) fn model_upstream() -> Option<Locator> {
+    cmx_service_rpc::locator(MODEL_UPSTREAM_KEY)
 }
 
 /// 解析主数据中心反代目标（per-key 定位）。
 ///
 /// 主数据已抽独立微服务 cmx-mdm（:8095），容器内引擎源码已退役，**无进程内嵌兜底**
-///（与 flow/report/rules/model 同构）：配了 `[center_client.services].mdm` = 反代到独立
+///（与 flow/report/rules/model 同构）：配了 `[service_rpc.services].mdm` = 反代到独立
 /// cmx-mdm-server；没配 = 门户不挂 `/api/mdm/*` 路由。
-pub(crate) fn mdm_upstream() -> Option<ProxyUpstream> {
-    cmx_plugin::center_client::proxy_upstream(MDM_UPSTREAM_KEY)
+pub(crate) fn mdm_upstream() -> Option<Locator> {
+    cmx_service_rpc::locator(MDM_UPSTREAM_KEY)
 }
 
 /// 解析元数据管理反代目标（per-key 定位）。
 ///
 /// 元数据管理是全新独立微服务 cmx-meta-data（:8096），**无进程内嵌兜底**（与 flow/report/rules/model
-/// 抽出后同构）。配了 `[center_client.services].meta` = 反代到独立 cmx-meta-server；没配 = 门户不挂
+/// 抽出后同构）。配了 `[service_rpc.services].meta` = 反代到独立 cmx-meta-server；没配 = 门户不挂
 /// `/api/meta/*` 路由。
-pub(crate) fn meta_upstream() -> Option<ProxyUpstream> {
-    cmx_plugin::center_client::proxy_upstream(META_UPSTREAM_KEY)
+pub(crate) fn meta_upstream() -> Option<Locator> {
+    cmx_service_rpc::locator(META_UPSTREAM_KEY)
 }
 
 /// 平台服务依赖拓扑：枚举各已挂载能力当前挂的是「进程内内嵌」还是「反代独立微服务」。
 ///
 /// 供通用监控 [`cmx_web_monitor`] 的拓扑面板/活体探测消费——真实反映路由装配决策，而非猜测。
-/// flow/report/rules 各按 `[center_client.services]` 服务定位配置（per-key）决定 embedded/proxy；
+/// flow/report/rules 各按 `[service_rpc.services]` 服务定位配置（per-key）决定 embedded/proxy；
 /// 其余模块均进程内嵌（无反代变体，`proxiable=false` 表示暂未接入独立部署）。这份清单与本文件
 /// 的 `routes()` 装配一一对应。proxy 目标的 `target` 每轮探测时现解析（服务发现模式下跟随
 /// 实例变化；未解析出实例时为 `None`，面板显示为无目标而非误报不可达）。
@@ -113,7 +113,7 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
         proxiable: false,
     };
     let mut deps = vec![
-        // flow：按 [center_client] 服务定位配置决定 embedded/proxy。
+        // flow：按 [service_rpc] 服务定位配置决定 embedded/proxy。
         match flow_upstream() {
             Some(upstream) => cmx_web_monitor::ServiceDep {
                 key: "flow".into(),
@@ -132,7 +132,7 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
         },
     ];
     // 其余已挂载模块（routes() 里无条件 merge，全进程内嵌）。
-    // report：按 [center_client] 服务定位配置决定 embedded/proxy。
+    // report：按 [service_rpc] 服务定位配置决定 embedded/proxy。
     deps.push(match report_upstream() {
         Some(upstream) => cmx_web_monitor::ServiceDep {
             key: "report".into(),
@@ -159,7 +159,7 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
             proxiable: true,
         });
     }
-    // 模型中心四能力（doc/dct/model/code）按 [center_client.services].model 决定 embedded/proxy；
+    // 模型中心四能力（doc/dct/model/code）按 [service_rpc.services].model 决定 embedded/proxy；
     // 配了 = 四者都反代到独立 cmx-model-server，没配 = 四者进程内嵌。
     match model_upstream() {
         Some(upstream) => {
@@ -226,7 +226,7 @@ pub fn service_topology() -> Vec<cmx_web_monitor::ServiceDep> {
 fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match flow_upstream() {
         Some(upstream) => {
-            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            let api_key = crate::config::rpc::load_outgoing_credential();
             tracing::info!(upstream = %upstream.describe(), "流程引擎：独立微服务模式（FlowProxy 转发 /api/flow/* + 页面反代 native/html）");
             let resolver = upstream.resolver_fn();
             let router = router.merge(
@@ -235,7 +235,7 @@ fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
             cmx_flow_api::with_flow_page_proxy(router, resolver, api_key)
         }
         None => {
-            tracing::warn!("流程引擎：未配置反代目标（[center_client.services] 未配 flow 键或 url/discovery 均空）→ 门户不挂 /api/flow/* 路由；请启动独立 cmx-flow-server 并配置其地址");
+            tracing::warn!("流程引擎：未配置反代目标（[service_rpc.services] 未配 flow 键或 url/discovery 均空）→ 门户不挂 /api/flow/* 路由；请启动独立 cmx-flow-server 并配置其地址");
             router
         }
     }
@@ -254,7 +254,7 @@ fn merge_flow(router: Router<CmxAppState>) -> Router<CmxAppState> {
 fn merge_report(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match report_upstream() {
         Some(upstream) => {
-            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            let api_key = crate::config::rpc::load_outgoing_credential();
             tracing::info!(upstream = %upstream.describe(), "报表引擎：独立微服务模式（ReportProxy 转发 /api/report-design/* + 页面反代 native/html）");
             let resolver = upstream.resolver_fn();
             let router = router.merge(
@@ -263,7 +263,7 @@ fn merge_report(router: Router<CmxAppState>) -> Router<CmxAppState> {
             cmx_rpt_api::with_report_page_proxy(router, resolver, api_key)
         }
         None => {
-            tracing::warn!("报表引擎：未配置反代目标（[center_client.services] 未配 report 键或 url/discovery 均空）→ 门户不挂报表路由；请启动独立 cmx-rpt-server 并配置其地址");
+            tracing::warn!("报表引擎：未配置反代目标（[service_rpc.services] 未配 report 键或 url/discovery 均空）→ 门户不挂报表路由；请启动独立 cmx-rpt-server 并配置其地址");
             router
         }
     }
@@ -275,7 +275,7 @@ fn merge_report(router: Router<CmxAppState>) -> Router<CmxAppState> {
 fn merge_rules(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match rules_upstream() {
         Some(upstream) => {
-            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            let api_key = crate::config::rpc::load_outgoing_credential();
             tracing::info!(upstream = %upstream.describe(), "规则引擎：独立微服务模式（RulesProxy 转发 /api/rules/* + 页面反代 native）");
             let resolver = upstream.resolver_fn();
             let router = router.merge(
@@ -293,13 +293,13 @@ fn merge_rules(router: Router<CmxAppState>) -> Router<CmxAppState> {
 ///
 /// 模型中心已抽独立微服务 cmx-model（:8093），容器内引擎源码已退役，**无进程内嵌兜底**（与
 /// flow/report/rules 同构）。前端零改：浏览器请求同源 `/api/dct/*` 等，切换只看
-/// `[center_client.services].model`。
+/// `[service_rpc.services].model`。
 ///
 /// ⚠ MDM（主数据）不在此列——见 [`merge_mdm`]（另一独立微服务 cmx-mdm）。
 fn merge_model(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match model_upstream() {
         Some(upstream) => {
-            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            let api_key = crate::config::rpc::load_outgoing_credential();
             tracing::info!(upstream = %upstream.describe(), "模型中心：独立微服务模式（ModelProxy 转发 /api/{{dct,dict,doc,model,definitions,flexible-combination,code}}/* + 页面反代 native/html）");
             let resolver = upstream.resolver_fn();
             let router = router.merge(
@@ -308,7 +308,7 @@ fn merge_model(router: Router<CmxAppState>) -> Router<CmxAppState> {
             cmx_model_proxy::with_model_page_proxy(router, resolver, api_key)
         }
         None => {
-            tracing::warn!("模型中心：未配置反代目标（[center_client.services] 未配 model 键或 url/discovery 均空）→ 门户不挂模型中心路由（/api/dct、/api/doc、/api/model、/api/code 等）；请启动独立 cmx-model-server 并配置其地址");
+            tracing::warn!("模型中心：未配置反代目标（[service_rpc.services] 未配 model 键或 url/discovery 均空）→ 门户不挂模型中心路由（/api/dct、/api/doc、/api/model、/api/code 等）；请启动独立 cmx-model-server 并配置其地址");
             router
         }
     }
@@ -319,11 +319,11 @@ fn merge_model(router: Router<CmxAppState>) -> Router<CmxAppState> {
 ///
 /// 主数据已抽独立微服务 cmx-mdm（:8095），容器内引擎源码已退役，**无进程内嵌兜底**（与
 /// flow/report/rules/model 同构）。前端零改：浏览器请求同源 `/api/mdm/*`，切换只看
-/// `[center_client.services].mdm`。
+/// `[service_rpc.services].mdm`。
 fn merge_mdm(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match mdm_upstream() {
         Some(upstream) => {
-            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            let api_key = crate::config::rpc::load_outgoing_credential();
             tracing::info!(upstream = %upstream.describe(), "主数据中心：独立微服务模式（MdmProxy 转发 /api/mdm/* + 页面反代 native）");
             let resolver = upstream.resolver_fn();
             let router = router.merge(
@@ -332,7 +332,7 @@ fn merge_mdm(router: Router<CmxAppState>) -> Router<CmxAppState> {
             cmx_mdm_proxy::with_mdm_page_proxy(router, resolver, api_key)
         }
         None => {
-            tracing::warn!("主数据中心：未配置反代目标（[center_client.services] 未配 mdm 键或 url/discovery 均空）→ 门户不挂 /api/mdm/* 路由；请启动独立 cmx-mdm-server 并配置其地址");
+            tracing::warn!("主数据中心：未配置反代目标（[service_rpc.services] 未配 mdm 键或 url/discovery 均空）→ 门户不挂 /api/mdm/* 路由；请启动独立 cmx-mdm-server 并配置其地址");
             router
         }
     }
@@ -342,11 +342,11 @@ fn merge_mdm(router: Router<CmxAppState>) -> Router<CmxAppState> {
 /// （`meta.*` native/html 页转发到 cmx-meta-server）；没配 → 不挂元数据路由。
 ///
 /// 元数据管理是全新独立微服务 cmx-meta-data（:8096），**无进程内嵌兜底**（与 flow/report/rules/model/
-/// mdm 同构）。前端零改：浏览器请求同源 `/api/meta/*`，切换只看 `[center_client.services].meta`。
+/// mdm 同构）。前端零改：浏览器请求同源 `/api/meta/*`，切换只看 `[service_rpc.services].meta`。
 fn merge_meta(router: Router<CmxAppState>) -> Router<CmxAppState> {
     match meta_upstream() {
         Some(upstream) => {
-            let api_key = crate::config::rpc::load_outgoing_credential().map(|c| c.value);
+            let api_key = crate::config::rpc::load_outgoing_credential();
             tracing::info!(upstream = %upstream.describe(), "元数据管理：独立微服务模式（MetaProxy 转发 /api/meta/* + 页面反代 meta.*）");
             let resolver = upstream.resolver_fn();
             let router = router.merge(
@@ -355,7 +355,7 @@ fn merge_meta(router: Router<CmxAppState>) -> Router<CmxAppState> {
             cmx_meta_proxy::with_meta_page_proxy(router, resolver, api_key)
         }
         None => {
-            tracing::warn!("元数据管理：未配置反代目标（[center_client.services] 未配 meta 键或 url/discovery 均空）→ 门户不挂 /api/meta/* 路由；请启动独立 cmx-meta-server 并配置其地址");
+            tracing::warn!("元数据管理：未配置反代目标（[service_rpc.services] 未配 meta 键或 url/discovery 均空）→ 门户不挂 /api/meta/* 路由；请启动独立 cmx-meta-server 并配置其地址");
             router
         }
     }
@@ -366,7 +366,7 @@ fn merge_meta(router: Router<CmxAppState>) -> Router<CmxAppState> {
 /// DocModule、数据字典 DctModule、主数据 MdmModule、异步任务中心 JobModule、模型中心 ModelModule、
 /// 编码引擎 CodeModule）在此合并——cmx-api 不依赖它们，避免循环依赖。
 ///
-/// 流程/报表/规则三引擎均为**独立微服务**：各按 `[center_client.services]` 的服务定位配置（per-key：
+/// 流程/报表/规则三引擎均为**独立微服务**：各按 `[service_rpc.services]` 的服务定位配置（per-key：
 /// `url` 静态基址优先，`discovery` Nacos 选例）决定——
 /// 配了=反代到独立微服务，没配=不挂该模块路由（三者无进程内嵌，编译期均不依赖引擎源码）。
 ///
@@ -390,11 +390,11 @@ pub fn routes() -> Router<CmxAppState> {
         .merge(TableMetadataModule.routes())
         .merge(MarketplaceModule.routes())
         .merge(ModulePackageModule.routes());
-    // 报表、流程各按 [center_client.services].{report,flow} 二选一：配了=反代到独立微服务，没配=进程内嵌。
-    // 规则按 [center_client.services].rules：配了=反代到独立 cmx-rule-server，没配=不挂（规则无内嵌）。
-    // 模型中心按 [center_client.services].model：配了=反代到独立 cmx-model-server，没配=进程内嵌
+    // 报表、流程各按 [service_rpc.services].{report,flow} 二选一：配了=反代到独立微服务，没配=进程内嵌。
+    // 规则按 [service_rpc.services].rules：配了=反代到独立 cmx-rule-server，没配=不挂（规则无内嵌）。
+    // 模型中心按 [service_rpc.services].model：配了=反代到独立 cmx-model-server，没配=进程内嵌
     // （Dct/Doc/Model/Code 四模块，见 merge_model 的 None 分支——故已从 base 移出）。
-    // 主数据按 [center_client.services].mdm：配了=反代到独立 cmx-mdm-server，没配=不挂
+    // 主数据按 [service_rpc.services].mdm：配了=反代到独立 cmx-mdm-server，没配=不挂
     // /api/mdm/* 路由（无进程内嵌，见 merge_mdm 的 None 分支——故已从 base 移出）。
     merge_meta(merge_mdm(merge_model(merge_flow(merge_report(merge_rules(base))))))
 }

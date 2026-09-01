@@ -83,7 +83,7 @@ path_patterns = "/files/**"
 # ============================================
 # RPC 配置
 # ============================================
-[rpc]
+[service_rpc.server]
 # 是否启用 RPC（可选，默认 false）
 enabled = true
 # 通信协议（目前仅支持 "grpc"）
@@ -91,7 +91,7 @@ protocol = "grpc"
 # 预热服务列表（启动时预先发现的服务名）
 warmup_services = []
 
-[rpc.grpc]
+[service_rpc.server.grpc]
 # gRPC 监听端口
 port = 9090
 # RPC 调用超时时间（毫秒，可选，默认 30000），通过 volo rpc_timeout 设置

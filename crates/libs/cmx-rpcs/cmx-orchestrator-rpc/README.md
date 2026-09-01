@@ -10,13 +10,13 @@
 
 ## 项目简介
 
-`cmx-orchestrator-rpc` 位于 `crates/libs/cmx-rpcs/` 归域目录下——该目录与 `cmx-apis/`（HTTP 皮肤）对称，集中收录各业务域的 **gRPC 皮肤** crate。皮肤 crate 只做「协议适配 + 装配」，不含业务逻辑：本 crate 实现 `cmx_traits::rpc::ServiceOrchestrationClient` trait 的 volo-grpc 版本，服务端则把 gRPC 请求桥接到 `ServiceInvoker`（编排执行）与 `FunctionInvoker`（插件函数调用）两个 trait——**不依赖任何业务 service crate**，具体实现由组装层（如 cmx-platform-app）通过 `cmx_rpc::bundle::ServerDeps` 注入。
+`cmx-orchestrator-rpc` 位于 `crates/libs/cmx-rpcs/` 归域目录下——该目录与 `cmx-apis/`（HTTP 皮肤）对称，集中收录各业务域的 **gRPC 皮肤** crate。皮肤 crate 只做「协议适配 + 装配」，不含业务逻辑：本 crate 实现 `cmx_traits::rpc::ServiceOrchestrationClient` trait 的 volo-grpc 版本，服务端则把 gRPC 请求桥接到 `ServiceInvoker`（编排执行）与 `FunctionInvoker`（插件函数调用）两个 trait——**不依赖任何业务 service crate**，具体实现由组装层（如 cmx-platform-app）通过 `cmx_service_rpc::grpc::bundle::ServerDeps` 注入。
 
 三件套结构：
 
-- **client 访问器** `orchestrator_client()`：`OnceLock` 领域全局，返回 `&'static Arc<dyn ServiceOrchestrationClient>`；未初始化时 panic（须先经 `cmx_rpc::init_rpc_clients` 初始化，调用前用 `cmx_rpc::GlobalRpcClient::is_initialized` 守卫）。
+- **client 访问器** `orchestrator_client()`：`OnceLock` 领域全局，返回 `&'static Arc<dyn ServiceOrchestrationClient>`；未初始化时 panic（须先经 `cmx_service_rpc::grpc::init_rpc_clients` 初始化，调用前用 `cmx_service_rpc::grpc::GlobalRpcClient::is_initialized` 守卫）。
 - **服务端实现** `CmxOrchestratorServerImpl`：实现 proto 生成的 `CmxServiceOrchestrator` trait，两个 RPC 方法 `execute_service` / `call_function`。
-- **装配 Bundle** `OrchestratorBundle`：实现 `cmx_rpc::bundle::RpcServiceBundle`（`init_client` + `build_server`），由组装层显式注册进 `init_rpc`。
+- **装配 Bundle** `OrchestratorBundle`：实现 `cmx_service_rpc::grpc::bundle::RpcServiceBundle`（`init_client` + `build_server`），由组装层显式注册进 `init_rpc`。
 
 服务端收到请求后经 `cmx_traits::auth::context_scope::scope_full` 建立 task_local scope，把鉴权上下文、委托用户 token、request_id 透传给业务层——使**链式跨服务调用可继续 on-behalf-of**（A 经平台调 B，B 内部再调 C 时 C 仍能拿到真实用户身份）。业务失败走 `Ok(success=false)` 响应而非 gRPC Status 错误（客户端拿到结构化错误信息，而非传输层异常）。
 
@@ -28,7 +28,7 @@
 
 | 依赖 | 用途 |
 |------|------|
-| `cmx-rpc` | 共享 RPC 基础设施：`GrpcInfrastructure`（服务发现/超时/重试）、`with_retry`（带 RetryStats）、`apply_auth_metadata`、`safe_parse_json`、`AuthVerifier` / `verify_request` / `VerifiedAuth`、`bundle::{RpcServiceBundle, ServerDeps, ServerRegistration}` |
+| `cmx-service-rpc`（feature `grpc-server`） | 共享 RPC 基础设施（src/grpc/）：`GrpcInfrastructure`（服务发现/超时/重试）、`with_retry`（带 RetryStats）、`apply_auth_metadata`、`safe_parse_json`、`AuthVerifier` / `verify_request` / `VerifiedAuth`、`bundle::{RpcServiceBundle, ServerDeps, ServerRegistration}` |
 | `cmx-rpc-gen` | proto 契约 `orchestrator_proto`（`CmxServiceOrchestratorClient/Server`、`ExecuteServiceRequest/Response`、`CallFunctionRequest/Response` 等） |
 | `cmx-traits` | trait 抽象层：`ServiceOrchestrationClient`、`ServiceInvoker`、`FunctionInvoker`、`ServiceInvokeOptions`、`FunctionCallResult`、`RpcError`、`step_status`、`context_scope` |
 | `cmx-core` | 领域模型：`CallServiceResponse`、`ExecutionStep`、`OrchestrationError`、`SVRContext` |
@@ -40,7 +40,7 @@
 | 使用方 | 引用方式 | 实际用途 |
 |--------|---------|---------|
 | `cmx-platform-app` | workspace 依赖 | 组装层注册 `OrchestratorBundle` 进 `init_rpc`（`rpc_bundles` vec，与 `ResourceDataBundle` 并列），注入 `GlobalServiceInvoker` 与 `FunctionInvoker` |
-| `cmx-common-api` | workspace 依赖 | `handlers/service/handler.rs` 的 `call_function_via_rpc` / `execute_service_via_rpc`：前置 `cmx_rpc::GlobalRpcClient::is_initialized()` 守卫后调 `orchestrator_client().call_function(...)` |
+| `cmx-common-api` | workspace 依赖 | `handlers/service/handler.rs` 的 `call_function_via_rpc` / `execute_service_via_rpc`：前置 `cmx_service_rpc::grpc::GlobalRpcClient::is_initialized()` 守卫后调 `orchestrator_client().call_function(...)` |
 | `cmx-plugin` | workspace 依赖 | `host_functions.rs` 中插件宿主函数经 `orchestrator_client()` 发起跨服务编排调用 |
 
 ---
@@ -52,7 +52,7 @@
 | `execute_service` RPC | 客户端 `call_service(service_name, service_key, input, options)` → 远端 `ServiceInvoker::invoke_service`；`ServiceInvokeOptions` 透传 `include_steps` / `debug` / `debug_node_id` / `debug_params` |
 | `call_function` RPC | 客户端 `call_function(service_name, plugin_id, function_name, input)` → 远端 `FunctionInvoker::invoke_plugin_function`（封装 RuntimeInvoker + PluginQuery 完整调用链） |
 | 客户端缓存 | `service_name → client` 的 RwLock 缓存 + double-check locking 防并发重复建连；discover 由 `GrpcInfrastructure` 共享 |
-| 超时与重试 | 两个调用均包 `cmx_rpc::with_retry`（timeout_ms / retry_count 取自 infra），成功/失败日志带 `RetryStats`（elapsed_us / attempts） |
+| 超时与重试 | 两个调用均包 `cmx_service_rpc::grpc::with_retry`（timeout_ms / retry_count 取自 infra），成功/失败日志带 `RetryStats`（elapsed_us / attempts） |
 | 出站鉴权 | `apply_auth_metadata` 注入 outbound_service_key（`[service_auth]` 服务凭证） |
 | 服务端鉴权 | `AuthVerifier` 可选注入（`with_auth_verifier`）；`verify_request` 从 gRPC metadata 验证，产出 `VerifiedAuth` |
 | 委托链透传 | `scope_full(auth_ctx, user_token, request_id, None, ...)` 建 task_local scope，链式调用继续 on-behalf-of |
@@ -134,7 +134,7 @@ impl cmx_rpc_gen::orchestrator_proto::CmxServiceOrchestrator for CmxOrchestrator
 use cmx_orchestrator_rpc::OrchestratorBundle;
 
 // rpc_bundles vec 与 ResourceDataBundle 并列，一起交给 init_rpc：
-let rpc_bundles: Vec<Box<dyn cmx_rpc::bundle::RpcServiceBundle>> =
+let rpc_bundles: Vec<Box<dyn cmx_service_rpc::grpc::bundle::RpcServiceBundle>> =
     vec![Box::new(OrchestratorBundle), Box::new(cmx_resource_rpc::ResourceDataBundle)];
 
 // init_rpc 内部会：遍历 bundles 调 init_client(基建) 填各自 OnceLock；
@@ -149,7 +149,7 @@ init_rpc(rpc_bundles, global_service_invoker, function_invoker, importer, auth).
 use serde_json::json;
 
 // 守卫：RPC 层未启用（未配注册中心）时优雅降级，而非 panic
-if !cmx_rpc::GlobalRpcClient::is_initialized() {
+if !cmx_service_rpc::grpc::GlobalRpcClient::is_initialized() {
     return Err(bad_request("RPC 未初始化"));
 }
 
@@ -194,4 +194,4 @@ for step in &resp.steps {
 
 ## Features
 
-无 `[features]`，本 crate 为薄皮肤，不含可选编译特性。新增一个 gRPC 服务的标准步骤见 `cmx-rpc/README.md`。
+无 `[features]`，本 crate 为薄皮肤，不含可选编译特性。新增一个 gRPC 服务的标准步骤见 `cmx-service-rpc/README.md`。

@@ -13,7 +13,7 @@ use axum::response::{IntoResponse, Response};
 
 /// 反代目标 resolver：每次调用返回当前可用基址（`None` = 无可用实例 → 503）。
 ///
-/// 由装配层（cmx-platform-app routes.rs）从 `cmx_plugin::center_client::ProxyUpstream::resolver_fn`
+/// 由装配层（cmx-platform-app routes.rs）从 `cmx_service_rpc::Locator::resolver_fn`
 /// 构造——`Send + Sync` 无状态闭包，`Static` 固化返回基址，`Discovery` 查内存实例缓存。
 pub type UpstreamResolver = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 

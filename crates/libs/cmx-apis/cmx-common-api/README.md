@@ -353,7 +353,7 @@ declare_crud_handlers!(user_crud, User, UserBmc, UserForCreate, UserForUpdate,
 `portal.model.*` → `model`；其余归门户本地数据根。
 
 - **保存（F3-save）**：`POST /api/html-pages` 命中属主时整包反代属主引擎落盘（body 原样透传避免重序列化丢字段，真源在各服务 assets 工作区；属主侧 domain/app/module 三级回退：显式 > 既有行 > id 推导），未命中落门户本地；
-- **批量取页（batch）**：`/batch` 按属主分组 → 本地组直读 + 远程组经 `cmx_plugin::center_client::proxy_upstream(key)` 并行 `POST {base}/api/{kind}-pages/batch`（reqwest，20s 超时，透传转发头）→ `MergedBatch` 合并 `{pages, revs, errors}` 三段；未返回的 id 记「不存在」，整组不可达记「服务 {key} 不可用」，单组失败不阻断其余组。
+- **批量取页（batch）**：`/batch` 按属主分组 → 本地组直读 + 远程组经 `cmx_service_rpc::locator(key)` 并行 `POST {base}/api/{kind}-pages/batch`（reqwest，20s 超时，透传转发头）→ `MergedBatch` 合并 `{pages, revs, errors}` 三段；未返回的 id 记「不存在」，整组不可达记「服务 {key} 不可用」，单组失败不阻断其余组。
 
 **data —— 事实数据 + 帮助中心**
 
@@ -498,7 +498,7 @@ cmx-platform-app（平台总装配：合并本 crate api_routes() + 各域 *-api
 ```
 
 依赖的主要内部 crate（见 Cargo.toml）：cmx-api-core / cmx-api-types / cmx-biz / cmx-portal /
-cmx-ai / cmx-auth / cmx-rpc / cmx-orchestrator-rpc / cmx-service / cmx-plugin / cmx-storage /
+cmx-ai / cmx-auth / cmx-service-rpc / cmx-orchestrator-rpc / cmx-service / cmx-plugin / cmx-storage /
 cmx-debug / cmx-metadata / cmx-buffer / cmx-traits / cmx-utils / cmx-core / cmx-database /
 cmx-database-pg；外部依赖含 `reqwest`（页面 batch 聚合分发 / F3-save 反代属主引擎的 HTTP 客户端）。
 

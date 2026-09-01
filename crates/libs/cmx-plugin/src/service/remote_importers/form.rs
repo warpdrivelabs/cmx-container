@@ -34,7 +34,7 @@ impl FormDefinitionImporter for RemoteFormDefinitionImporter {
             return Ok(0);
         }
         // 结构体 → ZIP(form_0.json, form_1.json ...)
-        let zip_data = crate::center_client::packer::pack_definitions_to_zip(definitions, "form")
+        let zip_data = crate::service::remote_importers::packer::pack_definitions_to_zip(definitions, "form")
             .map_err(|e| TraitError::Business(format!("打包表单定义失败: {e}")))?;
 
         let req = ResourceDataImportRequest {
@@ -51,7 +51,7 @@ impl FormDefinitionImporter for RemoteFormDefinitionImporter {
         // 统一发送(按该键生效 transport 透明走 gRPC 或 HTTP)
         let result = self
             .ctx
-            .send(crate::center_client::types::DataCategory::Form, req)
+            .send(crate::service::remote_importers::types::DataCategory::Form, req)
             .await
             .map_err(plugin_err_to_trait)?;
         info!(
@@ -78,7 +78,7 @@ impl FormDefinitionImporter for RemoteFormDefinitionImporter {
         };
         let result = self
             .ctx
-            .send_list(crate::center_client::types::DataCategory::Form, req)
+            .send_list(crate::service::remote_importers::types::DataCategory::Form, req)
             .await
             .map_err(plugin_err_to_trait)?;
         serde_json::from_slice(&result.json_data)

@@ -433,24 +433,24 @@ AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作*
 | 层 | crate | 职责 | 禁止 |
 |----|-------|------|------|
 | proto 契约 | `cmx-rpc-gen`（`idl/<域>/*.proto` + volo.yml + 别名模块） | 集中管理全部 proto、生成类型重导出 | 放任何运行时代码 |
-| 基础设施 | `cmx-infra/cmx-rpc` | Bundle trait / GrpcInfrastructure / with_retry / apply_auth_metadata / AuthVerifier / factory / server_runner / GlobalRpcClient | **禁止出现任何具体服务的 client/server impl**（皮肤已全部迁出） |
+| 基础设施 | `cmx-infra/cmx-service-rpc` 的 `grpc` 模块（feature `grpc-client` / `grpc-server`，路径 `cmx_service_rpc::grpc::*`） | Bundle trait / GrpcInfrastructure / with_retry / apply_auth_metadata / AuthVerifier / factory / server_runner / GlobalRpcClient | **禁止出现任何具体服务的 client/server impl**（皮肤已全部迁出） |
 | 皮肤 | `cmx-rpcs/cmx-<域>-rpc` | client 访问器 + server impl + Bundle（src/{lib,client,server}.rs） | **禁止依赖业务 service crate**（cmx-biz 等）——业务实现经 `ServerDeps` 由组装层注入 |
 
 ### 19.2 硬约束
 
-- **主应用提供哪些 gRPC 服务 = cmx-platform-app `run_platform` 的 `rpc_bundles` 列表**——增删一行即增删服务，cmx-rpc 与皮肤 crate 零改动。裁剪部署形态（精简版/独立微服务）只改该列表。
-- 新增 gRPC 服务按 `cmx-rpc/README.md` 的 SOP 九步执行（proto → volo.yml → 别名 → 新建皮肤 → workspace 注册 → 组装层注册 → 消费方调用）。
+- **主应用提供哪些 gRPC 服务 = cmx-platform-app `run_platform` 的 `rpc_bundles` 列表**——增删一行即增删服务，基座与皮肤 crate 零改动。裁剪部署形态（精简版/独立微服务）只改该列表。
+- 新增 gRPC 服务按 `cmx-service-rpc/README.md` 的 SOP 九步执行（proto → volo.yml → 别名 → 新建皮肤 → workspace 注册 → 组装层注册 → 消费方调用）。
 - 生成类型引用一律走便捷别名 `cmx_rpc_gen::orchestrator_proto::*` / `resource_data_proto::*`，不写四层深路径。
-- 消费方调用访问器前**必须**先 `cmx_rpc::GlobalRpcClient::is_initialized()` 守卫（未初始化访问器直接 panic）。
+- 消费方调用访问器前**必须**先 `cmx_service_rpc::grpc::GlobalRpcClient::is_initialized()` 守卫（未初始化访问器直接 panic）。
 - `with_retry` 闭包只返回原始 `volo_grpc::Status`，`into_inner`/proto 转换在重试返回后做一次。
-- 配置：`[rpc]`（enabled/protocol/grpc.port/timeout/retry/warmup_services）与 `[service_auth].outgoing_api_key`，皮肤与基础设施 crate 均不读配置（装配层 cmx-service-base 统一读）。
+- 配置：`[service_rpc.server]`（原 `[rpc]`：enabled/protocol/grpc.port/timeout/retry/warmup_services）与 `[service_auth].outgoing_api_key`，皮肤与基础设施 crate 均不读配置（装配层 cmx-service-base 统一读）。
 
 ### 19.3 关键路径
 
 ```
-crates/libs/cmx-rpc-gen/                  # proto 契约（idl/orchestrator/、idl/resource/）
-crates/libs/cmx-infra/cmx-rpc/            # RPC 基础设施（纯共享设施）
-crates/libs/cmx-rpcs/cmx-orchestrator-rpc/  # 编排皮肤（OrchestratorBundle + orchestrator_client()）
-crates/libs/cmx-rpcs/cmx-resource-rpc/      # 资源导入皮肤（ResourceDataBundle + resource_data_client()）
-cmx-platform-app/src/lib.rs               # ★ rpc_bundles 显式装配点
+crates/libs/cmx-rpc-gen/                     # proto 契约（idl/orchestrator/、idl/resource/）
+crates/libs/cmx-infra/cmx-service-rpc/       # 服务间统一调用基座（src/grpc/ = gRPC 基础设施，feature 门控）
+crates/libs/cmx-rpcs/cmx-orchestrator-rpc/   # 编排皮肤（OrchestratorBundle + orchestrator_client()）
+crates/libs/cmx-rpcs/cmx-resource-rpc/       # 资源导入皮肤（ResourceDataBundle + resource_data_client()）
+cmx-platform-app/src/lib.rs                  # ★ rpc_bundles 显式装配点
 ```

@@ -6,7 +6,7 @@
 
 | crate | 说明 |
 | --- | --- |
-| `cmx-model-proxy` | 平台反代薄壳：`ModelProxyModule` 把门户模型中心七前缀（`/api/{dct,dict,doc,model,definitions,flexible-combination,code}/*`）+ `portal.model.*` native/html 页取页请求透明转发到独立 cmx-model-server（`[center_client.services].model` per-key 定位）。**无进程内嵌兜底**：没配目标 = 门户不挂模型中心路由 |
+| `cmx-model-proxy` | 平台反代薄壳：`ModelProxyModule` 把门户模型中心七前缀（`/api/{dct,dict,doc,model,definitions,flexible-combination,code}/*`）+ `portal.model.*` native/html 页取页请求透明转发到独立 cmx-model-server（`[service_rpc.services].model` per-key 定位）。**无进程内嵌兜底**：没配目标 = 门户不挂模型中心路由 |
 
 ## 迁移对照
 
@@ -22,7 +22,7 @@
 
 模型中心微服务同时承载 dct/doc/model/code 四能力，对外 URL 与平台一致（无 `/v1`），
 壳的转发为恒等映射 `{model_base}/api{path}{query}`；切换只看
-`[center_client.services].model`——配了才挂模型中心路由，前端零改。
+`[service_rpc.services].model`——配了才挂模型中心路由，前端零改。
 
 ## 相关背景
 

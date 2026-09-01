@@ -1,11 +1,11 @@
-//! FlowProxyModule —— 平台→独立流程微服务的**反向代理壳**（S6 center_client 对接）。
+//! FlowProxyModule —— 平台→独立流程微服务的**反向代理壳**（S6 平台对接）。
 //!
 //! 「前端一芯三壳」在后端的对偶：`FlowModule`（进程内嵌引擎，`/api/flow/*` 由本进程 handler 处理）
 //! ↔ `FlowProxyModule`（引擎在**远程独立 flow-server**，`/api/flow/*` 透明转发到它）。二者对
 //! web-server 是同一个 `impl ModuleRoutes` 契约、同一段 `/flow/*` 前缀——**前端零改**（浏览器仍
-//! 请求同源 `/api/flow/...`），切换只看 `[center_client]` 的服务定位配置（per-key：`services.flow`
+//! 请求同源 `/api/flow/...`），切换只看 `[service_rpc]` 的服务定位配置（per-key：`services.flow`
 //! 配 url 静态基址或 discovery Nacos 选例，见
-//! `cmx_plugin::center_client::upstream::proxy_upstream`）。
+//! `cmx_service_rpc::locator`）。
 //!
 //! 目标经 [`UpstreamResolver`] 按请求动态解析：静态基址固化返回；Nacos 服务发现模式每次从
 //! 全局实例缓存选例（订阅推送 + 30s 同步保新鲜）。无可用实例 → 503（区别于下游不可达的 502）。
@@ -91,7 +91,7 @@ fn flow_target(flow_base: &str, uri: &Uri) -> String {
 }
 
 // ============================================================================
-// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 [center_client] 的服务定位配置
+// 页面反代（F3a）：前端页 native/html 也「一芯双壳」——门户按 [service_rpc] 的服务定位配置
 // 把**流程拥有的**页面取页请求反代到独立 cmx-flow-server（它自暴同款字节对齐 API）。
 // ----------------------------------------------------------------------------
 // 与 flow API 反代的差异：页面**不升级 /v1**（flow-server 页面挂在 `/api/native-pages`、

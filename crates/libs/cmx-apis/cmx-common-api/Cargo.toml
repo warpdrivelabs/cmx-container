@@ -5,6 +5,8 @@ edition.workspace = true
 authors.workspace = true
 
 [features]
+# gRPC 远程服务调用（orchestrator 通道；未启用时相应端点返回未启用错误）
+grpc = ["dep:cmx-orchestrator-rpc", "cmx-service-rpc/grpc-client"]
 default = []
 # 开发脚手架工具（项目模板生成：本地 fs 写入/解压 zip/写 settings.json）。
 # 违反集群无状态约束（AGENTS.md §五），仅单节点 dev 环境启用；默认关闭，启用时启动告警。
@@ -35,6 +37,7 @@ cmx-database-pg = { workspace = true }
 cmx-metadata = { workspace = true }
 # 内部依赖 - 插件
 cmx-plugin = { workspace = true }
+cmx-service-rpc = { workspace = true }
 # 内部依赖 - 二次开发平台（W1 构建 / W3 触发 / W5 工作区）HTTP 端点装配
 cmx-build = { workspace = true }
 cmx-build-store-pg = { workspace = true }
@@ -52,9 +55,8 @@ cmx-auth = { workspace = true }
 # 内部依赖 - 门户/设计器业务（迁移自 Node 后端）
 cmx-portal = { workspace = true }
 # 内部依赖 - RPC 通信
-cmx-rpc = { workspace = true }
-# RPC 皮肤（orchestrator/resource_data 访问器；GlobalRpcClient 守卫仍在 cmx-rpc）
-cmx-orchestrator-rpc = { workspace = true }
+# RPC 皮肤（orchestrator 访问器；grpc feature 门控）
+cmx-orchestrator-rpc = { workspace = true, optional = true }
 # 内部依赖 - 服务
 cmx-service = { workspace = true }
 # 内部依赖 - 调试
