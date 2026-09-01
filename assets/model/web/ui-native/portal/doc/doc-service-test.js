@@ -193,22 +193,22 @@ async function runAll (def) {
 /* ── 渲染 ─────────────────────────────────────────────────────────────── */
 function styleHtml () {
   return `<style>
-.st-root{font:13px/1.5 -apple-system,Segoe UI,sans-serif;padding:12px;height:100%;box-sizing:border-box;overflow:auto;color:#222}
+.st-root{font:13px/1.5 -apple-system,Segoe UI,sans-serif;padding:12px;height:100%;box-sizing:border-box;overflow:auto;color:var(--sapTextColor, #222222)}
 .st-head{display:flex;align-items:center;gap:12px;margin-bottom:8px}
 .st-title{font-weight:600;font-size:15px}
-.st-run{padding:3px 14px;cursor:pointer;border:1px solid #0854a0;background:#0854a0;color:#fff;border-radius:4px}
-.st-run:hover{background:#063d78}
+.st-run{padding:3px 14px;cursor:pointer;border:1px solid var(--sapInformationElementColor, #0854a0);background:var(--sapInformationElementColor, #0854a0);color:var(--sapGroup_ContentBorderColor, #ffffff);border-radius:4px}
+.st-run:hover{background:var(--sapInformationElementColor, #063d78)}
 .st-sum{margin-left:auto;font-weight:600}
-.st-sum.ok{color:#107e3e}.st-sum.bad{color:#bb0000}
-.st-list{border:1px solid #e5e5e5;border-radius:6px;overflow:hidden}
-.st-item{display:flex;gap:10px;padding:6px 10px;border-top:1px solid #f0f0f0;align-items:baseline}
+.st-sum.ok{color:var(--sapPositiveTextColor, #107e3e)}.st-sum.bad{color:var(--sapNegativeTextColor, #bb0000)}
+.st-list{border:1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);border-radius:6px;overflow:hidden}
+.st-item{display:flex;gap:10px;padding:6px 10px;border-top:1px solid var(--sapGroup_ContentBorderColor, #f0f0f0);align-items:baseline}
 .st-item:first-child{border-top:0}
 .st-badge{flex:0 0 auto;width:44px;text-align:center;font-weight:700;border-radius:3px;font-size:11px;padding:1px 0}
-.st-badge.ok{background:#e6f4ea;color:#107e3e}.st-badge.bad{background:#fbe9e9;color:#bb0000}
+.st-badge.ok{background:#e6f4ea;color:var(--sapPositiveElementColor, #107e3e)}.st-badge.bad{background:#fbe9e9;color:var(--sapNegativeElementColor, #bb0000)}
 .st-name{flex:0 0 44%;font-weight:600}
-.st-detail{flex:1;color:#555;word-break:break-all}
-.st-ms{flex:0 0 auto;color:#999;font-size:11px}
-.st-props{margin:6px 0;color:#777;font-size:12px}
+.st-detail{flex:1;color:var(--sapContent_LabelColor, #555555);word-break:break-all}
+.st-ms{flex:0 0 auto;color:var(--sapContent_LabelColor, #999999);font-size:11px}
+.st-props{margin:6px 0;color:var(--sapContent_LabelColor, #777777);font-size:12px}
 </style>`
 }
 
