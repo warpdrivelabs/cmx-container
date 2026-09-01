@@ -1,0 +1,26 @@
+[package]
+name = "cmx-master-slave"
+version.workspace = true
+edition.workspace = true
+
+# 后端主从协调器 —— 前端 CmxMasterSlave(packages/cmx-data-comp/src/lib/cmx-master-slave.js)的
+# Rust 对等物。业务无感知:只认 schema 路径树 + relations + aggregations,不认任何 cv_*/cf_*/业务术语。
+#
+# 依赖方向(与前端同姿态):本 crate 是近叶子(仅依赖 cmx-rowsource + serde 系),
+# 是 cmx-doc-store-pg / cmx-dct-store-pg 等服务 impl 本 crate 的 HierService 来适配它——
+# 服务依赖它,它不依赖服务。数据集统一用 ZmcDataSet(零拷贝,列式包与前端 CmxDataSet.fromJSON 同 wire)。
+
+[dependencies]
+# 驱动无关零拷贝数据集(ZmcDataSet/ZmcChildGroup/ZmcRowSource)——本 crate 的数据模型
+cmx-rowsource = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+# 测试里的 mock ZmcRowSource 需实现 trait 全签名（含 uuid/chrono/decimal 返回类型）
+tokio = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }

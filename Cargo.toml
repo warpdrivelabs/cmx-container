@@ -52,6 +52,21 @@ members = [
     "crates/libs/cmx-form",
     "crates/libs/cmx-engine-kit",
     "crates/libs/cmx-model/cmx-model-proxy",
+    # —— 数据运行态下沉 crate（第二批阶段三，自 ../cmx-model 迁回，真源随之移至本仓）——
+    # cmx-model-meta：定义 JSON 读取层（definitions store + resolve_dict_file），mdm 激活落库
+    # 与门户 cmx-portal 的公共依赖；cmx-master-slave：主从协调协议层（DCT/DOC 的 HierService
+    # 契约，近叶子，被 dct/doc 两存储层 impl 适配）。
+    "crates/libs/cmx-model/cmx-model-meta",
+    "crates/libs/cmx-model/cmx-master-slave",
+    # —— DCT 域组（字典数据运行态：模型 + PG 存储层）——
+    "crates/libs/cmx-dct/cmx-dct-model",
+    "crates/libs/cmx-dct/cmx-dct-store-pg",
+    # —— 编码域组（铸号引擎：规则模型 + 无状态 API，按 db_id 查 cmx_code_* 三表）——
+    "crates/libs/cmx-code/cmx-code-model",
+    "crates/libs/cmx-code/cmx-code-api",
+    # —— DOC 域组（单据数据运行态：定义模型 + PG 存储层，sqlx/tokio-pg 双驱动 + 主从上卷）——
+    "crates/libs/cmx-doc/cmx-doc-model",
+    "crates/libs/cmx-doc/cmx-doc-store-pg",
     "crates/libs/cmx-meta/cmx-meta-proxy",
     "crates/libs/cmx-dataauth/cmx-dataauth-proxy",
     "crates/libs/cmx-rpc-gen",
@@ -225,10 +240,21 @@ cmx-job-api = { path = "crates/libs/cmx-job/cmx-job-api", version = "0.1.12", re
 # 内部依赖 - 主数据（MDM）平台反代薄壳（MdmProxyModule，proxy-only；反代到独立 cmx-mdm-server）
 cmx-mdm-proxy = { path = "crates/libs/cmx-mdm/cmx-mdm-proxy", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 后端主从协调器（前端 CmxMasterSlave 的 Rust 对等物；近叶子，doc/dct 服务 impl 其 HierService）
+cmx-master-slave = { path = "crates/libs/cmx-model/cmx-master-slave", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 定义 JSON 读取层（definitions store + resolve_dict_file；mdm 激活落库与门户 cmx-portal 公共依赖）
+cmx-model-meta = { path = "crates/libs/cmx-model/cmx-model-meta", version = "0.1.12", registry = "nora" }
+# 内部依赖 - DCT 字典模型层（DictMeta/查询过滤，openapi feature 可选）
+cmx-dct-model = { path = "crates/libs/cmx-dct/cmx-dct-model", version = "0.1.12", registry = "nora" }
+# 内部依赖 - DCT 字典 PG 存储层（dict_upsert/dict_meta 数据服务；mdm 激活/查重经此落库读典）
+cmx-dct-store-pg = { path = "crates/libs/cmx-dct/cmx-dct-store-pg", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 编码引擎纯逻辑层（段定义/规则算法/Advance trait，无 DB/HTTP，DCT/DOC 钩子轻量依赖）
-# 内部依赖 - 编码引擎 HTTP 层（薄 handler + CodeModule 路由，web-server 合并，避免 cmx-api⇄cmx-code 环）
-# 内部依赖 - 模型中心部署层（编译/初始化/部署，DB 落库）
-# 内部依赖 - 模型中心 HTTP 层（ModelModule 路由，web-server 合并，避免 cmx-api⇄cmx-model 环）
+cmx-code-model = { path = "crates/libs/cmx-code/cmx-code-model", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 编码引擎 HTTP 层（CodeEngine 无状态实现，按 db_id 查 cmx_code_* 三表；mdm/model 各自注入）
+cmx-code-api = { path = "crates/libs/cmx-code/cmx-code-api", version = "0.1.12", registry = "nora" }
+# 内部依赖 - DOC 单据定义模型（表结构/校验/SQL 生成，sqlx 与 tokio-pg 通用 $N 占位 + DataValue 绑定）
+cmx-doc-model = { path = "crates/libs/cmx-doc/cmx-doc-model", version = "0.1.12", registry = "nora" }
+# 内部依赖 - DOC 单据 PG 存储层（装载/回存/版本化 + impl 主从 HierService 层级上卷）
+cmx-doc-store-pg = { path = "crates/libs/cmx-doc/cmx-doc-store-pg", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 模型中心平台反代薄壳（ModelProxyModule，proxy-only；反代到独立 cmx-model-server）
 cmx-model-proxy = { path = "crates/libs/cmx-model/cmx-model-proxy", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 元数据管理平台反代薄壳（MetaProxyModule，proxy-only；反代到独立 cmx-meta-server :8096）
