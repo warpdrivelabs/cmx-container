@@ -20,24 +20,7 @@ const DEFAULTS = { domain: 'fi', application: 'cmxfico', module: 'gl', file: 'cm
 const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
 
 /* ── 响应归一（兼容门户已拆信封 / 原始信封） ─────────────────────────────── */
-function unwrap (res, body) {
-  if (body && typeof body === 'object' && typeof body.code === 'number') {
-    if (body.code !== 0) throw new Error(body.msg || `code ${body.code}`)
-    return body.data
-  }
-  if (!res.ok) throw new Error((body && body.error) || `HTTP ${res.status}`)
-  return body
-}
-async function apiGet (url, dbId) {
-  const h = { Accept: 'application/json' }; if (dbId) h.db_id = dbId
-  const res = await fetch(url, { headers: h, credentials: 'same-origin' })
-  return unwrap(res, await res.json().catch(() => null))
-}
-async function apiPost (url, payload, dbId) {
-  const h = { 'Content-Type': 'application/json', Accept: 'application/json' }; if (dbId) h.db_id = dbId
-  const res = await fetch(url, { method: 'POST', headers: h, credentials: 'same-origin', body: JSON.stringify(payload) })
-  return unwrap(res, await res.json().catch(() => null))
-}
+const { apiGet, apiPost } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
 /** 二进制端点：arrayBuffer + msgpack 解码 → 列式包。 */
 async function apiMsgpack (url, dbId) {
   const C = cmx()

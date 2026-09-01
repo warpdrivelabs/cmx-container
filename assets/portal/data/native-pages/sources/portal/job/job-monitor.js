@@ -108,9 +108,7 @@ const KIND_COLOR = {
 }
 const kindColorClass = (k) => KIND_COLOR[k] || 'kc-default'
 
-const esc = (s) => String(s ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
 
 const fmtTime = (ms) => {
   if (!ms) return '—'
@@ -129,19 +127,7 @@ function setMsg (text, kind = 'info') { state.message = text; state.msgKind = ki
 
 // ───────────────────────── 后端调用 ─────────────────────────
 
-async function apiJson (url, options = {}) {
-  const res = await fetch(url, {
-    ...options,
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(options.headers || {}) },
-    credentials: 'same-origin',
-  })
-  let j = null
-  try { j = await res.json() } catch {}
-  if (!res.ok || (j && typeof j.code === 'number' && j.code !== 0)) {
-    throw new Error((j && (j.msg || j.error || j.message)) || `HTTP ${res.status}`)
-  }
-  return j && typeof j === 'object' && 'data' in j ? j.data : j
-}
+const { apiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
 
 async function loadJobs () {
   state.listLoading = true

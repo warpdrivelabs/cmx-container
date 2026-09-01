@@ -68,9 +68,7 @@ const DB_TYPE_META = {
 }
 const dbTypeMeta = (t) => DB_TYPE_META[String(t || '').toLowerCase()] || { icon: 'database', label: String(t || '未知'), short: String(t || '?') }
 
-const esc = (s) => String(s ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
 
 /** DAM 下拉选项文案：名称（ID）。名称取 name/label/title，缺省回退 ID。 */
 const damOptionLabel = (o) => {
@@ -85,19 +83,7 @@ const damOptionHtml = (o, val, selected, icon) => `<ui5-option value="${esc(val)
 
 const cmxClasses = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
 
-async function apiJson (url, options = {}) {
-  const res = await fetch(url, {
-    ...options,
-    headers: { Accept: 'application/json', ...(options.headers || {}) },
-    credentials: 'same-origin',
-  })
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`
-    try { const j = await res.json(); if (j && j.error) msg = j.error } catch {}
-    throw new Error(msg)
-  }
-  return res.status === 204 ? {} : res.json()
-}
+const { apiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
 
 // ─── 数据加载 ──────────────────────────────────────────────────────────────
 async function loadDam () {

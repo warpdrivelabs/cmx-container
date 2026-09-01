@@ -26,9 +26,7 @@ const VALUE_TYPES = Object.keys(TYPE_META)
 const DEFAULT_VALUE_NAME = '(默认)'
 
 // ─── 小工具 ──────────────────────────────────────────────────────────────
-const esc = (s) => String(s ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
 
 const isObj = (v) => v != null && typeof v === 'object' && !Array.isArray(v)
 const isKeyNode = (k) => !k.startsWith('__')
@@ -200,7 +198,7 @@ function saveDb(immediate) {
       localStorage.setItem(LS_KEY, JSON.stringify(state.db))
       state.savedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     } catch (e) {
-      toast('error', '注册表保存失败：' + e.message)
+      showCmxToast('注册表保存失败：' + e.message, { level: 'error' })
     }
     renderStatus()
   }
@@ -391,12 +389,7 @@ function importInto(segs, obj) {
 }
 
 // ─── 消息提示 ────────────────────────────────────────────────────────────
-function toast(kind, text) {
-  const C = cmx()
-  const fn = kind === 'error' ? C.cmxError : kind === 'warn' ? C.cmxWarn : C.cmxInfo
-  if (typeof fn === 'function') { fn(String(text)); return }
-  flashStatus(String(text))
-}
+const { showCmxToast } = globalThis.__cmxDataComp // 共享 toast（cmx-data-comp/lib/cmx-toast.js；治理清单 B-05）
 
 function flashStatus(text) {
   const el = state.host && state.host.renderRoot.querySelector('#regFlash')
@@ -538,7 +531,7 @@ function renderAll() {
 
 // ─── 路径导航 ────────────────────────────────────────────────────────────
 function navigateTo(segs, ensureExpanded) {
-  if (!getNode(segs)) { toast('warn', '路径不存在：' + pathStr(segs)); return false }
+  if (!getNode(segs)) { showCmxToast('路径不存在：' + pathStr(segs), { level: 'warning' }); return false }
   state.path = segs
   state.selectedValue = null
   state.search = ''
@@ -599,7 +592,7 @@ function treeMenu(segs, x, y) {
     { label: '重命名', disabled: ro || isRoot, run: () => openKeyDlg('重命名项', segs[segs.length - 1], (name) => afterEdit(renameKey(segs, name), true)) },
     { label: '删除', disabled: ro || isRoot, run: () => openConfirm(`删除项 “${segs[segs.length - 1]}” 及其全部子项？`, () => {
       const err = deleteKey(segs)
-      if (err) return toast('warn', err)
+      if (err) return showCmxToast(err, { level: 'warning' })
       navigateTo(segs.slice(0, -1))
     }) },
     { sep: true },
@@ -611,7 +604,7 @@ function treeMenu(segs, x, y) {
     { label: '导出此项 (.json)', run: () => doExport(segs) },
     { label: '导入到此项 (.json)', disabled: ro, run: () => doImport(segs) },
     { sep: true },
-    { label: '复制路径', run: () => { copyText(pathStr(segs)); toast('info', '已复制路径') } },
+    { label: '复制路径', run: () => { copyText(pathStr(segs)); showCmxToast('已复制路径', { level: 'info' }) } },
     { label: '刷新', run: () => renderAll() },
   ])
 }
@@ -636,12 +629,12 @@ function valueMenu(segs, name, x, y) {
     { label: '重命名', disabled: ro || name === DEFAULT_VALUE_NAME, run: () => openKeyDlg('重命名值', name, (nn) => afterEdit(renameValue(segs, name, nn))) },
     { label: '删除', disabled: ro, run: () => openConfirm(`删除值 “${name}”？`, () => afterEdit(deleteValue(segs, name))) },
     { sep: true },
-    { label: '复制数据', run: () => { copyText(typeof v.data === 'string' ? v.data : JSON.stringify(v.data)); toast('info', '已复制数据') } },
+    { label: '复制数据', run: () => { copyText(typeof v.data === 'string' ? v.data : JSON.stringify(v.data)); showCmxToast('已复制数据', { level: 'info' }) } },
   ])
 }
 
 function afterEdit(err, structural) {
-  if (err) return toast('warn', err)
+  if (err) return showCmxToast(err, { level: 'warning' })
   if (structural) { renderTree(); renderAddr() }
   renderValues()
   renderStatus()
@@ -755,14 +748,14 @@ function openConfirm(text, onYes) {
 // ─── 导入 / 导出 ─────────────────────────────────────────────────────────
 function doExport(segs) {
   const sub = exportSubtree(segs)
-  if (!sub) return toast('warn', '项不存在')
+  if (!sub) return showCmxToast('项不存在', { level: 'warning' })
   const blob = new Blob([JSON.stringify(sub, null, 2)], { type: 'application/json' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = `registry-${segs[segs.length - 1]}-${Date.now()}.json`
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 4000)
-  toast('info', '已导出：' + a.download)
+  showCmxToast('已导出：' + a.download, { level: 'info' })
 }
 
 function doImport(segs) {
@@ -775,11 +768,11 @@ function doImport(segs) {
     try {
       const obj = JSON.parse(await f.text())
       const r = importInto(segs, obj)
-      if (r.error) return toast('warn', r.error)
-      toast('info', `导入完成：新增 ${r.added} · 更新 ${r.updated}`)
+      if (r.error) return showCmxToast(r.error, { level: 'warning' })
+      showCmxToast(`导入完成：新增 ${r.added} · 更新 ${r.updated}`, { level: 'info' })
       renderAll()
     } catch (e) {
-      toast('error', '导入失败：' + e.message)
+      showCmxToast('导入失败：' + e.message, { level: 'error' })
     }
   }
   input.click()
@@ -844,7 +837,7 @@ function bindEvents() {
     const row = e.target.closest('.reg-vrow')
     if (!row) return
     const hit = getNode(state.path)
-    if (hit && hit.readonly) return toast('warn', '只读根键不可修改')
+    if (hit && hit.readonly) return showCmxToast('只读根键不可修改', { level: 'warning' })
     openValueDlg(state.path, row.dataset.name, null)
   })
   valuesBox.addEventListener('contextmenu', (e) => {
@@ -906,14 +899,14 @@ function bindEvents() {
   root.querySelector('#tbRefresh').addEventListener('click', async () => {
     await rebuildReadonly()
     renderAll()
-    toast('info', '已刷新（只读根已重建）')
+    showCmxToast('已刷新（只读根已重建）', { level: 'info' })
   })
   root.querySelector('#tbReset').addEventListener('click', () => {
     openConfirm('恢复出厂注册表？本地全部修改将丢失。', () => {
       state.db = defaultDb()
       saveDb(true)
       navigateTo(DEFAULT_PATH.slice(0, 1))
-      toast('info', '已恢复出厂注册表')
+      showCmxToast('已恢复出厂注册表', { level: 'info' })
     })
   })
 }

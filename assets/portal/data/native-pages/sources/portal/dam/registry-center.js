@@ -14,36 +14,9 @@ const state = {
   loadingPromise: null,
 }
 
-const esc = (s) => String(s ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
+const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
 
-async function apiJson (url, options = {}) {
-  const res = await fetch(url, {
-    ...options,
-    headers: { Accept: 'application/json', ...(options.headers || {}) },
-    credentials: 'same-origin',
-  })
-  if (!res.ok) {
-    // HTTP 层错误（4xx/5xx）
-    let msg = `HTTP ${res.status}`
-    try {
-      const j = await res.json()
-      if (j && (j.msg || j.error)) msg = j.msg || j.error
-    } catch {}
-    throw new Error(msg)
-  }
-  if (res.status === 204) return {}
-  const json = await res.json()
-  // 业务层错误：后端对 BusinessError 返回 HTTP 200 + {code:非0, msg}
-  // code 为 0 表示成功，非 0 表示业务失败，需抛出 msg 供调用方提示。
-  if (json && typeof json.code === 'number' && json.code !== 0) {
-    throw new Error(json.msg || `业务错误(${json.code})`)
-  }
-  return json
-}
+const { apiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
 
 // ─── DB 编码与 payload 转换 ──────────────────────────────────────────────
 // 仅写操作（create/update/delete）需要转 DB 风格；读路径仍用 registry shape。
@@ -362,7 +335,7 @@ async function reloadRegistry (message = '') {
   try {
     resetRegistryLoad()
     await loadRegistry()
-    if (message) showToast(message, 'ok')
+    if (message) showCmxToast(message, { level: 'success' })
   } finally {
     state.loading = null
   }
@@ -407,7 +380,7 @@ async function saveDraft (kind = state.selectedKind) {
   if (kind === 'module') state.selectedKeys.module = state.selectedKey
   resetRegistryLoad()
   await loadRegistry()
-  showToast('已保存', 'ok')
+  showCmxToast('已保存', { level: 'success' })
   refreshAll()
 }
 
@@ -458,7 +431,7 @@ async function deleteItem (kind, key) {
   }
   resetRegistryLoad()
   await loadRegistry()
-  showToast('已删除', 'ok')
+  showCmxToast('已删除', { level: 'success' })
   refreshAll()
 }
 
@@ -779,7 +752,7 @@ function bindPage (root, mode = 'manager') {
       ev.preventDefault()
       ev.stopPropagation()
       deleteItem(btn.getAttribute('data-delete-kind'), btn.getAttribute('data-delete-key'))
-        .catch((err) => { showToast(err.message || String(err), 'err') })
+        .catch((err) => { showCmxToast(err.message || String(err), { level: 'error' }) })
     })
   })
   root.querySelectorAll('[data-new]').forEach((btn) => {
@@ -788,12 +761,12 @@ function bindPage (root, mode = 'manager') {
   root.querySelectorAll('[data-field]').forEach((el) => {
     el.addEventListener('input', () => setDraft(el.getAttribute('data-field'), el.value, el.getAttribute('data-field-kind') || state.selectedKind))
   })
-  root.querySelector('[data-action="refresh"]')?.addEventListener('click', () => reloadRegistry('已刷新').catch((err) => { state.loading = null; showToast(err.message || String(err), 'err') }))
+  root.querySelector('[data-action="refresh"]')?.addEventListener('click', () => reloadRegistry('已刷新').catch((err) => { state.loading = null; showCmxToast(err.message || String(err), { level: 'error' }) }))
   root.querySelectorAll('[data-save-kind]').forEach((btn) => {
-    btn.addEventListener('click', () => saveDraft(btn.getAttribute('data-save-kind') || state.selectedKind).catch((err) => { showToast(err.message || String(err), 'err') }))
+    btn.addEventListener('click', () => saveDraft(btn.getAttribute('data-save-kind') || state.selectedKind).catch((err) => { showCmxToast(err.message || String(err), { level: 'error' }) }))
   })
   root.querySelectorAll('[data-delete-selected-kind]').forEach((btn) => {
-    btn.addEventListener('click', () => deleteSelectedKind(btn.getAttribute('data-delete-selected-kind') || state.selectedKind).catch((err) => { showToast(err.message || String(err), 'err') }))
+    btn.addEventListener('click', () => deleteSelectedKind(btn.getAttribute('data-delete-selected-kind') || state.selectedKind).catch((err) => { showCmxToast(err.message || String(err), { level: 'error' }) }))
   })
   if (mode === 'property') {
     renderResourcesInto(root)
@@ -999,45 +972,7 @@ function styleHtml () {
 // 全局轻提示 Toast（挂到 document.body，自动居中、自动消失）。
 // 脱离三视图独立渲染，避免每个视图各弹一条。
 // tone: 'ok'(成功/绿) | 'err'(失败/红)；duration 默认 3000ms，可覆盖。
-let _toastTimer = null
-function showToast (message, tone = 'ok', duration = 3000) {
-  // 复用同一个 toast 元素，避免叠加
-  let el = document.getElementById('cmx-native-toast')
-  if (!el) {
-    el = document.createElement('div')
-    el.id = 'cmx-native-toast'
-    el.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;font:500 14px/1.4 var(--sapFontFamily,Arial,sans-serif);box-shadow:0 4px 16px rgba(0,0,0,.16);pointer-events:none;opacity:0;transition:opacity .18s ease'
-    document.body.appendChild(el)
-    // 注入图标容器
-    const icon = document.createElement('span')
-    icon.style.cssText = 'display:inline-flex;width:16px;height:16px;flex-shrink:0'
-    const text = document.createElement('span')
-    el.appendChild(icon)
-    el.appendChild(text)
-    el._icon = icon
-    el._text = text
-  }
-  // 清掉上一次的定时器（连续触发时重置计时）
-  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null }
-
-  // 配色
-  const isErr = tone === 'err'
-  el.style.color = isErr ? 'var(--sapNegativeTextColor,#b00)' : 'var(--sapPositiveTextColor,#107e3e)'
-  el.style.background = isErr ? 'color-mix(in srgb,#b00 10%,#fff)' : 'color-mix(in srgb,#107e3e 10%,#fff)'
-  el.style.border = `1px solid ${isErr ? 'color-mix(in srgb,#b00 24%,transparent)' : 'color-mix(in srgb,#107e3e 24%,transparent)'}`
-  // 图标（用 UI5 icon SVG 兜底，避免依赖图标注册时序）
-  el._icon.innerHTML = isErr
-    ? '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5A5.5 5.5 0 118 2.5a5.5 5.5 0 010 11zM7.25 4h1.5v5h-1.5V4zm0 6h1.5v1.5h-1.5V10z"/></svg>'
-    : '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm3.4 5.1L7 10.5 4.6 8.1l1-1L7 8.5l3.4-3.4 1 1z"/></svg>'
-  el._text.textContent = String(message ?? '')
-
-  // 显示
-  requestAnimationFrame(() => { el.style.opacity = '1' })
-  _toastTimer = setTimeout(() => {
-    el.style.opacity = '0'
-    _toastTimer = null
-  }, duration)
-}
+const { showCmxToast } = globalThis.__cmxDataComp // 共享 toast（cmx-data-comp/lib/cmx-toast.js；治理清单 B-05）
 
 function mount (ctx, html, after) {
   const bindWhenReady = (tries = 0) => {

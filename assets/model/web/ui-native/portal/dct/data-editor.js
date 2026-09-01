@@ -122,27 +122,8 @@ function unwrap (res, body) {
   return body
 }
 
-async function apiGet (url, dbId) {
-  const headers = { Accept: 'application/json' }
-  if (dbId) headers.db_id = dbId
-  const res = await fetch(url, { headers, credentials: 'same-origin' })
-  const body = await res.json().catch(() => null)
-  return unwrap(res, body)
-}
+const { apiGet, apiPost } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
 
-async function apiPost (url, payload, dbId) {
-  const headers = { 'Content-Type': 'application/json', Accept: 'application/json' }
-  if (dbId) headers.db_id = dbId
-  const res = await fetch(url, { method: 'POST', headers, credentials: 'same-origin', body: JSON.stringify(payload || {}) })
-  const body = await res.json().catch(() => null)
-  try {
-    return unwrap(res, body)
-  } catch (e) {
-    e.status = res.status
-    e.body = body
-    throw e
-  }
-}
 
 function qs (def, extra = {}) {
   return new URLSearchParams({
@@ -332,12 +313,7 @@ function whenRendered (host, selector, cb, tries) {
 }
 
 /* ─────────────── HTML 转义 ─────────────── */
-function escHtml (s) {
-  return String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
-}
-function escAttr (s) {
-  return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
-}
+const { escHtml, escAttr } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
 
 /* ─────────────── props 归一 ─────────────── */
 function readDef (ctx) {

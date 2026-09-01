@@ -28,32 +28,11 @@ const state = {
 }
 
 /* ── 响应归一（兼容门户已拆信封 / 原始信封两种形态） ─────────────────────── */
-function unwrap (res, body) {
-  if (body && typeof body === 'object' && typeof body.code === 'number') {
-    if (body.code !== 0) throw new Error(body.msg || `业务错误 code ${body.code}`)
-    return body.data
-  }
-  if (!res.ok) throw new Error((body && body.error) || `HTTP ${res.status}`)
-  return body
-}
+const { apiGet, apiPost } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
 
 /** GET JSON（带 db_id 头），归一取业务数据。 */
-async function apiGet (url, dbId) {
-  const headers = { Accept: 'application/json' }
-  if (dbId) headers.db_id = dbId
-  const res = await fetch(url, { headers, credentials: 'same-origin' })
-  const body = await res.json().catch(() => null)
-  return unwrap(res, body)
-}
 
 /** POST JSON。 */
-async function apiPost (url, payload, dbId) {
-  const headers = { 'Content-Type': 'application/json', Accept: 'application/json' }
-  if (dbId) headers.db_id = dbId
-  const res = await fetch(url, { method: 'POST', headers, credentials: 'same-origin', body: JSON.stringify(payload) })
-  const body = await res.json().catch(() => null)
-  return unwrap(res, body)
-}
 
 function qs (def, extra = {}) {
   return new URLSearchParams({

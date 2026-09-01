@@ -23,14 +23,9 @@ const state = {
   acResult: '', hosts: new Set(), err: '',
 };
 
-async function apiJson(url, options = {}) {
-  const full = (CFG.apiBase && url.charAt(0) === '/') ? CFG.apiBase + url : url;
-  const res = await fetch(full, { ...CFG.fetchInit, ...options, headers: { Accept: 'application/json', ...CFG.authHeaders(), ...(options.headers || {}) } });
-  let j = null; try { j = await res.json(); } catch { /* */ }
-  if (!res.ok || (j && typeof j.code === 'number' && j.code !== 0)) throw new Error((j && (j.msg || j.error)) || `HTTP ${res.status}`);
-  return j && typeof j === 'object' && 'data' in j ? j.data : j;
-}
-function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+const { apiJson: _sharedApiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js）；经 CFG 转发保留组件壳 configure() 契约
+async function apiJson (url, options = {}) { return _sharedApiJson(url, options, CFG) }
+const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
 function hostRoot(h) { return h && (h.shadowRoot || h); }
 function fmt(v) { if (v == null) return ''; if (typeof v === 'object') return JSON.stringify(v); return String(v); }
 function typeMeta(a) { return (state.manifest.objectTypes || []).find(t => t.apiName === a); }
