@@ -1426,6 +1426,59 @@
                             ]
                         }
                     }
+                },
+                {
+                    "id": "mdm-flow-webhook-admin",
+                    "name": "flow-webhook-admin",
+                    "caption": "Webhook 订阅",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "connect",
+                    "workspace": {
+                        "id": "flow_webhook_admin",
+                        "explorer": {
+                            "caption": "订阅列表",
+                            "icon": "connect",
+                            "views": [
+                                {
+                                    "id": "flow-webhook-admin-explorer",
+                                    "tabLabel": "订阅",
+                                    "icon": "connect",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.webhook-admin",
+                                    "view": "explorer"
+                                }
+                            ]
+                        },
+                        "content": {
+                            "caption": "订阅编辑",
+                            "icon": "detail-view",
+                            "views": [
+                                {
+                                    "id": "flow-webhook-admin-content",
+                                    "tabLabel": "编辑",
+                                    "icon": "detail-view",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.webhook-admin",
+                                    "view": "content"
+                                }
+                            ]
+                        },
+                        "property": {
+                            "caption": "投递口径",
+                            "icon": "hint",
+                            "views": [
+                                {
+                                    "id": "flow-webhook-admin-prop",
+                                    "tabLabel": "说明",
+                                    "icon": "hint",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.webhook-admin",
+                                    "view": "property"
+                                }
+                            ]
+                        }
+                    }
                 }
             ]
         }
