@@ -515,6 +515,14 @@ incremental = true
 # 开发时通常关闭，发布到特定环境时可能需要开启
 rpath = false
 
+# 测试 profile（继承 dev）：专为 cargo test 裁剪体积
+# debug = 1：仅保留行号表（backtrace 仍有行号可定位），丢弃完整 DWARF 调试信息，
+#   测试二进制体积大幅缩小（debug=2 时调试信息占大头）
+# incremental = true：保留增量编译，改动后重跑测试更快
+[profile.test]
+debug = 1
+incremental = true
+
 # 本地 patch：让 cmx-plugin-demo 通过 registry(nora) 声明的 cmx-plugin-sdk
 # 解析到本地 path，便于在 SDK 改动后本地验证 demo（发布时 demo 用 registry 新版）。
 [patch.nora]
