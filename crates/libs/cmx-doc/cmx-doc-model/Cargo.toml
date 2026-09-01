@@ -1,0 +1,34 @@
+[package]
+name = "cmx-doc-model"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 业务单据（DOC）模块的语义中立层：把单据定义 JSON 解析为强类型 DocMetaView（层序/各层
+# 列/父子关系），以及富查询模型（DocQuery/Filter/OrderBy/游标）、公式求值（formula）、
+# 校验规则（rule）、层级 SELECT 生成（sql_builder）。全部 DB-free —— 生成的 SQL 对
+# tokio-postgres 与 sqlx 通用（$N 占位 + DataValue 绑定），由 cmx-doc-store-pg 执行。
+
+[dependencies]
+# 内部依赖 - 核心库（DataValue/Field/FieldType/Schema：强类型列模型）
+cmx-core = { workspace = true }
+# 内部依赖 - 业务错误 + 落库前列级校验规范（TableSpec，DOC/DCT 共享，留在 cmx-biz）
+cmx-biz = { workspace = true }
+# 内部依赖 - JSON 辅助（base_fieldset 等公共工具）
+cmx-utils = { workspace = true }
+
+# 序列化框架
+serde = { workspace = true }
+# JSON（弱类型定义 Value → 强类型 meta）
+serde_json = { workspace = true }
+# keyset 游标编解码（query.rs Cursor base64）
+base64 = { workspace = true }
+# 日期解析（query.rs 日期过滤值 RFC3339 归一）
+chrono = { workspace = true, features = ["serde"] }
+# 错误类型派生（error.rs ModelError/FormulaError）
+thiserror = { workspace = true }
+# 高精度十进制（codec.rs Decimal 列转换）
+rust_decimal = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }

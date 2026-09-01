@@ -11,14 +11,14 @@
 
 ## 项目简介
 
-`cmx-container` 是 CMX 企业级平台的**后端公用库与插件平台**，以 Cargo Workspace 组织，当前含 **53 个活跃成员 crate**（另有 `cmx-wasmdemo`、`cmx-nacos` 两个已停用 crate 源码保留、member 注释）。定位演进历程：早期是单体「插件化容器运行时」（含 web-server bin），后经架构重构——**server bin 迁至下游 `cmx-portalservice`（薄 bin + 业务层），流程引擎迁 `cmx-flowengine`、报表迁 `cmx-report`、规则引擎迁 `cmx-rulesengine`（各自独立 workspace），本仓库沉淀为被各微服务跨 workspace 共享的公用库 + 插件平台**。
+`cmx-container` 是 CMX 企业级平台的**后端公用库与插件平台**，以 Cargo Workspace 组织，当前含 **61 个活跃成员 crate**（另有 `cmx-wasmdemo`、`cmx-nacos` 两个已停用 crate 源码保留、member 注释）。定位演进历程：早期是单体「插件化容器运行时」（含 web-server bin），后经架构重构——**server bin 迁至下游 `cmx-portalservice`（薄 bin + 业务层），流程引擎迁 `cmx-flowengine`、报表迁 `cmx-report`、规则引擎迁 `cmx-rulesengine`（各自独立 workspace），本仓库沉淀为被各微服务跨 workspace 共享的公用库 + 插件平台**；微服务化后，模型中心的数据**运行态** crate（DCT/DOC 存储、编码引擎、定义读取、主从协调）又随服务化解耦回沉本仓（真源集中平台仓治理）。
 
 核心能力：
 
 - **WASM 插件平台**：Extism 运行时（`cmx-runtime`）+ 插件管理/市场/集群同步（`cmx-plugin`）+ 插件 SDK 与示范（`cmx-plugin-sdk` / `cmx-plugin-demo`）
 - **可视化服务编排**：声明式 JSON 流程 + 事务框 + 分支路由（`cmx-service`，gRPC 皮肤在 `cmx-rpcs/cmx-orchestrator-rpc`）
-- **元数据数据服务**：DCT 字典 / DOC 单据 / MDM 主数据引擎已迁独立微服务（`../cmx-model` / `../cmx-mdm`），门户侧仅剩反代薄壳（见「协议皮肤与装配」）
-- **模型中心**：引擎（含编码引擎）迁独立微服务 `../cmx-model`（`cmx-model-server` :8093），本仓库仅留 `cmx-model-proxy` 反代薄壳；`cmx-metadata` 保留（表定义 JSON → DDL 生成/迁移/seed）
+- **元数据数据服务**：DCT 字典 / DOC 单据 / MDM 主数据**管理引擎**已迁独立微服务（`../cmx-model` / `../cmx-mdm`），门户侧仅剩反代薄壳（见「协议皮肤与装配」）；DCT/DOC 数据**运行态**（`cmx-dct/*` / `cmx-doc/*`：模型 + PG 存储）与定义读取层（`cmx-model-meta`）已回沉本仓（微服务调用统一框架第二批阶段三）
+- **模型中心**：管理态（部署引擎 + 中立核 app/server）在独立微服务 `../cmx-model`（`cmx-model-server` :8093），本仓库留 `cmx-model-proxy` 反代薄壳 + 数据运行态下沉 crate（`cmx-model-meta` 定义 JSON 读取 / `cmx-master-slave` 主从协调协议 / `cmx-dct/*` / `cmx-doc/*` / `cmx-code/*`）；`cmx-metadata` 保留（表定义 JSON → DDL 生成/迁移/seed）
 - **统一认证授权**：JWT 双令牌 + Refresh Rotation + OAuth2/PKCE（`cmx-auth`）；RBAC/角色组/SoD 互斥 + 缓存熔断（`cmx-iam`）
 - **通用业务编码引擎**：单据号/流水号规则铸号（`cmx-code/*`）
 - **定时任务中心**：常驻消费者作业、集群可重入（`cmx-job/*`）
@@ -45,8 +45,10 @@
     │           model-proxy / mdm-proxy / meta-proxy（cmx-proxy-core） │
     ├──────────────────────────────────────────────────────────────────┤
     │ 域层：cmx-biz · cmx-iam · cmx-plugin · cmx-ai · cmx-form          │
-    │       cmx-job/* · cmx-metadata                                │
-    │       （doc/dct/code/master-slave/model/mdm 引擎已迁独立微服务）    │
+    │       cmx-job/* · cmx-metadata · cmx-dct/* · cmx-code/*          │
+    │       cmx-doc/* · cmx-model-meta · cmx-master-slave              │
+    │       （数据运行态，自模型中心回沉）                                │
+    │       （model 部署引擎/mdm 引擎在独立微服务）                       │
     ├──────────────────────────────────────────────────────────────────┤
     │ 运行时/服务：cmx-runtime（Extism WASM） · cmx-service（编排）      │
     │              cmx-debug · cmx-jsonstore                            │
@@ -74,7 +76,7 @@
 ```text
 cmx-container/
 ├── AGENTS.md                    # 开发规范（18 章，权威）
-├── Cargo.toml                   # Workspace 配置（version 0.1.12 · 53 成员）
+├── Cargo.toml                   # Workspace 配置（version 0.1.12 · 61 成员）
 ├── crates/
 │   ├── libs/                    # 全部公用库 crate（见下节导航）
 │   ├── tests/cmx-database-test/ # 数据库层基准/E2E 测试 crate
@@ -151,8 +153,11 @@ cmx-container/
 | 域 | api（HTTP 皮肤） | model（领域） | store-pg（持久化） |
 |----|------------------|---------------|--------------------|
 | 任务 JOB | [cmx-job-api](crates/libs/cmx-job/cmx-job-api/README.md) | [cmx-job-core](crates/libs/cmx-job/cmx-job-core/README.md) | [cmx-job-store-pg](crates/libs/cmx-job/cmx-job-store-pg/README.md) |
+| 字典 DCT | —（model-app 承载） | [cmx-dct-model](crates/libs/cmx-dct/cmx-dct-model/README.md) | [cmx-dct-store-pg](crates/libs/cmx-dct/cmx-dct-store-pg/README.md) |
+| 单据 DOC | —（model-app 承载） | [cmx-doc-model](crates/libs/cmx-doc/cmx-doc-model/README.md) | [cmx-doc-store-pg](crates/libs/cmx-doc/cmx-doc-store-pg/README.md)（sqlx/tokio-pg 双驱动 + 主从上卷） |
+| 编码 CODE | —（CodeEngine 注入） | [cmx-code-model](crates/libs/cmx-code/cmx-code-model/README.md) | [cmx-code-api](crates/libs/cmx-code/cmx-code-api/README.md)（无状态，查 cmx_code_* 三表） |
 
-> DOC 单据 / DCT 字典 / CODE 编码 / MODEL 模型中心三件套已迁至独立 workspace `../cmx-model`（模型中心微服务），MDM 主数据三件套已迁至 `../cmx-mdm`；门户侧仅剩反代薄壳（见下表）。
+> **数据运行态 crate 已回沉本仓**（微服务调用统一框架第二批阶段三，消灭服务仓间 path 依赖）：上表 DCT/DOC/CODE 三域 + [cmx-model-meta](crates/libs/cmx-model/cmx-model-meta/README.md)（定义 JSON 读取层）+ [cmx-master-slave](crates/libs/cmx-model/cmx-master-slave/README.md)（主从协调协议）——它们是 mdm 激活落库、门户 `cmx-portal` 与模型中心 handler 的公共数据层，真源在平台仓集中治理；cmx-model / cmx-mdm / cmx-portalservice 经跨 workspace path 消费。MODEL 模型中心**管理态**（部署引擎 cmx-model-deploy + 中立核 app + server 壳）仍在独立 workspace `../cmx-model`，MDM 主数据三件套在 `../cmx-mdm`；门户侧仅剩反代薄壳（见下表）。
 
 ### 协议皮肤与装配
 
