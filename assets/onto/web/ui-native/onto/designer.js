@@ -60,6 +60,7 @@ const state = {
 };
 
 const { apiJson: _sharedApiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js）；经 CFG 转发保留组件壳 configure() 契约
+const { deepClone } = globalThis.__cmxDataComp // 共享深拷贝（cmx-data-comp/lib/cmx-deep-clone.js；审查 B-04）
 async function apiJson (url, options = {}) { return _sharedApiJson(url, options, CFG) }
 const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
 
@@ -659,7 +660,7 @@ function richSideEffectHtml(s, i, params) {
 }
 // 存前序列化：把每个富副作用（起流程/Webhook/通知）的 _vars 折成内联字段（→ 载荷/变量），并剥除 _vars 编辑态。
 function serializeActionForSave(d) {
-  const clone = JSON.parse(JSON.stringify(d));
+  const clone = deepClone(d);
   (clone.sideEffects || []).forEach(s => {
     if (Array.isArray(s._vars)) { s._vars.forEach(v => { if (v.name) s[v.name] = v.value; }); }
     delete s._vars;
@@ -1072,7 +1073,7 @@ async function doSaveObject(root) {
   }
   try {
     // 落库前剥离纯前端字段（children 已进 constraints；__open/__origPk 前端会话态）。
-    const payload = JSON.parse(JSON.stringify(state.detail));
+    const payload = deepClone(state.detail);
     delete payload.__origPk;
     (payload.properties || []).forEach(p => { delete p.children; delete p.__open; });
     await saveObjectTypeFromDetail(payload);

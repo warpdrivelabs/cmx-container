@@ -17,8 +17,9 @@ const EDIT_MODES = ['', 'cmx-text-input', 'cmx-textarea-input', 'cmx-richtext-in
 const DIM_TYPES = ['', 'dimension', 'measure', 'attribute']
 
 const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+const { deepClone } = globalThis.__cmxDataComp // 共享深拷贝（cmx-data-comp/lib/cmx-deep-clone.js；审查 B-04）
 
-const clone = (v) => JSON.parse(JSON.stringify(v ?? null))
+const clone = (v) => deepClone(v ?? null)
 
 const { apiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
 
