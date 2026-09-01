@@ -1,0 +1,17 @@
+[package]
+name = "cmx-onto-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# 本体平台的**平台反代薄壳**（对标 cmx-rule-api 的 RulesProxyModule）。本体平台是**独立微服务**
+# （无进程内嵌壳）：本 crate 只含 OntoProxyModule——把平台 `/api/onto/*` + 本体拥有的 native 页
+# （`portal.onto.*`）透明转发到独立 cmx-onto-server（`[service_rpc.services].onto`）。前端零改。
+
+[dependencies]
+# API 共享骨架层（CmxAppState / routes::traits::ModuleRoutes）。单向依赖，避免环。
+cmx-api-core = { workspace = true }
+# Web 框架（Router 类型）
+axum = { workspace = true }
+# 反代转发核（头卫生/超时拆分/流式转发/三层出站鉴权，四反代壳共用）
+cmx-proxy-core = { workspace = true }

@@ -1,0 +1,33 @@
+{
+  "version": "2026.08.29",
+  "pages": [
+    {
+      "id": "portal.onto.designer",
+      "name": "本体设计工作台",
+      "details": "native_pages 四区本体设计工作台：model 本体元信息/统计/发布、explorer 七类元素分组树（对象/关系/接口/共享属性/动作/函数）、content <cmx-ontology-graph> 组件画布（富卡片对象类型 + 基数关系边 + 接口虚线挂接 + 拖拽/拉线建关系）、property 选中元素强类型 Inspector（对象类型概览 + 属性卡内表格 / 关系详情）。数据来自 cmx-ontology /api/onto/v1/*。改壳须重启本体服务。",
+      "sourceType": "js",
+      "relPath": "onto/designer.js"
+    },
+    {
+      "id": "portal.onto.explorer",
+      "name": "对象浏览器",
+      "details": "native_pages 四区对象浏览器（O8/§9.2）：逛 O3 灌入/动作写入的对象实例。model 当前类型+计数+钻取面包屑；explorer 对象类型列表 + 对象集构造器（加过滤谓词）；content 对象列表表格（/object-sets/load 编译一条 SQL）；property 选中对象全属性 + 关系区（点关系 Search-Around 图谱式钻取相关对象集）。数据来自 /api/onto/v1/manifest·object-sets/load·objects/{}/{}/links/{}。改壳须重启本体服务。",
+      "sourceType": "js",
+      "relPath": "onto/explorer.js"
+    },
+    {
+      "id": "portal.onto.workshop",
+      "name": "对象360/应用搭建台",
+      "details": "native_pages 四区应用搭建台最小版（O8/§9.3）：面向业务角色的对象操作闭环。explorer 选类型→列对象→点选进入 360 视图；content 对象属性卡 + 各关系区（每关系类型一块，Search-Around 列相关对象）；property 可执行动作按钮（点开填参→O4 execute→结果，执行后刷新对象）。数据来自 /api/onto/v1/manifest·object-sets/load·objects/{}/{}/links/{}·action-types/{}/execute。改壳须重启本体服务。",
+      "sourceType": "js",
+      "relPath": "onto/workshop.js"
+    },
+    {
+      "id": "portal.onto.graph-component",
+      "name": "本体图组件",
+      "details": "@cmx/ontology-graph 构建产物（vendor）。自注册 <cmx-ontology-graph> 自定义元素：SVG 本体 ER 图画布 + 富卡片（对象类型属性列表）+ 基数关系边 + 接口虚线挂接 + 网格布局 + 拖拽节点 + 拉线建关系。与 @cmx/decision-graph 平级。本体设计工作台经 fetch 本条目源码 → blob import 一次性注册后使用。源自独立 TS 组件包 cmx-ontology-graph/，改源须重跑 build.sh + sync-component.sh。",
+      "sourceType": "js",
+      "relPath": "vendor/cmx-ontology-graph.js"
+    }
+  ]
+}

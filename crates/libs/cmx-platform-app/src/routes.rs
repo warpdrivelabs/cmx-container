@@ -21,9 +21,11 @@ use cmx_job_api::JobModule;
 use cmx_service_rpc::Locator;
 use cmx_rpt_api::ReportProxyModule;
 use cmx_rule_api::RulesProxyModule;
+use cmx_onto_api::OntoProxyModule;
 use cmx_model_proxy::ModelProxyModule;
 use cmx_mdm_proxy::MdmProxyModule;
 use cmx_meta_proxy::MetaProxyModule;
+use cmx_dataauth_proxy::DataAuthProxyModule;
 use cmx_storage_api::{StorageApiDoc, StorageModule};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -34,12 +36,16 @@ const FLOW_UPSTREAM_KEY: &str = "flow";
 const REPORT_UPSTREAM_KEY: &str = "report";
 /// 服务定位键：决策规则引擎（`[service_rpc.services].rules`）。
 const RULES_UPSTREAM_KEY: &str = "rules";
+/// 服务定位键：本体平台（`[service_rpc.services].onto`）。
+const ONTO_UPSTREAM_KEY: &str = "onto";
 /// 服务定位键：模型中心（`[service_rpc.services].model`）。
 const MODEL_UPSTREAM_KEY: &str = "model";
 /// 服务定位键：主数据中心（`[service_rpc.services].mdm`）。
 const MDM_UPSTREAM_KEY: &str = "mdm";
 /// 服务定位键：元数据管理（`[service_rpc.services].meta`）。
 const META_UPSTREAM_KEY: &str = "meta";
+/// 服务定位键：数据权限（`[service_rpc.services].dataauth`）。
+const DATAAUTH_UPSTREAM_KEY: &str = "dataauth";
 
 /// 解析流程引擎反代目标（per-key 定位，见 `cmx_service_rpc::upstream`）。
 ///
@@ -70,6 +76,12 @@ pub(crate) fn rules_upstream() -> Option<Locator> {
     cmx_service_rpc::locator(RULES_UPSTREAM_KEY)
 }
 
+/// 本体平台**无进程内嵌壳**（始终独立微服务，与 rules 同构）：没配目标 = 门户不挂本体路由，
+/// 而非回退内嵌。配了目标就转发 `/api/onto/*` + 本体拥有的 native 页，前端全零改。
+pub(crate) fn onto_upstream() -> Option<Locator> {
+    cmx_service_rpc::locator(ONTO_UPSTREAM_KEY)
+}
+
 /// 解析模型中心反代目标（per-key 定位）。
 ///
 /// 与 flow/report 的差异：模型中心**保留进程内嵌兜底**（Dct/Doc/Model/Code 模块仍在 cmx-container，
@@ -95,6 +107,12 @@ pub(crate) fn mdm_upstream() -> Option<Locator> {
 /// `/api/meta/*` 路由。
 pub(crate) fn meta_upstream() -> Option<Locator> {
     cmx_service_rpc::locator(META_UPSTREAM_KEY)
+}
+
+/// 解析数据权限引擎反代目标。配了 `[service_rpc.services].dataauth` = 反代到独立 cmx-dataauth-server；
+/// 没配 = 门户不挂 `/api/dataauth/*` 与 `/console`。
+pub(crate) fn dataauth_upstream() -> Option<Locator> {
+    cmx_service_rpc::locator(DATAAUTH_UPSTREAM_KEY)
 }
 
 /// 平台服务依赖拓扑：枚举各已挂载能力当前挂的是「进程内内嵌」还是「反代独立微服务」。
@@ -287,6 +305,24 @@ fn merge_rules(router: Router<CmxAppState>) -> Router<CmxAppState> {
     }
 }
 
+/// 按配置产出本体平台路由：配置了反代目标 → OntoProxyModule（转发 `/api/onto/*`）+ 页面反代
+/// （本体拥有的 `portal.onto.*` native 页转发到 onto-server）；没配 → 不挂本体路由。
+/// 与 [`merge_rules`] 同构——本体始终独立微服务，无 embedded 分支。
+fn merge_onto(router: Router<CmxAppState>) -> Router<CmxAppState> {
+    match onto_upstream() {
+        Some(upstream) => {
+            let api_key = crate::config::rpc::load_outgoing_credential();
+            tracing::info!(upstream = %upstream.describe(), "本体平台：独立微服务模式（OntoProxy 转发 /api/onto/* + 页面反代 native）");
+            let resolver = upstream.resolver_fn();
+            let router = router.merge(
+                OntoProxyModule::with_resolver(resolver.clone(), api_key.clone()).routes(),
+            );
+            cmx_onto_api::with_onto_page_proxy(router, resolver, api_key)
+        }
+        None => router,
+    }
+}
+
 /// 按配置产出模型中心路由：配置了反代目标 → ModelProxyModule（转发 `/api/{dct,dict,doc,model,
 /// definitions,flexible-combination,code}/*`）+ 页面反代（模型中心拥有的 native/html 单页取页请求
 /// 转发到 cmx-model-server）；没配 → 不挂模型中心路由。
@@ -360,6 +396,25 @@ fn merge_meta(router: Router<CmxAppState>) -> Router<CmxAppState> {
         }
     }
 }
+
+/// 数据权限：按 `[service_rpc.services].dataauth` 反代到独立 cmx-dataauth-server（无进程内嵌兜底，与
+/// flow/report/rules/meta 同构）。前端零改：浏览器请求同源 `/api/dataauth/*`。`/console` 工作台整页
+/// 由 router.rs 顶层单独反代（非 `/api`）。
+fn merge_dataauth(router: Router<CmxAppState>) -> Router<CmxAppState> {
+    match dataauth_upstream() {
+        Some(upstream) => {
+            let api_key = crate::config::rpc::load_outgoing_credential();
+            tracing::info!(upstream = %upstream.describe(), "数据权限：独立微服务模式（DataAuthProxy 转发 /api/dataauth/*）");
+            router.merge(
+                DataAuthProxyModule::with_resolver(upstream.resolver_fn(), api_key).routes(),
+            )
+        }
+        None => {
+            tracing::warn!("数据权限：未配置反代目标（[service_rpc.services] 未配 dataauth）→ 门户不挂 /api/dataauth/* 路由；请启动独立 cmx-dataauth-server 并配置其地址");
+            router
+        }
+    }
+}
 ///
 /// 直接调用 cmx-api 的统一路由注册，返回配置好的 Axum Router。
 /// 外部模块路由（报表 ReportProxyModule、流程 FlowProxyModule、规则 RulesProxyModule、业务单据
@@ -396,7 +451,7 @@ pub fn routes() -> Router<CmxAppState> {
     // （Dct/Doc/Model/Code 四模块，见 merge_model 的 None 分支——故已从 base 移出）。
     // 主数据按 [service_rpc.services].mdm：配了=反代到独立 cmx-mdm-server，没配=不挂
     // /api/mdm/* 路由（无进程内嵌，见 merge_mdm 的 None 分支——故已从 base 移出）。
-    merge_meta(merge_mdm(merge_model(merge_flow(merge_report(merge_rules(base))))))
+    merge_dataauth(merge_meta(merge_mdm(merge_model(merge_flow(merge_report(merge_rules(merge_onto(base))))))))
 }
 
 /// 获取 Swagger 文档路由

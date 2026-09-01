@@ -35,10 +35,12 @@ cmx-common-api = { workspace = true, features = ["grpc"] }
 # 内部依赖 - 各模块 HTTP 层（在此合并进主路由，破环）
 cmx-rpt-api = { workspace = true }
 cmx-rule-api = { workspace = true }
+cmx-onto-api = { workspace = true }
 cmx-flow-api = { workspace = true }
 cmx-model-proxy = { workspace = true }
 cmx-mdm-proxy = { workspace = true }
 cmx-meta-proxy = { workspace = true }
+cmx-dataauth-proxy = { workspace = true }
 cmx-storage-api = { workspace = true }
 cmx-ai-api = { workspace = true }
 cmx-biz-api = { workspace = true }
