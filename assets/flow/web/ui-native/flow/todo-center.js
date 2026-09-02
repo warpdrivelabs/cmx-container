@@ -83,6 +83,7 @@ const state = {
 }
 
 const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+const { deepClone } = globalThis.__cmxDataComp // 共享深拷贝（cmx-data-comp/lib/cmx-deep-clone.js；审查 B-04）
 const enc = encodeURIComponent
 const slug = (s) => String(s || '').replace(/[^A-Za-z0-9_-]+/g, '_') || 'x'
 
@@ -292,7 +293,7 @@ function todoCard (t) {
       ${menuOpen ? `<div class="todo-card-menu" role="menu"><button role="menuitem" data-transfer="${esc(t.taskId)}">转签</button></div>` : ''}`
   }
   const icon = cat === 'initiated' ? 'journey-arrive' : (t.claimable ? 'inbox' : (cat === 'cc' ? 'email' : (cat === 'done' ? 'accept' : 'workflow-tasks')))
-  return `<article class="todo-card ${active ? 'active' : ''} ${t.urgent ? 'urgent' : ''}" data-task="${esc(t.taskId)}">
+  return `<article class="todo-card ${active ? 'active' : ''} ${t.urgent ? 'urgent' : ''} ${menuOpen ? 'menu-open' : ''}" data-task="${esc(t.taskId)}">
     <div class="todo-card-ava"><ui5-icon name="${icon}"></ui5-icon></div>
     <div class="todo-card-main">
       <div class="todo-card-title"><b>${esc(t.businessKey || t.instanceId)}</b><span>${esc(t.definitionName || t.definitionKey || '')}</span></div>
@@ -607,6 +608,24 @@ function bind (root, view, host) {
       state.cardMenu = state.cardMenu === id ? '' : id
       refreshView('content')
     }))
+    // 点页面任意空白关闭「更多操作」菜单：document 级委托（shadow DOM 的 click 是 composed 事件，
+    // 冒泡到 document；composedPath()[0] 是真实目标，closest 同树判定是否落在菜单/开关/卡片内）。
+    // 侧栏分类、属性面板、页面外壳等 root 之外的点击由此兜住——挂在 content root 上收不到这些。
+    // 菜单项与「…」开关自身 stopPropagation 不会到这；卡片点击先清 cardMenu 再选中，
+    // 这里的空值检查会直接退出，不与其冲突。模块单例，document 上守护绑定一次防堆叠。
+    if (!document.__todoMenuOutside) {
+      document.__todoMenuOutside = true
+      document.addEventListener('click', (e) => {
+        if (!state.cardMenu) return
+        const t = e.composedPath()[0]
+        if (t instanceof Element && t.closest('.todo-card-menu, [data-card-menu], .todo-card')) return
+        state.cardMenu = ''
+        refreshView('content')
+      })
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && state.cardMenu) { state.cardMenu = ''; refreshView('content') }
+      })
+    }
     root.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); claimTodo(b.dataset.claim) }))
     root.querySelectorAll('[data-transfer]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); openTransferDialog(b.dataset.transfer) }))
     root.querySelectorAll('[data-start]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); openStartForm(b.dataset.start, b) }))
@@ -1022,11 +1041,6 @@ async function buildWorkspaceWorknode (t, f, sourceEl, opts) {
   return openWorkNode(workNode, sourceEl)
 }
 
-// 结构化深拷贝（无 structuredClone 时退回 JSON）。
-function deepClone (o) {
-  try { return (typeof structuredClone === 'function') ? structuredClone(o) : JSON.parse(JSON.stringify(o)) }
-  catch { return JSON.parse(JSON.stringify(o)) }
-}
 
 // 给 workspace 各区（content/explorer/property/bottom/...）的 native_pages / html_pages 视图 props
 // 注入任务上下文（浅合并，节点已配的 props 优先保留）。空区/空 views/非对象 props 全容错。
@@ -1376,6 +1390,9 @@ function styleCss () {
   .todo-card-act .todo-btn{white-space:nowrap}
   .todo-btn.icon{width:32px;padding:0;display:inline-flex;align-items:center;justify-content:center}
   .todo-btn.icon ui5-icon{width:.95rem;height:.95rem}
+  /* 菜单打开时抬升整卡：hover 的 transform 会把卡片变成堆叠上下文，菜单 z-index 被困在卡内，
+     会被 DOM 靠后的兄弟卡片盖住（症状：悬停时菜单被下一行遮挡）——整卡置顶后菜单随卡浮在上层。 */
+  .todo-card.menu-open{z-index:30}
   .todo-card-menu{position:absolute;right:0;top:38px;z-index:12;min-width:112px;padding:5px;border:1px solid var(--line-soft);border-radius:9px;background:var(--tile);box-shadow:0 12px 32px color-mix(in srgb,var(--ink) 18%,transparent);display:flex;flex-direction:column;gap:3px}
   .todo-card-menu button,.todo-card-menu span{border:0;background:transparent;color:var(--ink);font:inherit;font-size:12.5px;text-align:left;padding:7px 9px;border-radius:7px;cursor:pointer}
   .todo-card-menu button:hover,.todo-card-menu button:focus-visible{background:color-mix(in srgb,var(--brand) 10%,var(--tile));outline:none}
