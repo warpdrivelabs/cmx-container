@@ -1979,3 +1979,11 @@ CONFIG_FILE=/path/to/config.toml ./cmx-server
 - **示例**: `incident_auto_retry_secs = 300`
 
 > env 覆盖：`FLOW__RETENTION__INSTANCE_DAYS` / `FLOW__RETENTION__DELIVERY_DAYS` / `FLOW__INCIDENT_AUTO_RETRY_SECS`（ConfigManager 三源合并，详见 ENV_MANUAL.md）。
+
+### `GET /flow/metrics` 抓取（流程引擎 Prometheus 指标，2026-09-02 补录）
+
+流程引擎（:8091）暴露 `GET /flow/metrics`（Prometheus text 格式，含 webhook 投递/incident/
+死信/实例计数）。端点挂在 auth 中间件之后——**抓取器必须携带凭证**（与普通 API 调用同凭证，
+`Authorization: Bearer <API-Key 或 JWT>`）。指标为无 label 的低基数集合；
+`cmx_flow_business_errors_total` 仅覆盖 ops 查询端点（非全站业务失败口径）；DB 聚合失败
+按 0 上报（连续 0 值本身即异常信号）。

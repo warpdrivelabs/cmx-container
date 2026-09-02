@@ -110,8 +110,8 @@ pub struct JwtAuthConfig {
 /// 一把服务间 API Key 的结构化声明（技术债 003：key 不再等价全量权限）。
 ///
 /// 载体仍是 ConfigManager 配置（`auth.api_keys`），不进库（019 口径：凭据出库而非入更多的库）。
-/// `allowed_definition_keys` / `endpoints` 为空均表示**不限**（allow-all）——这是存量
-/// legacy key 的隐式语义，也是两阶段迁移的过渡态：存量共享 key 零破坏，新增 key 建议最小声明。
+/// `allowed_definition_keys` 为空表示**不限**（allow-all）——这是存量 legacy key 的隐式
+/// 语义，也是两阶段迁移的过渡态：存量共享 key 零破坏，新增 key 建议最小声明。
 #[derive(Debug, Clone)]
 pub struct KeyDecl {
     /// key 明文（映射键，同时在 [`JwtAuthConfig::api_keys`] 里有 tenant 映射）。
@@ -122,8 +122,6 @@ pub struct KeyDecl {
     pub system: Option<String>,
     /// 可发起/操作的流程定义 key 白名单（空 = 全部）。命中判定 = 精确全等。
     pub allowed_definition_keys: Vec<String>,
-    /// 可调用端点类别（空 = 全部；值域 `start`/`query`/`task`/`admin`）。
-    pub endpoints: Vec<String>,
 }
 
 impl KeyDecl {
@@ -134,7 +132,6 @@ impl KeyDecl {
             tenant,
             system: None,
             allowed_definition_keys: Vec::new(),
-            endpoints: Vec::new(),
         }
     }
 
@@ -142,11 +139,6 @@ impl KeyDecl {
     pub fn definition_allowed(&self, definition_key: &str) -> bool {
         self.allowed_definition_keys.is_empty()
             || self.allowed_definition_keys.iter().any(|k| k == definition_key)
-    }
-
-    /// 端点类别是否可调（空 = 全部放行）。
-    pub fn endpoint_allowed(&self, category: &str) -> bool {
-        self.endpoints.is_empty() || self.endpoints.iter().any(|c| c == category)
     }
 }
 
@@ -232,8 +224,9 @@ impl JwtAuthConfig {
 /// - **legacy 逗号格式** `"k1:tenantA,k2"`：解析为 allow-all 声明（system/白名单全空），
 ///   行为与存量逐字节一致；legacy 把数由调用方打审计告警。
 /// - **JSON 数组格式**（技术债 003 结构化）：`[{"key":"k1","tenant":"t1","system":"mdm",
-///   "allowedDefinitionKeys":["mdm_x"],"endpoints":["start","query"]}]`——camelCase 字段
-///   全部可选（key 必填；tenant 缺省 default；其余缺省 = 不限）。
+///   "allowedDefinitionKeys":["mdm_x"]}]`——camelCase 字段全部可选（key 必填；tenant
+///   缺省 default；其余缺省 = 不限）。`endpoints` 端点类别字段已删（审查 S-02：声明后
+///   无任何消费方校验，属虚假安全感——端点级限权有诉求时按路由前缀实现并随 003 二期）。
 pub(crate) fn parse_api_keys_declared(
     raw: String,
 ) -> (HashMap<String, String>, HashMap<String, KeyDecl>, usize) {
@@ -256,7 +249,6 @@ pub(crate) fn parse_api_keys_declared(
                             tenant,
                             system: d.system.filter(|s| !s.trim().is_empty()),
                             allowed_definition_keys: d.allowed_definition_keys.unwrap_or_default(),
-                            endpoints: d.endpoints.unwrap_or_default(),
                         },
                     );
                 }
@@ -288,8 +280,6 @@ struct KeyDeclJson {
     system: Option<String>,
     #[serde(default)]
     allowed_definition_keys: Option<Vec<String>>,
-    #[serde(default)]
-    endpoints: Option<Vec<String>>,
 }
 
 /// 解析 `auth.api_keys="k1:tenantA,k2:tenantB"` → {k1→tenantA, k2→tenantB}。
@@ -344,13 +334,12 @@ mod tests {
         let d = decls.get("k1").expect("legacy key 也应有声明");
         assert_eq!(d.system, None);
         assert!(d.definition_allowed("any_def"));
-        assert!(d.endpoint_allowed("admin"));
     }
 
     #[test]
     fn json_keys_parse_structured_decls() {
-        // JSON 声明格式：system/定义白名单/端点类别逐字段生效；tenant 缺省 default。
-        let raw = r#"[{"key":"k_mdm","system":"mdm","allowedDefinitionKeys":["mdm_x"],"endpoints":["start","query"]},
+        // JSON 声明格式：system/定义白名单逐字段生效；tenant 缺省 default。
+        let raw = r#"[{"key":"k_mdm","system":"mdm","allowedDefinitionKeys":["mdm_x"]},
                        {"key":"k_fi","tenant":"t_fi","system":"fi"}]"#
             .to_string();
         let (tenants, decls, legacy) = parse_api_keys_declared(raw);
@@ -361,8 +350,6 @@ mod tests {
         assert_eq!(mdm.system.as_deref(), Some("mdm"));
         assert!(mdm.definition_allowed("mdm_x"));
         assert!(!mdm.definition_allowed("fi_y"));
-        assert!(mdm.endpoint_allowed("start"));
-        assert!(!mdm.endpoint_allowed("admin"));
         let fi = decls.get("k_fi").expect("第二把 key 应有声明");
         assert!(fi.allowed_definition_keys.is_empty(), "缺省白名单 = 不限");
     }

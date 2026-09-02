@@ -129,7 +129,14 @@ where
 fn resolve_ctx(req: &Request, spec: &'static JwtSpec) -> Result<TenantCtx, Response> {
     let cfg = auth_config();
     // 先查 X-Api-Key（服务间 M2M）：命中即以该 key 绑定的租户建 scope，免 JWT。
+    // S-14：与 Authorization 并存时 key 优先、JWT 被忽略——warn 显性化（调用方常以为
+    // 带 JWT 即有用户身份，行为静默偏离预期；文档同步声明优先级）。
     if let Some(key) = header_str(req, "x-api-key") {
+        if req.headers().get(axum::http::header::AUTHORIZATION).is_some() {
+            tracing::warn!(
+                "X-Api-Key 与 Authorization 并存：以 API Key 服务身份为准（JWT 被忽略）"
+            );
+        }
         return match cfg.api_keys.get(&key) {
             Some(key_tenant) => {
                 // 委托令牌桥：服务身份已验（API Key 合法）。若平台再带上**委托用户令牌**
