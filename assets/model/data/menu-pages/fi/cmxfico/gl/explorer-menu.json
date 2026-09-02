@@ -378,17 +378,17 @@
               "caption": "Webhook 订阅",
               "type": "workspace-node",
               "permissionId": null,
-              "icon": "connect",
+              "icon": "tabler-outline/webhook",
               "workspace": {
                 "id": "flow_webhook_admin",
                 "explorer": {
                   "caption": "订阅列表",
-                  "icon": "connect",
+                  "icon": "tabler-outline/webhook",
                   "views": [
                     {
                       "id": "flow-webhook-admin-explorer",
                       "tabLabel": "订阅",
-                      "icon": "connect",
+                      "icon": "tabler-outline/webhook",
                       "type": "native_pages",
                       "native_page": "portal.flow.webhook-admin",
                       "view": "explorer"
