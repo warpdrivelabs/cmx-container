@@ -37,8 +37,8 @@ const FN_KINDS = ['query', 'derivedProperty', 'validation', 'actionLogic', 'aggr
 const FN_KIND_LABEL = { query: '查询', derivedProperty: '派生属性', validation: '校验', actionLogic: '动作逻辑', aggregation: '聚合' };
 const EDIT_OPS = ['createObject', 'modifyObject', 'deleteObject', 'addLink', 'removeLink'];
 const EDIT_OP_LABEL = { createObject: '创建对象', modifyObject: '修改对象', deleteObject: '删除对象', addLink: '加关系', removeLink: '删关系' };
-const SIDE_KINDS = ['notification', 'webhook', 'callFunction', 'startBusinessProcess', 'emitEvent'];
-const SIDE_KIND_LABEL = { notification: '通知', webhook: 'Webhook', callFunction: '调用函数', startBusinessProcess: '触发流程', emitEvent: '发事件' };
+const SIDE_KINDS = ['notification', 'webhook', 'callFunction', 'startBusinessProcess', 'computeReport', 'emitEvent'];
+const SIDE_KIND_LABEL = { notification: '通知', webhook: 'Webhook', callFunction: '调用函数', startBusinessProcess: '触发流程', computeReport: '生成报表', emitEvent: '发事件' };
 // apiName 合法性（镜像后端 is_valid_api_name）。
 function validApiName(s) { return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s || ''); }
 
@@ -209,7 +209,7 @@ function explorerHtml() {
     ${grp('共享属性', '⊞', m.sharedProperties, 'shared')}
     ${grp('动作类型', '⚡', m.actionTypes, 'action')}
     ${grp('函数', 'ƒ', m.functions, 'function')}
-    <div class="o-newbar"><button class="o-btn xs" data-act="new-object">+ 对象类型</button><button class="o-btn xs" data-act="new-interface">+ 接口</button><button class="o-btn xs" data-act="new-action">+ 动作</button><button class="o-btn xs" data-act="new-function">+ 函数</button></div>
+    <div class="o-newbar"><button class="o-btn xs" data-act="new-object">+ 对象类型</button><button class="o-btn xs" data-act="new-interface">+ 接口</button><button class="o-btn xs" data-act="new-action">+ 动作</button><button class="o-btn xs" data-act="new-from-template">+ 从模板</button><button class="o-btn xs" data-act="new-function">+ 函数</button></div>
   </div>`;
 }
 
@@ -544,6 +544,7 @@ async function doRunAction(root, id, dryRun) {
 function actionInspectorHtml() {
   const d = state.detail || {};
   if (!state.flowDefsLoaded) loadFlowDefs(); // 惰性拉已发布流程（「起流程」副作用选择器数据源）
+  if (!state.reportDefsLoaded) loadReportDefs(); // 惰性拉报表（「生成报表」副作用选择器数据源）
   const params = d.parameters || [];
   const logic = d.logic || [];
   const vals = d.validations || [];
@@ -566,8 +567,8 @@ function actionInspectorHtml() {
     <input class="o-cin xs" data-vaf="message" value="${esc(v.message || '')}" placeholder="错误提示"/>
     <button class="o-btn xs danger" data-act="ac-del-val" data-i="${i}">✕</button>
   </div>`).join('');
-  const RICH_KINDS = ['startBusinessProcess', 'webhook', 'notification'];
-  const FX_TAG = { startBusinessProcess: '🔀 起流程', webhook: '🪝 Webhook', notification: '🔔 通知' };
+  const RICH_KINDS = ['startBusinessProcess', 'computeReport', 'webhook', 'notification'];
+  const FX_TAG = { startBusinessProcess: '🔀 起流程', computeReport: '📊 生成报表', webhook: '🪝 Webhook', notification: '🔔 通知' };
   const fxRows = fx.map((s, i) => {
     const kindSel = `<select class="o-csel xs" data-sef="kind">${SIDE_KINDS.map(k => `<option value="${k}" ${k === (s.kind || 'notification') ? 'selected' : ''}>${SIDE_KIND_LABEL[k]}</option>`).join('')}</select>`;
     const del = `<button class="o-btn xs danger" data-act="ac-del-fx" data-i="${i}">✕</button>`;
@@ -597,7 +598,7 @@ function actionInspectorHtml() {
   </div>`;
 }
 // 副作用可视化配置（起流程 / Webhook / 通知）——
-const SE_RESERVED = ['kind', 'flowDefKey', 'businessKey', 'function', 'url', 'topic', 'template', '_vars'];
+const SE_RESERVED = ['kind', 'flowDefKey', 'businessKey', 'reportCode', 'function', 'url', 'topic', 'template', '_vars'];
 // 惰性拉 flowengine 已发布流程定义（经 onto /flow/definitions 代理；flow 不可达则空，降级为自由输入）。
 async function loadFlowDefs() {
   if (state.flowDefsLoaded || state._flowDefsLoading) return;
@@ -605,6 +606,15 @@ async function loadFlowDefs() {
   try { const r = await apiJson(API + '/flow/definitions'); state.flowDefs = (r && r.definitions) || []; }
   catch (e) { state.flowDefs = []; }
   state.flowDefsLoaded = true; state._flowDefsLoading = false;
+  refresh('property');
+}
+// 惰性拉 cmx-report 报表列表（经 onto /report/definitions 代理；report 不可达则空，降级为自由输入）。
+async function loadReportDefs() {
+  if (state.reportDefsLoaded || state._reportDefsLoading) return;
+  state._reportDefsLoading = true;
+  try { const r = await apiJson(API + '/report/definitions'); state.reportDefs = (r && r.reports) || []; }
+  catch (e) { state.reportDefs = []; }
+  state.reportDefsLoaded = true; state._reportDefsLoading = false;
   refresh('property');
 }
 // 副作用对象的内联额外字段 → 键值映射编辑模型（{name,value}[]；流程变量 / Webhook 请求体 / 通知数据）。
@@ -625,9 +635,10 @@ function richSideEffectHtml(s, i, params) {
   const kind = s.kind;
   const dlPars = (params || []).map(p => `<option value="$${esc(p.name)}"></option>`).join('');
   const vars = seVars(s);
-  const mapLabel = kind === 'startBusinessProcess' ? '流程变量映射' : kind === 'webhook' ? '请求体字段' : '通知数据字段';
-  const mapEmpty = kind === 'startBusinessProcess' ? '无映射（仅传 businessKey）' : '无字段（仅传固定载荷）';
-  const nameHint = kind === 'startBusinessProcess' ? '流程变量名' : '字段名';
+  const MAP_LABEL = { startBusinessProcess: '流程变量映射', computeReport: '报表参数（orgCode/periodCode/version）', webhook: '请求体字段', notification: '通知数据字段' };
+  const mapLabel = MAP_LABEL[kind] || '载荷字段';
+  const mapEmpty = kind === 'startBusinessProcess' ? '无映射（仅传 businessKey）' : kind === 'computeReport' ? '无参数（生成报表通常需 orgCode/periodCode）' : '无字段（仅传固定载荷）';
+  const nameHint = kind === 'startBusinessProcess' ? '流程变量名' : kind === 'computeReport' ? '参数名（orgCode…）' : '字段名';
   const varRows = vars.map((v, j) => `<div class="o-fnrow o-sevar" data-i="${i}" data-j="${j}">
     <input class="o-cin xs" data-sev="name" value="${esc(v.name || '')}" placeholder="${nameHint}"/>
     <input class="o-cin xs" data-sev="value" list="opar-${i}" value="${esc(v.value || '')}" placeholder="$参数 或 字面量"/>
@@ -643,6 +654,13 @@ function richSideEffectHtml(s, i, params) {
       <datalist id="ofd-${i}">${dlDefs}</datalist>
       <label>业务键 businessKey <span class="o-hint">可选，回查/单据关联</span></label>
       <input class="o-cin" data-sef="businessKey" list="opar-${i}" value="${esc(s.businessKey || '')}" placeholder="如 $orderId 或 PO-2024"/>`;
+  } else if (kind === 'computeReport') {
+    const reps = state.reportDefs || [];
+    const dlReps = reps.map(r => `<option value="${esc(r.code)}">${esc(r.name || r.code)}</option>`).join('');
+    const note = !state.reportDefsLoaded ? '加载中…' : (reps.length ? `${reps.length} 张报表` : '（cmx-report 未连/无报表，可直接输入编码）');
+    head = `<label>报表 reportCode <span class="o-hint">${note}</span></label>
+      <input class="o-cin" data-sef="reportCode" list="orp-${i}" value="${esc(s.reportCode || '')}" placeholder="选报表 / 输入编码（支持 $参数）"/>
+      <datalist id="orp-${i}">${dlReps}</datalist>`;
   } else if (kind === 'webhook') {
     head = `<label>Webhook URL <span class="o-hint">POST；host 须在白名单 ONTO_WEBHOOK_ALLOW</span></label>
       <input class="o-cin" data-sef="url" list="opar-${i}" value="${esc(s.url || '')}" placeholder="http(s)://host/path（支持 $参数 插值）"/>`;
@@ -687,6 +705,9 @@ function collectAction(root) {
       const fd = block.querySelector('[data-sef="flowDefKey"]'); if (fd && fd.value.trim()) s.flowDefKey = fd.value.trim();
       const bk = block.querySelector('[data-sef="businessKey"]'); if (bk && bk.value.trim()) s.businessKey = bk.value.trim();
       s._vars = collectSeVars(block);
+    } else if (kind === 'computeReport') {
+      const rc = block.querySelector('[data-sef="reportCode"]'); if (rc && rc.value.trim()) s.reportCode = rc.value.trim();
+      s._vars = collectSeVars(block);
     } else if (kind === 'webhook') {
       const u = block.querySelector('[data-sef="url"]'); if (u && u.value.trim()) s.url = u.value.trim();
       s._vars = collectSeVars(block);
@@ -722,6 +743,27 @@ async function doNewFunction() {
 async function doNewAction() {
   const apiName = window.prompt('新动作类型 apiName（如 reassignOrder）：', ''); if (!apiName) return;
   try { await apiJson(API + '/action-types', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiName, displayName: apiName, parameters: [], logic: [], validations: [], sideEffects: [] }) }); flashAll('已建动作 ' + apiName); await loadAll(); refreshAll(); selectElement('action', apiName, true); }
+  catch (e) { flashAll('建动作失败：' + e.message, true); }
+}
+// 从内置模板新建动作（关账联动等预置「动作 + 副作用」组合）——建后直接进编辑器（副作用富块自动呈现）。
+async function doNewFromTemplate() {
+  let tpls = [];
+  try { const r = await apiJson(API + '/action-templates'); tpls = (r && r.templates) || []; }
+  catch (e) { return flashAll('拉取模板失败：' + e.message, true); }
+  if (!tpls.length) return flashAll('无可用模板', true);
+  const opts = tpls.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('');
+  const help = tpls.map(t => `<div class="o-tplrow"><b>${esc(t.name)}</b> — ${esc(t.description || '')}</div>`).join('');
+  const body = `<div class="o-tplhelp">${help}</div>
+    <div class="o-row2"><div><label>选择模板</label><select class="o-inp" data-k="tpl">${opts}</select></div>
+    <div><label>新动作 apiName</label><input class="o-inp" data-k="apiName" placeholder="如 monthEndClose"/></div></div>`;
+  const c = await openDialog({ title: '从模板新建动作', body, buttons: [{ label: '取消', id: '__cancel' }, { label: '使用模板', id: 'use', kind: 'primary' }] });
+  if (c !== 'use') return;
+  const idx = +((_lastDialogValues && _lastDialogValues['tpl']) || 0);
+  const apiName = ((_lastDialogValues && _lastDialogValues['apiName']) || '').trim();
+  if (!validApiName(apiName)) return flashAll('apiName 非法（字母/下划线开头）', true);
+  const tpl = tpls[idx]; if (!tpl) return;
+  const action = Object.assign({ apiName }, JSON.parse(JSON.stringify(tpl.action || {})));
+  try { await apiJson(API + '/action-types', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(action) }); flashAll('已从模板「' + tpl.name + '」建动作 ' + apiName); await loadAll(); refreshAll(); selectElement('action', apiName, true); }
   catch (e) { flashAll('建动作失败：' + e.message, true); }
 }
 
@@ -853,6 +895,7 @@ function bind(root, view, host) {
     // ── UI5 动能层：函数 / 动作 ──
     if (a === 'new-function') return doNewFunction();
     if (a === 'new-action') return doNewAction();
+    if (a === 'new-from-template') return doNewFromTemplate();
     if (a === 'fn-add-input') return fnAddInput(root);
     if (a === 'fn-del-input') return fnDelInput(root, +act.getAttribute('data-i'));
     if (a === 'save-function') return doSaveFunction(root);
@@ -1225,6 +1268,9 @@ function css() {
   .o-erow.sel{background:var(--o-panel);box-shadow:inset 2.5px 0 0 var(--o-accent)}
   .o-ename{flex:1;font-size:12.5px}
   .o-newbar{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
+  .o-tplhelp{margin-bottom:10px;max-height:160px;overflow:auto}
+  .o-tplrow{font-size:11.5px;color:var(--o-muted,#94a3b8);padding:4px 0;border-bottom:1px solid var(--o-border,#243049)}
+  .o-tplrow b{color:var(--o-fg,#e6ecf5)}
   /* UI5 动能层：函数/动作编辑器 */
   .o-code{width:100%;box-sizing:border-box;background:var(--o-bg,#0b1020);border:1px solid var(--o-border);color:var(--o-fg);border-radius:8px;padding:8px 10px;font-family:var(--o-mono);font-size:12px;line-height:1.5;resize:vertical}
   .o-codein{padding:5px 8px;font-size:11.5px}

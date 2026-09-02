@@ -160,7 +160,7 @@ impl From<BizError> for cmx_traits::error::TraitError {
 impl From<BizError> for cmx_api_types::Error {
     fn from(e: BizError) -> Self {
         match e {
-            BizError::Crud(e) => cmx_api_types::Error::from(e),
+            BizError::Crud(e) => cmx_api_types::Error::internal_error(format!("数据库操作错误: {e}")),
             BizError::Business(msg) => cmx_api_types::Error::business_error(msg),
             BizError::NotFound(msg) => cmx_api_types::Error::not_found(msg),
             BizError::Conflict(msg) => cmx_api_types::Error::conflict(msg),
