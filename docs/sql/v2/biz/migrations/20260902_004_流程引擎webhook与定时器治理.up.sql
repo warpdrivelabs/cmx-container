@@ -1,9 +1,15 @@
 -- =============================================
--- 迁移说明：流程引擎出站 webhook 订阅表 + 持久化投递队列表（001 方案 v2.3）
--- 影响表：cmx_flow_webhook_subscription, cmx_flow_webhook_delivery
--- 操作类型：CREATE TABLE / CREATE INDEX
--- 回滚方式：20260901_001_流程webhook订阅与投递队列表.down.sql
+-- 迁移说明：流程引擎治理批次合并迁移（原 20260901_001 + 20260902_001/002/003 四个迁移
+--           重整为单文件）：出站 webhook 订阅/投递队列表、三级路由列、实例乐观锁与
+--           系统归属列、定时器租约列与故障清单表。语句全部幂等（IF NOT EXISTS），
+--           已执行过旧 version 的环境重放无副作用。
+-- 影响表：cmx_flow_webhook_subscription, cmx_flow_webhook_delivery, cmx_flow_instance,
+--         cmx_flow_hi_instance, cmx_flow_job, cmx_flow_incident
+-- 操作类型：CREATE TABLE / ADD COLUMN / CREATE INDEX / COMMENT
+-- 回滚方式：20260902_004_流程引擎webhook与定时器治理.down.sql
 -- =============================================
+
+-- ═══════════ 原 20260901_001：出站 webhook 订阅表 + 持久化投递队列表（001 方案 v2.3） ═══════════
 
 -- 订阅配置表（结构对齐 md_subscription；主键 = BIGINT 应用层 Pk52 雪花）
 CREATE TABLE IF NOT EXISTS cmx_flow_webhook_subscription (
@@ -95,3 +101,89 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_cmx_flow_webhook_dlv_sub_event ON cmx_flow_
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_webhook_dlv_due ON cmx_flow_webhook_delivery (state, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_webhook_dlv_sub ON cmx_flow_webhook_delivery (subscription_id, seq);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_webhook_dlv_did ON cmx_flow_webhook_delivery (delivery_id);
+
+-- ═══════════ 原 20260902_001：三级路由——实例发起绑定列 + 投递行路由成因列（v2.4） ═══════════
+
+-- L2 发起绑定：实例落订阅 id（NULL = 未绑定，事件走规则 2 全量匹配；子实例继承父实例值）。
+-- 部分索引服务删除守卫（非终态绑定实例存在性检查）与绑定维度查询；写入开销近零。
+-- 历史实例归档同步登记（终态清理后「曾绑给谁」审计不断链）。
+-- 投递行路由成因：回答「这条投递为什么发生」。值域 bound | matched；
+-- 测试行不经此列区分（复用 source='test'），落默认 matched。
+-- 生产执行注意（方案 §3.3）：长查询可能被 ALTER 锁队列阻塞，事务内已设 lock_timeout = 5s。
+BEGIN;
+
+SET LOCAL lock_timeout = '5s';
+
+ALTER TABLE cmx_flow_instance ADD COLUMN IF NOT EXISTS subscriber_id BIGINT;
+COMMENT ON COLUMN cmx_flow_instance.subscriber_id IS '发起绑定的 webhook 订阅 id（v2.4 三级路由 L2；NULL = 未绑定走规则 2 全量匹配）；子实例继承父实例值';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_subscriber ON cmx_flow_instance (subscriber_id) WHERE subscriber_id IS NOT NULL;
+
+ALTER TABLE cmx_flow_hi_instance ADD COLUMN IF NOT EXISTS subscriber_id BIGINT;
+COMMENT ON COLUMN cmx_flow_hi_instance.subscriber_id IS '发起绑定的 webhook 订阅 id（v2.4 归档登记；终态清理后「曾绑给谁」审计不断链）';
+
+ALTER TABLE cmx_flow_webhook_delivery ADD COLUMN IF NOT EXISTS route_source VARCHAR(8) NOT NULL DEFAULT 'matched';
+COMMENT ON COLUMN cmx_flow_webhook_delivery.route_source IS '路由成因（v2.4 三级路由）：bound 发起绑定定向投递 / matched 规则匹配（含 L3 显式旁听）；测试行复用 source 列区分';
+
+COMMIT;
+
+-- ═══════════ 原 20260902_002：实例乐观锁与系统归属列（技术债 007 + 005，治理方案批次 2/4） ═══════════
+
+-- 007：cmx_flow_instance 加 version 乐观锁（save 以 WHERE id AND version CAS 提交并 +1；
+--       配合代码侧 cc/转签台账旁路剥离——两表不再随快照 DELETE 重插，此迁移不涉及）。
+-- 005：instance/hi_instance 加 system_id（结构化 API Key 声明的调用方系统归属）。
+-- 说明：cc 已读保护与台账幂等化均为 SQL 语句形态变更，无 DDL。
+BEGIN;
+
+SET LOCAL lock_timeout = '5s';
+
+ALTER TABLE cmx_flow_instance    ADD COLUMN IF NOT EXISTS version   BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE cmx_flow_instance    ADD COLUMN IF NOT EXISTS system_id VARCHAR(64);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_system ON cmx_flow_instance (system_id);
+
+ALTER TABLE cmx_flow_hi_instance ADD COLUMN IF NOT EXISTS version   BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE cmx_flow_hi_instance ADD COLUMN IF NOT EXISTS system_id VARCHAR(64);
+
+COMMENT ON COLUMN cmx_flow_instance.version   IS '乐观锁版本（技术债 007）：save 以 WHERE id AND version CAS 提交并 +1，0 行即并发冲突 409';
+COMMENT ON COLUMN cmx_flow_instance.system_id IS '发起方业务系统标识（技术债 005：来自结构化 API Key 声明；NULL = legacy 调用未声明系统）；子实例继承';
+COMMENT ON COLUMN cmx_flow_hi_instance.version   IS '归档时的乐观锁版本（技术债 007 审计留档）';
+COMMENT ON COLUMN cmx_flow_hi_instance.system_id IS '发起方业务系统标识（技术债 005 归档登记）';
+
+COMMIT;
+
+-- ═══════════ 原 20260902_003：定时器租约列 + 故障清单表（技术债 008 + 011，治理方案批次 5/6） ═══════════
+
+-- 008：cmx_flow_job 加租约列（SKIP LOCKED 抢占——多副本下同一作业只被一个副本 fire）。
+-- 011：cmx_flow_incident 独立故障清单表（跨实例台账，/incidents 端点 + 自动重试数据源）。
+BEGIN;
+
+SET LOCAL lock_timeout = '5s';
+
+ALTER TABLE cmx_flow_job ADD COLUMN IF NOT EXISTS claimed_by VARCHAR(128);
+ALTER TABLE cmx_flow_job ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_job_acquire ON cmx_flow_job (due_at, claimed_by, lease_expires_at);
+
+COMMENT ON COLUMN cmx_flow_job.claimed_by       IS '定时器抢占持有者（技术债 008；worker id = timer-<pid>）';
+COMMENT ON COLUMN cmx_flow_job.lease_expires_at IS '租约到期时刻（到期后作业可被其它副本重抢）';
+
+CREATE TABLE IF NOT EXISTS cmx_flow_incident (
+    id              VARCHAR(64)  PRIMARY KEY,
+    instance_id     VARCHAR(64)  NOT NULL,
+    token_id        VARCHAR(64),
+    node_bpmn_id    VARCHAR(128) NOT NULL,
+    definition_key  VARCHAR(128) NOT NULL,
+    business_key    VARCHAR(128),
+    reason          TEXT         NOT NULL DEFAULT '',
+    retries         INTEGER      NOT NULL DEFAULT 0,
+    state           VARCHAR(16)  NOT NULL DEFAULT 'OPEN',
+    created_at      TIMESTAMPTZ  NOT NULL,
+    updated_at      TIMESTAMPTZ  NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cmx_flow_incident_inst_node ON cmx_flow_incident (instance_id, node_bpmn_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_incident_state ON cmx_flow_incident (state, updated_at);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_incident_def ON cmx_flow_incident (definition_key);
+
+COMMENT ON TABLE  cmx_flow_incident           IS '流程故障清单（技术债 011：跨实例 incident 台账；实例变量 __incident 仍是实例内派生视图）';
+COMMENT ON COLUMN cmx_flow_incident.state     IS 'OPEN / RESOLVED（retry_incident 成功后批量关闭）';
+COMMENT ON COLUMN cmx_flow_incident.retries   IS '累计发生/重试次数（同 instance+node 幂等累加）';
+
+COMMIT;
