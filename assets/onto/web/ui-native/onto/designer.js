@@ -55,14 +55,25 @@ const state = {
   selRows: new Set(), // UI2 批量：选中的属性行索引
   pendingLink: null,  // UI3 关系速建气泡：{source,target,apiName,cardinality,roleA,roleB,sourceProperty,targetProperty}
   linkProps: {},      // 属性到属性映射（会话内）：apiName → {sourceProperty,targetProperty}；后端 LinkType 暂不存外键属性，refreshAll 后据此重挂
+  expDam: {},         // explorer「对象类型」DAM 分组树折叠态：groupKey → true(收起)；默认展开
   hosts: new Set(),   // 各区 host（含 __view）
   el: null,           // <cmx-ontology-graph> 实例
 };
 
-const { apiJson: _sharedApiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js）；经 CFG 转发保留组件壳 configure() 契约
-const { deepClone } = globalThis.__cmxDataComp // 共享深拷贝（cmx-data-comp/lib/cmx-deep-clone.js；审查 B-04）
+// 共享 fetch 封装/转义（门户注入 globalThis.__cmxDataComp）；独立 :8097 运行时门户未注入 → 内置等价兜底，
+// 使壳「独立 :8097 与门户 F3 反代都走」的契约在两端都成立（否则独立态会因解构 undefined 而崩）。
+const __dc = globalThis.__cmxDataComp || {};
+const _sharedApiJson = __dc.apiJson || (async (url, options = {}, cfg = {}) => {
+  const full = (cfg.apiBase && url.charAt(0) === '/') ? cfg.apiBase + url : url;
+  const res = await fetch(full, { ...(cfg.fetchInit || {}), ...(options || {}), headers: { Accept: 'application/json', ...((cfg.authHeaders && cfg.authHeaders()) || {}), ...((options && options.headers) || {}) } });
+  let j = null; try { j = await res.json(); } catch (e) { /* */ }
+  if (!res.ok || (j && typeof j.code === 'number' && j.code !== 0)) throw new Error((j && (j.msg || j.error)) || ('HTTP ' + res.status));
+  return j && typeof j === 'object' && 'data' in j ? j.data : j;
+});
+// 共享深拷贝（cmx-data-comp/lib/cmx-deep-clone.js；审查 B-04）；独立态兜底 structuredClone/JSON。
+const deepClone = __dc.deepClone || ((v) => (typeof structuredClone === 'function' ? structuredClone(v) : JSON.parse(JSON.stringify(v))));
 async function apiJson (url, options = {}) { return _sharedApiJson(url, options, CFG) }
-const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+const esc = __dc.escHtml || ((s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
 
 // ── 组件加载（一次性，幂等）──
 let _componentPromise = null;
@@ -79,6 +90,25 @@ function ensureComponent() {
 }
 
 // ── 数据层：manifest → 组件 spec（nodes/edges）──
+// 属性 → 组件卡片投影（递归）。复合类型(array/struct)=层块：children 取 constraints.children||p.children，
+// 标 isLevel + entityName(constraints.entity||displayName)，让卡片画成嵌套分层块（业务单据的头/行/明细）。
+const COMPOSITE_PROJ = ['array', 'struct'];
+function projectProp(p, full) {
+  const base = {
+    apiName: p.apiName, displayName: p.displayName, baseType: p.baseType,
+    isPrimaryKey: full && p.apiName === full.primaryKey,
+    isTitle: full && p.apiName === full.titleProperty,
+    required: p.required, isIndexed: p.isIndexed, semanticType: p.semanticType,
+  };
+  if (COMPOSITE_PROJ.includes(p.baseType)) {
+    const c = p.constraints || {};
+    const kids = (Array.isArray(c.children) && c.children) || (Array.isArray(p.children) && p.children) || [];
+    base.isLevel = true;
+    base.entityName = c.entity || c.displayName || p.displayName || p.apiName;
+    base.children = kids.map(k => projectProp(k, null));
+  }
+  return base;
+}
 async function loadAll() {
   const m = await apiJson(API + '/manifest');
   state.manifest = m;
@@ -90,13 +120,9 @@ async function loadAll() {
     nodes.push({
       id: ot.apiName, kind: 'object',
       displayName: ot.displayName, status: ot.status,
-      properties: (full && full.properties || []).map(p => ({
-        apiName: p.apiName, baseType: p.baseType,
-        isPrimaryKey: full && p.apiName === full.primaryKey,
-        isTitle: full && p.apiName === full.titleProperty,
-        required: p.required, isIndexed: p.isIndexed, semanticType: p.semanticType,
-      })),
+      properties: (full && full.properties || []).map(p => projectProp(p, full)),
       implements: (full && full.implements) || [],
+      ...(damPathOrNull(full) ? { groupPath: damPathOrNull(full) } : {}),
     });
   }
   for (const iface of (m.interfaces || [])) nodes.push({ id: iface.apiName, kind: 'interface', displayName: iface.displayName });
@@ -192,7 +218,49 @@ function modelHtml() {
   </div>`;
 }
 
-// ── explorer 区：七类元素分组树 ──
+// ── explorer 区：七类元素分组树（对象类型按 DAM 域▸应用▸模块 折叠，其余五类平铺）──
+function objTypePath(it) {
+  const dam = it.dam || {};
+  if (!dam.domain && !dam.application && !dam.module) return ['未分组'];
+  return [dam.domain || '未分域', dam.application || '未分应用', dam.module || '未分模块'];
+}
+function buildObjTree(items) {
+  const root = { children: new Map(), leaves: [] };
+  for (const it of items || []) {
+    let cur = root, key = '';
+    for (const seg of objTypePath(it)) {
+      key = key ? key + '/' + seg : seg;
+      let ch = cur.children.get(seg);
+      if (!ch) { ch = { label: seg, key, children: new Map(), leaves: [] }; cur.children.set(seg, ch); }
+      cur = ch;
+    }
+    cur.leaves.push(it);
+  }
+  return root;
+}
+function objTreeCount(node) { let c = node.leaves.length; for (const ch of node.children.values()) c += objTreeCount(ch); return c; }
+function objTreeKeys(node, acc) { for (const ch of node.children.values()) { acc.push(ch.key); objTreeKeys(ch, acc); } return acc; }
+const DAM_ICON = ['🗂', '📁', '📦'];
+function renderObjNode(node, depth) {
+  const collapsed = state.expDam[node.key] === true; // 默认展开
+  const pad = 4 + depth * 12;
+  let out = `<li class="o-tnode" data-act="dam-toggle" data-key="${esc(node.key)}" style="padding-left:${pad}px"><span class="o-tcaret">${collapsed ? '▸' : '▾'}</span><span class="o-tlabel">${DAM_ICON[Math.min(depth, 2)]} ${esc(node.label)}</span><span class="o-gn">${objTreeCount(node)}</span></li>`;
+  if (collapsed) return out;
+  for (const ch of node.children.values()) out += renderObjNode(ch, depth + 1);
+  for (const it of node.leaves) {
+    const on = state.sel && state.sel.id === it.apiName;
+    const dt = it.docType && (it.docType.name || it.docType.code) ? `<span class="o-tdoc">🧾${esc(it.docType.name || it.docType.code)}</span>` : '';
+    out += `<li class="o-erow o-tleaf ${on ? 'sel' : ''}" data-sel-kind="object" data-sel-id="${esc(it.apiName)}" style="padding-left:${4 + (depth + 1) * 12}px"><span class="o-ename">${esc(it.displayName || it.apiName)}</span>${dt}<code>${esc(it.apiName)}</code></li>`;
+  }
+  return out;
+}
+function objTreeHtml(items) {
+  const root = buildObjTree(items);
+  let out = '';
+  for (const ch of root.children.values()) out += renderObjNode(ch, 0);
+  return out || '<li class="o-empty2">—</li>';
+}
+
 function explorerHtml() {
   const m = state.manifest || {};
   const grp = (title, icon, items, kind) => {
@@ -202,9 +270,10 @@ function explorerHtml() {
     }).join('') || `<li class="o-empty2">—</li>`;
     return `<div class="o-grp"><div class="o-ghd">${icon} ${title} <span class="o-gn">${(items || []).length}</span></div><ul class="o-elist">${rows}</ul></div>`;
   };
+  const objCount = (m.objectTypes || []).length;
   return `<div class="o o-explorer">
     <div class="o-search"><input class="o-inp" placeholder="🔍 查找类型…" data-role="search"/></div>
-    ${grp('对象类型', '📦', m.objectTypes, 'object')}
+    <div class="o-grp"><div class="o-ghd">📦 对象类型 <span class="o-gn">${objCount}</span><span class="o-sp2"></span><button class="o-btn xs" data-act="dam-collapse-all" title="按 DAM 全部收起">⊟</button><button class="o-btn xs" data-act="dam-expand-all" title="全部展开">⊞</button></div><ul class="o-elist o-tree">${objTreeHtml(m.objectTypes)}</ul></div>
     ${grp('关系类型', '🔗', m.linkTypes, 'link')}
     ${grp('接口', '◈', m.interfaces, 'interface')}
     ${grp('共享属性', '⊞', m.sharedProperties, 'shared')}
@@ -223,6 +292,8 @@ function contentHtml() {
       <span class="o-sp"></span>
       <button class="o-btn xs" data-act="new-object">+ 对象类型</button>
       <button class="o-btn xs" data-act="auto-layout">重排</button>
+      <button class="o-btn xs" data-act="collapse-all" title="按 DAM 全部收起为域盒（大图提速）">⊟ 收起</button>
+      <button class="o-btn xs" data-act="expand-all" title="全部展开">⊞ 展开</button>
     </div>
     <div class="o-hint">拖节点移位 · 从卡片右缘小圆拉线建关系（拖回自身=自关联层级）· 点节点在右侧编辑 · 点边选中</div>
     <div class="o-canvaswrap" data-graph-host></div>
@@ -286,6 +357,66 @@ function propertyHtml() {
   if (state.sel.kind === 'function') return functionInspectorHtml();
   return `<div class="o o-prop"><div class="o-phd">${esc(state.sel.id)}</div><div class="o-pmuted">该类型的 Inspector 待补（O1 已支持后端 CRUD）。</div></div>`;
 }
+// ── DAM 分域（本体图分域折叠）——对象类型 DAM 三级归组 ──
+function damPathOrNull(def) {
+  const dam = (def && def.dam) || {};
+  if (!dam.domain && !dam.application && !dam.module) return null;
+  return [dam.domain || '未分域', dam.application || '未分应用', dam.module || '未分模块'];
+}
+async function loadDamTree() {
+  if (state.damLoaded || state._damLoading) return;
+  state._damLoading = true;
+  const opt = { domain: [], application: [], module: [] };
+  try {
+    const r = await apiJson('/api/domains/tree', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const roots = Array.isArray(r) ? r : (r && (r.data || r.tree)) || [];
+    (function walk(ns) { for (const n of ns || []) { const x = n.data || n; const t = x.node_type; if (t && opt[t]) opt[t].push([x.code, x.name || x.code]); walk(n.children); } })(roots);
+  } catch (e) { /* 独立 :8097 无门户 → 空，datalist 退回既有值 */ }
+  state.damOpt = opt; state.damLoaded = true; state._damLoading = false;
+  refresh('property');
+}
+function damOptions() {
+  const m = { domain: new Map(), application: new Map(), module: new Map() };
+  const o = state.damOpt;
+  if (o) for (const k of ['domain', 'application', 'module']) for (const [c, n] of (o[k] || [])) if (c) m[k].set(c, n || c);
+  for (const nd of ((state.spec && state.spec.nodes) || [])) {
+    const gp = nd.groupPath; if (!gp) continue;
+    if (gp[0] && gp[0] !== '未分域') m.domain.set(gp[0], m.domain.get(gp[0]) || gp[0]);
+    if (gp[1] && gp[1] !== '未分应用') m.application.set(gp[1], m.application.get(gp[1]) || gp[1]);
+    if (gp[2] && gp[2] !== '未分模块') m.module.set(gp[2], m.module.get(gp[2]) || gp[2]);
+  }
+  return { domain: [...m.domain], application: [...m.application], module: [...m.module] };
+}
+function damRowHtml(d) {
+  if (!state.damLoaded && !state._damLoading) loadDamTree();
+  const dam = d.dam || {};
+  const opt = damOptions();
+  const dl = (id, arr) => `<datalist id="${id}">${arr.map(([c, n]) => `<option value="${esc(c)}">${esc(n)}</option>`).join('')}</datalist>`;
+  return `<label>业务领域 DAM <span class="o-hint" style="color:var(--o-muted,#94a3b8);font-weight:400">域/应用/模块 —— 大图按此分域折叠</span></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <input class="o-inp" data-df="dam.domain" list="odl-dom" value="${esc(dam.domain || '')}" placeholder="域 domain"/>
+      <input class="o-inp" data-df="dam.application" list="odl-app" value="${esc(dam.application || '')}" placeholder="应用 application"/>
+      <input class="o-inp" data-df="dam.module" list="odl-mod" value="${esc(dam.module || '')}" placeholder="模块 module"/>
+    </div>${dl('odl-dom', opt.domain)}${dl('odl-app', opt.application)}${dl('odl-mod', opt.module)}`;
+}
+// 业务单据类型输入（对象浏览器在模块下按此再分一层）；datalist = 已加载类型的既有单据类型去重（DOC 导入自动回填，此处可手改）。
+function docTypeOptions() {
+  const m = new Map();
+  for (const it of ((state.manifest && state.manifest.objectTypes) || [])) {
+    const dt = it.docType; if (dt && dt.code) m.set(dt.code, dt.name || dt.code);
+  }
+  return [...m];
+}
+function docTypeRowHtml(d) {
+  const dt = d.docType || {};
+  const opts = docTypeOptions();
+  return `<label style="margin-top:8px">业务单据类型 <span class="o-hint" style="color:var(--o-muted,#94a3b8);font-weight:400">单据码/名 —— 对象浏览器在模块下按此再分一层</span></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <input class="o-inp" data-df="docType.code" list="odl-doc" value="${esc(dt.code || '')}" placeholder="单据码 code"/>
+      <input class="o-inp" data-df="docType.name" value="${esc(dt.name || '')}" placeholder="单据名 name"/>
+    </div><datalist id="odl-doc">${opts.map(([c, n]) => `<option value="${esc(c)}">${esc(n)}</option>`).join('')}</datalist>`;
+}
+
 function objectInspectorHtml() {
   const d = state.detail || {};
   const props = d.properties || [];
@@ -339,6 +470,8 @@ function objectInspectorHtml() {
       <div><label>标题属性</label><select class="o-inp" data-df="titleProperty"><option value="">—</option>${props.map(p => `<option ${p.apiName === d.titleProperty ? 'selected' : ''}>${esc(p.apiName)}</option>`).join('')}</select></div>
       <div><label>状态</label><select class="o-inp" data-df="status">${STATUS.map(s => `<option value="${s}" ${s === d.status ? 'selected' : ''}>${STATUS_LABEL[s]}</option>`).join('')}</select></div>
     </div>
+    ${damRowHtml(d)}
+    ${docTypeRowHtml(d)}
     <div class="o-phd2">属性 <span class="o-pn">${props.length}</span> <span class="o-sp"></span><button class="o-btn xs" data-act="add-prop">+ 加属性</button></div>
     ${sharedRefBar}
     ${batchBar}
@@ -871,10 +1004,14 @@ function bind(root, view, host) {
     const act = ev.target.closest('[data-act]'); if (!act) return;
     const a = act.getAttribute('data-act');
     const pi = act.hasAttribute('data-pi') ? +act.getAttribute('data-pi') : -1;
+    if (a === 'dam-toggle') { const k = act.getAttribute('data-key'); state.expDam[k] = state.expDam[k] === true ? false : true; return refresh('explorer'); }
+    if (a === 'dam-collapse-all' || a === 'dam-expand-all') { const c = a === 'dam-collapse-all'; for (const k of objTreeKeys(buildObjTree((state.manifest || {}).objectTypes), [])) state.expDam[k] = c; return refresh('explorer'); }
     if (a === 'publish') return doPublish();
     if (a === 'new-object') return doNewObject();
     if (a === 'new-interface') return doNewInterface();
     if (a === 'auto-layout') { if (state.el) state.el.autoLayout(); return; }
+    if (a === 'collapse-all') { if (state.el && state.el.setAllGroups) state.el.setAllGroups(true); return; }
+    if (a === 'expand-all') { if (state.el && state.el.setAllGroups) state.el.setAllGroups(false); return; }
     if (a === 'add-prop') return addPropRow();
     if (a === 'del-prop') return delPropRow(pi);
     if (a === 'save-object') return doSaveObject(root);
@@ -956,7 +1093,11 @@ function onPropChange(ev, root) {
   const pf = el.getAttribute && el.getAttribute('data-pf');
   const df = el.getAttribute && el.getAttribute('data-df');
   const d = state.detail; if (!d) return;
-  if (df) { d[df] = el.value; if (df === 'displayName' || df === 'status') return; refresh('property'); return; }
+  if (df) {
+    if (df.indexOf('dam.') === 0) { d.dam = d.dam || {}; d.dam[df.slice(4)] = el.value; return; }
+    if (df.indexOf('docType.') === 0) { d.docType = d.docType || {}; d.docType[df.slice(8)] = el.value; return; }
+    d[df] = el.value; if (df === 'displayName' || df === 'status') return; refresh('property'); return;
+  }
   if (el.classList && el.classList.contains('o-rowsel')) {
     const i = +el.getAttribute('data-pi');
     if (el.checked) state.selRows.add(i); else state.selRows.delete(i);
@@ -1087,6 +1228,14 @@ function collectDetail(root) {
   const d = state.detail; if (!d) return;
   const gv = (sel) => { const el = root.querySelector(sel); return el ? el.value : undefined; };
   const dn = gv('[data-df="displayName"]'); if (dn !== undefined) d.displayName = dn;
+  // DAM 三级（分域折叠分组键）——直接从输入读，避免最后未失焦的输入漏收。
+  const damGet = (k) => { const el = root.querySelector('[data-df="dam.' + k + '"]'); return el ? el.value.trim() : undefined; };
+  const dmn = damGet('domain'), dap = damGet('application'), dmd = damGet('module');
+  if (dmn !== undefined || dap !== undefined || dmd !== undefined) d.dam = { domain: dmn || '', application: dap || '', module: dmd || '' };
+  // 业务单据类型（同 dam：直接从输入读，避免未失焦漏收）。
+  const docGet = (k) => { const el = root.querySelector('[data-df="docType.' + k + '"]'); return el ? el.value.trim() : undefined; };
+  const dcc = docGet('code'), dcn = docGet('name');
+  if (dcc !== undefined || dcn !== undefined) d.docType = { code: dcc || '', name: dcn || '' };
   // titleProperty/status/属性各字段已由 onPropChange 即时入 state.detail。
   // 复合类型子属性 → constraints.children（O1 后端 constraints jsonb 原样保留，前端还原）。
   (d.properties || []).forEach(p => {
@@ -1268,6 +1417,13 @@ function css() {
   .o-erow:hover{background:var(--o-panel)}
   .o-erow.sel{background:var(--o-panel);box-shadow:inset 2.5px 0 0 var(--o-accent)}
   .o-ename{flex:1;font-size:12.5px}
+  .o-tree{max-height:38vh;overflow:auto}
+  .o-tnode{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:pointer;user-select:none}
+  .o-tnode:hover{background:var(--o-panel)}
+  .o-tcaret{color:var(--o-accent);font-size:10px;width:10px;flex:none;text-align:center}
+  .o-tlabel{flex:1;font-size:11.5px;font-weight:700;color:var(--o-fg)}
+  .o-tleaf .o-ename{font-weight:400}
+  .o-tdoc{font-size:10px;color:var(--o-muted);white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis}
   .o-newbar{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
   .o-tplhelp{margin-bottom:10px;max-height:160px;overflow:auto}
   .o-tplrow{font-size:11.5px;color:var(--o-muted,#94a3b8);padding:4px 0;border-bottom:1px solid var(--o-border,#243049)}

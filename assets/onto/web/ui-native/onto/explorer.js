@@ -26,13 +26,22 @@ const state = {
   rows: [],               // 已载入对象
   sel: null,              // 选中对象 {pk, title, properties}
   breadcrumb: [],         // Search-Around 钻取路径 [{type, pk, link}]
+  expTree: {},            // 类型分组树折叠态：groupKey → true(收起)；默认展开
   hosts: new Set(),
   err: '',
 };
 
-const { apiJson: _sharedApiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js）；经 CFG 转发保留组件壳 configure() 契约
+// 共享 fetch 封装/转义（门户注入 globalThis.__cmxDataComp）；独立 :8097 未注入 → 内置等价兜底（否则解构 undefined 崩）。
+const __dc = globalThis.__cmxDataComp || {};
+const _sharedApiJson = __dc.apiJson || (async (url, options = {}, cfg = {}) => {
+  const full = (cfg.apiBase && url.charAt(0) === '/') ? cfg.apiBase + url : url;
+  const res = await fetch(full, { ...(cfg.fetchInit || {}), ...(options || {}), headers: { Accept: 'application/json', ...((cfg.authHeaders && cfg.authHeaders()) || {}), ...((options && options.headers) || {}) } });
+  let j = null; try { j = await res.json(); } catch (e) { /* */ }
+  if (!res.ok || (j && typeof j.code === 'number' && j.code !== 0)) throw new Error((j && (j.msg || j.error)) || ('HTTP ' + res.status));
+  return j && typeof j === 'object' && 'data' in j ? j.data : j;
+});
 async function apiJson (url, options = {}) { return _sharedApiJson(url, options, CFG) }
-const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+const esc = __dc.escHtml || ((s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
 function hostRoot(host) { return host && (host.shadowRoot || host); }
 
 // ── 数据 ──
@@ -103,17 +112,59 @@ function modelHtml() {
   </div>`;
 }
 
+// ── 类型分组树：域 ▸ 应用 ▸ 模块 ▸ 业务单据类型 ▸ 对象类型（实例数据按此组织；数据取富化清单 dam/docType）──
+function typePath(t) {
+  const dam = t.dam || {};
+  const has = dam.domain || dam.application || dam.module;
+  if (!has) return ['未分组'];                       // 无 DAM → 顶层单桶（不深嵌）
+  const dt = t.docType || {};
+  return [dam.domain || '未分域', dam.application || '未分应用', dam.module || '未分模块', dt.name || dt.code || '未归类单据'];
+}
+function buildTypeTree(types) {
+  const root = { children: new Map(), leaves: [] };
+  for (const t of types) {
+    let cur = root, key = '';
+    for (const seg of typePath(t)) {
+      key = key ? key + '/' + seg : seg;
+      let ch = cur.children.get(seg);
+      if (!ch) { ch = { label: seg, key, children: new Map(), leaves: [] }; cur.children.set(seg, ch); }
+      cur = ch;
+    }
+    cur.leaves.push(t);
+  }
+  return root;
+}
+function countTreeLeaves(node) { let c = node.leaves.length; for (const ch of node.children.values()) c += countTreeLeaves(ch); return c; }
+function allTreeKeys(node, acc) { for (const ch of node.children.values()) { acc.push(ch.key); allTreeKeys(ch, acc); } return acc; }
+const TREE_ICON = ['🗂', '📁', '📦', '🧾'];
+function renderTreeNode(node, depth) {
+  const collapsed = state.expTree[node.key] === true;    // 默认展开
+  const pad = 6 + depth * 12;
+  let out = `<li class="o-tnode" data-act="tree-toggle" data-key="${esc(node.key)}" style="padding-left:${pad}px"><span class="o-tcaret">${collapsed ? '▸' : '▾'}</span><span class="o-tlabel">${TREE_ICON[Math.min(depth, 3)]} ${esc(node.label)}</span><span class="o-gn">${countTreeLeaves(node)}</span></li>`;
+  if (collapsed) return out;
+  for (const ch of node.children.values()) out += renderTreeNode(ch, depth + 1);
+  for (const t of node.leaves) {
+    const on = t.apiName === state.currentType;
+    out += `<li class="o-erow o-tleaf ${on ? 'sel' : ''}" data-act="pick-type" data-type="${esc(t.apiName)}" style="padding-left:${6 + (depth + 1) * 12}px"><span class="o-ename">${esc(t.displayName || t.apiName)}</span><code>${esc(t.apiName)}</code></li>`;
+  }
+  return out;
+}
+function typeTreeHtml(types) {
+  const root = buildTypeTree(types);
+  let out = '';
+  for (const ch of root.children.values()) out += renderTreeNode(ch, 0);
+  return out || '<li class="o-empty2">无对象类型</li>';
+}
+
 function explorerHtml() {
   const types = state.manifest.objectTypes || [];
-  const list = types.map(t => `<li class="o-erow ${t.apiName === state.currentType ? 'sel' : ''}" data-act="pick-type" data-type="${esc(t.apiName)}">
-    <span class="o-ename">${esc(t.displayName || t.apiName)}</span><code>${esc(t.apiName)}</code></li>`).join('');
   const t = state.currentType ? typeMeta(state.currentType) : null;
   const props = (state.typeDetail && state.typeDetail.properties) || [];
   const propOpts = props.map(p => `<option value="${esc(p.apiName)}">${esc(p.apiName)}</option>`).join('');
   const chips = state.filters.map((f, i) => `<span class="o-chip">${esc(f.property)} ${esc(opLabel(f.op))} ${esc(f.op === 'isNull' ? '' : f.value)} <button class="o-x" data-act="del-filter" data-i="${i}">✕</button></span>`).join('');
   return `<div class="o o-explorer">
-    <div class="o-hd">对象类型 <span class="o-gn">${types.length}</span></div>
-    <ul class="o-elist">${list || '<li class="o-empty2">无对象类型</li>'}</ul>
+    <div class="o-hd">对象类型 <span class="o-gn">${types.length}</span><span class="o-sp2"></span><button class="o-btn xs" data-act="tree-collapse-all" title="全部收起">⊟</button><button class="o-btn xs" data-act="tree-expand-all" title="全部展开">⊞</button></div>
+    <ul class="o-elist o-tree">${typeTreeHtml(types)}</ul>
     <div class="o-hd2">对象集构造器</div>
     <div class="o-fb">
       <select class="o-inp xs" data-fb="property">${propOpts || '<option>（无属性）</option>'}</select>
@@ -192,6 +243,8 @@ function bind(root, view) {
     el.addEventListener('click', async (e) => {
       const a = el.getAttribute('data-act');
       if (a === 'refresh') { await loadObjects(); return refreshAll(); }
+      if (a === 'tree-toggle') { const k = el.getAttribute('data-key'); state.expTree[k] = state.expTree[k] === true ? false : true; return refresh('explorer'); }
+      if (a === 'tree-collapse-all' || a === 'tree-expand-all') { const c = a === 'tree-collapse-all'; for (const k of allTreeKeys(buildTypeTree(state.manifest.objectTypes || []), [])) state.expTree[k] = c; return refresh('explorer'); }
       if (a === 'back') { state.breadcrumb.pop(); if (state.breadcrumb.length === 0) { /* 顶层 */ } state.sel = null; await loadObjects(); return refreshAll(); }
       if (a === 'pick-type') { state.currentType = el.getAttribute('data-type'); state.filters = []; state.sel = null; state.breadcrumb = []; await loadTypeDetail(); await loadObjects(); return refreshAll(); }
       if (a === 'add-filter') return addFilter(root);
@@ -229,6 +282,14 @@ function css() {
   .o-erow{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer}
   .o-erow:hover{background:var(--o-panel)}.o-erow.sel{background:var(--o-panel);box-shadow:inset 2.5px 0 0 var(--o-accent)}
   .o-ename{flex:1;font-size:12.5px}
+  .o-hd{display:flex;align-items:center;gap:4px}
+  .o-sp2{flex:1}
+  .o-tree{max-height:44vh;overflow:auto;margin-top:4px}
+  .o-tnode{display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:6px;user-select:none}
+  .o-tnode:hover{background:var(--o-panel)}
+  .o-tcaret{color:var(--o-accent);font-size:10px;width:10px;flex:none;text-align:center}
+  .o-tlabel{flex:1;font-size:12px;font-weight:600;color:var(--o-fg)}
+  .o-tleaf .o-ename{font-weight:400}
   .o-fb{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:4px 0}
   .o-fb .o-inp{flex:1;min-width:60px}
   .o-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}

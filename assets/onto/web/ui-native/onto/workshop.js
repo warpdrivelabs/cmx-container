@@ -23,9 +23,17 @@ const state = {
   acResult: '', hosts: new Set(), err: '',
 };
 
-const { apiJson: _sharedApiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js）；经 CFG 转发保留组件壳 configure() 契约
+// 共享 fetch 封装/转义（门户注入 globalThis.__cmxDataComp）；独立 :8097 未注入 → 内置等价兜底（否则解构 undefined 崩）。
+const __dc = globalThis.__cmxDataComp || {};
+const _sharedApiJson = __dc.apiJson || (async (url, options = {}, cfg = {}) => {
+  const full = (cfg.apiBase && url.charAt(0) === '/') ? cfg.apiBase + url : url;
+  const res = await fetch(full, { ...(cfg.fetchInit || {}), ...(options || {}), headers: { Accept: 'application/json', ...((cfg.authHeaders && cfg.authHeaders()) || {}), ...((options && options.headers) || {}) } });
+  let j = null; try { j = await res.json(); } catch (e) { /* */ }
+  if (!res.ok || (j && typeof j.code === 'number' && j.code !== 0)) throw new Error((j && (j.msg || j.error)) || ('HTTP ' + res.status));
+  return j && typeof j === 'object' && 'data' in j ? j.data : j;
+});
 async function apiJson (url, options = {}) { return _sharedApiJson(url, options, CFG) }
-const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+const esc = __dc.escHtml || ((s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
 function hostRoot(h) { return h && (h.shadowRoot || h); }
 function fmt(v) { if (v == null) return ''; if (typeof v === 'object') return JSON.stringify(v); return String(v); }
 function typeMeta(a) { return (state.manifest.objectTypes || []).find(t => t.apiName === a); }
@@ -67,7 +75,18 @@ function modelHtml() {
   </div>`;
 }
 function explorerHtml() {
-  const types = (state.manifest.objectTypes || []).map(t => `<option value="${esc(t.apiName)}" ${t.apiName === state.currentType ? 'selected' : ''}>${esc(t.displayName || t.apiName)}</option>`).join('');
+  const opt = (t) => `<option value="${esc(t.apiName)}" ${t.apiName === state.currentType ? 'selected' : ''}>${esc(t.displayName || t.apiName)}</option>`;
+  // 用 <optgroup> 按「模块 · 业务单据类型」轻量分组（保持 select 交互；缺 dam/docType → 未分组桶）。
+  const groups = new Map();
+  for (const t of (state.manifest.objectTypes || [])) {
+    const dam = t.dam || {}, dt = t.docType || {};
+    const mod = dam.module || dam.application || dam.domain;
+    const doc = dt.name || dt.code;
+    const label = mod ? (doc ? `${mod} · ${doc}` : mod) : (doc || '未分组');
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(t);
+  }
+  const types = [...groups].map(([label, arr]) => `<optgroup label="${esc(label)}">${arr.map(opt).join('')}</optgroup>`).join('');
   const rows = state.listRows.map(r => `<li class="o-erow ${state.sel && state.sel.pk === r.pk ? 'sel' : ''}" data-act="enter" data-pk="${esc(r.pk)}"><span class="o-ename">${esc(r.title || r.pk)}</span><code>${esc(r.pk)}</code></li>`).join('');
   return `<div class="o o-explorer">
     <div class="o-hd">选对象类型</div>

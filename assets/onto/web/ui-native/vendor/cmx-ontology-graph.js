@@ -34,6 +34,7 @@ var OntologyModel = class _OntologyModel {
   setDef(def) {
     const prevLayout = this.def && this.def._layout ? this.def._layout : void 0;
     const prevRoutes = this.def && this.def._edgeRoutes ? this.def._edgeRoutes : void 0;
+    const prevGroups = this.def && this.def._groupCollapsed ? this.def._groupCollapsed : void 0;
     this.def = clone(def);
     this.def.nodes = this.def.nodes || [];
     this.def.edges = this.def.edges || [];
@@ -55,6 +56,7 @@ var OntologyModel = class _OntologyModel {
       }
       if (Object.keys(kept).length) this.def._edgeRoutes = kept;
     }
+    if (!this.def._groupCollapsed && prevGroups) this.def._groupCollapsed = prevGroups;
     this.syncInterfaceLinks();
   }
   /** 设置某关系边的手动布线折点（含锚点）。 */
@@ -69,6 +71,26 @@ var OntologyModel = class _OntologyModel {
   /** 清除某关系边的手动布线（回退自动布线）。 */
   clearEdgeRoute(apiName) {
     if (this.def._edgeRoutes) delete this.def._edgeRoutes[apiName];
+  }
+  // ── 分组折叠态（DAM 分域）──
+  /** 当前所有分组容器折叠态（组键 → 是否收起）。 */
+  groupCollapsed() {
+    return this.def._groupCollapsed;
+  }
+  /** 设某组键收起/展开。 */
+  setGroupCollapsed(key, collapsed) {
+    this.def._groupCollapsed = this.def._groupCollapsed || {};
+    this.def._groupCollapsed[key] = collapsed;
+  }
+  /** 切换某组键折叠态（默认收起，故首次切换 = 展开）。 */
+  toggleGroup(key) {
+    this.def._groupCollapsed = this.def._groupCollapsed || {};
+    this.def._groupCollapsed[key] = !(this.def._groupCollapsed[key] ?? true);
+  }
+  /** 批量设置（工具栏「全部展开/收起」用）。 */
+  setAllGroups(keys, collapsed) {
+    this.def._groupCollapsed = this.def._groupCollapsed || {};
+    for (const k of keys) this.def._groupCollapsed[k] = collapsed;
   }
   get nodes() {
     return this.def.nodes;
@@ -204,7 +226,7 @@ var OntologyModel = class _OntologyModel {
 var DEFAULT_LAYOUT = {
   colGap: 300,
   rowGap: 260,
-  nodeW: 210,
+  nodeW: 232,
   headH: 46,
   rowH: 22,
   maxRows: 6,
@@ -219,12 +241,22 @@ var PREVIEW_LAYOUT = {
   maxRows: 4,
   pad: 30
 };
+function isLevelProp(p) {
+  return !!(p.isLevel || p.children && p.children.length || p.baseType === "array" || p.baseType === "struct");
+}
+function countRenderRows(props, maxRows) {
+  const scalars = props.filter((p) => !isLevelProp(p));
+  const levels = props.filter((p) => isLevelProp(p));
+  const shownScalars = Math.min(scalars.length, maxRows);
+  const extra = scalars.length > maxRows ? 1 : 0;
+  let rows = shownScalars + extra;
+  for (const lv of levels) rows += 1 + countRenderRows(lv.children || [], maxRows);
+  return rows;
+}
 function nodeHeight(n, cfg) {
   if (n.kind === "interface") return cfg.headH;
-  const props = n.properties || [];
-  const shown = Math.min(props.length, cfg.maxRows);
-  const extra = props.length > cfg.maxRows ? cfg.rowH : 0;
-  return cfg.headH + shown * cfg.rowH + extra + 8;
+  const rows = countRenderRows(n.properties || [], cfg.maxRows);
+  return cfg.headH + rows * cfg.rowH + 8;
 }
 function layout(def, cfg, hints) {
   const nodes = def.nodes || [];
@@ -435,9 +467,9 @@ function toPath(pts, radius = 7) {
   d += ` L${last.x},${last.y}`;
   return d;
 }
-function polyMidpoint(pts) {
-  if (pts.length === 0) return { x: 0, y: 0 };
-  if (pts.length === 1) return pts[0];
+function polyMidpointOriented(pts) {
+  if (pts.length === 0) return { x: 0, y: 0, vertical: false };
+  if (pts.length === 1) return { x: pts[0].x, y: pts[0].y, vertical: false };
   const seg = [];
   let total = 0;
   for (let i = 1; i < pts.length; i++) {
@@ -452,11 +484,17 @@ function polyMidpoint(pts) {
       const t = d ? (total / 2 - acc) / d : 0;
       const a = pts[i - 1];
       const b = pts[i];
-      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      const vertical = Math.abs(b.y - a.y) > Math.abs(b.x - a.x);
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, vertical };
     }
     acc += d;
   }
-  return pts[Math.floor(pts.length / 2)];
+  const m = pts[Math.floor(pts.length / 2)];
+  return { x: m.x, y: m.y, vertical: false };
+}
+function polyMidpoint(pts) {
+  const m = polyMidpointOriented(pts);
+  return { x: m.x, y: m.y };
 }
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -487,27 +525,76 @@ function propGlyph(p) {
 function statusClass(n) {
   return `og-st-${n.status || "experimental"}`;
 }
+function propIsLevel(p) {
+  return !!(p.isLevel || p.children && p.children.length || p.baseType === "array" || p.baseType === "struct");
+}
+function rowMidY(ctx, rowIdx) {
+  return ctx.topY + rowIdx * ctx.rowH + ctx.rowH / 2;
+}
+function rowPorts(ctx, propApi, rowIdx) {
+  const cy = rowMidY(ctx, rowIdx);
+  const pa = esc(propApi);
+  const hl = (side) => portHot(ctx.hot, ctx.nodeId, propApi, side) ? " hot" : "";
+  return `<circle class="og-port${hl("L")}" data-port="${ctx.pid}" data-prop="${pa}" data-side="L" cx="${ctx.rx}" cy="${cy}" r="4.5"/><circle class="og-port${hl("R")}" data-port="${ctx.pid}" data-prop="${pa}" data-side="R" cx="${ctx.rx + ctx.rw}" cy="${cy}" r="4.5"/>`;
+}
+function scalarRow(ctx, p, rowIdx, depth) {
+  const y = ctx.topY + rowIdx * ctx.rowH + ctx.rowH - 6;
+  const x = ctx.rx + 14 + depth * 12;
+  const glyph = propGlyph(p);
+  const flags = (p.required ? '<tspan class="og-req">*</tspan>' : "") + (p.isIndexed ? ' <tspan class="og-idx">\u26A1</tspan>' : "");
+  const sem = p.semanticType ? `<tspan class="og-sem"> ${esc(p.semanticType)}</tspan>` : "";
+  const ty = p.baseType ? `<tspan class="og-ty">${esc(p.baseType)}</tspan>` : "";
+  return `<text class="og-prow" x="${x}" y="${y}"><tspan class="og-pg">${glyph}</tspan> ${esc(p.apiName)}${flags} ${ty}${sem}</text>`;
+}
+function levelHeader(ctx, p, rowIdx, depth, innerRows) {
+  const yText = ctx.topY + rowIdx * ctx.rowH + ctx.rowH - 6;
+  const x = ctx.rx + 12 + depth * 12;
+  const kids = (p.children || []).length;
+  const kind = p.baseType === "struct" ? "struct" : "array";
+  const label = p.entityName || p.displayName || p.apiName;
+  const bandY = ctx.topY + rowIdx * ctx.rowH + 2;
+  const bandH = (1 + innerRows) * ctx.rowH - 3;
+  const bandX = ctx.rx + 6 + depth * 12;
+  const bandW = ctx.rw - (6 + depth * 12) - 6;
+  const band = `<rect class="og-level-band" x="${bandX}" y="${bandY}" width="${Math.max(bandW, 20)}" height="${bandH}" rx="6"/><rect class="og-level-bar" x="${bandX}" y="${bandY}" width="3" height="${bandH}" rx="1.5"/>`;
+  const head = `<text class="og-level-hd" x="${x}" y="${yText}">\u25BE ${esc(label)} <tspan class="og-level-kind">${kind}\xB7${kids}</tspan> <tspan class="og-level-api">${esc(p.apiName)}</tspan></text>`;
+  return band + head;
+}
+function renderProps(ctx, props, depth, startIdx) {
+  const scalars = props.filter((p) => !propIsLevel(p));
+  const levels = props.filter((p) => propIsLevel(p));
+  let idx = startIdx;
+  let body = "";
+  let ports = "";
+  const shownScalars = depth === 0 ? scalars.slice(0, ctx.maxRows) : scalars;
+  const extra = depth === 0 ? scalars.length - shownScalars.length : 0;
+  for (const p of shownScalars) {
+    body += scalarRow(ctx, p, idx, depth);
+    ports += rowPorts(ctx, p.apiName, idx);
+    idx += 1;
+  }
+  if (extra > 0) {
+    const y = ctx.topY + idx * ctx.rowH + ctx.rowH - 6;
+    body += `<text class="og-more" x="${ctx.rx + 14 + depth * 12}" y="${y}">+${extra} more</text>`;
+    idx += 1;
+  }
+  for (const lv of levels) {
+    const inner = countRenderRows(lv.children || [], ctx.maxRows);
+    body += levelHeader(ctx, lv, idx, depth, inner);
+    ports += rowPorts(ctx, lv.apiName, idx);
+    idx += 1;
+    const sub = renderProps(ctx, lv.children || [], depth + 1, idx);
+    body += sub.body;
+    ports += sub.ports;
+    idx = sub.nextIdx;
+  }
+  return { body, ports, nextIdx: idx };
+}
 function objectCard(n, r, cfg, sel, hot) {
   const color = n.color || "var(--og-node-bar)";
   const props = n.properties || [];
-  const shown = props.slice(0, cfg.maxRows);
-  const extra = props.length - shown.length;
-  const rows = shown.map((p, i) => {
-    const y = r.y + cfg.headH + i * cfg.rowH + cfg.rowH - 6;
-    const glyph = propGlyph(p);
-    const flags = (p.required ? '<tspan class="og-req">*</tspan>' : "") + (p.isIndexed ? ' <tspan class="og-idx">\u26A1</tspan>' : "");
-    const sem = p.semanticType ? `<tspan class="og-sem"> ${esc(p.semanticType)}</tspan>` : "";
-    const ty = p.baseType ? `<tspan class="og-ty">${esc(p.baseType)}</tspan>` : "";
-    return `<text class="og-prow" x="${r.x + 14}" y="${y}"><tspan class="og-pg">${glyph}</tspan> ${esc(p.apiName)}${flags} ${ty}${sem}</text>`;
-  }).join("");
-  const more = extra > 0 ? `<text class="og-more" x="${r.x + 14}" y="${r.y + r.h - 8}">+${extra} more</text>` : "";
-  const pid = esc(n.id);
-  const ports = shown.map((p, i) => {
-    const cy = r.y + cfg.headH + i * cfg.rowH + cfg.rowH / 2;
-    const pa = esc(p.apiName);
-    const hl = (side) => portHot(hot, n.id, p.apiName, side) ? " hot" : "";
-    return `<circle class="og-port${hl("L")}" data-port="${pid}" data-prop="${pa}" data-side="L" cx="${r.x}" cy="${cy}" r="4.5"/><circle class="og-port${hl("R")}" data-port="${pid}" data-prop="${pa}" data-side="R" cx="${r.x + r.w}" cy="${cy}" r="4.5"/>`;
-  }).join("");
+  const ctx = { rx: r.x, rw: r.w, topY: r.y + cfg.headH, rowH: cfg.rowH, maxRows: cfg.maxRows, pid: esc(n.id), nodeId: n.id, hot };
+  const rendered = renderProps(ctx, props, 0, 0);
   const clipId = `og-clip-${n.id.replace(/[^\w-]/g, "_")}`;
   return `<g class="og-node og-object ${statusClass(n)} ${sel ? "sel" : ""}" data-node="${esc(n.id)}">
     <clipPath id="${clipId}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="10"/></clipPath>
@@ -516,7 +603,7 @@ function objectCard(n, r, cfg, sel, hot) {
     <text class="og-title" x="${r.x + 14}" y="${r.y + 26}">${esc(n.displayName || n.id)}</text>
     <text class="og-api" x="${r.x + 14}" y="${r.y + 40}">${esc(n.id)}</text>
     <line class="og-hr" x1="${r.x}" y1="${r.y + cfg.headH}" x2="${r.x + r.w}" y2="${r.y + cfg.headH}"/>
-    ${rows}${more}${ports}
+    ${rendered.body}${rendered.ports}
   </g>`;
 }
 function interfaceCard(n, r, sel, hot) {
@@ -558,9 +645,28 @@ function fkProp(src, e, tgt) {
   }
   return best ? best.name : null;
 }
+function renderRowIndexOf(props, propApi, maxRows, depth, startIdx) {
+  const scalars = props.filter((p) => !propIsLevel(p));
+  const levels = props.filter((p) => propIsLevel(p));
+  let idx = startIdx;
+  const shown = depth === 0 ? scalars.slice(0, maxRows) : scalars;
+  for (const p of shown) {
+    if (p.apiName === propApi) return idx;
+    idx += 1;
+  }
+  if (depth === 0 && scalars.length > shown.length) idx += 1;
+  for (const lv of levels) {
+    if (lv.apiName === propApi) return idx;
+    idx += 1;
+    const found = renderRowIndexOf(lv.children || [], propApi, maxRows, depth + 1, idx);
+    if (found >= 0) return found;
+    idx += countRenderRows(lv.children || [], maxRows);
+  }
+  return -1;
+}
 function propAnchor(rect, node, cfg, propApi, side) {
   if (!propApi || !node || !node.properties) return null;
-  const idx = node.properties.slice(0, cfg.maxRows).findIndex((p) => p.apiName === propApi);
+  const idx = renderRowIndexOf(node.properties, propApi, cfg.maxRows, 0, 0);
   if (idx < 0) return null;
   const y = Math.round(rect.y + cfg.headH + idx * cfg.rowH + cfg.rowH / 2);
   const x = side === "R" ? Math.round(rect.x + rect.w) : Math.round(rect.x);
@@ -603,13 +709,17 @@ function edgePath(e, from, to, srcNode, tgtNode, cfg, others, manualRoute, sel) 
   const cls = `og-edge og-link${sel ? " sel" : ""}`;
   const label = e.displayName || e.apiName;
   const role = e.roleA ? ` \xB7 ${esc(e.roleA)}` : "";
-  const mid = polyMidpoint(pts);
+  const mid = polyMidpointOriented(pts);
+  const mx = Math.round(mid.x);
+  const my = Math.round(mid.y);
+  const labelText = `${esc(label)}${role}`;
+  const labelEl = mid.vertical ? `<text class="og-elabel" x="${mx - 7}" y="${my}" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 ${mx - 7} ${my})">${labelText}</text>` : `<text class="og-elabel" x="${mx}" y="${my - 6}" text-anchor="middle">${labelText}</text>`;
   const route = pts.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join(" ");
   return `<g data-edge="${esc(e.apiName)}" data-route="${route}">
     <path class="${cls} og-hit" d="${d}"/>
     <path class="${cls}" d="${d}" marker-end="url(#og-arrow)"/>
     ${segLines(pts, e.apiName)}
-    <text class="og-elabel" x="${Math.round(mid.x)}" y="${Math.round(mid.y) - 6}" text-anchor="middle">${esc(label)}${role}</text>
+    ${labelEl}
   </g>`;
 }
 function renderSvg(def, lay, cfg, st) {
@@ -640,9 +750,121 @@ function renderSvg(def, lay, cfg, st) {
     <g class="og-nodes">${nodes}</g>
   </svg>`;
 }
+function domainColor(seg) {
+  let h = 0;
+  for (let i = 0; i < seg.length; i++) h = (h * 31 + seg.charCodeAt(i)) % 360;
+  return `hsl(${h},60%,60%)`;
+}
+function groupContainer(b) {
+  const col = domainColor(b.key.split("/")[0] || b.key);
+  const label = esc(b.label);
+  const badge = `<g class="og-grp-badge"><rect x="${b.rect.x + b.rect.w - 44}" y="${b.rect.y + 7}" width="32" height="17" rx="8.5"/><text x="${b.rect.x + b.rect.w - 28}" y="${b.rect.y + 19}" text-anchor="middle">${b.count}</text></g>`;
+  if (b.collapsed) {
+    return `<g class="og-grp og-grp-collapsed" data-group-toggle="${esc(b.key)}" style="--gc:${col}">
+      <rect class="og-grp-box" x="${b.rect.x}" y="${b.rect.y}" width="${b.rect.w}" height="${b.rect.h}" rx="12"/>
+      <rect class="og-grp-bar" x="${b.rect.x}" y="${b.rect.y + 8}" width="5" height="${b.rect.h - 16}" rx="2.5"/>
+      <text class="og-grp-caret" x="${b.rect.x + 18}" y="${b.rect.y + b.rect.h / 2 + 5}">\u25B8</text>
+      <text class="og-grp-label" x="${b.rect.x + 36}" y="${b.rect.y + b.rect.h / 2 - 3}">${label}</text>
+      <text class="og-grp-key" x="${b.rect.x + 36}" y="${b.rect.y + b.rect.h / 2 + 13}">${esc(b.key)}</text>
+      ${badge}
+    </g>`;
+  }
+  return `<g class="og-grp og-grp-open" style="--gc:${col}">
+    <rect class="og-grp-region" x="${b.rect.x}" y="${b.rect.y}" width="${b.rect.w}" height="${b.rect.h}" rx="12"/>
+    <g data-group-toggle="${esc(b.key)}">
+      <rect class="og-grp-head" x="${b.rect.x}" y="${b.rect.y}" width="${b.rect.w}" height="28" rx="12"/>
+      <text class="og-grp-caret" x="${b.rect.x + 16}" y="${b.rect.y + 19}">\u25BE</text>
+      <text class="og-grp-label" x="${b.rect.x + 32}" y="${b.rect.y + 19}">${label}</text>
+      ${badge}
+    </g>
+  </g>`;
+}
+function bundledEdge(a, b, count, others) {
+  const pts = routeEdge(a, b, others);
+  const d = toPath(pts);
+  const mid = polyMidpoint(pts);
+  const mx = Math.round(mid.x);
+  const my = Math.round(mid.y);
+  const cnt = count > 1 ? `<g class="og-bundle-cnt"><rect x="${mx - 11}" y="${my - 9}" width="22" height="16" rx="8"/><text x="${mx}" y="${my + 3}" text-anchor="middle">${count}</text></g>` : "";
+  return `<path class="og-bundle" d="${d}" marker-end="url(#og-arrow)"/>${cnt}`;
+}
+function renderGrouped(def, gl, cfg, st) {
+  const nodeById = new Map(def.nodes.map((n) => [n.id, n]));
+  const containers = gl.boxes.map(groupContainer).join("");
+  const cards = def.nodes.map((n) => {
+    const r = gl.pos[n.id];
+    if (!r) return "";
+    const sel = st.selectedNodeId === n.id;
+    return n.kind === "interface" ? interfaceCard(n, r, sel, st.hotPort) : objectCard(n, r, cfg, sel, st.hotPort);
+  }).join("");
+  const cardRects = Object.keys(gl.pos).map((id) => gl.pos[id]);
+  const collapsedBoxRects = gl.boxes.filter((b) => b.collapsed).map((b) => b.rect);
+  const obstacleRects = [...cardRects, ...collapsedBoxRects];
+  const bundles = /* @__PURE__ */ new Map();
+  let fineEdges = "";
+  for (const e of def.edges || []) {
+    const aK = gl.resolveKey(e.source);
+    const bK = gl.resolveKey(e.target);
+    if (aK === bK) continue;
+    if (aK === e.source && bK === e.target) {
+      const from = gl.pos[e.source];
+      const to = gl.pos[e.target];
+      if (!from || !to) continue;
+      const others = obstacleRects.filter((r) => r !== from && r !== to);
+      const manualRoute = def._edgeRoutes ? def._edgeRoutes[e.apiName] : void 0;
+      fineEdges += edgePath(e, from, to, nodeById.get(e.source), nodeById.get(e.target), cfg, others, manualRoute, st.selectedEdgeApiName === e.apiName);
+    } else {
+      const k = [aK, bK].sort().join("|");
+      const cur = bundles.get(k);
+      if (cur) cur.count++;
+      else bundles.set(k, { a: aK, b: bK, count: 1 });
+    }
+  }
+  let bundleEdges = "";
+  for (const b of bundles.values()) {
+    const ra = gl.rectOf(b.a);
+    const rb = gl.rectOf(b.b);
+    if (ra && rb) {
+      const others = obstacleRects.filter((r) => r !== ra && r !== rb);
+      bundleEdges += bundledEdge(ra, rb, b.count, others);
+    }
+  }
+  const w = Math.max(gl.width, 400);
+  const h = Math.max(gl.height, 300);
+  return `<svg class="og-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="og-arrow" viewBox="0 0 12 12" refX="10.5" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto">
+        <path d="M2,2.2 L10.5,6 L2,9.8 L4.8,6 Z" class="og-mk"/>
+      </marker>
+    </defs>
+    <g class="og-groups">${containers}</g>
+    <g class="og-edges">${bundleEdges}${fineEdges}</g>
+    <g class="og-nodes">${cards}</g>
+  </svg>`;
+}
 function graphCss() {
   return `
-  :host{display:block;width:100%;height:100%}
+  :host{
+    display:block;width:100%;height:100%;
+    /* \u8BBE\u8BA1\u4EE4\u724C\u5C42\uFF1A\u5168\u90E8\u6D3E\u751F\u81EA\u95E8\u6237 --sap* \u4E3B\u9898\u4EE4\u724C\uFF08UI5 \u5728 :root \u91CD\u5B9A\u4E49 --sap*\uFF0C\u4F5C\u4E3A\u7EE7\u627F\u5C5E\u6027\u7A7F\u900F shadow \u8FB9\u754C \u2192 \u81EA\u52A8\u7FFB\uFF0C\u96F6 JS\uFF09\u3002
+       \u88F8 hex \u4E3A light-first \u964D\u7EA7\uFF08\u72EC\u7ACB\u90E8\u7F72\u65E0 UI5 \u8FD0\u884C\u65F6\u65F6\u547D\u4E2D\uFF09\u3002\u79D1\u6280\u611F\u5F3A\u8C03\u8272\u8D70 color-mix \u6D3E\u751F\u3002 */
+    --og-bg:var(--sapBackgroundColor,#f5f6f7);
+    --og-node:var(--sapList_Background,#ffffff);
+    --og-node2:var(--sapList_Hover_Background,#eef3fb);
+    --og-node-bar:var(--sapHighlightColor,#0a6ed1);
+    --og-fg:var(--sapTextColor,#1c2530);
+    --og-muted:var(--sapContent_LabelColor,#5a6b7b);
+    --og-border:var(--sapList_BorderColor,#c9ced4);
+    --og-accent:var(--sapHighlightColor,#0a6ed1);
+    --og-accent2:color-mix(in srgb,var(--sapHighlightColor,#0a6ed1) 55%,#8b5cf6);
+    --og-edge:var(--sapContent_LabelColor,#5a6b7b);
+    --og-iface:color-mix(in srgb,var(--sapHighlightColor,#0a6ed1) 8%,var(--sapList_Background,#fff));
+    --og-ok:var(--sapPositiveColor,#178a5a);
+    --og-warn:var(--sapCriticalColor,#c26a00);
+    --og-err:var(--sapNegativeColor,#d1394a);
+    --og-mono:var(--sapContent_MonospaceFontFamily,ui-monospace,Menlo,Consolas,monospace);
+    color-scheme:light dark;
+  }
   .og-canvas{position:relative;width:100%;height:100%;overflow:auto;background:var(--og-bg,#0b1020)}
   .og-svg{display:block}
   .og-empty{padding:40px;text-align:center;color:var(--og-muted,#94a3b8);font-size:13px}
@@ -662,6 +884,12 @@ function graphCss() {
   .og-req{fill:var(--og-err,#ef4444);font-weight:700}
   .og-idx{fill:var(--og-warn,#f59e0b)}
   .og-more{fill:var(--og-muted,#64748b);font-size:10.5px;font-style:italic}
+  /* \u4E1A\u52A1\u5355\u636E\u5C42\u5757\uFF08\u5934/\u884C/\u660E\u7EC6\uFF1A\u5355\u5361\u5185\u5D4C\u5957\u5206\u5C42\uFF09 */
+  .og-level-band{fill:color-mix(in srgb,var(--og-accent,#22d3ee) 7%,transparent);stroke:color-mix(in srgb,var(--og-accent,#22d3ee) 22%,transparent);stroke-width:1}
+  .og-level-bar{fill:var(--og-accent2,#8b5cf6)}
+  .og-level-hd{fill:var(--og-fg,#e6ecf5);font-size:11px;font-weight:700}
+  .og-level-kind{fill:var(--og-accent2,#a78bfa);font-size:9.5px;font-weight:600}
+  .og-level-api{fill:var(--og-muted,#64748b);font-size:9px;font-family:var(--og-mono,ui-monospace,Menlo,monospace)}
   .og-port{fill:var(--og-accent,#22d3ee);stroke:var(--og-node,#121a2e);stroke-width:1.5;cursor:crosshair;opacity:.6;transition:opacity .12s ease, r .12s ease}
   .og-port:hover{opacity:1;r:6.5}
   .og-port.hot{opacity:1;r:8;fill:var(--og-ok,#22c55e);stroke:var(--og-node,#121a2e);stroke-width:2;filter:drop-shadow(0 0 4px var(--og-ok,#22c55e))}
@@ -682,7 +910,174 @@ function graphCss() {
   .og-mk{fill:var(--og-edge,#64748b);stroke:none}
   .og-elabel{fill:var(--og-muted,#94a3b8);font-size:10.5px}
   .og-rubber{stroke:var(--og-accent,#22d3ee);stroke-width:1.8;stroke-dasharray:5 4;fill:none}
+  /* \u5206\u57DF\u6298\u53E0\u5BB9\u5668 */
+  .og-grp{cursor:pointer}
+  .og-grp-box{fill:var(--og-node,#121a2e);stroke:var(--gc,#22d3ee);stroke-width:1.4}
+  .og-grp-collapsed:hover .og-grp-box{fill:var(--og-node2,#17223c);stroke-width:2}
+  .og-grp-bar{fill:var(--gc,#22d3ee)}
+  .og-grp-caret{fill:var(--gc,#22d3ee);font-size:12px}
+  .og-grp-label{fill:var(--og-fg,#e6ecf5);font-size:13.5px;font-weight:700}
+  .og-grp-key{fill:var(--og-muted,#94a3b8);font-size:10px;font-family:var(--og-mono,ui-monospace,Menlo,monospace)}
+  .og-grp-badge rect{fill:color-mix(in srgb,var(--gc,#22d3ee) 22%,transparent);stroke:var(--gc,#22d3ee);stroke-width:.8}
+  .og-grp-badge text{fill:var(--gc,#22d3ee);font-size:11px;font-weight:700}
+  .og-grp-region{fill:color-mix(in srgb,var(--gc,#22d3ee) 6%,transparent);stroke:var(--gc,#22d3ee);stroke-width:1.1;stroke-dasharray:3 4}
+  .og-grp-head{fill:color-mix(in srgb,var(--gc,#22d3ee) 14%,transparent)}
+  .og-grp-open>g[data-group-toggle]:hover .og-grp-head{fill:color-mix(in srgb,var(--gc,#22d3ee) 26%,transparent)}
+  .og-bundle{stroke:var(--og-edge,#64748b);stroke-width:1.8;fill:none;opacity:.85}
+  .og-bundle-cnt rect{fill:var(--og-bg,#0b1020);stroke:var(--og-edge,#64748b);stroke-width:.8}
+  .og-bundle-cnt text{fill:var(--og-muted,#94a3b8);font-size:10.5px;font-weight:700}
   `;
+}
+
+// src/layout/groupLayout.ts
+var PAD = 16;
+var HEADER = 34;
+var GAP = 26;
+var BOX_W = 220;
+var BOX_H = 62;
+function pathOf(n) {
+  return n.groupPath && n.groupPath.length ? n.groupPath : ["\u672A\u5206\u7EC4"];
+}
+function newG(key, label, depth) {
+  return { key, label, depth, subMap: /* @__PURE__ */ new Map(), subs: [], leaves: [] };
+}
+function buildTree(nodes) {
+  const root = newG("", "ROOT", -1);
+  for (const n of nodes) {
+    const path = pathOf(n);
+    let cur = root;
+    for (let i = 0; i < path.length; i++) {
+      const key = path.slice(0, i + 1).join("/");
+      let child = cur.subMap.get(key);
+      if (!child) {
+        child = newG(key, path[i], i);
+        cur.subMap.set(key, child);
+        cur.subs.push(child);
+      }
+      cur = child;
+    }
+    cur.leaves.push(n);
+  }
+  return root;
+}
+function countLeaves(g) {
+  let c = g.leaves.length;
+  for (const s of g.subs) c += countLeaves(s);
+  return c;
+}
+function isCollapsed(collapsed, key) {
+  return collapsed[key] ?? true;
+}
+function layoutGroup(g, ox, oy, cfg, collapsed) {
+  const count = countLeaves(g);
+  const collapsedNow = isCollapsed(collapsed, g.key);
+  if (collapsedNow) {
+    const rect2 = { x: ox, y: oy, w: BOX_W, h: BOX_H };
+    return { rect: rect2, boxes: [{ key: g.key, label: g.label, count, depth: g.depth, collapsed: true, rect: rect2 }], pos: {} };
+  }
+  const children = [];
+  for (const sub of g.subs) {
+    const sl = layoutGroup(sub, 0, 0, cfg, collapsed);
+    children.push({ w: sl.rect.w, h: sl.rect.h, kind: "group", sub: sl });
+  }
+  for (const leaf of g.leaves) children.push({ w: cfg.nodeW, h: nodeHeight(leaf, cfg), kind: "leaf", node: leaf });
+  const boxes = [];
+  const pos = {};
+  const childX = ox + PAD;
+  const childY = oy + HEADER;
+  const cols = Math.max(1, Math.ceil(Math.sqrt(children.length)));
+  let x = childX;
+  let y = childY;
+  let rowH = 0;
+  let col = 0;
+  let maxRight = childX + BOX_W;
+  let maxBottom = childY;
+  for (const c of children) {
+    if (c.kind === "leaf") {
+      pos[c.node.id] = { x, y, w: c.w, h: c.h };
+    } else {
+      const dx = x;
+      const dy = y;
+      for (const b of c.sub.boxes) boxes.push({ ...b, rect: { x: b.rect.x + dx, y: b.rect.y + dy, w: b.rect.w, h: b.rect.h } });
+      for (const id in c.sub.pos) {
+        const r = c.sub.pos[id];
+        pos[id] = { x: r.x + dx, y: r.y + dy, w: r.w, h: r.h };
+      }
+    }
+    maxRight = Math.max(maxRight, x + c.w);
+    maxBottom = Math.max(maxBottom, y + c.h);
+    rowH = Math.max(rowH, c.h);
+    col++;
+    x += c.w + GAP;
+    if (col >= cols) {
+      col = 0;
+      x = childX;
+      y += rowH + GAP;
+      rowH = 0;
+    }
+  }
+  const rect = { x: ox, y: oy, w: maxRight - ox + PAD, h: Math.max(maxBottom - oy + PAD, HEADER + PAD) };
+  boxes.unshift({ key: g.key, label: g.label, count, depth: g.depth, collapsed: false, rect });
+  return { rect, boxes, pos };
+}
+function groupLayout(def, cfg, collapsed) {
+  const root = buildTree(def.nodes || []);
+  const boxes = [];
+  const pos = {};
+  const cols = Math.max(1, Math.ceil(Math.sqrt(root.subs.length)));
+  let x = PAD;
+  let y = PAD;
+  let rowH = 0;
+  let col = 0;
+  let maxRight = PAD;
+  let maxBottom = PAD;
+  for (const sub of root.subs) {
+    const sl = layoutGroup(sub, x, y, cfg, collapsed);
+    for (const b of sl.boxes) boxes.push(b);
+    for (const id in sl.pos) pos[id] = sl.pos[id];
+    maxRight = Math.max(maxRight, sl.rect.x + sl.rect.w);
+    maxBottom = Math.max(maxBottom, sl.rect.y + sl.rect.h);
+    rowH = Math.max(rowH, sl.rect.h);
+    col++;
+    x += sl.rect.w + GAP * 1.5;
+    if (col >= cols) {
+      col = 0;
+      x = PAD;
+      y += rowH + GAP * 1.5;
+      rowH = 0;
+    }
+  }
+  const boxByKey = new Map(boxes.map((b) => [b.key, b]));
+  const nodePath = /* @__PURE__ */ new Map();
+  for (const n of def.nodes || []) nodePath.set(n.id, pathOf(n));
+  const resolveKey = (nodeId) => {
+    if (pos[nodeId]) return nodeId;
+    const path = nodePath.get(nodeId) || ["\u672A\u5206\u7EC4"];
+    for (let i = 0; i < path.length; i++) {
+      const key = path.slice(0, i + 1).join("/");
+      if (isCollapsed(collapsed, key)) return key;
+    }
+    return nodeId;
+  };
+  const rectOf = (key) => pos[key] || (boxByKey.get(key) ? boxByKey.get(key).rect : void 0);
+  return { boxes, pos, resolveKey, rectOf, width: maxRight + PAD, height: maxBottom + PAD };
+}
+function groupingActive(def) {
+  const keys = /* @__PURE__ */ new Set();
+  for (const n of def.nodes || []) {
+    const p = pathOf(n);
+    keys.add(p.join("/"));
+    if (keys.size >= 2) return true;
+  }
+  return false;
+}
+function allGroupKeys(def) {
+  const keys = /* @__PURE__ */ new Set();
+  for (const n of def.nodes || []) {
+    const p = pathOf(n);
+    for (let i = 0; i < p.length; i++) keys.add(p.slice(0, i + 1).join("/"));
+  }
+  return [...keys];
 }
 
 // src/interaction/pointer.ts
@@ -705,9 +1100,15 @@ var InteractionController = class {
   grabDY = 0;
   moved = false;
   pointerId = -1;
+  /** connectOnly：分域折叠视图用——仅允许从属性锚点拉线建关系；节点重定位/线段手动布线（容器自动布局）留 M2。 */
+  connectOnly = false;
   constructor(model, cb) {
     this.model = model;
     this.cb = cb;
+  }
+  /** 切换 connectOnly（分域折叠开、扁平图关）。 */
+  setConnectOnly(v) {
+    this.connectOnly = v;
   }
   toSvgPoint(clientX, clientY) {
     const svg = this.cb.getSvg();
@@ -720,7 +1121,7 @@ var InteractionController = class {
   }
   onPointerDown(ev) {
     const target = ev.target;
-    const segEl = target.closest("[data-edge-seg]");
+    const segEl = this.connectOnly ? null : target.closest("[data-edge-seg]");
     if (segEl) {
       const grp = segEl.closest("[data-edge]");
       const routeStr = grp ? grp.getAttribute("data-route") : null;
@@ -762,6 +1163,7 @@ var InteractionController = class {
       return;
     }
     if (nodeEl) {
+      if (this.connectOnly) return;
       const id = nodeEl.getAttribute("data-node");
       if (!id) return;
       this.mode = "drag";
@@ -1021,6 +1423,12 @@ var CmxOntologyGraph = class extends HTMLElement {
     this.render();
     this.emit("spec-change", { spec: this.model.getDef() });
   }
+  /** 工具栏「全部展开/收起」——批量设置分域容器折叠态（无分组时无副作用）。 */
+  setAllGroups(collapsed) {
+    this.model.setAllGroups(allGroupKeys(this.model.getDef()), collapsed);
+    this.render();
+    this.emit("spec-change", { spec: this.model.getDef() });
+  }
   selectNode(id) {
     this.selectedNodeId = id;
     this.selectedEdgeApiName = null;
@@ -1060,11 +1468,26 @@ var CmxOntologyGraph = class extends HTMLElement {
       hotPort: this.hotPort
     };
   }
+  /** 当前是否走分域折叠视图（对象数少/无分组 → 回退扁平图）。 */
+  grouped() {
+    return this.model.nodes.length > 0 && groupingActive(this.model.getDef());
+  }
+  /** 构建画布 SVG（分域折叠 或 扁平）。 */
+  buildSvg() {
+    if (!this.model.nodes.length) return '<div class="og-empty">\u7A7A\u672C\u4F53 \xB7 \u53CC\u51FB\u753B\u5E03\u6216\u70B9\u300C+ \u5BF9\u8C61\u7C7B\u578B\u300D\u5F00\u59CB</div>';
+    const def = this.model.getDef();
+    if (this.grouped()) {
+      const gl = groupLayout(def, this.cfg(), this.model.groupCollapsed() || {});
+      return renderGrouped(def, gl, this.cfg(), this.renderState());
+    }
+    return renderSvg(def, this.currentLayout(), this.cfg(), this.renderState());
+  }
   render() {
-    const lay = this.currentLayout();
-    const svg = this.model.nodes.length ? renderSvg(this.model.getDef(), lay, this.cfg(), this.renderState()) : '<div class="og-empty">\u7A7A\u672C\u4F53 \xB7 \u53CC\u51FB\u753B\u5E03\u6216\u70B9\u300C+ \u5BF9\u8C61\u7C7B\u578B\u300D\u5F00\u59CB</div>';
-    this.root.innerHTML = `<style>${graphCss()}</style><div class="og-canvas${this._readonly ? " og-readonly" : ""}" part="canvas">${svg}</div>`;
-    if (this._readonly) this.bindReadonlySelect();
+    const grouped = this.grouped();
+    const cls = `og-canvas${this._readonly ? " og-readonly" : ""}${grouped ? " og-grouped" : ""}`;
+    this.root.innerHTML = `<style>${graphCss()}</style><div class="${cls}" part="canvas">${this.buildSvg()}</div>`;
+    if (grouped) this.bindGrouped();
+    else if (this._readonly) this.bindReadonlySelect();
     else this.bindInteractions();
   }
   paint() {
@@ -1074,8 +1497,7 @@ var CmxOntologyGraph = class extends HTMLElement {
       return;
     }
     canvas.classList.toggle("og-connecting", !!this.rubber.from);
-    const lay = this.currentLayout();
-    let svg = this.model.nodes.length ? renderSvg(this.model.getDef(), lay, this.cfg(), this.renderState()) : '<div class="og-empty">\u7A7A\u672C\u4F53</div>';
+    let svg = this.buildSvg();
     if (this.rubber.from && this.rubber.to) {
       const r = `<path class="og-rubber" d="M${this.rubber.from.x},${this.rubber.from.y} L${this.rubber.to.x},${this.rubber.to.y}"/>`;
       svg = svg.replace("</svg>", r + "</svg>");
@@ -1086,6 +1508,7 @@ var CmxOntologyGraph = class extends HTMLElement {
     const canvas = this.root.querySelector(".og-canvas");
     if (!canvas || canvas.__ogBound) return;
     canvas.__ogBound = true;
+    this.interaction.setConnectOnly(false);
     canvas.addEventListener("pointerdown", (e) => this.interaction.onPointerDown(e));
     canvas.addEventListener("pointermove", (e) => this.interaction.onPointerMove(e));
     canvas.addEventListener("pointerup", (e) => this.interaction.onPointerUp(e));
@@ -1111,6 +1534,43 @@ var CmxOntologyGraph = class extends HTMLElement {
         this.selectedEdgeApiName = edgeEl.getAttribute("data-edge");
         this.selectedNodeId = null;
         this.paint();
+        return;
+      }
+      const nodeEl = e.target.closest("[data-node]");
+      if (nodeEl) {
+        const id = nodeEl.getAttribute("data-node");
+        if (id) this.selectNode(id);
+      }
+    });
+  }
+  /** 分域折叠视图交互：容器折叠切换 + 节点/边选中 + **从属性锚点拉线建关系**（节点重定位留 M2）。 */
+  bindGrouped() {
+    const canvas = this.root.querySelector(".og-canvas");
+    if (!canvas || canvas.__ogGrpBound) return;
+    canvas.__ogGrpBound = true;
+    this.interaction.setConnectOnly(true);
+    canvas.addEventListener("pointerdown", (e) => this.interaction.onPointerDown(e));
+    canvas.addEventListener("pointermove", (e) => this.interaction.onPointerMove(e));
+    canvas.addEventListener("pointerup", (e) => this.interaction.onPointerUp(e));
+    canvas.addEventListener("pointercancel", (e) => this.interaction.onPointerCancel(e));
+    canvas.addEventListener("click", (e) => {
+      const tgl = e.target.closest("[data-group-toggle]");
+      if (tgl) {
+        const key = tgl.getAttribute("data-group-toggle");
+        if (key) {
+          this.model.toggleGroup(key);
+          this.render();
+          this.emit("spec-change", { spec: this.model.getDef() });
+        }
+        return;
+      }
+      const edgeEl = e.target.closest("[data-edge]");
+      if (edgeEl) {
+        this.selectedEdgeApiName = edgeEl.getAttribute("data-edge");
+        this.selectedNodeId = null;
+        this.paint();
+        const e2 = this.model.edges.find((x) => x.apiName === this.selectedEdgeApiName);
+        this.emit("edge-select", { apiName: this.selectedEdgeApiName, edge: e2 ? JSON.parse(JSON.stringify(e2)) : null });
         return;
       }
       const nodeEl = e.target.closest("[data-node]");
