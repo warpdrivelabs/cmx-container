@@ -17,8 +17,9 @@ const EDIT_MODES = ['', 'cmx-text-input', 'cmx-textarea-input', 'cmx-richtext-in
 const DIM_TYPES = ['', 'dimension', 'measure', 'attribute']
 
 const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+const { deepClone } = globalThis.__cmxDataComp // 共享深拷贝（cmx-data-comp/lib/cmx-deep-clone.js；审查 B-04）
 
-const clone = (v) => JSON.parse(JSON.stringify(v ?? null))
+const clone = (v) => deepClone(v ?? null)
 
 const { apiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
 
@@ -373,7 +374,7 @@ function styleHtml () {
     .bdn-head{height:42px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#d9d9d9);box-sizing:border-box;flex:0 0 auto}
     .bdn-title{font-weight:700;font-size:14px}.bdn-sub{font-size:12px;color:var(--sapContent_LabelColor,#6a6d70);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bdn-spacer{flex:1 1 auto}.bdn-actions{display:flex;align-items:center;gap:6px}
     .bdn-btn{height:28px;border:1px solid var(--sapButton_BorderColor,#8a8f94);border-radius:4px;background:var(--sapButton_Background,#fff);color:var(--sapButton_TextColor,#0064d9);padding:0 9px;cursor:pointer;font:inherit;display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap}
-    .bdn-btn.primary{background:var(--sapButton_Emphasized_Background,#0070f2);border-color:var(--sapButton_Emphasized_BorderColor,#0070f2);color:#fff}.bdn-btn.danger{color:var(--sapNegativeTextColor,#b00)}.bdn-btn.icon{width:28px;padding:0}.bdn-btn:disabled{opacity:.45;cursor:default}
+    .bdn-btn.primary{background:var(--sapButton_Emphasized_Background,#0070f2);border-color:var(--sapButton_Emphasized_BorderColor,#0070f2);color: #fff}.bdn-btn.danger{color:var(--sapNegativeTextColor,#b00)}.bdn-btn.icon{width:28px;padding:0}.bdn-btn:disabled{opacity:.45;cursor:default}
     .bdn-body{flex:1 1 auto;min-height:0;overflow:auto;background:var(--sapGroup_ContentBackground,#fafafa);padding:10px;box-sizing:border-box}.bdn-stack{display:flex;flex-direction:column;gap:10px;height:100%;min-height:0}
     .bdn-card{border:1px solid var(--sapGroup_TitleBorderColor,#d9d9d9);border-radius:6px;background:var(--sapTile_Background,#fff);display:flex;flex-direction:column;min-height:0;overflow:hidden}.bdn-card.flex{flex:1 1 auto}.bdn-card.third{flex:0 0 34%;min-height:140px}
     .bdn-card-head{height:36px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#d9d9d9);box-sizing:border-box;flex:0 0 auto}.bdn-card-title{font-weight:700}
@@ -382,7 +383,7 @@ function styleHtml () {
     .bdn-form{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px 10px;align-items:center;padding:10px}.bdn-form label{color:var(--sapContent_LabelColor,#6a6d70)}
     .bdn-input,.bdn-form input,.bdn-form textarea,.bdn-form select,.bdn-table input,.bdn-table select{width:100%;height:28px;box-sizing:border-box;border:1px solid var(--sapField_BorderColor,#89919a);border-radius:4px;padding:0 7px;background:var(--sapField_Background,#fff);color:var(--sapField_TextColor,var(--sapTextColor,#1d2d3e));font:inherit}
     .bdn-form textarea{height:auto;min-height:58px;padding:6px 7px;resize:vertical}.bdn-table{width:100%;border-collapse:collapse;font-size:12px}.bdn-table th,.bdn-table td{border-bottom:1px solid var(--sapList_BorderColor,#eee);padding:5px;text-align:left;vertical-align:middle}.bdn-table th{position:sticky;top:0;background:var(--sapList_HeaderBackground,#f7f7f7);z-index:1;color:var(--sapContent_LabelColor,#6a6d70);font-weight:600}.bdn-table tr.active{background:var(--sapList_SelectionBackgroundColor,#e5f2ff)}
-    .bdn-table input[type=checkbox]{appearance:none;width:16px;height:16px;min-width:16px;padding:0;border-radius:3px;position:relative;vertical-align:middle}.bdn-table input[type=checkbox]:checked{background:#0a6ed1;border-color:#0a6ed1}.bdn-table input[type=checkbox]:checked:after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+    .bdn-table input[type=checkbox]{appearance:none;width:16px;height:16px;min-width:16px;padding:0;border-radius:3px;position:relative;vertical-align:middle}.bdn-table input[type=checkbox]:checked{background:var(--sapInformationElementColor, #0a6ed1);border-color:var(--sapInformationElementColor, #0a6ed1)}.bdn-table input[type=checkbox]:checked:after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid var(--sapGroup_ContentBorderColor, #ffffff);border-width:0 2px 2px 0;transform:rotate(45deg)}
     .bdn-section{border:1px solid var(--sapGroup_TitleBorderColor,#e5e5e5);border-radius:6px;margin:8px;overflow:hidden}.bdn-section-head{height:34px;display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--sapList_HeaderBackground,#f7f7f7);border-bottom:1px solid var(--sapGroup_TitleBorderColor,#e5e5e5);font-weight:700}.bdn-chip{font-size:11px;border:1px solid color-mix(in srgb,var(--sapHighlightColor,#0070f2) 45%,transparent);background:color-mix(in srgb,var(--sapHighlightColor,#0070f2) 10%,transparent);border-radius:10px;padding:1px 7px}
     .bdn-code{flex:1 1 auto;min-height:0;width:100%;border:0;resize:none;outline:none;padding:10px;box-sizing:border-box;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--sapField_Background,#fff);color:inherit}.bdn-empty{padding:12px;color:var(--sapContent_LabelColor,#6a6d70)}.bdn-status{min-height:20px;padding:4px 10px;color:var(--sapContent_LabelColor,#6a6d70);font-size:12px}
   </style>`

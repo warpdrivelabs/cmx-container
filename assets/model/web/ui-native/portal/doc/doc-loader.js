@@ -46,19 +46,19 @@ function styleHtml () {
 .dl-root{display:flex;flex-direction:column;height:100%;gap:6px;padding:8px;box-sizing:border-box;min-width:0}
 .dl-bar{flex:0 0 auto}
 .dl-title{font-weight:600}
-.dl-msg{margin-left:12px;color:#0854a0;font-size:12px}
+.dl-msg{margin-left:12px;color:var(--sapLinkColor, #0854a0);font-size:12px}
 .dl-grids{flex:1;display:flex;flex-direction:column;gap:6px;min-height:0;min-width:0;overflow:auto}
-.dl-pane{flex:1 1 0;display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;border:1px solid #e5e5e5;border-radius:4px}
-.dl-pane-head{display:flex;align-items:center;gap:8px;padding:2px 6px;background:#f7f7f7;flex-wrap:wrap;font-size:12px}
+.dl-pane{flex:1 1 0;display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;border:1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);border-radius:4px}
+.dl-pane-head{display:flex;align-items:center;gap:8px;padding:2px 6px;background:var(--sapList_Background, #f7f7f7);flex-wrap:wrap;font-size:12px}
 .dl-pane-title{font-weight:600}
 .dl-grid{display:block;width:100%;flex:1;min-height:120px;min-width:0}
-.dl-filter{display:flex;gap:4px;align-items:center;flex-wrap:wrap;padding:2px 6px;background:#fcfcfc;border-top:1px dashed #eee;font-size:12px}
+.dl-filter{display:flex;gap:4px;align-items:center;flex-wrap:wrap;padding:2px 6px;background:var(--sapList_Background, #fcfcfc);border-top:1px dashed var(--sapGroup_ContentBorderColor, #eeeeee);font-size:12px}
 .dl-cond{display:flex;gap:2px;align-items:center;background:#eef4ff;border-radius:3px;padding:1px 3px}
 .dl-cond select,.dl-cond input{font-size:12px;padding:1px 3px;max-width:130px}
-.dl-btn{font-size:12px;padding:1px 8px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff}
-.dl-btn:hover{background:#f0f0f0}
+.dl-btn{font-size:12px;padding:1px 8px;cursor:pointer;border:1px solid var(--sapGroup_ContentBorderColor, #bbbbbb);border-radius:3px;background:var(--sapGroup_ContentBorderColor, #ffffff)}
+.dl-btn:hover{background:var(--sapBackgroundColor, #f0f0f0)}
 .dl-pg{display:flex;gap:4px;align-items:center;margin-left:auto}
-.dl-sort{cursor:pointer;color:#0854a0;text-decoration:underline;font-size:11px}
+.dl-sort{cursor:pointer;color:var(--sapLinkColor, #0854a0);text-decoration:underline;font-size:11px}
 </style>`
 }
 
@@ -420,7 +420,7 @@ export default {
 
       const def = readDef(ctx)
       if (!def) {
-        return `<div style="padding:12px;color:#b00;font-size:13px">通用单据加载页缺少必要 props：需 { domain, application, module, file }（可选 dbId/apiPath/binary）。</div>`
+        return `<div style="padding:12px;color:var(--sapNegativeTextColor, #bb0000);font-size:13px">通用单据加载页缺少必要 props：需 { domain, application, module, file }（可选 dbId/apiPath/binary）。</div>`
       }
       state.def = def
       const title = `业务单据 · ${def.module}/${def.file}${def.binary ? ' · 二进制' : (def.apiPath ? ' · ' + def.apiPath.split('/').pop() : '')}`

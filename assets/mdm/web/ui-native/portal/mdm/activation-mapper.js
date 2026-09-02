@@ -25,6 +25,7 @@ const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp
 // 轻量 toast（成功/失败反馈，3s 自动消失，免点确定）—— 对齐 registry-center 的提示范式。
 // 仅用于「操作已完成」这类轻反馈；校验警告用 cmxWarn、异常用 cmxError（需用户停下查看）。
 const { showCmxToast } = globalThis.__cmxDataComp // 共享 toast（cmx-data-comp/lib/cmx-toast.js；治理清单 B-05）
+const { deepClone } = globalThis.__cmxDataComp // 共享深拷贝（cmx-data-comp/lib/cmx-deep-clone.js；审查 B-04）
 
 const { apiGet, apiPost } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
 
@@ -230,7 +231,7 @@ function styleCss() {
     color:var(--neo-cyan,#00b4d8); }
   .sw-wrap { display:inline-flex; align-items:center; gap:8px; font-size:12px; color:var(--sapContent_LabelColor); cursor:pointer; user-select:none; }
   .sw { position:relative; width:38px; height:20px; border-radius:10px; background:var(--neo-green,#2f855a); transition:background .2s; flex-shrink:0; }
-  .sw::after { content:""; position:absolute; top:2px; left:20px; width:16px; height:16px; background:#fff; border-radius:50%; transition:left .2s; box-shadow:0 1px 2px rgba(0,0,0,.25); }
+  .sw::after { content:""; position:absolute; top:2px; left:20px; width:16px; height:16px; background:var(--sapList_Background, #ffffff); border-radius:50%; transition:left .2s; box-shadow:0 1px 2px rgba(0,0,0,.25); }
   .sw.off { background:var(--sapContent_LabelColor); opacity:.55; }
   .sw.off::after { left:2px; }
 
@@ -247,7 +248,7 @@ function styleCss() {
   .card-head { display:flex; align-items:center; justify-content:space-between; padding:11px 16px;
     border-bottom:1px solid var(--sapList_BorderColor); background:color-mix(in srgb,var(--sapBackgroundColor) 75%,#000 0%); }
   .card-head h3 { font-size:13px; font-weight:600; margin:0; display:flex; align-items:center; gap:8px; }
-  .card-head .num { width:18px; height:18px; border-radius:50%; background:var(--neo-cyan,#00b4d8); color:#fff;
+  .card-head .num { width:18px; height:18px; border-radius:50%; background:var(--neo-cyan,#00b4d8); color: #fff;
     font-size:11px; display:inline-flex; align-items:center; justify-content:center; }
   .card-hint { font-size:11px; color:var(--sapContent_LabelColor); }
   .card-body { padding:16px; }
@@ -1086,7 +1087,7 @@ function openCloneDlg() {
 // 深拷贝改 cr_type（doc_code_rules 一并复制）→ 进入未保存编辑态（cloneDirty）。
 function doClone(target) {
   const src = state.current
-  const dup = JSON.parse(JSON.stringify(src)) // 配置均为 JSON 可序列化数据，深拷贝安全
+  const dup = deepClone(src) // 配置均为 JSON 可序列化数据，深拷贝安全
   dup.cr_type = target
   dup.activation_code = `${src.source_doc_type}__${target}`
   cloneDirty = true

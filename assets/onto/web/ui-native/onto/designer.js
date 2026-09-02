@@ -60,6 +60,7 @@ const state = {
 };
 
 const { apiJson: _sharedApiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js）；经 CFG 转发保留组件壳 configure() 契约
+const { deepClone } = globalThis.__cmxDataComp // 共享深拷贝（cmx-data-comp/lib/cmx-deep-clone.js；审查 B-04）
 async function apiJson (url, options = {}) { return _sharedApiJson(url, options, CFG) }
 const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
 
@@ -677,7 +678,7 @@ function richSideEffectHtml(s, i, params) {
 }
 // 存前序列化：把每个富副作用（起流程/Webhook/通知）的 _vars 折成内联字段（→ 载荷/变量），并剥除 _vars 编辑态。
 function serializeActionForSave(d) {
-  const clone = JSON.parse(JSON.stringify(d));
+  const clone = deepClone(d);
   (clone.sideEffects || []).forEach(s => {
     if (Array.isArray(s._vars)) { s._vars.forEach(v => { if (v.name) s[v.name] = v.value; }); }
     delete s._vars;
@@ -1115,7 +1116,7 @@ async function doSaveObject(root) {
   }
   try {
     // 落库前剥离纯前端字段（children 已进 constraints；__open/__origPk 前端会话态）。
-    const payload = JSON.parse(JSON.stringify(state.detail));
+    const payload = deepClone(state.detail);
     delete payload.__origPk;
     (payload.properties || []).forEach(p => { delete p.children; delete p.__open; });
     await saveObjectTypeFromDetail(payload);
@@ -1350,7 +1351,7 @@ function css() {
   .o-dlg-overlay{position:fixed;inset:0;background:rgba(4,8,18,.6);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(2px)}
   .o-dlg{width:440px;max-width:92vw;max-height:86vh;overflow:auto;background:var(--o-panel);border:1px solid var(--o-border);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
   .o-dlg-danger{border-top:3px solid var(--o-err)}
-  .o-dlg-warn{border-top:3px solid #f59e0b}
+  .o-dlg-warn{border-top:3px solid var(--sapCriticalElementColor, #f59e0b)}
   .o-dlg-info{border-top:3px solid var(--o-accent)}
   .o-dlghd{display:flex;align-items:center;gap:9px;padding:14px 16px;font-size:14px;font-weight:700;border-bottom:1px solid var(--o-border)}
   .o-dlg-danger .o-dlgic{color:var(--o-err)}.o-dlg-warn .o-dlgic{color:#f59e0b}.o-dlg-info .o-dlgic{color:var(--o-accent)}
@@ -1362,7 +1363,7 @@ function css() {
   .o-imp{margin:8px 0;padding:8px 11px;border-radius:8px;background:rgba(148,163,184,.08);border:1px solid var(--o-border)}
   .o-imp ul{margin:6px 0 0;padding-left:18px}.o-imp li{margin:2px 0}
   .o-impok{color:var(--o-ok)}
-  .o-impwarn{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.08);color:#fbbf24}
+  .o-impwarn{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.08);color:var(--sapCriticalElementColor, #fbbf24)}
   .o-dlgtip{margin-top:10px;padding:9px 12px;border-radius:8px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.3);color:var(--o-accent);font-size:12px}
   .o-dlgfoot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--o-border)}
   `;
