@@ -12,8 +12,9 @@ openapi = ["utoipa"]
 [dependencies]
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
-# 内部依赖 - API 通用类型
-cmx-api-types = { workspace = true }
+# 内部依赖 - API 通用类型（features 显式拉 db-error：workspace 依赖表 default-features=false，
+# 缺此声明则 From<cmx_database::crud::ServiceError> 转换桥缺失，本 crate 编译失败）
+cmx-api-types = { workspace = true, features = ["db-error"] }
 # 内部依赖 - 特征定义
 cmx-traits = { workspace = true }
 # 内部依赖 - 数据库
