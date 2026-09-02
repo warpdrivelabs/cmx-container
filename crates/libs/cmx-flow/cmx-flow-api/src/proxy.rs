@@ -11,7 +11,8 @@
 //! 全局实例缓存选例（订阅推送 + 30s 同步保新鲜）。无可用实例 → 503（区别于下游不可达的 502）。
 //!
 //! 壳与核的分工：本壳只管**路径重写**（`/flow/{rest}` → `{flow_base}/api/flow/v1/{rest}`，升级到
-//! v1 正式契约）与**页面归属判定**；头卫生（P0：剥客户端可伪造的注入型头/Cookie）、三层出站
+//! v1 正式契约；`/flow/v1/{rest}` 恒等透传，不叠加 v1）与**页面归属判定**；头卫生（P0：剥客户端
+//! 可伪造的注入型头/Cookie）、三层出站
 //! 鉴权、超时语义（connect/read 拆分，不设总超时保 SSE 长流）、流式转发、502/503 兜底全在
 //! 转发核 [`cmx_proxy_core::ProxyCore`]（三反代壳共用，一处定义一处修复）。
 //!
@@ -73,8 +74,11 @@ async fn proxy_handler(State(px): State<std::sync::Arc<ProxyCore>>, req: Request
     px.forward("流程服务", req, flow_target).await
 }
 
-/// flow 路径重写：`/flow/{rest}`（经 web-server `nest("/api")` → 实际 `/api/flow/{rest}`）→
-/// `{flow_base}/api/flow/v1/{rest}`（**升级到 v1 正式契约**）。query 原样透传。
+/// flow 路径重写（两条入径，目标统一到 v1 正式契约）。query 原样透传。
+///   - `/flow/{rest}`（门户既有前缀）→ `{flow_base}/api/flow/v1/{rest}`（升级到 v1）；
+///   - `/flow/v1/{rest}`（前端直用 v1 前缀，SSE 等仅 v1 端点）→ 恒等透传
+///     `{flow_base}/api/flow/v1/{rest}`，**不叠加 v1**——一刀切升级会拼出
+///     `/api/flow/v1/v1/…` 双 v1 404（2026-09-02 修复）。
 fn flow_target(flow_base: &str, uri: &Uri) -> String {
     let path = uri.path();
     let rest = path
@@ -83,10 +87,51 @@ fn flow_target(flow_base: &str, uri: &Uri) -> String {
         .unwrap_or("");
     let rest = rest.trim_start_matches('/');
     let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
+    if rest == "v1" {
+        return format!("{flow_base}/api/flow/v1{query}");
+    }
+    if let Some(tail) = rest.strip_prefix("v1/") {
+        return format!("{flow_base}/api/flow/v1/{tail}{query}");
+    }
     if rest.is_empty() {
         format!("{flow_base}/api/flow/v1{query}")
     } else {
         format!("{flow_base}/api/flow/v1/{rest}{query}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn target(path: &str) -> String {
+        flow_target(
+            "http://flow:8091",
+            &format!("http://portal{path}").parse::<Uri>().unwrap(),
+        )
+    }
+
+    #[test]
+    fn rewrites_legacy_prefix_up_to_v1() {
+        assert_eq!(
+            target("/flow/instances?page=1"),
+            "http://flow:8091/api/flow/v1/instances?page=1"
+        );
+        assert_eq!(target("/flow"), "http://flow:8091/api/flow/v1");
+    }
+
+    #[test]
+    fn passes_v1_prefix_through_verbatim() {
+        // 双 v1 回归守卫：v1 子前缀恒等透传。
+        assert_eq!(
+            target("/flow/v1/sse/ticket"),
+            "http://flow:8091/api/flow/v1/sse/ticket"
+        );
+        assert_eq!(
+            target("/flow/v1/events?ticket=t"),
+            "http://flow:8091/api/flow/v1/events?ticket=t"
+        );
+        assert_eq!(target("/flow/v1"), "http://flow:8091/api/flow/v1");
     }
 }
 

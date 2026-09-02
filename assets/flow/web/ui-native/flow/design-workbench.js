@@ -150,57 +150,10 @@ function setActiveDirty (v) {
   state.dirty = v
 }
 
-const { apiJson: _sharedApiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js）；经 CFG 转发保留组件壳 configure() 契约
+const { apiJson: _sharedApiJson, openSseStream } = globalThis.__cmxDataComp // 共享 fetch 封装 + fetch 流式 SSE（cmx-data-comp/lib；SSE 走 fetch 可带 Authorization 头——门户全局拦截器自动注入，本页 X-User 由下方包装层注入）；经 CFG 转发保留组件壳 configure() 契约
 // 本页多注入一个 X-User 头（流程设计工作台历史约定），用户自带的 options.headers 仍可覆盖。
 async function apiJson (url, options = {}) {
   return _sharedApiJson(url, { ...options, headers: { 'X-User': currentUser(), ...(options.headers || {}) } }, CFG)
-}
-
-// SSE 连接（带 jwt 一次性票据）。浏览器原生 EventSource 不能带 Authorization header，
-// 故 jwt 模式下先用带 header 的 POST 换一张短期一次性票据，再拼进 SSE URL（?ticket=）。
-// off 模式下后端忽略票据、走 header ctx，前端统一走此路径，无需探测鉴权模式。
-// listeners = { eventName: fn(dataObj) }；onopen 可选。返回一个 handle：{ close() }。
-// 断线（原生 EventSource 自动重连会用旧票 401）→ 由 onerror 关闭后重新铸票重连，带节流+次数守卫防风暴。
-function openSse (path, listeners, onopen) {
-  const wc = !(CFG.fetchInit && CFG.fetchInit.credentials === 'omit')
-  const handle = { es: null, closed: false, retries: 0, timer: null }
-  const MAX_RETRIES = 6
-  const connect = async () => {
-    if (handle.closed) return
-    let ticket = ''
-    try {
-      const t = await apiJson('/api/flow/v1/sse/ticket', { method: 'POST' })
-      ticket = (t && t.ticket) || ''
-    } catch { /* 铸票失败（如未鉴权）→ 无票裸连，off 模式仍可用 */ }
-    if (handle.closed) return
-    try {
-      const sep = path.includes('?') ? '&' : '?'
-      const url = (CFG.apiBase || '') + path + (ticket ? sep + 'ticket=' + enc(ticket) : '')
-      const es = new EventSource(url, { withCredentials: wc })
-      handle.es = es
-      for (const [name, fn] of Object.entries(listeners || {})) {
-        es.addEventListener(name, (m) => { try { fn(JSON.parse(m.data)) } catch { /* ignore */ } })
-      }
-      es.onopen = () => { handle.retries = 0; if (!handle.closed && onopen) onopen() }
-      es.onerror = () => {
-        // 票据单次消费，原生重连会带旧票 401 → 关掉自己，重新铸票重连（节流退避 + 次数上限）。
-        try { es.close() } catch { /* ignore */ }
-        handle.es = null
-        if (handle.closed || handle.retries >= MAX_RETRIES) return
-        handle.retries++
-        const delay = Math.min(1000 * handle.retries, 5000)
-        handle.timer = setTimeout(connect, delay)
-      }
-    } catch { /* EventSource 不可用则降级（调用方另有心跳等兜底） */ }
-  }
-  connect()
-  return {
-    close () {
-      handle.closed = true
-      if (handle.timer) { clearTimeout(handle.timer); handle.timer = null }
-      if (handle.es) { try { handle.es.close() } catch { /* ignore */ } handle.es = null }
-    },
-  }
 }
 
 const { showCmxToast: toast } = globalThis.__cmxDataComp // 共享 toast（cmx-data-comp/lib/cmx-toast.js；治理清单 B-05）
@@ -4054,7 +4007,7 @@ async function doSaveSilent () {
 // ═══════════════════════════ 协同 M1 · 感知层 + 防冲突 ═══════════════════════════
 // 仅在编辑「草稿」时启用（shownVersion==null）。SSE 收 presence/draft.saved（后端 collab.rs），
 // presence 心跳/选中经 POST 发；远端选中用 canvas.addMarker 高亮（复用 sim/diff 技法）。
-// 传输：/api/flow/v1/design/*（off 模式；EventSource 无 header → tenant=default，defKey 过滤）。
+// 传输：/api/flow/v1/design/*（fetch 流式 SSE 带 Authorization 头；defKey 过滤）。
 
 function selectedId () { return state.selectedElement ? state.selectedElement.id : null }
 
@@ -4094,16 +4047,18 @@ function startCollab (defKey, baseUpdatedAt) {
   c.sessionId = c.sessionId || ('s-' + Math.random().toString(36).slice(2, 10))
   collabPost('join', { selection: selectedId() })
   try {
-    // 协同 SSE：经 openSse 走一次性票据（jwt 模式可用；off 模式后端忽略票据）。
-    c.es = openSse('/api/flow/v1/design/collab?defKey=' + enc(defKey), {
+    // 协同 SSE：走共享 openSseStream（fetch 流式，Authorization 头由门户全局拦截器注入）。
+    c.es = openSseStream('/api/flow/v1/design/collab?defKey=' + enc(defKey), {
       presence: (d) => onPresence(d),
       'draft.saved': (d) => onDraftSaved(d),
       op: (d) => onRemoteOp(d),
-    }, () => {
+    }, {
       // 连接就绪后再 join 一次：首个 join 在流建立前发出会丢自己的初始 roster——onopen 补发。
-      if (state.collab.on && state.collab.defKey === defKey) collabPost('join', { selection: selectedId() })
-    })
-  } catch { /* EventSource 不可用则降级为仅心跳 */ }
+      onopen: () => {
+        if (state.collab.on && state.collab.defKey === defKey) collabPost('join', { selection: selectedId() })
+      },
+    }, CFG)
+  } catch { /* 流不可用则降级为仅心跳 */ }
   c.hbTimer = setInterval(() => collabPost('heartbeat', { selection: selectedId() }), 10000)
   if (!window.__flowCollabUnload) {
     window.__flowCollabUnload = true
