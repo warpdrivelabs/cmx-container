@@ -14,7 +14,9 @@
  *   - 控制流 走 fetch：POST /api/jobs（提交）、/api/jobs/{id}/{pause|resume|cancel|restart}、DELETE /api/jobs/{id}。
  *   - 进度流 走 SSE：/api/jobs/{id}/events（单作业，snapshot 首帧 + 增量；跨节点作业后端降级为 DB 轮询合成流）；
  *                    /api/jobs/events（汇总流，job 摘要事件 → 列表实时刷新）。
- *   - 鉴权：native page 同源（cookie），/api/jobs 已入 [auth].whitelist；EventSource 自动带 cookie。
+ *   - 鉴权：mw_auth 只认 Authorization / X-API-Key 头（EventSource 不能带 header）——SSE 与控制流
+ *            统一走 fetch：全局 fetch 拦截器（cmx-ui5-runtime）自动带 Bearer，SSE 用 openSseStream
+ *            （fetch 流式分帧解析，cmx-data-comp 共享库）替代 EventSource。
  * 后端：cmx-job-api(JobModule) + JobManager（PgJobStore 持久化 + 分布式抢占循环，M3）。
  */
 
@@ -42,7 +44,7 @@ const state = {
   historyTotalPages: 0, // 历史总页数
   historyLoading: false,
   hosts: new Set(),     // 挂载的 host 集合（多区/多标签页刷新）
-  es: null,             // 当前单作业 EventSource
+  es: null,             // 当前单作业 SSE 句柄（openSseStream 返回 {close()}）
   esJobId: '',          // es 订阅的作业 id（避免重复订阅）
   summaryEs: null,      // 汇总 SSE（服务端推送：后端有变化即推，取代轮询）
   summaryReady: false,  // 汇总流是否已首次连上（用于区分首连 vs 断线重连补拉）
@@ -127,7 +129,7 @@ function setMsg (text, kind = 'info') { state.message = text; state.msgKind = ki
 
 // ───────────────────────── 后端调用 ─────────────────────────
 
-const { apiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js；信封解包+结构化错误）
+const { apiJson, openSseStream } = globalThis.__cmxDataComp // 共享 fetch 封装（信封解包+结构化错误）+ fetch 流式 SSE（cmx-sse-stream.js；拦截器自动带 Bearer）
 
 async function loadJobs () {
   state.listLoading = true
@@ -350,40 +352,42 @@ function closeEs () {
 
 // 汇总 SSE：订阅 /api/jobs/events，后端有任何作业变化即主动推 job 摘要事件 → 实时更新列表。
 // 这是「服务端推送」的核心——取代定时轮询：提交/状态跃迁/进度/终态/归档 后端都会推。
+// 传输：openSseStream（fetch 流式 + 拦截器 Bearer；断线退避重连，收到载荷才复位计数）。
 function subscribeSummary () {
   if (state.summaryEs) return
-  const es = new EventSource('/api/jobs/events')
-  state.summaryEs = es
-  // 断线重连（EventSource 原生自动重连）后，全量拉一次对齐，补回断连期间漏推的变化。
-  es.addEventListener('open', () => {
-    if (state.summaryReady) loadJobs()  // 首次 open 不重复拉（mount 已 loadJobs）；重连才补拉
-    state.summaryReady = true
-  })
-  es.addEventListener('job', (e) => {
-    const j = safeParse(e.data)
-    if (!j || !j.id) return
-    const id = String(j.id)
-    // 移除事件（归档/删除）：从活跃列表删行，若正选中则清详情。
-    if (j.removed) {
-      const i = state.jobs.findIndex((x) => String(x.id) === id)
-      if (i >= 0) state.jobs.splice(i, 1)
-      state.throughput.delete(id)
-      if (state.selectedId === id) { closeEs(); state.selectedId = ''; state.detail = null; state.items = new Map(); state.logs = [] }
+  state.summaryEs = openSseStream('/api/jobs/events', {
+    job: (data) => {
+      const j = asObj(data)
+      if (!j || !j.id) return
+      const id = String(j.id)
+      // 移除事件（归档/删除）：从活跃列表删行，若正选中则清详情。
+      if (j.removed) {
+        const i = state.jobs.findIndex((x) => String(x.id) === id)
+        if (i >= 0) state.jobs.splice(i, 1)
+        state.throughput.delete(id)
+        if (state.selectedId === id) { closeEs(); state.selectedId = ''; state.detail = null; state.items = new Map(); state.logs = [] }
+        refreshMonitor('active')
+        return
+      }
+      const idx = state.jobs.findIndex((x) => String(x.id) === id)
+      const merged = idx >= 0
+        ? { ...state.jobs[idx], ...j, progress: { ...(state.jobs[idx].progress || {}), ...summaryProgress(j) } }
+        : { ...j, progress: summaryProgress(j) }
+      if (idx >= 0) state.jobs[idx] = merged
+      else state.jobs.unshift(merged)
+      sampleThroughput(merged) // service 作业：按 done 差分采样，驱动列表吞吐行/火花线
+      if (String(j.id) === state.selectedId && state.detail) {
+        state.detail.status = j.status
+        if (state.detail.progress) Object.assign(state.detail.progress, summaryProgress(j))
+      }
       refreshMonitor('active')
-      return
-    }
-    const idx = state.jobs.findIndex((x) => String(x.id) === id)
-    const merged = idx >= 0
-      ? { ...state.jobs[idx], ...j, progress: { ...(state.jobs[idx].progress || {}), ...summaryProgress(j) } }
-      : { ...j, progress: summaryProgress(j) }
-    if (idx >= 0) state.jobs[idx] = merged
-    else state.jobs.unshift(merged)
-    sampleThroughput(merged) // service 作业：按 done 差分采样，驱动列表吞吐行/火花线
-    if (String(j.id) === state.selectedId && state.detail) {
-      state.detail.status = j.status
-      if (state.detail.progress) Object.assign(state.detail.progress, summaryProgress(j))
-    }
-    refreshMonitor('active')
+    },
+  }, {
+    // 断线重连（openSseStream 退避重连）后，全量拉一次对齐，补回断连期间漏推的变化。
+    onopen: () => {
+      if (state.summaryReady) loadJobs()  // 首次 open 不重复拉（mount 已 loadJobs）；重连才补拉
+      state.summaryReady = true
+    },
   })
 }
 
@@ -409,62 +413,61 @@ function openMonitor (id) {
 function subscribe (id) {
   if (state.esJobId === String(id) && state.es) return
   closeEs()
-  const es = new EventSource(`/api/jobs/${id}/events`)
-  state.es = es
-  state.esJobId = String(id)
-
-  es.addEventListener('snapshot', (e) => {
-    const d = safeParse(e.data)
-    if (!d) return
-    if (state.detail) state.detail.status = d.status
-    if (d.progress) {
-      applyProgress(d.progress)
-      if (Array.isArray(d.progress.items)) state.items = new Map(d.progress.items.map((it) => [it.key, it]))
-    }
-    refreshMonitor('active')
-  })
-  es.addEventListener('state', (e) => {
-    const d = safeParse(e.data)
-    if (d && state.detail) { state.detail.status = d.status }
-    refreshMonitor('active')
-    // 终态：关闭本作业流（无更多实时事件）。列表变化由汇总流推送，无需在此 loadJobs（否则触发循环）。
-    if (d && ['completed', 'failed', 'cancelled'].includes(d.status)) { closeEs() }
-  })
-  es.addEventListener('progress', (e) => {
-    const d = safeParse(e.data)
-    if (d) applyProgress(d)
-    if (state.detail) sampleThroughput(state.detail) // 详情 service 作业：采样驱动仪表
-    refreshMonitor('active')
-  })
-  es.addEventListener('item', (e) => {
-    const it = safeParse(e.data)
-    if (it && it.key) {
-      // 最新的移到末尾（Map 保持插入序）：先删再插，确保 key 复用时也更新顺序。
-      state.items.delete(it.key)
-      state.items.set(it.key, it)
-      // 最近处理只留最近 MAX_ITEMS 条（常驻消费者明细无限增长 → 截断防泄漏）。
-      while (state.items.size > MAX_ITEMS) {
-        state.items.delete(state.items.keys().next().value) // 删最旧（Map 头部）
+  state.es = openSseStream(`/api/jobs/${id}/events`, {
+    snapshot: (data) => {
+      const d = asObj(data)
+      if (!d) return
+      if (state.detail) state.detail.status = d.status
+      if (d.progress) {
+        applyProgress(d.progress)
+        if (Array.isArray(d.progress.items)) state.items = new Map(d.progress.items.map((it) => [it.key, it]))
       }
-    }
-    refreshMonitor('active')
+      refreshMonitor('active')
+    },
+    state: (data) => {
+      const d = asObj(data)
+      if (d && state.detail) { state.detail.status = d.status }
+      refreshMonitor('active')
+      // 终态：关闭本作业流（无更多实时事件）。列表变化由汇总流推送，无需在此 loadJobs（否则触发循环）。
+      if (d && ['completed', 'failed', 'cancelled'].includes(d.status)) { closeEs() }
+    },
+    progress: (data) => {
+      const d = asObj(data)
+      if (d) applyProgress(d)
+      if (state.detail) sampleThroughput(state.detail) // 详情 service 作业：采样驱动仪表
+      refreshMonitor('active')
+    },
+    item: (data) => {
+      const it = asObj(data)
+      if (it && it.key) {
+        // 最新的移到末尾（Map 保持插入序）：先删再插，确保 key 复用时也更新顺序。
+        state.items.delete(it.key)
+        state.items.set(it.key, it)
+        // 最近处理只留最近 MAX_ITEMS 条（常驻消费者明细无限增长 → 截断防泄漏）。
+        while (state.items.size > MAX_ITEMS) {
+          state.items.delete(state.items.keys().next().value) // 删最旧（Map 头部）
+        }
+      }
+      refreshMonitor('active')
+    },
+    log: (data) => {
+      const d = asObj(data)
+      if (d) { state.logs.push(d); if (state.logs.length > MAX_LOGS) state.logs.splice(0, state.logs.length - MAX_LOGS) }
+      refreshMonitor('active')
+    },
+    result: (data) => {
+      const d = asObj(data)
+      if (state.detail) state.detail.result = d
+      refreshMonitor('active')
+    },
+    error: (data) => {
+      const d = asObj(data)
+      if (d && state.detail) state.detail.error = d
+      refreshMonitor('active')
+    },
+    done: () => { closeEs() }, // 流终结：仅关流。列表更新靠汇总流推送。
   })
-  es.addEventListener('log', (e) => {
-    const d = safeParse(e.data)
-    if (d) { state.logs.push(d); if (state.logs.length > MAX_LOGS) state.logs.splice(0, state.logs.length - MAX_LOGS) }
-    refreshMonitor('active')
-  })
-  es.addEventListener('result', (e) => {
-    const d = safeParse(e.data)
-    if (state.detail) state.detail.result = d
-    refreshMonitor('active')
-  })
-  es.addEventListener('error', (e) => {
-    const d = safeParse(e.data)
-    if (d && state.detail) state.detail.error = d
-    refreshMonitor('active')
-  })
-  es.addEventListener('done', () => { closeEs() }) // 流终结：仅关流。列表更新靠汇总流推送。
+  state.esJobId = String(id)
 }
 
 function applyProgress (p) {
@@ -474,7 +477,9 @@ function applyProgress (p) {
   state.detail.progress = { ...prev, ...p }
 }
 
-function safeParse (s) { try { return JSON.parse(s) } catch { return null } }
+// openSseStream 回调的 data 已 JSON.parse（失败回退原始字符串）；SSE 事件均为对象语义，
+// 统一收口「非对象即 null」——沿用原 safeParse 的守卫语义，防字符串载荷混进对象处理路径。
+function asObj (d) { return (d && typeof d === 'object') ? d : null }
 
 // ───────────────────────── 派生数据 ─────────────────────────
 
