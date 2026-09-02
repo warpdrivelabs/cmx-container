@@ -740,3 +740,25 @@ running_reclaim_minutes = 10
 # webhook 目标是否允许私网/回环地址（默认 true，可选）。MDM 下游多为内网系统故默认放行；
 # 对外网开放部署时置 false 启用 SSRF 防护（拒 127/8、10/8、172.16/12、192.168/16、169.254/16）。
 allow_private_address = true
+
+# ============================================
+# 流程引擎（cmx-flowengine）运行态库
+# ============================================
+[flow]
+# 默认租户的运行态库 db_id（cmx_flow_* 表所在库；005 短期项：配置化解「默认库绑死财务库」假耦合）。
+# 未配置时缺省 "fico-db"（零回归）；新环境建议配中性名（如 "flow-default"），
+# 须与 [[databases]] 中该库的 db_id 一致。env 覆盖：FLOW__DB_ID。
+db_id = "fico-db"
+
+# —— 运行态数据生命周期治理（技术债 010：统一清理任务，每小时 tick）——
+# 终态实例运行态行保留天数：hi 归档表保留审计，运行态 10 表行在终态 N 天后删除。
+# 0 = 禁用（不推荐：待办/定时器扫描的活性数据集会随终态数据无限膨胀）。env：FLOW__RETENTION__INSTANCE_DAYS
+retention.instance_days = 30
+# webhook 投递流水终态行（DONE/SKIPPED）保留天数。0 = 禁用。env：FLOW__RETENTION__DELIVERY_DAYS
+retention.delivery_days = 30
+
+# —— incident 自动重试（技术债 011）——
+# OPEN incident 自动重试轮询间隔（秒）。默认 0 = 关闭（自动重试对外部依赖未修复场景是
+# 无效重试，默认交人工 retry-incident；启用后每轮至多重试 20 个实例）。
+# env：FLOW__INCIDENT_AUTO_RETRY_SECS
+incident_auto_retry_secs = 0

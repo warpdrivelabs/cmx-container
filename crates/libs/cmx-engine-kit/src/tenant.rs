@@ -38,10 +38,19 @@ pub struct TenantCtx {
     pub nickname: Option<String>,
     /// 当前用户角色（JWT roles；可空）。
     pub roles: Vec<String>,
+    /// 调用方业务系统标识（技术债 003：API Key 结构化声明；None = legacy key 未声明系统，
+    /// 归属过滤/命名空间校验一律放行——两阶段迁移口径，存量共享 key 零破坏）。
+    pub system: Option<String>,
+    /// 委托令牌 fail-close 标记（技术债 004/003-3）：请求带了 `X-Delegated-User-Token`
+    /// 但验签失败。涉及身份的动作端点（发起/取消/跳转等）须拒绝；纯查询可降级放行。
+    pub delegation_failed: bool,
+    /// 结构化 key 声明的流程定义白名单（技术债 003；空 = 不限——legacy key 的过渡态语义）。
+    /// 发起端点据此校验 definitionKey 归属（精确全等）。
+    pub allowed_definition_keys: Vec<String>,
 }
 
 impl TenantCtx {
-    /// 用租户名构建（user/username/nickname/roles 空）。
+    /// 用租户名构建（其余字段空/false）。
     pub fn new(tenant: impl Into<String>) -> Self {
         Self {
             tenant: tenant.into(),
@@ -49,10 +58,23 @@ impl TenantCtx {
             username: None,
             nickname: None,
             roles: Vec::new(),
+            system: None,
+            delegation_failed: false,
+            allowed_definition_keys: Vec::new(),
         }
     }
     pub fn with_user(mut self, user: Option<String>) -> Self {
         self.user = user;
+        self
+    }
+    /// 携带调用方系统标识（003 结构化 key 声明；链路贯通到实例归属/查询过滤）。
+    pub fn with_system(mut self, system: Option<String>) -> Self {
+        self.system = system;
+        self
+    }
+    /// 携带流程定义白名单（003；空 = 不限）。
+    pub fn with_allowed_definition_keys(mut self, keys: Vec<String>) -> Self {
+        self.allowed_definition_keys = keys;
         self
     }
     pub fn with_username(mut self, username: Option<String>) -> Self {
@@ -120,6 +142,24 @@ pub fn current_display_nickname() -> Option<String> {
 /// 当前用户角色（无 scope 时空）。
 pub fn current_roles() -> Vec<String> {
     TENANT.try_with(|c| c.roles.clone()).unwrap_or_default()
+}
+
+/// 当前调用方系统标识（003 结构化 key 声明；无 scope / legacy key 时 None）。
+pub fn current_system() -> Option<String> {
+    TENANT.try_with(|c| c.system.clone()).ok().flatten()
+}
+
+/// 本请求是否携带了验签失败的委托令牌（004/003-3 fail-close 依据）。
+/// 涉及身份的动作端点据此拒绝；纯查询端点可降级放行。
+pub fn delegation_failed() -> bool {
+    TENANT.try_with(|c| c.delegation_failed).unwrap_or(false)
+}
+
+/// 当前请求的结构化 key 流程定义白名单（003；空 = 不限）。
+pub fn current_allowed_definition_keys() -> Vec<String> {
+    TENANT
+        .try_with(|c| c.allowed_definition_keys.clone())
+        .unwrap_or_default()
 }
 
 /// 是否处于租户 scope 内（认证中间件已建立）。

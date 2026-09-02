@@ -74,6 +74,12 @@ fn auth_config() -> &'static JwtAuthConfig {
     AUTH.get_or_init(JwtAuthConfig::load)
 }
 
+/// 启动期预热认证配置（004 小项 fail-fast）：auth.mode 缺失/非法时在启动阶段即 panic 终止，
+/// 而不是等第一个请求才炸（server bin 的 init 钩子里调用；单测/工具形态可不调）。
+pub fn auth_config_warmup() {
+    let _ = auth_config();
+}
+
 /// JWT claim 壳（宽松：只取需要的，其余忽略）。
 #[derive(Debug, Deserialize)]
 struct Claims {
@@ -132,6 +138,7 @@ fn resolve_ctx(req: &Request, spec: &'static JwtSpec) -> Result<TenantCtx, Respo
                 //
                 // 关键：多租户下一个服务 key 服务多个平台租户，故**租户优先取委托令牌的
                 // claim**，而非 key 绑定的租户（key_tenant 仅作无委托令牌时的回退）。
+                let has_delegation_header = header_str(req, "x-delegated-user-token").is_some();
                 let ctx = match delegated_user_ctx(req, cfg) {
                     Some(mut ctx) => {
                         // 委托令牌解出用户/租户；追加 "service" 角色标记本跳是经服务代理来的。
@@ -139,10 +146,22 @@ fn resolve_ctx(req: &Request, spec: &'static JwtSpec) -> Result<TenantCtx, Respo
                         ctx
                     }
                     None => {
-                        TenantCtx::new(key_tenant.clone()).with_roles(vec!["service".to_string()])
+                        let mut c = TenantCtx::new(key_tenant.clone())
+                            .with_roles(vec!["service".to_string()]);
+                        // 技术债 004/003-3 fail-close：带了委托令牌头但验签失败 → 打标。
+                        // 涉及身份的动作端点（发起/取消/跳转等）据此拒绝；纯查询降级放行。
+                        c.delegation_failed = has_delegation_header;
+                        c
                     }
                 };
-                Ok(ctx)
+                // 技术债 003：结构化 key 声明的 system / 定义白名单贯通上下文
+                // （归属过滤、发起白名单校验、命名空间校验）。
+                let decl = cfg.api_key_decls.get(&key);
+                Ok(ctx
+                    .with_system(decl.and_then(|d| d.system.clone()))
+                    .with_allowed_definition_keys(
+                        decl.map(|d| d.allowed_definition_keys.clone()).unwrap_or_default(),
+                    ))
             }
             None => Err(unauthorized("无效 API Key")),
         };
@@ -328,6 +347,7 @@ mod tests {
             tenant_claim: "tenant".to_string(),
             roles_claim: "roles".to_string(),
             api_keys: std::collections::HashMap::new(),
+            api_key_decls: std::collections::HashMap::new(),
         }
     }
 

@@ -101,10 +101,64 @@ pub struct JwtAuthConfig {
     pub roles_claim: String,
     /// 服务间 API Key → 租户映射。`auth.api_keys="k1:tenantA,k2:tenantB"`。
     pub api_keys: HashMap<String, String>,
+    /// 服务间 API Key → 结构化声明（技术债 003）。legacy 逗号格式解析出的 key 生成
+    /// allow-all 声明（system=None、白名单空 = 不限），行为与存量逐字节一致；
+    /// JSON 声明格式见 [`parse_api_keys_declared`]。
+    pub api_key_decls: HashMap<String, KeyDecl>,
+}
+
+/// 一把服务间 API Key 的结构化声明（技术债 003：key 不再等价全量权限）。
+///
+/// 载体仍是 ConfigManager 配置（`auth.api_keys`），不进库（019 口径：凭据出库而非入更多的库）。
+/// `allowed_definition_keys` / `endpoints` 为空均表示**不限**（allow-all）——这是存量
+/// legacy key 的隐式语义，也是两阶段迁移的过渡态：存量共享 key 零破坏，新增 key 建议最小声明。
+#[derive(Debug, Clone)]
+pub struct KeyDecl {
+    /// key 明文（映射键，同时在 [`JwtAuthConfig::api_keys`] 里有 tenant 映射）。
+    pub key: String,
+    /// 绑定租户（同 legacy 冒号格式的 tenant 段）。
+    pub tenant: String,
+    /// 调用方业务系统标识（`TenantCtx.system`；None = 未声明 = 归属校验放行）。
+    pub system: Option<String>,
+    /// 可发起/操作的流程定义 key 白名单（空 = 全部）。命中判定 = 精确全等。
+    pub allowed_definition_keys: Vec<String>,
+    /// 可调用端点类别（空 = 全部；值域 `start`/`query`/`task`/`admin`）。
+    pub endpoints: Vec<String>,
+}
+
+impl KeyDecl {
+    /// legacy key 的 allow-all 声明（两阶段迁移过渡态；加载时按把数打审计告警）。
+    fn allow_all(key: String, tenant: String) -> Self {
+        Self {
+            key,
+            tenant,
+            system: None,
+            allowed_definition_keys: Vec::new(),
+            endpoints: Vec::new(),
+        }
+    }
+
+    /// 定义 key 是否在白名单内（空白名单 = 全部放行）。
+    pub fn definition_allowed(&self, definition_key: &str) -> bool {
+        self.allowed_definition_keys.is_empty()
+            || self.allowed_definition_keys.iter().any(|k| k == definition_key)
+    }
+
+    /// 端点类别是否可调（空 = 全部放行）。
+    pub fn endpoint_allowed(&self, category: &str) -> bool {
+        self.endpoints.is_empty() || self.endpoints.iter().any(|c| c == category)
+    }
 }
 
 impl JwtAuthConfig {
-    /// 经 ConfigManager 读 `[auth]` 段（未初始化/缺项 → off 模式空配置）。
+    /// 经 ConfigManager 读 `[auth]` 段。
+    ///
+    /// **auth-off 显式 opt-in + fail-fast**（技术债 004 小项，对齐 f407bbb 给 DB 立的先例）：
+    /// ConfigManager 已初始化但 `auth.mode` 缺失/为空 → **panic**——「配置缺失静默 Off」等于
+    /// 一次配置丢失即无鉴权网关；无鉴权必须是显式选择（`mode = "off"`），未知 mode 值同样
+    /// fail-fast（宁严勿漏）。ConfigManager 未初始化（单测/工具形态）→ 维持 Off 空配置不 panic。
+    /// 行为变更：部署若既未配 `mode = "jwt"` 也未配 `mode = "off"`，启动后首个鉴权调用即失败，
+    /// 须补配置（发布说明义务）。
     pub fn load() -> Self {
         let get = |key: &str| {
             ConfigManager::try_global()
@@ -112,7 +166,18 @@ impl JwtAuthConfig {
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty())
         };
-        let mode = match get("auth.mode").as_deref() {
+        let mode_value = get("auth.mode");
+        if ConfigManager::try_global().is_some() {
+            match mode_value.as_deref().map(str::to_ascii_lowercase).as_deref() {
+                Some("jwt") | Some("off") => {}
+                other => panic!(
+                    "auth.mode 配置缺失或非法（当前值: {:?}）。无鉴权必须是显式选择：\
+                     请在配置中设置 auth.mode = \"jwt\"（生产）或 auth.mode = \"off\"（显式放弃鉴权）",
+                    other
+                ),
+            }
+        }
+        let mode = match mode_value.as_deref() {
             Some(m) if m.eq_ignore_ascii_case("jwt") => AuthMode::Jwt,
             _ => AuthMode::Off,
         };
@@ -136,15 +201,95 @@ impl JwtAuthConfig {
         if mode == AuthMode::Jwt && decoding_key.is_none() {
             tracing::error!("auth.mode=jwt 但缺密钥（auth.jwt_secret / auth.jwt_public_key），所有请求将 401");
         }
+        let (api_keys, api_key_decls, legacy_count) =
+            parse_api_keys_declared(get("auth.api_keys").unwrap_or_default());
+        if legacy_count > 0 {
+            // 两阶段迁移（红队 R21）的过渡态审计告警：legacy key = 隐式 allow-all，
+            // 建议迁移为 JSON 结构化声明（最小权限）。
+            tracing::warn!(
+                legacy_keys = legacy_count,
+                total = api_keys.len(),
+                "auth.api_keys 存在 {} 把 legacy 格式 key（未声明 system/白名单 = allow-all）\
+                 ——建议迁移为 JSON 结构化声明以启用最小权限",
+                legacy_count
+            );
+        }
         Self {
             mode,
             alg,
             decoding_key,
             tenant_claim: get("auth.jwt_tenant_claim").unwrap_or_else(|| "tenant".to_string()),
             roles_claim: get("auth.jwt_roles_claim").unwrap_or_else(|| "roles".to_string()),
-            api_keys: parse_api_keys(get("auth.api_keys").unwrap_or_default()),
+            api_keys,
+            api_key_decls,
         }
     }
+}
+
+/// 解析 `auth.api_keys` → (key→tenant 映射, key→声明映射, legacy 把数)。
+///
+/// 两形态（首字符判定，与值内容解耦）：
+/// - **legacy 逗号格式** `"k1:tenantA,k2"`：解析为 allow-all 声明（system/白名单全空），
+///   行为与存量逐字节一致；legacy 把数由调用方打审计告警。
+/// - **JSON 数组格式**（技术债 003 结构化）：`[{"key":"k1","tenant":"t1","system":"mdm",
+///   "allowedDefinitionKeys":["mdm_x"],"endpoints":["start","query"]}]`——camelCase 字段
+///   全部可选（key 必填；tenant 缺省 default；其余缺省 = 不限）。
+pub(crate) fn parse_api_keys_declared(
+    raw: String,
+) -> (HashMap<String, String>, HashMap<String, KeyDecl>, usize) {
+    let trimmed = raw.trim();
+    if trimmed.starts_with('[') {
+        match serde_json::from_str::<Vec<KeyDeclJson>>(trimmed) {
+            Ok(decls) => {
+                let mut tenants = HashMap::new();
+                let mut map = HashMap::new();
+                for d in decls {
+                    if d.key.trim().is_empty() {
+                        continue;
+                    }
+                    let tenant = d.tenant.unwrap_or_else(|| DEFAULT_TENANT.to_string());
+                    tenants.insert(d.key.clone(), tenant.clone());
+                    map.insert(
+                        d.key.clone(),
+                        KeyDecl {
+                            key: d.key,
+                            tenant,
+                            system: d.system.filter(|s| !s.trim().is_empty()),
+                            allowed_definition_keys: d.allowed_definition_keys.unwrap_or_default(),
+                            endpoints: d.endpoints.unwrap_or_default(),
+                        },
+                    );
+                }
+                return (tenants, map, 0);
+            }
+            Err(e) => {
+                tracing::error!("auth.api_keys 以 '[' 开头但不是合法的 JSON 声明数组，按空配置处理: {e}");
+                return (HashMap::new(), HashMap::new(), 0);
+            }
+        }
+    }
+    let map = parse_api_keys(raw);
+    let legacy = map.len();
+    let decls = map
+        .iter()
+        .map(|(k, t)| (k.clone(), KeyDecl::allow_all(k.clone(), t.clone())))
+        .collect();
+    (map, decls, legacy)
+}
+
+/// JSON 声明的中间壳（camelCase 对外、缺省宽容）。
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyDeclJson {
+    key: String,
+    #[serde(default)]
+    tenant: Option<String>,
+    #[serde(default)]
+    system: Option<String>,
+    #[serde(default)]
+    allowed_definition_keys: Option<Vec<String>>,
+    #[serde(default)]
+    endpoints: Option<Vec<String>>,
 }
 
 /// 解析 `auth.api_keys="k1:tenantA,k2:tenantB"` → {k1→tenantA, k2→tenantB}。
@@ -187,5 +332,46 @@ mod tests {
         assert_eq!(map.get("k1").map(String::as_str), Some("tenantA"));
         assert_eq!(map.get("k2").map(String::as_str), Some("default"));
         assert_eq!(map.get("k3").map(String::as_str), Some("tenantC"));
+    }
+
+    #[test]
+    fn legacy_keys_parse_as_allow_all_decls() {
+        // legacy 逗号格式：解析为 allow-all 声明（system/白名单空），legacy 计数如实上报。
+        let (tenants, decls, legacy) =
+            parse_api_keys_declared("k1:tenantA, k2".to_string());
+        assert_eq!(legacy, 2);
+        assert_eq!(tenants.get("k1").map(String::as_str), Some("tenantA"));
+        let d = decls.get("k1").expect("legacy key 也应有声明");
+        assert_eq!(d.system, None);
+        assert!(d.definition_allowed("any_def"));
+        assert!(d.endpoint_allowed("admin"));
+    }
+
+    #[test]
+    fn json_keys_parse_structured_decls() {
+        // JSON 声明格式：system/定义白名单/端点类别逐字段生效；tenant 缺省 default。
+        let raw = r#"[{"key":"k_mdm","system":"mdm","allowedDefinitionKeys":["mdm_x"],"endpoints":["start","query"]},
+                       {"key":"k_fi","tenant":"t_fi","system":"fi"}]"#
+            .to_string();
+        let (tenants, decls, legacy) = parse_api_keys_declared(raw);
+        assert_eq!(legacy, 0);
+        assert_eq!(tenants.get("k_fi").map(String::as_str), Some("t_fi"));
+        assert_eq!(tenants.get("k_mdm").map(String::as_str), Some("default"));
+        let mdm = decls.get("k_mdm").expect("结构化 key 应有声明");
+        assert_eq!(mdm.system.as_deref(), Some("mdm"));
+        assert!(mdm.definition_allowed("mdm_x"));
+        assert!(!mdm.definition_allowed("fi_y"));
+        assert!(mdm.endpoint_allowed("start"));
+        assert!(!mdm.endpoint_allowed("admin"));
+        let fi = decls.get("k_fi").expect("第二把 key 应有声明");
+        assert!(fi.allowed_definition_keys.is_empty(), "缺省白名单 = 不限");
+    }
+
+    #[test]
+    fn malformed_json_array_falls_back_to_empty() {
+        // 以 '[' 开头但非法 JSON：按空配置处理（error 日志），不 panic。
+        let (tenants, decls, _) = parse_api_keys_declared("[not json".to_string());
+        assert!(tenants.is_empty());
+        assert!(decls.is_empty());
     }
 }

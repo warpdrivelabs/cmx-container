@@ -1939,3 +1939,43 @@ CONFIG_FILE=/path/to/config.toml ./cmx-server
 | backoff_max_ms | int | 1800000 | 重试退避上限（30 分钟） |
 | running_reclaim_minutes | int | 10 | running 残留回收阈值（分钟） |
 | allow_private_address | bool | true | webhook 目标允许私网/回环地址；外网部署置 false 启用 SSRF 防护 |
+
+## 流程引擎运行态库
+
+### `[flow]`
+
+#### `db_id`
+
+- **类型**: 字符串
+- **必需**: 否
+- **默认值**: `"fico-db"`
+- **说明**: 默认租户的运行态库 db_id（`cmx_flow_*` 流程运行态表所在库，即 `[[databases]]` 中 `source_type = "biz"` 的业务库）。未配置时缺省 `fico-db`（存量环境零回归）；新环境建议配中性名（如 `flow-default`）解「默认库绑死财务库」的假耦合。多租户（`auth.tenancy = "multi"`）下非默认租户仍按 `flow_<tenant>` 规则派生，不受本项影响。
+- **示例**: `db_id = "flow-default"`
+
+> env 覆盖：`FLOW__DB_ID`（ConfigManager 三源合并，详见 ENV_MANUAL.md）。
+
+#### `retention.instance_days`
+
+- **类型**: 整数（天）
+- **必需**: 否
+- **默认值**: `30`
+- **说明**: 技术债 010 运行态生命周期治理——终态（COMPLETED/TERMINATED）实例的运行态行在终态 N 天后由统一清理任务删除（每小时 tick，每轮至多 200 实例）；`cmx_flow_hi_instance` / `hi_task` 归档行保留，审计不断链。`0` = 禁用（不推荐：待办/定时器扫描的活性数据集会随终态数据无限膨胀）。
+- **示例**: `retention.instance_days = 30`
+
+#### `retention.delivery_days`
+
+- **类型**: 整数（天）
+- **必需**: 否
+- **默认值**: `30`
+- **说明**: webhook 投递流水（`cmx_flow_webhook_delivery`）终态行（DONE/SKIPPED）保留天数，同一清理任务承接（001 方案 M3 的 DONE 清理复用 010 框架）。`0` = 禁用。
+- **示例**: `retention.delivery_days = 30`
+
+#### `incident_auto_retry_secs`
+
+- **类型**: 整数（秒）
+- **必需**: 否
+- **默认值**: `0`（关闭）
+- **说明**: 技术债 011——OPEN incident 自动重试轮询间隔。自动重试对外部依赖未修复的场景是无效重试，默认关闭交人工 `POST /instances/{id}/retry-incident`；启用后每轮至多重试 20 个实例，重试仍失败则台账 retries 累加、下轮再试。
+- **示例**: `incident_auto_retry_secs = 300`
+
+> env 覆盖：`FLOW__RETENTION__INSTANCE_DAYS` / `FLOW__RETENTION__DELIVERY_DAYS` / `FLOW__INCIDENT_AUTO_RETRY_SECS`（ConfigManager 三源合并，详见 ENV_MANUAL.md）。
