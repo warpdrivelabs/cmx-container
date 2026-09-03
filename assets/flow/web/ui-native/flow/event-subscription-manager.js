@@ -5,7 +5,8 @@
  *  - 列表：cmx-filter-bar（关键字/通道/启停）+ cmx-revo-grid（名称/描述/通道/规则数/状态/
  *    待投/24h死信/最近投递）+ cmx-pager；行操作 编辑/测试/启停/删除（仅停用态）/补发。
  *  - 编辑：cmx-floating-dialog 大尺寸——① 基本信息（名称/描述/通道/重试上限/启用）
- *    ② 通道配置（webhook：服务键/回调路径/secret 只写掩码+随机生成）
+ *    ② 通道配置（webhook：目标二选一——服务键=目录路由 / 完整 URL=外部直连；回调路径仅
+ *    服务键模式生效；secret 只写掩码+随机生成）
  *    ③ 订阅规则卡片区（每卡：规则名/启停/事件类型多选/流程分组多选/key glob 模式 chips；
  *    卡可增删上移下移；底部「预览命中定义」→ rules/preview 弹框：每规则命中数/样例/死组标注）。
  *  - 测试投递：不校验规则——文案澄清「验证回调连通与签名，不是规则命中」。
@@ -248,6 +249,7 @@ function openEditDialog (host, st, sub) {
     active: sub ? !!sub.active : true,
     retryMax: (sub && sub.retryMax) != null ? Number(sub.retryMax) : 10,
     serviceKey: cfg.service_key || '',
+    targetUrl: cfg.target_url || '',
     callbackPath: cfg.callback_path || '/api/mdm/flow/callback',
     secret: '',
     rules: ((sub && sub.rules) || []).map((r) => ({
@@ -307,13 +309,14 @@ function openEditDialog (host, st, sub) {
     </div>
     <div class="sec-title">② 通道配置（webhook）</div>
     <div class="grid3">
-      <div class="f"><label>服务键（service_key）</label><ui5-input id="esSvcKey" placeholder="如 mdm" value="${esc(fm.serviceKey)}"></ui5-input></div>
-      <div class="f"><label>回调路径（callback_path）</label><ui5-input id="esCbPath" placeholder="/api/mdm/flow/callback" value="${esc(fm.callbackPath)}"></ui5-input></div>
+      <div class="f"><label>服务键（service_key；内部微服务）</label><ui5-input id="esSvcKey" placeholder="目录键，如 mdm —— 与完整 URL 二选一" value="${esc(fm.serviceKey)}"></ui5-input></div>
+      <div class="f"><label>完整 URL（target_url；外部系统直连）</label><ui5-input id="esTgtUrl" placeholder="如 https://oapi.example.com/hook —— 与服务键二选一" value="${esc(fm.targetUrl)}"></ui5-input></div>
+      <div class="f"><label>回调路径（callback_path；仅服务键模式生效）</label><ui5-input id="esCbPath" placeholder="/api/mdm/flow/callback" value="${esc(fm.callbackPath)}"></ui5-input></div>
       <div class="f"><label>签名密钥（secret；留空/掩码 = 沿用旧值）</label>
         <div style="display:flex;gap:6px"><ui5-input id="esSecret" type="Password" placeholder="${isNew ? '' : '******（回显掩码 = 沿用旧值）'}"></ui5-input>
         <ui5-button design="Transparent" icon="random" id="esGen" title="随机生成"></ui5-button></div></div>
     </div>
-    <div class="hint">密钥明文只写不读：API 永远回显掩码；接收端按 HMAC-SHA256 验签（头 x-cmx-flow-signature）。</div>
+    <div class="hint">服务键 = 目录路由（[service_rpc.services] 登记，内部微服务可走注册发现）；完整 URL = 外部系统直连（不经服务目录，生产自助接入免改配置）。密钥明文只写不读：API 永远回显掩码；接收端按 HMAC-SHA256 验签（头 x-cmx-flow-signature）。</div>
     <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center">
       <span>③ 订阅规则（自上而下首个命中；规则内三维全部满足）</span>
       <span><ui5-button design="Transparent" icon="play" id="esPreview">预览命中定义</ui5-button>
@@ -410,6 +413,7 @@ function openEditDialog (host, st, sub) {
     retryMax: Number((wrap.querySelector('#esRetry') || {}).value) || 10,
     channelConfig: {
       service_key: ((wrap.querySelector('#esSvcKey') || {}).value || '').trim(),
+      target_url: ((wrap.querySelector('#esTgtUrl') || {}).value || '').trim(),
       callback_path: ((wrap.querySelector('#esCbPath') || {}).value || '').trim(),
       secret: ((wrap.querySelector('#esSecret') || {}).value || ''),
     },
@@ -425,6 +429,11 @@ function openEditDialog (host, st, sub) {
   wrap.querySelector('#esSave')?.addEventListener('click', async () => {
     const body = collect()
     if (!body.name) { M.cmxWarn?.('订阅者名称必填'); return }
+    const cc = body.channelConfig
+    // 目标二选一：有服务键 = 目录路由（微服务形态）；没有 = URL 直连（外部系统形态）。
+    if (cc.service_key && cc.target_url) { M.cmxWarn?.('服务键与完整 URL 只能二选一'); return }
+    if (!cc.service_key && !cc.target_url) { M.cmxWarn?.('服务键与完整 URL 至少填一个：内部微服务填服务键，外部系统填完整 URL'); return }
+    if (cc.target_url && !/^https?:\/\//.test(cc.target_url)) { M.cmxWarn?.('完整 URL 须以 http:// 或 https:// 开头（含路径）'); return }
     try {
       await apiPost('/api/flow/event-subscribers/save', body)
       showCmxToast('已保存')
