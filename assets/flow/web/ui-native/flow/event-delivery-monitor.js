@@ -88,6 +88,8 @@ function styleCss () {
 }
 
 // KPI 行：cmx-kpi-card 带 tone 配色（对标 mdm dispatch-monitor）；死信 >0 另有页顶告警条。
+// 0 值本身是「健康」态用 success 绿（绿=正常 / 黄=有积压 / 红=有死信，一眼可读）；
+// neutral 灰只留给加载中占位——全灰渐变底+灰字灰边视觉发闷。
 function kpiRowHtml (st) {
   const s = st.stats || {}
   const e = s.emit || {}
@@ -98,8 +100,8 @@ function kpiRowHtml (st) {
   return `<div class="kpi-row">
     <cmx-kpi-card variant="card" id="edKpiTotal" label="近 ${st.hours}h 投递量" value="${ready ? (s.total ?? 0) : '…'}" tone="info"></cmx-kpi-card>
     <cmx-kpi-card variant="card" id="edKpiRate" label="投递成功率" value="${ready && rate != null ? rate : '…'}" unit="${ready && rate != null ? '%' : ''}" tone="${ready && rate != null ? 'success' : 'neutral'}"></cmx-kpi-card>
-    <cmx-kpi-card variant="card" id="edKpiDead" label="死信" value="${ready ? dead : '…'}" tone="${ready && dead > 0 ? 'danger' : 'neutral'}"></cmx-kpi-card>
-    <cmx-kpi-card variant="card" id="edKpiPending" label="待投 / 投递中" value="${ready ? pending : '…'}" tone="${ready && pending > 0 ? 'warning' : 'neutral'}"></cmx-kpi-card>
+    <cmx-kpi-card variant="card" id="edKpiDead" label="死信" value="${ready ? dead : '…'}" tone="${ready ? (dead > 0 ? 'danger' : 'success') : 'neutral'}"></cmx-kpi-card>
+    <cmx-kpi-card variant="card" id="edKpiPending" label="待投 / 投递中" value="${ready ? pending : '…'}" tone="${ready ? (pending > 0 ? 'warning' : 'success') : 'neutral'}"></cmx-kpi-card>
   </div>`
 }
 
@@ -377,9 +379,9 @@ function applyStats (host, st) {
   set('edKpiTotal', s.total ?? 0)
   set('edKpiRate', rate != null ? rate : '-', rate != null ? { unit: '%' } : {})
   const dead = e.dead ?? 0
-  set('edKpiDead', dead, { tone: dead > 0 ? 'danger' : 'neutral' })
+  set('edKpiDead', dead, { tone: dead > 0 ? 'danger' : 'success' })
   const pending = (e.pending ?? 0) + (e.inFlight ?? 0)
-  set('edKpiPending', pending, { tone: pending > 0 ? 'warning' : 'neutral' })
+  set('edKpiPending', pending, { tone: pending > 0 ? 'warning' : 'success' })
   const alarm = root.querySelector('#edAlarm')
   if (alarm) {
     alarm.classList.toggle('on', dead > 0)
