@@ -730,6 +730,20 @@
                                             "view": "content"
                                         }
                                     ]
+                                },
+                                "explorer": {
+                                    "caption": "目标端点",
+                                    "icon": "tabler-outline/broadcast",
+                                    "views": [
+                                        {
+                                            "id": "mdm-subscription-manager-explorer",
+                                            "tabLabel": "目标端点",
+                                            "icon": "tabler-outline/broadcast",
+                                            "type": "native_pages",
+                                            "native_page": "portal.mdm.subscription-manager",
+                                            "view": "explorer"
+                                        }
+                                    ]
                                 }
                             }
                         },

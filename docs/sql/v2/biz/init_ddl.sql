@@ -509,43 +509,64 @@ COMMENT ON COLUMN md_match_scan.status        IS 'pending/resolved/ignored';
 CREATE INDEX IF NOT EXISTS idx_md_match_scan_dict_status ON md_match_scan (dict_code, status);
 CREATE INDEX IF NOT EXISTS idx_md_match_scan_hash        ON md_match_scan (dict_code, cluster_hash);
 
--- 8. 分发订阅
-CREATE TABLE IF NOT EXISTS md_subscription (
+-- 8. 分发目标端点（目标系统×通道，凭证与投递策略的唯一载体；方案C两级模型）
+CREATE TABLE IF NOT EXISTS md_target_endpoint (
     id             BIGINT       NOT NULL,
     target_sys     VARCHAR(64)  NOT NULL,
-    dict_code      VARCHAR(64)  NOT NULL,
-    filter         JSONB,
-    field_map      JSONB,
     channel        VARCHAR(16)  NOT NULL,
-    active         BOOLEAN      NOT NULL DEFAULT TRUE,
     name           VARCHAR(128),
     description    VARCHAR(512),
     channel_config JSONB        NOT NULL DEFAULT '{}',
-    event_types    JSONB        NOT NULL DEFAULT '[]',
     retry_max      INT          NOT NULL DEFAULT 8,
     timeout_ms     INT          NOT NULL DEFAULT 10000,
     batch_size     INT          NOT NULL DEFAULT 50,
+    active         BOOLEAN      NOT NULL DEFAULT TRUE,
     created_by     VARCHAR(64),
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
-COMMENT ON TABLE  md_subscription IS '分发订阅配置';
+COMMENT ON TABLE  md_target_endpoint IS '分发目标端点（目标系统×通道，凭证与投递策略的唯一载体）';
+COMMENT ON COLUMN md_target_endpoint.target_sys     IS '目标系统标识（同系统同通道可多端点，重复创建由应用层提示）';
+COMMENT ON COLUMN md_target_endpoint.channel        IS '通道 webhook/kafka/rocketmq/rest_pull';
+COMMENT ON COLUMN md_target_endpoint.channel_config IS '通道配置：webhook {url,secret,timeout_ms}；rest_pull {consumerId}；kafka {brokers,topic,partition_key}（预留）';
+COMMENT ON COLUMN md_target_endpoint.active         IS '端点启停（停用 = 级联停其下全部订阅：扇出与 claim 双门）';
+CREATE INDEX IF NOT EXISTS idx_md_target_endpoint ON md_target_endpoint (target_sys, channel);
+
+-- 8a. 分发订阅（端点×字典：事件类型/行级过滤/字段映射；凭证在端点）
+CREATE TABLE IF NOT EXISTS md_subscription (
+    id             BIGINT       NOT NULL,
+    endpoint_id    BIGINT       NOT NULL,
+    dict_code      VARCHAR(64)  NOT NULL,
+    filter         JSONB,
+    field_map      JSONB,
+    active         BOOLEAN      NOT NULL DEFAULT TRUE,
+    name           VARCHAR(128),
+    description    VARCHAR(512),
+    event_types    JSONB        NOT NULL DEFAULT '[]',
+    created_by     VARCHAR(64),
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    -- 过渡冗余列（迁移 20260902_001 前的旧结构；阶段一双写保回滚，阶段二迁移移除）
+    target_sys     VARCHAR(64)  NOT NULL DEFAULT '',
+    channel        VARCHAR(16)  NOT NULL DEFAULT 'webhook',
+    channel_config JSONB        NOT NULL DEFAULT '{}',
+    retry_max      INT          NOT NULL DEFAULT 8,
+    timeout_ms     INT          NOT NULL DEFAULT 10000,
+    batch_size     INT          NOT NULL DEFAULT 50,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  md_subscription IS '分发订阅配置（端点×字典：事件类型/行级过滤/字段映射；凭证在端点）';
 COMMENT ON COLUMN md_subscription.id             IS '主键（应用层生成）';
-COMMENT ON COLUMN md_subscription.target_sys     IS '目标系统标识（uk：同系统同字典同通道唯一）';
+COMMENT ON COLUMN md_subscription.endpoint_id    IS '所属目标端点 → md_target_endpoint.id';
 COMMENT ON COLUMN md_subscription.filter         IS '行级过滤条件 {conditions:[{field,op,value}],logic:"and"}';
 COMMENT ON COLUMN md_subscription.field_map      IS '列级转换 {include:[],rename:{},mask:[]}（value_map 预留）';
-COMMENT ON COLUMN md_subscription.channel        IS '通道 webhook/kafka/rocketmq/rest_pull';
 COMMENT ON COLUMN md_subscription.name           IS '订阅名称（展示）';
 COMMENT ON COLUMN md_subscription.description    IS '订阅描述';
-COMMENT ON COLUMN md_subscription.channel_config IS '通道配置：webhook {url,secret,headers{}}；rest_pull {consumerId}；kafka {brokers,topic,partition_key}（骨架）';
 COMMENT ON COLUMN md_subscription.event_types    IS '订阅事件类型 JSON 数组；[] = 全部(created/updated/merged)';
-COMMENT ON COLUMN md_subscription.retry_max      IS '最大尝试次数（含首发）';
-COMMENT ON COLUMN md_subscription.timeout_ms     IS '单次投递超时（毫秒）';
-COMMENT ON COLUMN md_subscription.batch_size     IS '单轮该订阅最大投递数';
 COMMENT ON COLUMN md_subscription.created_by     IS '创建人用户 id';
 COMMENT ON COLUMN md_subscription.updated_at     IS '最近更新时间';
-CREATE UNIQUE INDEX IF NOT EXISTS uk_md_subscription ON md_subscription (target_sys, dict_code, channel);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_md_subscription ON md_subscription (endpoint_id, dict_code);
 
 -- 9. 分发事件日志（激活器激活成功时写入；主键 VARCHAR(64) snowflake，seq 为有序拉取列非主键）
 CREATE TABLE IF NOT EXISTS md_event_log (
