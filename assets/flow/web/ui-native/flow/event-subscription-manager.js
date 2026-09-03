@@ -13,7 +13,7 @@
  *
  * 端点（前缀 /api/flow，门户反代 → 引擎 /flow）：
  *   POST /event-subscribers/{query,save,delete,set-active,test,rules/preview,rebuild}
- *   GET  /event-subscribers/{detail?id=,channels}
+ *   POST /event-subscribers/{detail,channels}（R3：query 收编 body）
  *   GET  /definition-groups（分组多选数据源）
  */
 
@@ -110,11 +110,11 @@ function viewHtml (st) {
 
 async function loadLookups (st) {
   try {
-    const d = (await apiGet('/api/flow/event-subscribers/channels')) || {}
+    const d = (await apiPost('/api/flow/event-subscribers/channels', {})) || {}
     st.channels = (d.channels || []).map((c) => ({ type: c.type, label: c.name || c.type }))
   } catch { st.channels = [{ type: 'webhook', label: 'webhook' }] }
   try {
-    const d = (await apiGet('/api/flow/definition-groups')) || {}
+    const d = (await apiPost('/api/flow/definition-groups', {})) || {}
     st.groups = (d.rows || []).map((g) => ({ id: Number(g.id), name: g.name || '', enabled: g.enabled !== false }))
   } catch { st.groups = [] }
 }
@@ -208,7 +208,7 @@ async function doAction (host, st, act, rec) {
   const id = Number(rec.id)
   try {
     if (act === 'edit') {
-      const sub = (await apiGet(`/api/flow/event-subscribers/detail?id=${encodeURIComponent(String(id))}`)) || {}
+      const sub = (await apiPost('/api/flow/event-subscribers/detail', { id })) || {}
       openEditDialog(host, st, sub)
     } else if (act === 'test') {
       const t = (await apiPost('/api/flow/event-subscribers/test', { id })) || {}

@@ -51,52 +51,37 @@ use cmx_service_rpc::{ServiceRpcError, ServiceRpcHandle};
 /// 流程服务在服务目录中的键（`[service_rpc.services].flow`）。
 pub const SERVICE_KEY: &str = "flow";
 
-/// v1 API 路径常量与拼接函数（固定路径用常量，参数化路径用函数）。
+/// v1 API 路径常量（R3 · 技术债 016 收敛：全 POST + 固定路径，资源标识进 JSON body）。
 pub mod paths {
-    /// 起实例 / 实例列表：`POST/GET /api/flow/v1/instances`。
-    pub const INSTANCES: &str = "/api/flow/v1/instances";
+    /// 起实例：`POST /api/flow/v1/instances/start`。
+    pub const INSTANCES_START: &str = "/api/flow/v1/instances/start";
 
-    /// 实例详情：`GET /api/flow/v1/instances/{id}`。
-    pub fn instance(id: &str) -> String {
-        format!("/api/flow/v1/instances/{id}")
-    }
+    /// 实例详情：`POST /api/flow/v1/instances/detail`（body: {id}）。
+    pub const INSTANCE_DETAIL: &str = "/api/flow/v1/instances/detail";
 
-    /// 实例变量：`GET /api/flow/v1/instances/{id}/variables`。
-    pub fn instance_variables(id: &str) -> String {
-        format!("/api/flow/v1/instances/{id}/variables")
-    }
+    /// 实例变量：`POST /api/flow/v1/instances/variables`（body: {id}）。
+    pub const INSTANCE_VARIABLES: &str = "/api/flow/v1/instances/variables";
 
-    /// 实例审批意见：`GET /api/flow/v1/instances/{id}/comments`。
-    pub fn instance_comments(id: &str) -> String {
-        format!("/api/flow/v1/instances/{id}/comments")
-    }
+    /// 实例审批意见：`POST /api/flow/v1/instances/comments`（body: {id}）。
+    pub const INSTANCE_COMMENTS: &str = "/api/flow/v1/instances/comments";
 
-    /// 实例绑定的单据坐标：`GET /api/flow/v1/instances/{id}/biz`。
-    pub fn instance_biz(id: &str) -> String {
-        format!("/api/flow/v1/instances/{id}/biz")
-    }
+    /// 实例绑定的单据坐标：`POST /api/flow/v1/instances/biz`（body: {id}）。
+    pub const INSTANCE_BIZ: &str = "/api/flow/v1/instances/biz";
 
-    /// 取消实例：`POST /api/flow/v1/instances/{id}/cancel`。
-    pub fn instance_cancel(id: &str) -> String {
-        format!("/api/flow/v1/instances/{id}/cancel")
-    }
+    /// 取消实例：`POST /api/flow/v1/instances/cancel`（body: {id, reason?}）。
+    pub const INSTANCE_CANCEL: &str = "/api/flow/v1/instances/cancel";
 
-    /// 单据 → 实例列表（倒序，第一条 = 当前实例）：`GET /api/flow/v1/biz/{table}/{id}/instances`。
-    pub fn biz_instances(biz_table: &str, biz_id: &str) -> String {
-        format!("/api/flow/v1/biz/{biz_table}/{biz_id}/instances")
-    }
+    /// 单据 → 实例列表（倒序，第一条 = 当前实例）：`POST /api/flow/v1/biz/instances`
+    /// （body: {bizTable, bizId}）。
+    pub const BIZ_INSTANCES: &str = "/api/flow/v1/biz/instances";
 
-    /// 办结任务：`POST /api/flow/v1/tasks/{taskId}/complete`。
-    pub fn task_complete(task_id: &str) -> String {
-        format!("/api/flow/v1/tasks/{task_id}/complete")
-    }
+    /// 办结任务：`POST /api/flow/v1/tasks/complete`（body 含 taskId）。
+    pub const TASK_COMPLETE: &str = "/api/flow/v1/tasks/complete";
 
-    /// 退回任务：`POST /api/flow/v1/tasks/{taskId}/reject`。
-    pub fn task_reject(task_id: &str) -> String {
-        format!("/api/flow/v1/tasks/{task_id}/reject")
-    }
+    /// 退回任务：`POST /api/flow/v1/tasks/reject`（body 含 taskId）。
+    pub const TASK_REJECT: &str = "/api/flow/v1/tasks/reject";
 
-    /// 我的任务（kind=todo|claimable|all）：`GET /api/flow/v1/tasks/my`。
+    /// 我的任务（body: {assignee, kind=todo|claimable|all, ...}）：`POST /api/flow/v1/tasks/my`。
     pub const TASKS_MY: &str = "/api/flow/v1/tasks/my";
 }
 
@@ -115,7 +100,7 @@ pub struct BizLink {
     pub role: String,
 }
 
-/// 起实例请求（`POST /api/flow/v1/instances`）。
+/// 起实例请求（`POST /api/flow/v1/instances/start`）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartInstanceReq {
@@ -138,7 +123,7 @@ pub struct StartInstanceReq {
     pub biz_link: Option<BizLink>,
 }
 
-/// 办结任务请求（`POST /api/flow/v1/tasks/{taskId}/complete`）。
+/// 办结任务请求（`POST /api/flow/v1/tasks/complete`，taskId 由 SDK 并入 body）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompleteTaskReq {
@@ -376,7 +361,7 @@ pub trait FlowClient: Send + Sync {
         biz_id: &str,
     ) -> Result<Vec<BizInstanceSummary>, ServiceRpcError>;
 
-    /// 当前用户可认领的任务 id 列表（`GET /tasks/my?kind=claimable`）。
+    /// 当前用户可认领的任务 id 列表（`POST /tasks/my`，body kind=claimable）。
     async fn my_claimable_tasks(&self, user: &str) -> Result<Vec<String>, ServiceRpcError>;
 }
 
@@ -429,7 +414,7 @@ impl FlowClient for HttpFlowClient {
         user_token: Option<&str>,
     ) -> Result<InstanceView, ServiceRpcError> {
         let r = self
-            .base_req(cmx_service_rpc::HttpMethod::Post, paths::INSTANCES.to_string())
+            .base_req(cmx_service_rpc::HttpMethod::Post, paths::INSTANCES_START.to_string())
             .json_body(serde_json::to_value(req).map_err(decode_err)?);
         let r = apply_token(r, user_token);
         self.rpc.call_api(r).await
@@ -441,9 +426,12 @@ impl FlowClient for HttpFlowClient {
         req: CompleteTaskReq,
         user_token: Option<&str>,
     ) -> Result<InstanceView, ServiceRpcError> {
+        // R3：taskId 进 body（路径段收编）。
+        let mut body = serde_json::to_value(req).map_err(decode_err)?;
+        body["taskId"] = serde_json::json!(task_id);
         let r = self
-            .base_req(cmx_service_rpc::HttpMethod::Post, paths::task_complete(task_id))
-            .json_body(serde_json::to_value(req).map_err(decode_err)?);
+            .base_req(cmx_service_rpc::HttpMethod::Post, paths::TASK_COMPLETE.to_string())
+            .json_body(body);
         let r = apply_token(r, user_token);
         self.rpc.call_api(r).await
     }
@@ -454,9 +442,12 @@ impl FlowClient for HttpFlowClient {
         req: RejectTaskReq,
         user_token: Option<&str>,
     ) -> Result<InstanceView, ServiceRpcError> {
+        // R3：taskId 进 body（路径段收编）。
+        let mut body = serde_json::to_value(req).map_err(decode_err)?;
+        body["taskId"] = serde_json::json!(task_id);
         let r = self
-            .base_req(cmx_service_rpc::HttpMethod::Post, paths::task_reject(task_id))
-            .json_body(serde_json::to_value(req).map_err(decode_err)?);
+            .base_req(cmx_service_rpc::HttpMethod::Post, paths::TASK_REJECT.to_string())
+            .json_body(body);
         let r = apply_token(r, user_token);
         self.rpc.call_api(r).await
     }
@@ -467,19 +458,20 @@ impl FlowClient for HttpFlowClient {
         req: CancelReq,
         user_token: Option<&str>,
     ) -> Result<InstanceView, ServiceRpcError> {
+        // R3：id 进 body（路径段收编）。
+        let mut body = serde_json::to_value(req).map_err(decode_err)?;
+        body["id"] = serde_json::json!(instance_id);
         let r = self
-            .base_req(
-                cmx_service_rpc::HttpMethod::Post,
-                paths::instance_cancel(instance_id),
-            )
-            .json_body(serde_json::to_value(req).map_err(decode_err)?);
+            .base_req(cmx_service_rpc::HttpMethod::Post, paths::INSTANCE_CANCEL.to_string())
+            .json_body(body);
         let r = apply_token(r, user_token);
         self.rpc.call_api(r).await
     }
 
     async fn instance_detail(&self, instance_id: &str) -> Result<InstanceView, ServiceRpcError> {
         self.rpc.call_api(
-            self.base_req(cmx_service_rpc::HttpMethod::Get, paths::instance(instance_id))
+            self.base_req(cmx_service_rpc::HttpMethod::Post, paths::INSTANCE_DETAIL.to_string())
+                .json_body(serde_json::json!({ "id": instance_id }))
                 .idempotent(),
         )
         .await
@@ -487,22 +479,18 @@ impl FlowClient for HttpFlowClient {
 
     async fn instance_variables(&self, instance_id: &str) -> Result<Value, ServiceRpcError> {
         self.rpc.call_api(
-            self.base_req(
-                cmx_service_rpc::HttpMethod::Get,
-                paths::instance_variables(instance_id),
-            )
-            .idempotent(),
+            self.base_req(cmx_service_rpc::HttpMethod::Post, paths::INSTANCE_VARIABLES.to_string())
+                .json_body(serde_json::json!({ "id": instance_id }))
+                .idempotent(),
         )
         .await
     }
 
     async fn instance_comments(&self, instance_id: &str) -> Result<Vec<Value>, ServiceRpcError> {
         let page: CommentsPage = self.rpc.call_api(
-            self.base_req(
-                cmx_service_rpc::HttpMethod::Get,
-                paths::instance_comments(instance_id),
-            )
-            .idempotent(),
+            self.base_req(cmx_service_rpc::HttpMethod::Post, paths::INSTANCE_COMMENTS.to_string())
+                .json_body(serde_json::json!({ "id": instance_id }))
+                .idempotent(),
         )
         .await?;
         Ok(page.comments)
@@ -510,7 +498,8 @@ impl FlowClient for HttpFlowClient {
 
     async fn biz_of_instance(&self, instance_id: &str) -> Result<Vec<Value>, ServiceRpcError> {
         let page: BizLinksPage = self.rpc.call_api(
-            self.base_req(cmx_service_rpc::HttpMethod::Get, paths::instance_biz(instance_id))
+            self.base_req(cmx_service_rpc::HttpMethod::Post, paths::INSTANCE_BIZ.to_string())
+                .json_body(serde_json::json!({ "id": instance_id }))
                 .idempotent(),
         )
         .await?;
@@ -523,11 +512,9 @@ impl FlowClient for HttpFlowClient {
         biz_id: &str,
     ) -> Result<Vec<BizInstanceSummary>, ServiceRpcError> {
         let page: InstancesPage = self.rpc.call_api(
-            self.base_req(
-                cmx_service_rpc::HttpMethod::Get,
-                paths::biz_instances(biz_table, biz_id),
-            )
-            .idempotent(),
+            self.base_req(cmx_service_rpc::HttpMethod::Post, paths::BIZ_INSTANCES.to_string())
+                .json_body(serde_json::json!({ "bizTable": biz_table, "bizId": biz_id }))
+                .idempotent(),
         )
         .await?;
         Ok(page.instances)
@@ -535,10 +522,9 @@ impl FlowClient for HttpFlowClient {
 
     async fn my_claimable_tasks(&self, user: &str) -> Result<Vec<String>, ServiceRpcError> {
         let page: MyTasksPage = self.rpc.call_api(
-            self.base_req(cmx_service_rpc::HttpMethod::Get, paths::TASKS_MY.to_string())
-                .idempotent()
-                .query("kind", "claimable")
-                .query("assignee", user),
+            self.base_req(cmx_service_rpc::HttpMethod::Post, paths::TASKS_MY.to_string())
+                .json_body(serde_json::json!({ "assignee": user, "kind": "claimable" }))
+                .idempotent(),
         )
         .await?;
         Ok(page.tasks.into_iter().map(|t| t.task_id).collect())

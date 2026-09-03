@@ -8,8 +8,8 @@
  *             命中策略徽标；空条件（"-"/""）显示为「不限」。
  *   property：内联试算——填 facts JSON → POST /decisions/evaluate → 命中规则高亮 + 输出结果。
  *
- * 数据源：GET /api/flow/decisions（列表元数据）、GET /api/flow/decisions/{key}（全表）、
- *        POST /api/flow/decisions/evaluate（试算，纯函数不落库）。
+ * 数据源（R3 收敛：全 POST + body）：POST /decisions/list（列表元数据）、POST /decisions/detail（全表）、
+ *        POST /decisions/evaluate（试算，纯函数不落库）。
  *
  * S4 抽核纪律：CFG 接缝同其它 native-page，门户默认同源+cookie 零回归。
  */
@@ -214,7 +214,7 @@ async function loadList () {
   state.loading = true
   refreshView('explorer')
   try {
-    const d = await apiJson('/api/flow/decisions')
+    const d = await apiJson('/api/flow/decisions/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     state.list = d.decisions || d.items || (Array.isArray(d) ? d : [])
   } catch (e) { toast('加载失败: ' + e.message); state.list = [] }
   state.loading = false
@@ -227,7 +227,7 @@ async function selectTable (key) {
   state.lastEval = null
   refreshAll()
   try {
-    state.table = await apiJson('/api/flow/decisions/' + enc(key))
+    state.table = await apiJson('/api/flow/decisions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) })
   } catch (e) { toast('加载决策表失败: ' + e.message); state.table = null }
   refreshAll()
 }

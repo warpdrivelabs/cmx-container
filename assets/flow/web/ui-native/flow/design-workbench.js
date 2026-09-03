@@ -1127,7 +1127,7 @@ function diffVersionOptions () {
 // 取某侧 XML：'' = 当前画布（getXml，含未存改动）；否则按版本号取已存 XML。
 async function diffVersionXml (sel) {
   if (sel === '' || sel == null) return await getXml()
-  const detail = await apiJson('/api/flow/definitions/' + enc(state.selectedKey) + '?version=' + enc(sel))
+  const detail = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: state.selectedKey, version: sel || undefined }) })
   if (!detail || !detail.bpmnXml) throw new Error('v' + sel + ' 无 XML')
   return detail.bpmnXml
 }
@@ -2142,10 +2142,10 @@ async function openWsNodeEditor (sourceEl) {
       // 维护的 console/bizTable/pkField 等字段；查不到（data=null）或查询失败按新注册 4 字段全量。
       let body = { formKey: fk, kind: 'workspace', workspaceNode: wsId, title: `流程表单工作台 · ${fk}` }
       try {
-        const b = await apiJson('/api/flow/forms/' + enc(fk))
+        const b = await apiJson('/api/flow/forms/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ formKey: fk }) })
         if (b && b.formKey) { const { seeded, ...rest } = b; body = { ...rest, formKey: fk, kind: 'workspace', workspaceNode: wsId, title: body.title } }
       } catch { /* 注册表查询失败 → 按新注册，不阻断 */ }
-      await apiJson('/api/flow/forms', {
+      await apiJson('/api/flow/forms/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
@@ -2435,7 +2435,7 @@ function bindBindingDialog (root) {
 async function loadOrgs () {
   if (state.orgs.length) return
   try {
-    const d = await apiJson('/api/flow/orgs')
+    const d = await apiJson('/api/flow/orgs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     state.orgs = d.orgs || []
   } catch (e) { toast('加载组织失败: ' + e.message) }
 }
@@ -2444,7 +2444,7 @@ async function loadOrgs () {
 async function loadDims () {
   if (state.dims) return
   try {
-    const d = await apiJson('/api/flow/dimensions')
+    const d = await apiJson('/api/flow/dimensions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     state.dims = d.dimensions || [{ dimKey: 'org', name: '组织机构', builtin: true }]
   } catch (e) {
     state.dims = [{ dimKey: 'org', name: '组织机构', builtin: true }]
@@ -2457,7 +2457,7 @@ async function loadDimEntries (dimKey) {
   if (state.dimEntries[dk]) return state.dimEntries[dk]
   if (dk === 'org') { await loadOrgs(); state.dimEntries.org = state.orgs; return state.orgs }
   try {
-    const d = await apiJson('/api/flow/dimension/' + encodeURIComponent(dk) + '/entries')
+    const d = await apiJson('/api/flow/dimensions/entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dimKey: dk }) })
     state.dimEntries[dk] = d.entries || []
   } catch (e) { state.dimEntries[dk] = []; toast('加载维度条目失败: ' + e.message) }
   return state.dimEntries[dk]
@@ -2542,7 +2542,7 @@ async function loadSubflowIntoContent (targetKey) {
   sn.pendingBindOrg = undefined
   let xml; let name = targetKey; let exists = false
   try {
-    const detail = await apiJson('/api/flow/definitions/' + enc(targetKey))
+    const detail = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: targetKey }) })
     if (detail && detail.bpmnXml) { xml = detail.bpmnXml; name = detail.name || targetKey; exists = true }
   } catch { /* 不存在 → 空模板 */ }
   if (!exists) xml = rewriteProcessId(EMPTY_DIAGRAM, targetKey)
@@ -2602,7 +2602,7 @@ async function backToMain () {
 async function reloadSubVariants (calledKey) {
   if (!state.subNav) return
   try {
-    const d = await apiJson('/api/flow/subflow-bindings/' + enc(calledKey))
+    const d = await apiJson('/api/flow/subflow-bindings/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ calledKey }) })
     const binds = d.bindings || []
     state.subNav.variants = binds.map((bd) => ({
       id: bd.id, orgId: bd.orgId, orgName: bd.orgName, isDefault: bd.isDefault,
@@ -2641,7 +2641,7 @@ async function subSave () {
     const wasNew = !sn.activeTargetKey || sn.activeTargetKey !== r.key
     sn.activeTargetKey = r.key; state.selectedKey = r.key; sn.subName = state.name || r.key; state.dirty = false
     if (sn.calledKey && wasNew && sn.pendingBindOrg !== undefined) {
-      await apiJson('/api/flow/subflow-bindings', {
+      await apiJson('/api/flow/subflow-bindings/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ calledKey: sn.calledKey, orgId: sn.pendingBindOrg || null, targetKey: r.key, enabled: true }),
       })
@@ -2651,7 +2651,7 @@ async function subSave () {
     await loadDefs()
     // 新建首存后：画布仍持模板 id → 重载已存版本，使后续保存迭代同一 key。
     if (wasNew) {
-      try { const d = await apiJson('/api/flow/definitions/' + enc(r.key)); if (d.bpmnXml) { sn.subName = d.name || r.key; state.name = sn.subName; await openDiagram(d.bpmnXml); state.dirty = false } } catch {}
+      try { const d = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: r.key }) }); if (d.bpmnXml) { sn.subName = d.name || r.key; state.name = sn.subName; await openDiagram(d.bpmnXml); state.dirty = false } } catch {}
     }
     toast('子流程草稿已保存: ' + r.key)
     refreshContentChrome(); refreshView('explorer'); refreshView('property')
@@ -2667,7 +2667,7 @@ async function subPublish () {
   try {
     let xml = await getXml(); xml = subXmlWithUniqueKey(xml, sn)
     await apiJson('/api/flow/definitions/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: state.name || '未命名子流程', bpmnXml: xml }) })
-    const r = await apiJson('/api/flow/definitions/' + enc(key) + '/publish', {
+    const r = await apiJson('/api/flow/definitions/publish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: null }),
     })
     if (sn.calledKey) await reloadSubVariants(sn.calledKey)
@@ -2794,7 +2794,7 @@ function bindVarDialog (root) {
 
 async function reloadBindings (calledKey) {
   try {
-    const d = await apiJson('/api/flow/subflow-bindings/' + enc(calledKey))
+    const d = await apiJson('/api/flow/subflow-bindings/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ calledKey }) })
     state.bindings = d.bindings || []
   } catch (e) { state.bindingError = '加载绑定失败: ' + e.message; state.bindings = [] }
 }
@@ -2813,7 +2813,7 @@ async function saveBinding (root) {
     if (!window.confirm(`「${who}」已绑定到「${existing.targetKey}」，保存将覆盖为「${targetKey}」。确定？`)) return
   }
   try {
-    await apiJson('/api/flow/subflow-bindings', {
+    await apiJson('/api/flow/subflow-bindings/save', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ calledKey: key, dimKey, dimValue: dimValue || null, targetKey, enabled: true }),
     })
@@ -2830,7 +2830,7 @@ async function deleteBinding (id) {
   // U2：删除组织绑定不可恢复，加确认（对齐 deleteVersion）。
   if (typeof window !== 'undefined' && window.confirm && !window.confirm('确认删除该组织绑定？删除后该组织将沿组织树继承或落默认绑定。')) return
   try {
-    await apiJson('/api/flow/subflow-bindings/id/' + enc(id), { method: 'DELETE' })
+    await apiJson('/api/flow/subflow-bindings/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     await reloadBindings(key)
     refreshView('property')
     toast('绑定已删除')
@@ -2855,7 +2855,7 @@ async function activateVersion (version) {
   const key = state.versionDialog?.key || state.selectedKey
   if (!key) return
   try {
-    const r = await apiJson('/api/flow/definitions/' + enc(key) + '/versions/' + version + '/activate', {
+    const r = await apiJson('/api/flow/definitions/versions/activate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
     })
     state.versionError = ''
@@ -2876,7 +2876,7 @@ async function deleteVersion (version) {
     : window.confirm('确认删除版本 v' + version + '？该操作不可恢复。')
   if (!ok) return
   try {
-    await apiJson('/api/flow/definitions/' + enc(key) + '/versions/' + version, { method: 'DELETE' })
+    await apiJson('/api/flow/definitions/versions/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, version: Number(version) }) })
     state.versionError = ''
     await loadDefs()
     refreshContentChrome()
@@ -3121,7 +3121,7 @@ async function bootCanvas (root, host) {
     // 装当前选中定义 或 空白
     if (state.selectedKey) {
       try {
-        const d = await apiJson('/api/flow/definitions/' + enc(state.selectedKey))
+        const d = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: state.selectedKey }) })
         if (d.bpmnXml) await openDiagram(d.bpmnXml)
         else await openDiagram(EMPTY_DIAGRAM)
       } catch { await openDiagram(EMPTY_DIAGRAM) }
@@ -3464,7 +3464,7 @@ function applyPropTo (el, prop, value) {
 async function ensureFnCatalog () {
   if (state.fnCatalog) return
   try {
-    const d = await apiJson('/api/flow/conditions/functions')
+    const d = await apiJson('/api/flow/conditions/functions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     state.fnCatalog = d.functions || []
   } catch (e) { state.fnCatalog = [] }
 }
@@ -3640,11 +3640,11 @@ async function ensureIdnForTab () {
   state.idnCache.__loaded = true
   try {
     // 先探模式（external 时列表可能空，退化文本框）。
-    const m = await apiJson('/api/flow/identity/mode').catch(() => null)
+    const m = await apiJson('/api/flow/identity/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).catch(() => null)
     state.idnMode = m ? m.mode : 'external'
     for (const ent of ['orgs', 'roles', 'positions', 'users']) {
       try {
-        const d = await apiJson('/api/flow/identity/' + ent)
+        const d = await apiJson('/api/flow/identity/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entity: ent }) })
         state.idnCache[ent] = d.items || []
       } catch { state.idnCache[ent] = [] }
     }
@@ -3797,8 +3797,7 @@ async function loadDef (key, version) {
     const d = state.definitions.find((x) => x.key === key)
     let v = version
     if (v === undefined) v = d ? defVersion(d) : null
-    const q = v == null ? '' : ('?version=' + enc(v))
-    const detail = await apiJson('/api/flow/definitions/' + enc(key) + q)
+    const detail = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, version: v == null ? undefined : v }) })
     if (!detail.bpmnXml) { toast('该版本无 XML'); return }
     state.selectedKey = key
     state.name = detail.name || key
@@ -4011,9 +4010,9 @@ async function doPublish (note) {
   try {
     // 先存草稿（把画布最新内容落库），再发布——工具栏「发布新版」与对话框发布同路径。
     await doSaveSilent()
-    const r = await apiJson('/api/flow/definitions/' + enc(state.selectedKey) + '/publish', {
+    const r = await apiJson('/api/flow/definitions/publish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ note: (typeof note === 'string' && note) ? note : null }),
+      body: JSON.stringify({ key: state.selectedKey, note: (typeof note === 'string' && note) ? note : null }),
     })
     state.selectedVersion[state.selectedKey] = r.version
     state.shownVersion = r.version

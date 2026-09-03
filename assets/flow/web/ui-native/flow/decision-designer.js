@@ -11,7 +11,7 @@
  *     实时 /conditions/validate 校验；输出格填 JSON 值（数/字符串/布尔/对象）。
  *   - 增删输入列须同步每行 conditions 宽度（后端 validate 要求 conditions.len()==inputs.len()）。
  *
- * 数据源：GET /api/flow/decisions（列表）、GET /decisions/{key}（全表）、POST /decisions（保存=落库+热注册，
+ * 数据源（R3 收敛：全 POST + body）：POST /decisions/list（列表）、POST /decisions/detail（全表）、POST /decisions/register（保存=落库+热注册，
  *   400 带 validate 诊断）、DELETE /decisions/{key}、POST /decisions/evaluate（试算）、
  *   /api/flow/conditions/{functions,validate}（fx 向导）。**无版本/改名**（后端 upsert 覆盖式，记为后续）。
  */
@@ -328,20 +328,20 @@ async function validateFx (root, expr) {
 async function loadList () {
   state.loading = true; refreshView('explorer')
   try {
-    const d = await apiJson('/api/flow/decisions')
+    const d = await apiJson('/api/flow/decisions/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     state.list = d.decisions || d.items || (Array.isArray(d) ? d : [])
   } catch (e) { showCmxToast('加载失败: ' + e.message, { level: 'error' }); state.list = [] }
   state.loading = false; refreshView('explorer')
 }
 async function ensureFns () {
   if (state.fns.length) return
-  try { const d = await apiJson('/api/flow/conditions/functions'); state.fns = (d && d.functions) || [] } catch { state.fns = [] }
+  try { const d = await apiJson('/api/flow/conditions/functions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); state.fns = (d && d.functions) || [] } catch { state.fns = [] }
 }
 async function selectTable (key) {
   state.selectedKey = key; state.def = null; state.lastEval = null; state.dirty = false; state.validation = null; state.fx = null
   refreshAll()
   try {
-    const t = await apiJson('/api/flow/decisions/' + enc(key))
+    const t = await apiJson('/api/flow/decisions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) })
     t.inputs = t.inputs || []; t.outputs = t.outputs || []; t.rules = t.rules || []; t.hit_policy = t.hit_policy || 'FIRST'
     t.rules.forEach((r) => { r.conditions = r.conditions || []; r.outputs = r.outputs || {} })
     state.def = t
@@ -362,9 +362,9 @@ async function saveTable () {
   const d = state.def; if (!d) return
   state.validation = null
   try {
-    await apiJson('/api/flow/decisions', {
+    await apiJson('/api/flow/decisions/register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(d),
+      body: JSON.stringify({ table: d }),
     })
     state.dirty = false
     showCmxToast('已保存并热注册：' + d.key)
@@ -384,7 +384,7 @@ async function deleteTable () {
   const d = state.def; if (!d) return
   if (typeof window !== 'undefined' && window.confirm && !window.confirm(`删除决策表「${d.key}」？此操作从库中移除并从引擎注销。`)) return
   try {
-    await apiJson('/api/flow/decisions/' + enc(d.key), { method: 'DELETE' })
+    await apiJson('/api/flow/decisions/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: d.key }) })
     showCmxToast('已删除：' + d.key)
     state.selectedKey = null; state.def = null; state.lastEval = null; state.dirty = false
     await loadList(); refreshAll()

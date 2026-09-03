@@ -10,14 +10,14 @@
     {
       "id": "portal.flow.todo-center",
       "name": "待办中心",
-      "details": "native_pages 四区待办中心（F3）：explorer 待办分类（我的待办/待认领/我发起的/抄送我的/我已办）、content 待办列表卡片、property 流程轨迹+意见历史；数据源 /api/flow/tasks/my。点「办理」经 openWorkNode 打开 portal.flow.task-form。",
+      "details": "native_pages 四区待办中心（F3）：explorer 待办分类（我的待办/待认领/我发起的/抄送我的/我已办）、content 待办列表卡片、property 流程轨迹+意见历史；数据源 POST /api/flow/tasks/my。点「办理」经 openWorkNode 打开 portal.flow.task-form。",
       "sourceType": "js",
       "relPath": "flow/todo-center.js"
     },
     {
       "id": "portal.flow.task-form",
       "name": "任务表单宿主",
-      "details": "native_pages 任务办理表单（F3，由待办中心动态打开、不进菜单）：content 业务单据审阅区+审批意见区+同意/驳回，property 流程轨迹；办结走 /api/flow/tasks/{id}/complete，成功广播 cmx-flow-task-done 让待办中心刷新。",
+      "details": "native_pages 任务办理表单（F3，由待办中心动态打开、不进菜单）：content 业务单据审阅区+审批意见区+同意/驳回，property 流程轨迹；办结走 /api/flow/tasks/complete（taskId 进 body），成功广播 cmx-flow-task-done 让待办中心刷新。",
       "sourceType": "js",
       "relPath": "flow/task-form.js"
     },

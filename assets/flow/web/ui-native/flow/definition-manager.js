@@ -97,7 +97,7 @@ async function loadGroups (st) {
   // grandTotal 用 pageSize=1 的无筛选查询取 total——否则选中分组后 st.total 变成
   // 筛选值，「全部定义/未分组」角标跟着漂移。
   const [d, q] = await Promise.all([
-    apiGet('/api/flow/definition-groups').then((x) => x || {}),
+    apiPost('/api/flow/definition-groups', {}).then((x) => x || {}),
     apiPost('/api/flow/definitions/query', { page: 1, pageSize: 1 }).then((x) => x || {}).catch(() => null),
   ])
   st.groups = (d.rows || []).map((g) => ({
@@ -120,7 +120,7 @@ async function loadRows (st) {
 
 async function loadVersions (st, key) {
   // 接口 data = { key, activeVersion, versions:[...] }——取 versions 数组。
-  const d = (await apiGet(`/api/flow/definitions/${encodeURIComponent(key)}/versions`)) || {}
+  const d = (await apiPost('/api/flow/definitions/versions/list', { key })) || {}
   st.detailVersions = Array.isArray(d) ? d : (d.versions || [])
 }
 

@@ -7,8 +7,8 @@
  *   content ：选中绑定的编辑表单；字段按 kind 联动显隐；formKey 编辑态禁改（主键，改 key=删旧建新）。
  *   property：字段说明 + kind 联动规则 + 消费方/seed 复位警示。
  *
- * 数据源：GET /api/flow/forms（列表）、GET /api/flow/forms/{key}（存在性检查）、
- *        POST /api/flow/forms（upsert 整行）、POST /api/flow/forms/delete（幂等删除，返回 deleted 行数）。
+ * 数据源（R3 收敛）：POST /api/flow/forms/query（列表）、POST /forms/detail（存在性检查）、
+ *        POST /forms/save（upsert 整行）、POST /forms/delete（幂等删除，返回 deleted 行数）。
  *
  * S4 抽核纪律：与 todo-center/design-workbench 同款 CFG 接缝——门户默认值=同源+cookie，逐字节
  * 零回归；组件壳可 configure 覆盖 apiBase/authHeaders。核心只经 CFG 触达外部。
@@ -321,7 +321,7 @@ function selectRecord (formKey) {
 
 async function loadList () {
   try {
-    const d = await apiJson('/api/flow/forms')
+    const d = await apiJson('/api/flow/forms/query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     state.items = d.bindings || []
   } catch (e) { toast('加载失败: ' + e.message); state.items = [] }
   refreshView('explorer')
@@ -339,7 +339,7 @@ async function saveBinding () {
   // 新建时存在性检查：upsert 整行覆盖语义，提示后放行。
   if (!state.selected) {
     try {
-      const b = await apiJson('/api/flow/forms/' + enc(d.formKey))
+      const b = await apiJson('/api/flow/forms/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ formKey: d.formKey }) })
       if (b && b.formKey) {
         const go = await confirmBox(`formKey「${d.formKey}」已存在，保存将整行覆盖。确认继续？`, '覆盖')
         if (!go) return
@@ -352,7 +352,7 @@ async function saveBinding () {
     body[f.k] = v === '' ? (f.k === 'kind' || f.k === 'console' ? d[f.k] : null) : v
   }
   try {
-    await apiJson('/api/flow/forms', {
+    await apiJson('/api/flow/forms/save', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     toast('已保存: ' + d.formKey)

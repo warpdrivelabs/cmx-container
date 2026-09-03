@@ -436,7 +436,7 @@ async function loadDefinition (definitionKey) {
   if (!definitionKey) return null
   if (definitionCache[definitionKey]) return definitionCache[definitionKey]
   try {
-    const d = await apiJson('/api/flow/definitions')
+    const d = await apiJson('/api/flow/definitions/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     for (const item of (d?.definitions || [])) {
       definitionCache[item.key] = item
     }
@@ -451,8 +451,8 @@ async function loadAll (st) {
   st.loadError = ''
   refreshAll(st)
   const requests = []
-  const instanceIndex = p.instanceId ? requests.push(apiJson(`/api/flow/instances/${enc(p.instanceId)}`).then((x) => x).catch(() => null)) - 1 : requests.push(Promise.resolve(null)) - 1
-  const commentsIndex = p.instanceId ? requests.push(apiJson(`/api/flow/instances/${enc(p.instanceId)}/comments`).catch(() => null)) - 1 : requests.push(Promise.resolve(null)) - 1
+  const instanceIndex = p.instanceId ? requests.push(apiJson('/api/flow/instances/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.instanceId }) }).then((x) => x).catch(() => null)) - 1 : requests.push(Promise.resolve(null)) - 1
+  const commentsIndex = p.instanceId ? requests.push(apiJson('/api/flow/instances/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.instanceId }) }).catch(() => null)) - 1 : requests.push(Promise.resolve(null)) - 1
   const values = await Promise.all([...requests, loadUserSnapshots()])
   const inst = values[instanceIndex]
   const commentEnvelope = values[commentsIndex]
@@ -573,7 +573,7 @@ async function submitStart (st, host) {
       variables,
     }
     if (p.bizTable) body.bizLink = { bizTable: p.bizTable, bizId }
-    const r = await apiJson('/api/flow/instances', {
+    const r = await apiJson('/api/flow/instances/start', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     showCmxToast('已发起流程实例 ' + (r.id ? String(r.id).slice(0, 8) : ''))
@@ -824,18 +824,19 @@ async function submitApproval (st, action) {
   refreshAll(st)
   try {
     if (kind === 'approve' || kind === 'reject') {
-      await apiJson(`/api/flow/tasks/${enc(p.taskId)}/complete`, {
+      await apiJson('/api/flow/tasks/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: p.instanceId, decision: kind, comment: comment || null }),
+        body: JSON.stringify({ taskId: p.taskId, instanceId: p.instanceId, decision: kind, comment: comment || null }),
       })
       st.resultMessage = kind === 'approve' ? '已同意办结' : '已驳回'
     } else {
       const target = kind === 'return-pick' ? st.returnTarget : ''
-      await apiJson(`/api/flow/tasks/${enc(p.taskId)}/reject`, {
+      await apiJson('/api/flow/tasks/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          taskId: p.taskId,
           instanceId: p.instanceId,
           reason: comment || (target ? '退回到指定节点' : '退回上一步'),
           ...(target ? { targetBpmnId: target } : {}),
@@ -866,7 +867,7 @@ async function openReturnPicker (st, reload) {
   st.returnError = ''
   refreshAll(st)
   try {
-    const r = await apiJson(`/api/flow/tasks/${enc(p.taskId)}/reject-targets?instanceId=${enc(p.instanceId)}`)
+    const r = await apiJson('/api/flow/tasks/reject-targets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: p.taskId, instanceId: p.instanceId }) })
     const targets = (r && r.targets) || []
     st.returnTargets = r?.rejectable ? targets : []
     st.returnTarget = st.returnTargets.find((x) => x.isDirectPredecessor)?.bpmnId || st.returnTargets[0]?.bpmnId || ''

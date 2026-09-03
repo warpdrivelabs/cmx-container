@@ -6,8 +6,8 @@
  *   content ：选中记录的编辑表单（新增/更新）；顶部工具条「新增 / 保存 / 删除」。
  *   property：字段说明 + 当前身份模式（local/external）提示；external 模式只读横幅。
  *
- * 数据源：GET /api/flow/identity/mode、GET/POST /api/flow/identity/{entity}、
- *        DELETE /api/flow/identity/{entity}/{id}、POST /api/flow/identity/users/{id}/roles。
+ * 数据源（R3 收敛：全 POST + body）：POST /identity/mode、POST /identity/list|upsert|delete
+ *        （entity 进 body）、POST /identity/users/roles（userId 进 body）。
  *
  * S4 抽核纪律：与 todo-center/design-workbench 同款 CFG 接缝——门户默认值=同源+cookie，逐字节
  * 零回归；组件壳可 configure 覆盖 apiBase/authHeaders。核心只经 CFG 触达外部。
@@ -235,7 +235,7 @@ function blankDraft () { return {} }
 
 async function loadMode () {
   try {
-    const d = await apiJson('/api/flow/identity/mode')
+    const d = await apiJson('/api/flow/identity/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     state.mode = d.mode || 'external'
     state.editable = !!d.editable
   } catch { state.mode = 'external'; state.editable = false }
@@ -245,7 +245,7 @@ async function loadMode () {
 async function loadList () {
   state.loading = true
   try {
-    const d = await apiJson('/api/flow/identity/' + enc(state.entity))
+    const d = await apiJson('/api/flow/identity/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entity: state.entity }) })
     state.items = d.items || []
   } catch (e) { toast('加载失败: ' + e.message); state.items = [] }
   state.loading = false
@@ -285,8 +285,8 @@ async function saveRecord () {
   const body = { ...d }
   if (!body.id) body.id = genId(ent, d)
   try {
-    const r = await apiJson('/api/flow/identity/' + enc(state.entity), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    const r = await apiJson('/api/flow/identity/upsert', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entity: state.entity, data: body }),
     })
     toast('已保存: ' + (r.id || body.id))
     await loadList()
@@ -306,7 +306,7 @@ async function deleteRecord () {
   if (!state.editable || !state.selected) return
   if (!await cmxConfirm({ message: `确认删除「${state.selected.name || state.selected.username || state.selected.code || state.selected.id}」？`, intent: 'danger', confirmText: '删除' })) return
   try {
-    await apiJson('/api/flow/identity/' + enc(state.entity) + '/' + enc(state.selected.id), { method: 'DELETE' })
+    await apiJson('/api/flow/identity/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entity: state.entity, id: state.selected.id }) })
     toast('已删除')
     state.selected = null; state.draft = blankDraft()
     await loadList(); refreshAll()
@@ -317,8 +317,8 @@ async function saveRoles () {
   if (!state.editable || !state.selected) return
   const ids = String((state.draft || {}).__roleIds || '').split(',').map((s) => s.trim()).filter(Boolean)
   try {
-    await apiJson('/api/flow/identity/users/' + enc(state.selected.id) + '/roles', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roleIds: ids }),
+    await apiJson('/api/flow/identity/users/roles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: state.selected.id, roleIds: ids }),
     })
     toast(`已设置 ${ids.length} 个角色`)
   } catch (e) { toast('设置角色失败: ' + e.message) }

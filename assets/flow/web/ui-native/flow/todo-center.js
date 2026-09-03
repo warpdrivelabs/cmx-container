@@ -43,7 +43,7 @@ const formCache = {}
 async function resolveForm (formKey) {
   if (!formKey) return {}
   if (formCache[formKey]) return formCache[formKey]
-  const b = await apiJson('/api/flow/forms/' + enc(formKey))
+  const b = await apiJson('/api/flow/forms/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ formKey }) })
   if (!b || !b.formKey) throw new Error('表单绑定不存在: ' + formKey + '（请在表单绑定管理页注册）')
   const f = { kind: b.kind || 'native', nativePage: b.nativePage || '', nativeView: b.nativeView || b.view || 'content', htmlPage: b.htmlPage || '', workspaceNode: b.workspaceNode || '', bizTable: b.bizTable || '', domain: b.domain || '', application: b.application || '', module: b.module || '', file: b.file || '', apiPath: b.apiPath || '', title: b.title || '', console: b.console || 'platform' }
   formCache[formKey] = f
@@ -763,18 +763,17 @@ function bindPager (root) {
 
 // ————————————————————— 数据/动作 —————————————————————
 
-// 组装查找/过滤/分页 query 串。
-function filterQs (extra) {
-  const f = state.filter
-  const p = new URLSearchParams()
-  if (f.keyword) p.set('keyword', f.keyword)
-  if (f.definitionKey) p.set('definitionKey', f.definitionKey)
-  if (f.nodeBpmnId) p.set('nodeBpmnId', f.nodeBpmnId)
-  if (f.state) p.set('state', f.state)
-  p.set('page', String(state.page))
-  p.set('pageSize', String(state.pageSize))
-  for (const k in (extra || {})) p.set(k, extra[k])
-  return p.toString()
+// 组装查找/过滤/分页 body 对象（R3：query 串收编 POST body）。
+function filterBody () {
+  const f = state.filter || {}
+  return {
+    keyword: f.keyword || undefined,
+    definitionKey: f.definitionKey || undefined,
+    nodeBpmnId: f.nodeBpmnId || undefined,
+    state: f.state || undefined,
+    page: state.page,
+    pageSize: state.pageSize,
+  }
 }
 
 async function loadTodos () {
@@ -785,24 +784,24 @@ async function loadTodos () {
   try {
     if (state.category === 'initiate') {
       // 发起流程：可发起定义（量小，前端过滤，无分页）。
-      const d = await apiJson('/api/flow/startable')
+      const d = await apiJson('/api/flow/startable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
       let list = d.definitions || []
       const kw = (state.filter.keyword || '').trim().toLowerCase()
       if (kw) list = list.filter((x) => (x.name || x.key || '').toLowerCase().includes(kw) || (x.key || '').toLowerCase().includes(kw))
       if (state.filter.definitionKey) list = list.filter((x) => x.key === state.filter.definitionKey)
       state.startables = list; state.total = list.length
     } else if (state.category === 'todo' || state.category === 'claimable') {
-      const d = await apiJson(`/api/flow/tasks/my?${filterQs({ assignee: user, kind: state.category })}`)
+      const d = await apiJson('/api/flow/tasks/my', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignee: user, kind: state.category, ...filterBody() }) })
       state.todos = d.tasks || []; state.total = d.total || 0
     } else if (state.category === 'cc') {
-      const d = await apiJson(`/api/flow/todos/cc?${filterQs({ user })}`)
+      const d = await apiJson('/api/flow/todos/cc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, ...filterBody() }) })
       state.todos = (d.tasks || []).map((x) => ({ ...x, ccId: String(x.taskId || '').replace(/^cc-/, ''), definitionName: x.definitionKey }))
       state.total = d.total || 0
     } else if (state.category === 'initiated') {
-      const d = await apiJson(`/api/flow/todos/initiated?${filterQs({})}`)
+      const d = await apiJson('/api/flow/todos/initiated', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, ...filterBody() }) })
       state.todos = (d.tasks || []).map(instToTodo); state.total = d.total || 0
     } else if (state.category === 'done') {
-      const d = await apiJson(`/api/flow/todos/done?${filterQs({ user })}`)
+      const d = await apiJson('/api/flow/todos/done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, ...filterBody() }) })
       state.todos = (d.tasks || []).map((x) => ({ ...x, definitionName: x.definitionKey }))
       state.total = d.total || 0
     }
@@ -818,7 +817,7 @@ async function loadTodos () {
 async function loadFilterOptions () {
   if (state.defOptions.length) return
   try {
-    const d = await apiJson('/api/flow/todos/filters')
+    const d = await apiJson('/api/flow/todos/filters', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     state.defOptions = d.definitions || []
     refreshView('content')
   } catch { /* 忽略 */ }
@@ -852,7 +851,7 @@ async function loadFullDefinition (key) {
   if (!key) return null
   if (fullDefinitionCache[key]) return fullDefinitionCache[key]
   try {
-    const d = await apiJson('/api/flow/definitions')
+    const d = await apiJson('/api/flow/definitions/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     for (const item of (d?.definitions || [])) fullDefinitionCache[item.key] = item
   } catch { /* 定义失败时保留实例已发生路径 */ }
   return fullDefinitionCache[key] || null
@@ -874,8 +873,8 @@ async function selectTodo (taskId, force) {
   try {
     if (t.instanceId) {
       const [inst, commentEnvelope] = await Promise.all([
-        apiJson(`/api/flow/instances/${enc(t.instanceId)}`),
-        apiJson(`/api/flow/instances/${enc(t.instanceId)}/comments`).catch(() => null),
+        apiJson('/api/flow/instances/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.instanceId }) }),
+        apiJson('/api/flow/instances/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.instanceId }) }).catch(() => null),
         loadUserSnapshots(),
       ])
       state.trail = inst
@@ -1167,9 +1166,9 @@ async function claimTodo (taskId) {
   const t = state.todos.find((x) => x.taskId === taskId)
   if (!t) return
   try {
-    await apiJson(`/api/flow/tasks/${enc(taskId)}/claim`, {
+    await apiJson('/api/flow/tasks/claim', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instanceId: t.instanceId, userId: currentUser() }),
+      body: JSON.stringify({ taskId, instanceId: t.instanceId, userId: currentUser() }),
     })
     toast('已认领')
     loadTodos()
@@ -1205,7 +1204,7 @@ async function openTransferDialog (taskId) {
       users = (Array.isArray(portalUsers) ? portalUsers : portalUsers?.items || []).map(normalizeUser).filter(Boolean)
     } catch { /* 门户用户目录不可用时退回 flow identity */ }
     if (!users.length) {
-      const flowUsers = await apiJson('/api/flow/identity/users').catch(() => null)
+      const flowUsers = await apiJson('/api/flow/identity/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entity: 'users' }) }).catch(() => null)
       users = (flowUsers?.items || []).map(normalizeUser).filter(Boolean)
     }
     if (state.dialog?.kind !== 'transfer' || state.dialog.taskId !== taskId) return
@@ -1255,9 +1254,10 @@ async function confirmDialogAction () {
   d.submitting = true
   refreshView('content')
   try {
-    await apiJson(`/api/flow/tasks/${enc(d.taskId)}/transfer`, {
+    await apiJson('/api/flow/tasks/transfer', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        taskId: d.taskId,
         instanceId: d.task.instanceId,
         fromUser: currentUser(),
         toUser: d.selectedUserId,
@@ -1293,9 +1293,9 @@ async function performCancelInstance (instanceId) {
   d.submitting = true
   refreshView('content')
   try {
-    await apiJson(`/api/flow/instances/${enc(instanceId)}/cancel`, {
+    await apiJson('/api/flow/instances/cancel', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: '发起人在待办中心撤销' }),
+      body: JSON.stringify({ id: instanceId, reason: '发起人在待办中心撤销' }),
     })
     state.dialog = null
     toast('已撤销')
@@ -1325,9 +1325,9 @@ async function performWithdrawInstance (instanceId) {
   d.submitting = true
   refreshView('content')
   try {
-    await apiJson(`/api/flow/instances/${enc(instanceId)}/withdraw`, {
+    await apiJson('/api/flow/instances/withdraw', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: currentUser(), reason: '发起人在待办中心取回' }),
+      body: JSON.stringify({ id: instanceId, user: currentUser(), reason: '发起人在待办中心取回' }),
     })
     state.dialog = null
     toast('已取回，可修改后重新提交')
@@ -1343,8 +1343,8 @@ async function performWithdrawInstance (instanceId) {
 async function markCcRead (ccId) {
   if (!ccId) return
   try {
-    await apiJson(`/api/flow/cc/${enc(ccId)}/read`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    await apiJson('/api/flow/cc/read', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ccId }),
     })
     toast('已标记已读')
     loadTodos()

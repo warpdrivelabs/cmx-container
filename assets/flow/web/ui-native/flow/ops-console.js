@@ -7,8 +7,8 @@
  *             干预工具条：重试异常 / 改变量 / 取消实例。
  *   property：异常(incident)明细（卡在哪节点、原因、重试次数）+ 流转台账时间线。
  *
- * 数据源：GET /api/flow/instances(列表)、GET /api/flow/instances/{id}(详情，含 incidents)、
- *        POST /api/flow/instances/{id}/{retry-incident,set-variables,cancel}(干预)。
+ * 数据源（R3 收敛：全 POST + body）：POST /instances/query(列表)、POST /instances/detail(详情，含 incidents)、
+ *        POST /instances/{retry-incident,set-variables,cancel,jump,suspend,resume}(干预，id 进 body)。
  *
  * S4 抽核纪律：CFG 接缝同其它 native-page，门户默认同源+cookie 零回归。
  */
@@ -140,7 +140,7 @@ function explorerHtml () {
 
 async function loadDeadLetters (root) {
   try {
-    const r = await apiJson('/api/flow/v1/dead-letter-jobs')
+    const r = await apiJson('/api/flow/v1/dead-letter-jobs/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     state.deadLetters = (r && (r.data || r).jobs) || []
     refreshView('explorer')
   } catch (e) { console.warn('死信清单加载失败', e) }
@@ -418,7 +418,7 @@ async function mountDiagram (root) {
     let xml = state.bpmnCache[key]
     if (!xml) {
       try {
-        const def = await apiJson('/api/flow/definitions/' + enc(key))
+        const def = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) })
         xml = def && def.bpmnXml
         if (xml) state.bpmnCache[key] = xml
       } catch { /* 定义拉取失败：降级只显示文字令牌位置 */ }
@@ -482,7 +482,7 @@ async function toggleReplay () {
   rp.on = true; rp.loading = true; rp.frames = []; rp.idx = 0; rp.playing = false
   refreshView('content')
   try {
-    const d = await apiJson('/api/flow/instances/' + enc(state.selectedId) + '/activities')
+    const d = await apiJson('/api/flow/instances/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.selectedId }) })
     const acts = (d.activities || d.items || []).slice()
     rp.frames = buildReplayFrames(acts, state.detail)
     rp.idx = rp.frames.length ? rp.frames.length - 1 : 0  // 默认停在末帧（= 当前态）
@@ -634,10 +634,10 @@ function bind (root, view, host) {
       panel.addEventListener('toggle', () => { if (panel.open && !state.deadLetters) loadDeadLetters(root) })
     }
     root.querySelectorAll('[data-dl-retry]').forEach((b) => b.addEventListener('click', async () => {
-      try { await apiJson('/api/flow/v1/dead-letter-jobs/' + enc(b.dataset.dlRetry) + '/retry', { method: 'POST' }); loadDeadLetters(root) } catch (e) { console.warn('死信重投失败', e) }
+      try { await apiJson('/api/flow/v1/dead-letter-jobs/retry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: b.dataset.dlRetry }) }); loadDeadLetters(root) } catch (e) { console.warn('死信重投失败', e) }
     }))
     root.querySelectorAll('[data-dl-drop]').forEach((b) => b.addEventListener('click', async () => {
-      try { await apiJson('/api/flow/v1/dead-letter-jobs/' + enc(b.dataset.dlDrop), { method: 'DELETE' }); loadDeadLetters(root) } catch (e) { console.warn('死信删除失败', e) }
+      try { await apiJson('/api/flow/v1/dead-letter-jobs/discard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: b.dataset.dlDrop }) }); loadDeadLetters(root) } catch (e) { console.warn('死信删除失败', e) }
     }))
     root.querySelector('[data-jobs-load]')?.addEventListener('click', () => loadJobs(root))
   }
@@ -670,7 +670,7 @@ function bind (root, view, host) {
 async function loadList () {
   state.loading = true
   try {
-    const d = await apiJson('/api/flow/instances?limit=100')
+    const d = await apiJson('/api/flow/instances/query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page: 1, pageSize: 100 }) })
     let items = d.items || d.instances || (Array.isArray(d) ? d : [])
     const kw = state.filter.keyword.trim().toLowerCase()
     if (kw) items = items.filter((it) => JSON.stringify(it).toLowerCase().includes(kw))
@@ -687,7 +687,7 @@ async function selectInstance (id) {
   // 切实例：退出上个实例的回放态（帧属于旧实例）。
   if (state.replay.on) { state.replay.on = false; state.replay.playing = false; if (state.replay.timer) { clearInterval(state.replay.timer); state.replay.timer = null } }
   try {
-    state.detail = await apiJson('/api/flow/instances/' + enc(id))
+    state.detail = await apiJson('/api/flow/instances/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
   } catch (e) { toast('加载详情失败: ' + e.message); state.detail = null }
   refreshAll()
   loadVarHistory()  // 异步补载变量历史（不阻塞详情/图渲染）
@@ -695,7 +695,7 @@ async function selectInstance (id) {
 
 async function reloadDetail () {
   if (!state.selectedId) return
-  try { state.detail = await apiJson('/api/flow/instances/' + enc(state.selectedId)) } catch {}
+  try { state.detail = await apiJson('/api/flow/instances/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.selectedId }) }) } catch {}
   refreshAll()
   loadList()
   loadVarHistory()
@@ -706,7 +706,7 @@ async function loadVarHistory () {
   const id = state.selectedId
   if (!id) return
   try {
-    const d = await apiJson('/api/flow/instances/' + enc(id) + '/variables/history?limit=200')
+    const d = await apiJson('/api/flow/instances/variables/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, limit: 200 }) })
     if (state.selectedId !== id) return  // 期间已切实例，丢弃过期结果
     state.varHistory = d.history || d.items || (Array.isArray(d) ? d : [])
   } catch { state.varHistory = [] }
@@ -716,8 +716,8 @@ async function loadVarHistory () {
 async function doRetry () {
   if (!state.selectedId) return
   try {
-    await apiJson('/api/flow/instances/' + enc(state.selectedId) + '/retry-incident', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+    await apiJson('/api/flow/instances/retry-incident', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.selectedId }),
     })
     toast('已触发重试')
     await reloadDetail()
@@ -733,8 +733,8 @@ async function doSetVar () {
   let variables
   try { variables = JSON.parse(raw) } catch { toast('变量 JSON 非法'); return }
   try {
-    await apiJson('/api/flow/instances/' + enc(state.selectedId) + '/set-variables', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ variables }),
+    await apiJson('/api/flow/instances/set-variables', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.selectedId, variables }),
     })
     toast('变量已更新')
     await reloadDetail()
@@ -745,8 +745,8 @@ async function doCancel () {
   if (!state.selectedId) return
   if (typeof window !== 'undefined' && window.confirm && !window.confirm('确认取消/终止该实例？此操作不可逆。')) return
   try {
-    await apiJson('/api/flow/instances/' + enc(state.selectedId) + '/cancel', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+    await apiJson('/api/flow/instances/cancel', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.selectedId }),
     })
     toast('实例已取消')
     await reloadDetail()
@@ -761,9 +761,9 @@ async function doJump () {
     : ''
   if (!target) return
   try {
-    await apiJson('/api/flow/instances/' + enc(state.selectedId) + '/jump', {
+    await apiJson('/api/flow/instances/jump', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetBpmnId: target, reason: '运维跳转' }),
+      body: JSON.stringify({ id: state.selectedId, targetBpmnId: target, reason: '运维跳转' }),
     })
     toast('已跳转到 ' + target)
     await reloadDetail()
@@ -774,8 +774,8 @@ async function doJump () {
 async function doSuspendResume (action) {
   if (!state.selectedId) return
   try {
-    await apiJson('/api/flow/instances/' + enc(state.selectedId) + '/' + action, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+    await apiJson('/api/flow/instances/' + action, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.selectedId }),
     })
     toast(action === 'suspend' ? '实例已挂起' : '实例已恢复')
     await reloadDetail()
@@ -790,9 +790,9 @@ async function doUrge (taskId) {
     : '请尽快处理'
   if (msg == null) return
   try {
-    await apiJson('/api/flow/tasks/' + enc(taskId) + '/urge', {
+    await apiJson('/api/flow/tasks/urge', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instanceId: state.selectedId, message: msg || null }),
+      body: JSON.stringify({ taskId, instanceId: state.selectedId, message: msg || null }),
     })
     toast('已催办')
     await reloadDetail()
