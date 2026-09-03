@@ -108,11 +108,37 @@
           "expanded": true,
           "children": [
             {
+              "id": "gl-flow-definition-manager",
+              "name": "flow-definition-manager",
+              "caption": "流程定义",
+              "type": "workspace-node",
+              "permissionId": null,
+              "icon": "tabler-outline/sitemap",
+              "workspace": {
+                "id": "gl_flow_definition_manager",
+                "content": {
+                  "caption": "流程定义",
+                  "icon": "tabler-outline/sitemap",
+                  "views": [
+                    {
+                      "id": "flow-definition-manager-content",
+                      "tabLabel": "流程定义",
+                      "icon": "tabler-outline/sitemap",
+                      "type": "native_pages",
+                      "native_page": "portal.flow.definition-manager",
+                      "view": "content"
+                    }
+                  ]
+                }
+              }
+            },
+            {
               "id": "gl-flow-design-workbench",
               "name": "flow-design-workbench",
               "caption": "流程设计工作台",
               "type": "workspace-node",
               "permissionId": null,
+              "visible": 0,
               "icon": "workflow-tasks",
               "workspace": {
                 "id": "flow_design_workbench",
@@ -367,31 +393,6 @@
                       "type": "native_pages",
                       "native_page": "portal.flow.ops-console",
                       "view": "property"
-                    }
-                  ]
-                }
-              }
-            },
-            {
-              "id": "gl-flow-definition-manager",
-              "name": "flow-definition-manager",
-              "caption": "流程定义",
-              "type": "workspace-node",
-              "permissionId": null,
-              "icon": "tabler-outline/sitemap",
-              "workspace": {
-                "id": "gl_flow_definition_manager",
-                "content": {
-                  "caption": "流程定义",
-                  "icon": "tabler-outline/sitemap",
-                  "views": [
-                    {
-                      "id": "flow-definition-manager-content",
-                      "tabLabel": "流程定义",
-                      "icon": "tabler-outline/sitemap",
-                      "type": "native_pages",
-                      "native_page": "portal.flow.definition-manager",
-                      "view": "content"
                     }
                   ]
                 }
