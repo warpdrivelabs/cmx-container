@@ -2224,7 +2224,7 @@ function styleHtml () {
     .cds-bd-actbar-info b{color:var(--sapLinkColor, #0a6ed1)}
     .cds-bd-actbar-btns{display:flex;gap:8px}
     .cds-bd-btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 16px;border-radius:8px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent}
-    .cds-bd-btn ui5-icon{width:.95rem;height:.95rem}
+    .cds-bd-btn ui5-icon{width:.95rem;height:.95rem;color:inherit}
     .cds-bd-btn.ghost{background:#fff;border-color:var(--sapButton_BorderColor,#b9c0c9);color:var(--sapButton_TextColor,#32363a)}
     .cds-bd-btn.ghost:hover{background:#f2f5f8}
     .cds-bd-btn.primary{background:var(--sapButton_Emphasized_Background,#0a6ed1);color:#fff;box-shadow:0 2px 6px rgba(10,110,209,.35)}
@@ -2466,16 +2466,12 @@ function styleHtml () {
     .mc-cell.on{border-color:var(--sapInformationElementColor, #0a6ed1);border-width:1px 1px 1px 3px;box-shadow:0 2px 10px rgba(10,110,209,.18)}
     .mc-cell.on .mc-cell-ck{opacity:1;background:var(--sapInformationElementColor, #0a6ed1);border-color:var(--sapInformationElementColor, #0a6ed1)}
     .mc-cell.on .mc-cell-ck ui5-icon{opacity:1;color: #fff}
-    /* 执行抽屉 */
-    .mc-drawer{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;padding:11px 14px;border-radius:10px;background:linear-gradient(120deg,var(--sapInformationElementColor, #0a6ed1),var(--sapInformationElementColor, #3b8ae6));color:var(--sapGroup_ContentBorderColor, #ffffff);box-shadow:0 4px 14px rgba(10,110,209,.3)}
+    /* 执行抽屉：与库门闸同族蓝色 tint 条，走 --cds-mc-* 令牌（亮/暗主题 + Neo tone 自动适配） */
+    .mc-drawer{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;padding:11px 14px;border-radius:10px;background:linear-gradient(120deg,var(--cds-mc-blue-bg),var(--cds-mc-surface));border:1px solid color-mix(in srgb,var(--cds-mc-blue) 35%,var(--cds-mc-border));color:var(--sapTextColor,#32363a);box-shadow:0 4px 14px color-mix(in srgb,var(--cds-mc-blue) 20%,transparent)}
     .mc-drawer-info{flex:1;min-width:180px;display:flex;align-items:center;gap:7px;font-size:13px}
-    .mc-drawer-info ui5-icon{width:1rem;height:1rem;flex:0 0 auto}
-    .mc-drawer-info b{font-weight:800}
+    .mc-drawer-info ui5-icon{width:1rem;height:1rem;flex:0 0 auto;color:var(--cds-mc-blue)}
+    .mc-drawer-info b{font-weight:800;color:var(--cds-mc-blue)}
     .mc-drawer-btns{display:flex;gap:8px}
-    .mc-drawer .cds-bd-btn.ghost{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.4);color:var(--sapGroup_ContentBorderColor, #ffffff)}
-    .mc-drawer .cds-bd-btn.ghost:hover{background:rgba(255,255,255,.26)}
-    .mc-drawer .cds-bd-btn.primary{background:var(--sapList_Background, #ffffff);color:var(--sapInformationElementColor, #0a6ed1)}
-    .mc-drawer .cds-bd-btn.primary:hover{background:#eaf2fc}
     /* 运维总览 / 初始化面板：统一使用 UI5 主题变量，避免暗色主题出现白底浅字。 */
     .cds-neo{
       --cds-mc-surface:var(--sapTile_Background,var(--sapList_Background,#fff));
