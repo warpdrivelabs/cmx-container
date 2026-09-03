@@ -310,11 +310,11 @@ function openEditDialog (host, st, sub) {
     <div class="sec-title">② 通道配置（webhook）</div>
     <div class="grid3">
       <div class="f"><label>服务键（service_key；内部微服务）</label><ui5-input id="esSvcKey" placeholder="目录键，如 mdm —— 与完整 URL 二选一" value="${esc(fm.serviceKey)}"></ui5-input></div>
-      <div class="f"><label>完整 URL（target_url；外部系统直连）</label><ui5-input id="esTgtUrl" placeholder="如 https://oapi.example.com/hook —— 与服务键二选一" value="${esc(fm.targetUrl)}"></ui5-input></div>
       <div class="f"><label>回调路径（callback_path；仅服务键模式生效）</label><ui5-input id="esCbPath" placeholder="/api/mdm/flow/callback" value="${esc(fm.callbackPath)}"></ui5-input></div>
       <div class="f"><label>签名密钥（secret；留空/掩码 = 沿用旧值）</label>
         <div style="display:flex;gap:6px"><ui5-input id="esSecret" type="Password" placeholder="${isNew ? '' : '******（回显掩码 = 沿用旧值）'}"></ui5-input>
         <ui5-button design="Transparent" icon="random" id="esGen" title="随机生成"></ui5-button></div></div>
+      <div class="f"><label>完整 URL（target_url；外部系统直连）</label><ui5-input id="esTgtUrl" placeholder="如 https://oapi.example.com/hook —— 与服务键二选一" value="${esc(fm.targetUrl)}"></ui5-input></div>
     </div>
     <div class="hint">服务键 = 目录路由（[service_rpc.services] 登记，内部微服务可走注册发现）；完整 URL = 外部系统直连（不经服务目录，生产自助接入免改配置）。密钥明文只写不读：API 永远回显掩码；接收端按 HMAC-SHA256 验签（头 x-cmx-flow-signature）。</div>
     <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center">
