@@ -1428,53 +1428,75 @@
                     }
                 },
                 {
-                    "id": "mdm-flow-webhook-admin",
-                    "name": "flow-webhook-admin",
-                    "caption": "Webhook 订阅",
+                    "id": "mdm-flow-definition-manager",
+                    "name": "flow-definition-manager",
+                    "caption": "流程定义",
                     "type": "workspace-node",
                     "permissionId": null,
-                    "icon": "tabler-outline/webhook",
+                    "icon": "tabler-outline/sitemap",
                     "workspace": {
-                        "id": "flow_webhook_admin",
-                        "explorer": {
-                            "caption": "订阅列表",
-                            "icon": "tabler-outline/webhook",
-                            "views": [
-                                {
-                                    "id": "flow-webhook-admin-explorer",
-                                    "tabLabel": "订阅",
-                                    "icon": "tabler-outline/webhook",
-                                    "type": "native_pages",
-                                    "native_page": "portal.flow.webhook-admin",
-                                    "view": "explorer"
-                                }
-                            ]
-                        },
+                        "id": "mdm_flow_definition_manager",
                         "content": {
-                            "caption": "订阅编辑",
-                            "icon": "detail-view",
+                            "caption": "流程定义",
+                            "icon": "tabler-outline/sitemap",
                             "views": [
                                 {
-                                    "id": "flow-webhook-admin-content",
-                                    "tabLabel": "编辑",
-                                    "icon": "detail-view",
+                                    "id": "flow-definition-manager-content",
+                                    "tabLabel": "流程定义",
+                                    "icon": "tabler-outline/sitemap",
                                     "type": "native_pages",
-                                    "native_page": "portal.flow.webhook-admin",
+                                    "native_page": "portal.flow.definition-manager",
                                     "view": "content"
                                 }
                             ]
-                        },
-                        "property": {
-                            "caption": "投递口径",
-                            "icon": "hint",
+                        }
+                    }
+                },
+                {
+                    "id": "mdm-flow-event-subscription",
+                    "name": "flow-event-subscription",
+                    "caption": "事件订阅",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/broadcast",
+                    "workspace": {
+                        "id": "mdm_flow_event_subscription",
+                        "content": {
+                            "caption": "事件订阅",
+                            "icon": "tabler-outline/broadcast",
                             "views": [
                                 {
-                                    "id": "flow-webhook-admin-prop",
-                                    "tabLabel": "说明",
-                                    "icon": "hint",
+                                    "id": "flow-event-subscription-content",
+                                    "tabLabel": "事件订阅",
+                                    "icon": "tabler-outline/broadcast",
                                     "type": "native_pages",
-                                    "native_page": "portal.flow.webhook-admin",
-                                    "view": "property"
+                                    "native_page": "portal.flow.event-subscription-manager",
+                                    "view": "content"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "mdm-flow-event-delivery",
+                    "name": "flow-event-delivery",
+                    "caption": "投递记录",
+                    "type": "workspace-node",
+                    "permissionId": null,
+                    "icon": "tabler-outline/activity",
+                    "workspace": {
+                        "id": "mdm_flow_event_delivery",
+                        "content": {
+                            "caption": "投递记录",
+                            "icon": "tabler-outline/activity",
+                            "views": [
+                                {
+                                    "id": "flow-event-delivery-content",
+                                    "tabLabel": "投递记录",
+                                    "icon": "tabler-outline/activity",
+                                    "type": "native_pages",
+                                    "native_page": "portal.flow.event-delivery-monitor",
+                                    "view": "content"
                                 }
                             ]
                         }
