@@ -339,13 +339,13 @@ function reviewActionsHtml() {
 // 20260903 上收：组件定义移至 packages/cmx-data-comp/src/components/cmx-flow-trail.js，
 // barrel 全局注册一次（native 页 Blob 模块不能 import 共享代码，故归库而非页面内联副本）；
 // 本页只写 <cmx-flow-trail> 标签 + bind() 里回填 el.trail，办理人用户快照由组件内部兜底拉取。
-// 数据源：/api/mdm/change-requests/flow-history（各实例+意见）+ /api/flow/instances/{id}
-// （tokens/tasks 全量）+ /api/flow/definitions（节点轴）。
+// 数据源：/api/mdm/change-requests/flow-history（各实例+意见）+ /api/flow/instances/detail
+// （tokens/tasks 全量）+ /api/flow/definitions/list（节点轴）。
 let ftDefCache = null
 async function ftDefinition (key) {
   if (ftDefCache && ftDefCache[key]) return ftDefCache[key]
   try {
-    const d = await apiGet('/api/flow/definitions')
+    const d = await apiPost('/api/flow/definitions/list', {})
     ftDefCache = {}
     for (const item of (d && d.definitions) || []) ftDefCache[item.key] = item
   } catch { ftDefCache = ftDefCache || {} }
@@ -362,7 +362,7 @@ async function ftLoad () {
     const inst = ((fh && fh.instances) || [])[0]
     const trail = []
     if (inst && inst.instanceId) {
-      const full = await apiGet(`/api/flow/instances/${encodeURIComponent(inst.instanceId)}`).catch(() => null)
+      const full = await apiPost('/api/flow/instances/detail', { id: inst.instanceId }).catch(() => null)
       const definitionKey = (full && full.definitionKey) || 'mdm_cr_approval'
       const definition = await ftDefinition(definitionKey)
       trail.push({ instance: full, definition, comments: inst.comments || [] })
