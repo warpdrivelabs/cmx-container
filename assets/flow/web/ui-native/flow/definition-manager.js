@@ -61,7 +61,9 @@ function styleCss () {
   .pg-title { font-size:20px; font-weight:600; color:var(--sapTitleColor); }
   .pg-sub { font-size:12px; color:var(--sapContent_LabelColor); margin-top:2px; }
   .main { flex:1; min-height:0; display:flex; gap:12px; }
-  .grp-panel { width:230px; flex-shrink:0; display:flex; flex-direction:column;
+  /* 分组面板与右侧列表约 2:8 分：宽随容器 20% 伸缩，窄窗口不小于 176px（分组名可读）、
+     宽屏不大于 280px（分组列太宽挤占列表） */
+  .grp-panel { width:20%; min-width:176px; max-width:280px; flex-shrink:0; box-sizing:border-box; display:flex; flex-direction:column;
     background:var(--sapList_Background); border:1px solid var(--sapList_BorderColor); border-radius:8px; padding:10px; }
   .grp-hd { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
   .grp-title { font-size:14px; font-weight:600; color:var(--sapTitleColor); }
