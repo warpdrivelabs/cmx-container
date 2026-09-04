@@ -14,7 +14,8 @@ authors.workspace = true
 #
 # feature 分层：
 #   default = []      轻量核：from_toml_path 加载 + pg 数据源注册。仅依赖 cmx-database-pg/cmx-core（跨 ws 安全）。
-#   redis             Redis 缓存/分布式锁 init（拉 cmx-buffer）。portal 开、flow 不开。
+#   redis             Redis 缓存/分布式锁 init（拉 cmx-buffer）。portal 开；flow 开（R4.2 起收编
+#                     复刻 init——flow-app 经通用 init_cache 装配，redis feature 仅拉已在编译图的 cmx-buffer）。
 #   config-manager    from_config_manager 重量加载器（拉 cmx-utils，读 CONFIG_FILE+Nacos+env）。portal 专属。
 #   crypto            加密服务 init（拉 cmx-utils）。纯全局。
 #   debug             调试会话管理器 init（拉 cmx-debug）。纯全局。
