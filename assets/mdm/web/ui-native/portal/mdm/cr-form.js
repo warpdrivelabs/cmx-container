@@ -345,7 +345,8 @@ let ftDefCache = null
 async function ftDefinition (key) {
   if (ftDefCache && ftDefCache[key]) return ftDefCache[key]
   try {
-    const d = await apiGet('/api/flow/definitions')
+    // flow API 已收敛 POST+body（技术债 016）：GET /definitions 已废除 → POST /design/definitions。
+    const d = await apiPost('/api/flow/design/definitions', {})
     ftDefCache = {}
     for (const item of (d && d.definitions) || []) ftDefCache[item.key] = item
   } catch { ftDefCache = ftDefCache || {} }
@@ -362,7 +363,8 @@ async function ftLoad () {
     const inst = ((fh && fh.instances) || [])[0]
     const trail = []
     if (inst && inst.instanceId) {
-      const full = await apiGet(`/api/flow/instances/${encodeURIComponent(inst.instanceId)}`).catch(() => null)
+      // GET /instances/{id} 已废除（技术债 016）→ POST /instances/detail（body 带 id）。
+      const full = await apiPost('/api/flow/instances/detail', { id: inst.instanceId }).catch(() => null)
       const definitionKey = (full && full.definitionKey) || 'mdm_cr_approval'
       const definition = await ftDefinition(definitionKey)
       trail.push({ instance: full, definition, comments: inst.comments || [] })

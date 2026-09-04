@@ -101,6 +101,7 @@ const state = {
   groupId: null,         // 当前编辑定义的目标分组 id（null = 未分组）
   groups: [],            // 分组下拉数据源 [{id,name,enabled}]
   ctxApplied: false,     // initialContext（definitionKey/groupId 预填）只消费一次）
+  _ctxHooked: null,      // 已挂 change 订阅的 workspace.context 实例（tab 关闭重开后是新实例，按引用判等重挂）
 
   // ⑤ 变量声明（设计态）。随定义 XML 走：openDiagram 从 <cmx:varSchema> 读入，getXml 注回。
   varSchema: [],         // VarDecl[] 树（含对象 fields / 数组 item）
@@ -192,17 +193,24 @@ function mount (ctx, view) {
     if (view === 'explorer') { loadDefs(); if (!state.dam.domains.length) loadDam() }
     if (view === 'content') {
       loadGroups()
+      const wctx = host && host.workspace && host.workspace.context
       if (!state.ctxApplied) {
         state.ctxApplied = true
         try {
           // 门户 openNode({initialContext}) → workspace.context 逐键注入（定义管理页「新建/工作台」入口）。
-          const wctx = host && host.workspace && host.workspace.context
           const get = (k) => (wctx && typeof wctx.get === 'function' ? wctx.get(k) : undefined)
           const dk = get('definitionKey') || get('flowDefinitionKey')
           const gid = get('groupId')
           if (dk) loadDef(String(dk))
           else if (gid != null && gid !== '') state.groupId = Number(gid)
         } catch { /* initialContext 非法不阻断工作台 */ }
+      }
+      // tab 已存在时（定义管理页重复点「新建流程定义/工作台」），门户 addTab 不重建视图、
+      // 只 ws.context.set 触发 change——上面的一次性消费已过期，须订阅 change 补读。
+      // context 随 tab 生命周期：关闭重开后是新实例，按引用判等重挂。
+      if (wctx && typeof wctx.on === 'function' && state._ctxHooked !== wctx) {
+        state._ctxHooked = wctx
+        wctx.on('change', onWsCtxChange)
       }
     }
   })
@@ -3754,9 +3762,10 @@ function setMultiInstanceField (f, value) {
 // ————————————————————— 数据/动作 —————————————————————
 
 // 分组下拉数据源（20260902 重构：/definition-groups；失败静默降级为空列表）。
+// 接口仅收 POST（GET 405，同定义管理页 apiPost 口径）——用 GET 会静默拿到空列表，下拉只剩「未分组」。
 async function loadGroups () {
   try {
-    const d = await apiJson('/api/flow/definition-groups')
+    const d = await apiJson('/api/flow/definition-groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     state.groups = (d.rows || []).map((g) => ({ id: Number(g.id), name: g.name || '', enabled: g.enabled !== false }))
     refreshContentChrome()
   } catch { state.groups = [] }
@@ -3768,7 +3777,8 @@ async function loadDefs () {
     // 设计器列表来源定义库（草稿+已发布全列），而非引擎运行态已装载定义。
     // 保留全量（含 isSubflow 标记）：explorer 渲染时按 isSubflow 过滤只显主流程，
     // 但绑定目标下拉 / 子流程编辑器变体侧栏仍需完整集，故不在此剔除子流程。
-    const d = await apiJson('/api/flow/design/definitions')
+    // 接口仅收 POST（技术债 016 收敛后 GET 405，同 loadGroups 口径）。
+    const d = await apiJson('/api/flow/design/definitions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     state.definitions = (d.definitions || []).filter((x) => x.startable !== false)
     state.defPage = 0    // 刷新/重载列表回首页
   } catch (e) { toast('加载定义失败: ' + e.message); state.definitions = [] }
@@ -3792,6 +3802,20 @@ function confirmDiscard (action) {
   const msg = `当前流程有未保存的改动，${action || '继续'}将丢弃这些改动。确定继续吗？`
   try { return (typeof window !== 'undefined' && window.confirm) ? window.confirm(msg) : true }
   catch { return true }
+}
+
+// workspace.context 后续注入（定义管理页在 tab 已存在时重复打开）：definitionKey → 载入该定义
+// （loadDef 自带脏确认）；仅 groupId → 挂分组并同步工具栏下拉；画布已在编辑别的定义或有未保存
+// 改动时按「新建」意图重开空白稿（newDiagram 内含脏确认）。同值重复 set 不触发 change，天然幂等。
+function onWsCtxChange (ev) {
+  if (ev.key === 'definitionKey' || ev.key === 'flowDefinitionKey') {
+    if (ev.value != null && ev.value !== '') loadDef(String(ev.value))
+    return
+  }
+  if (ev.key !== 'groupId' || ev.value == null || ev.value === '') return
+  state.groupId = Number(ev.value)
+  syncNameInput()
+  if (state.selectedKey || state.dirty) newDiagram()
 }
 
 async function loadDef (key, version) {

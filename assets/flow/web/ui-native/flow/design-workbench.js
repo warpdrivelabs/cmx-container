@@ -1,7 +1,7 @@
 /**
  * 流程设计工作台 —— native_pages 四区工作台（对标报表设计工作台 portal.rpt.design-workbench）。
  *
- * explorer：流程定义列表（GET /api/flow/definitions）。点选加载到画布。
+ * explorer：流程定义列表（POST /api/flow/design/definitions，技术债 016 收敛）。点选加载到画布。
  * content ：bpmn-js 画布 + 工具条（工具条在 content 内、画布上方）。存草稿/发布/校验/撤销/适应。
  * property：选中节点的属性（办理人/候选角色/子流程/条件），modeling.updateProperties 写回。
  *
@@ -3755,9 +3755,10 @@ function setMultiInstanceField (f, value) {
 // ————————————————————— 数据/动作 —————————————————————
 
 // 分组下拉数据源（20260902 重构：/definition-groups；失败静默降级为空列表）。
+// 接口仅收 POST（GET 405，同定义管理页 apiPost 口径）——用 GET 会静默拿到空列表，下拉只剩「未分组」。
 async function loadGroups () {
   try {
-    const d = await apiJson('/api/flow/definition-groups')
+    const d = await apiJson('/api/flow/definition-groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     state.groups = (d.rows || []).map((g) => ({ id: Number(g.id), name: g.name || '', enabled: g.enabled !== false }))
     refreshContentChrome()
   } catch { state.groups = [] }
@@ -3769,7 +3770,8 @@ async function loadDefs () {
     // 设计器列表来源定义库（草稿+已发布全列），而非引擎运行态已装载定义。
     // 保留全量（含 isSubflow 标记）：explorer 渲染时按 isSubflow 过滤只显主流程，
     // 但绑定目标下拉 / 子流程编辑器变体侧栏仍需完整集，故不在此剔除子流程。
-    const d = await apiJson('/api/flow/design/definitions')
+    // 接口仅收 POST（技术债 016 收敛后 GET 405，同 loadGroups 口径）。
+    const d = await apiJson('/api/flow/design/definitions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     state.definitions = (d.definitions || []).filter((x) => x.startable !== false)
     state.defPage = 0    // 刷新/重载列表回首页
   } catch (e) { toast('加载定义失败: ' + e.message); state.definitions = [] }

@@ -5,8 +5,8 @@
  * content ：待办列表卡片；「办理」→ openWorkNode 打开任务表单页（portal.flow.task-form）。
  * property：选中待办的流程轨迹 + 审批意见历史。
  *
- * 数据源：F2 的 GET /api/flow/tasks/my（我的待办 / 待认领）、GET /api/flow/instances/{id}
- *        （轨迹）、GET /api/flow/instances/{id}/comments（意见历史）。办理/认领/转签走现成端点。
+ * 数据源：F2 的 POST /api/flow/tasks/my（我的待办 / 待认领）、POST /api/flow/instances/detail
+ *        （轨迹）、POST /api/flow/instances/comments（意见历史）。办理/认领/转签走现成端点。
  *
  * 打开表单：复用报表设计器验证过的 openWorkNode 5 级兜底链（openTab→openWorkspaceNode→
  *          POST /api/workspace-nodes→postMessage→CustomEvent），把 {formKey,taskId,bizRef,mode}
