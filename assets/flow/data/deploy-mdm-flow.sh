@@ -7,8 +7,8 @@
 #   1) 自检：mdm_approver 角色成员 > 0（候选在 start 时物化，无成员 = 任务对所有人不可见）
 #   2) POST /definitions/draft（key 由 BPMN <process id> 派生，body 无 key 字段）
 #   3) POST /definitions/validate：断言编译 key 与两个防退化属性
-#   4) POST /definitions/{key}/publish（须合法 JSON body，空 body 会 400）
-#   5) POST /api/flow/forms：注册表单绑定（nativeView 留空 → 待办中心回退 content 视图）
+#   4) POST /definitions/publish（key 进 body，热装载）
+#   5) POST /forms/save：注册表单绑定（nativeView 留空 → 待办中心回退 content 视图）
 #
 # 用法：
 #   ./deploy-mdm-flow.sh            # 经门户 :8080（反代/内嵌双模式透明）
@@ -28,8 +28,8 @@ AUTH=(-H "X-API-Key: ${API_KEY}" -H "Content-Type: application/json")
 
 echo "== MDM 审批流程部署（${PORTAL}）=="
 
-# 0) 已部署自检
-EXISTING=$(curl -s "${AUTH[@]}" "${PORTAL}/api/flow/forms/${FORM_KEY}")
+# 0) 已部署自检（技术债016 收敛后全部 POST+body：/forms/detail，key 进 body）
+EXISTING=$(curl -s "${AUTH[@]}" -X POST "${PORTAL}/api/flow/forms/detail" -d "{\"formKey\":\"${FORM_KEY}\"}")
 if echo "${EXISTING}" | grep -q '"code":0' && ! echo "${EXISTING}" | grep -q '"data":null'; then
   if [[ "${1:-}" != "--force" ]]; then
     echo "表单绑定 ${FORM_KEY} 已注册（${EXISTING}）。如需重跑：$0 --force"
@@ -40,7 +40,7 @@ fi
 
 # 1) 角色成员自检（候选 start 时物化——无成员则任务无人可见，必须先补角色分配）
 echo "== 步骤1：检查 mdm_approver 角色成员（经 startable 校验流程可用性）=="
-if ! curl -s "${AUTH[@]}" "${PORTAL}/api/flow/startable" | grep -q "${DEF_KEY}"; then
+if ! curl -s "${AUTH[@]}" -X POST "${PORTAL}/api/flow/startable" -d '{}' | grep -q "${DEF_KEY}"; then
   echo "提示：${DEF_KEY} 尚未发布（首次部署正常）；若为重跑失败，请先给 mdm_approver 角色分配成员"
 fi
 echo "（角色成员请经 IAM 管理界面核对：cmx_role.code='mdm_approver' 的用户数须 > 0）"
@@ -68,16 +68,16 @@ echo "${VALIDATE}" | grep -q "\"code\":0" || { echo "校验失败，中止"; exi
 grep -q 'cmx:withdrawPolicy="lenient"' "${BPMN_FILE}" || { echo "BPMN 缺少 cmx:withdrawPolicy=\"lenient\"（防退化断言失败）"; exit 1; }
 grep -q 'cmx:candidates="initiator"' "${BPMN_FILE}" || { echo "BPMN 的 apply 节点缺少 cmx:candidates=\"initiator\"（防退化断言失败）"; exit 1; }
 
-# 4) 发布（既有接口含 Path Variable，属存量约定不受新接口规范约束）
+# 4) 发布（key 进 body；热装载，立即生效）
 echo "== 步骤4：发布 ${DEF_KEY} =="
-curl -s "${AUTH[@]}" -X POST "${PORTAL}/api/flow/definitions/${DEF_KEY}/publish" \
-  -d '{ "note": "MDM M7 首版部署" }' | head -c 400; echo
+curl -s "${AUTH[@]}" -X POST "${PORTAL}/api/flow/definitions/publish" \
+  -d "{ \"key\": \"${DEF_KEY}\", \"note\": \"MDM M7 首版部署\" }" | head -c 400; echo
 
 # 5) 表单绑定（nativeView 留空 → content 视图；console='none' → 待办中心不挂平台审批
 #    控制台、全屏打开 cr-form——M7.1 决议：审批动作全收口 MDM 业务端点）。
 #    apply/review 两节点共用。
 echo "== 步骤5：注册表单绑定 ${FORM_KEY} =="
-curl -s "${AUTH[@]}" -X POST "${PORTAL}/api/flow/forms" -d "$(cat <<'EOF'
+curl -s "${AUTH[@]}" -X POST "${PORTAL}/api/flow/forms/save" -d "$(cat <<'EOF'
 {
   "formKey": "mdm.cr.review",
   "kind": "native",
