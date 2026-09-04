@@ -43,6 +43,10 @@ const state = {
 }
 
 const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+/* 时间显示统一走 cmx-shared 注册的 globalThis.cmx.datetime（转当前时区，禁截取 ISO 串）；未装配时降级显示原文 */
+const __CMX_DT = (typeof globalThis !== 'undefined' && globalThis.cmx && globalThis.cmx.datetime) || null
+const fmtT = (t) => (__CMX_DT ? __CMX_DT.fmtDateTime(t) : (t ? String(t) : ''))
+const fmtD = (t) => (__CMX_DT ? __CMX_DT.fmtDate(t) : (t ? String(t) : ''))
 const enc = encodeURIComponent
 
 const { apiJson: _sharedApiJson, openSseStream } = globalThis.__cmxDataComp // 共享 fetch 封装 + fetch 流式 SSE（cmx-data-comp/lib；SSE 走 fetch 可带 Authorization 头，门户全局拦截器自动注入，无需换票）；经 CFG 转发保留组件壳 configure() 契约
@@ -154,7 +158,7 @@ async function loadJobs (root) {
     const jobs = (r && (r.data || r).jobs) || []
     const total = (r && (r.data || r).total) || 0
     box.innerHTML = `定时器作业：共 ${total} 条（前 ${jobs.length} 条）` +
-      jobs.slice(0, 5).map((j) => `<div><small>${esc(j.definitionKey || '')} · ${esc((j.dueAt || '').slice(0, 19))} · ${esc(j.kind || '')}</small></div>`).join('') +
+      jobs.slice(0, 5).map((j) => `<div><small>${esc(j.definitionKey || '')} · ${esc(fmtT(j.dueAt))} · ${esc(j.kind || '')}</small></div>`).join('') +
       '<small style="color:var(--muted)">详见 POST /jobs/query</small>'
   } catch (e) { box.innerHTML = '定时器作业：加载失败'; console.warn(e) }
 }
@@ -232,7 +236,7 @@ function replayBarHtml () {
   if (!n) return `<div class="ops-replay"><span class="ops-muted">该实例暂无可回放的历史活动（节点尚未离开或无 DI 布局）。</span></div>`
   const f = rp.frames[Math.min(rp.idx, n - 1)]
   const entered = (f.entered || []).join(', ') || '—'
-  const atStr = f.live ? '此刻（当前活动）' : (f.at || '').slice(0, 19).replace('T', ' ')
+  const atStr = f.live ? '此刻（当前活动）' : fmtT(f.at)
   return `<div class="ops-replay">
     <div class="ops-replay-ctl">
       <button class="ops-mini" data-rp="first" title="第一帧">⏮</button>
@@ -264,14 +268,14 @@ function propertyHtml () {
     ? (d.incidents || []).map((i) => `<div class="ops-inc">
         <div class="ops-inc-head"><ui5-icon name="alert"></ui5-icon><b>${esc(i.nodeBpmnId)}</b><span class="ops-inc-retries">重试 ${esc(i.retries)} 次</span></div>
         <div class="ops-inc-reason">${esc(i.reason || '（无原因记录）')}</div>
-        <div class="ops-inc-since">自 ${esc((i.since || '').slice(0, 19).replace('T', ' '))}</div>
+        <div class="ops-inc-since">自 ${esc(fmtT(i.since))}</div>
       </div>`).join('')
     : '<div class="ops-muted">无异常</div>'
   const dels = (d.delegations || []).length
     ? (d.delegations || []).map((x) => `<div class="ops-tl">
         <span class="ops-tl-kind">${esc(delKind(x.kind))}</span>
         <span class="ops-tl-who">${esc(x.fromUserId || '')} → ${esc(x.toUserId || '')}</span>
-        <em>${esc((x.createdAt || '').slice(0, 19).replace('T', ' '))}</em>
+        <em>${esc(fmtT(x.createdAt))}</em>
         ${x.reason ? `<div class="ops-tl-reason">${esc(x.reason)}</div>` : ''}
       </div>`).join('')
     : '<div class="ops-muted">无流转记录</div>'
@@ -285,7 +289,7 @@ function propertyHtml () {
             <span class="ops-vh-src ${srcClass(h.source)}">${esc(srcLabel(h.source))}</span>
             <b class="ops-vh-name">${esc(h.varName)}</b>
             ${h.nodeBpmnId ? `<span class="ops-vh-node">@${esc(h.nodeBpmnId)}</span>` : ''}
-            <em class="ops-vh-at">${esc((h.changedAt || '').slice(0, 19).replace('T', ' '))}</em>
+            <em class="ops-vh-at">${esc(fmtT(h.changedAt))}</em>
           </div>
           <div class="ops-vh-diff"><span class="ops-vh-old">${esc(vhVal(h.oldValue))}</span><span class="ops-vh-arw">→</span><span class="ops-vh-new">${esc(vhVal(h.newValue))}</span></div>
           ${h.changedBy ? `<div class="ops-vh-by">${esc(h.changedBy)}</div>` : ''}
@@ -548,7 +552,7 @@ function replayGoto (idx) {
     const info = root.querySelector('.ops-replay-info')
     if (info) {
       const f = rp.frames[rp.idx]
-      const atStr = f.live ? '此刻（当前活动）' : (f.at || '').slice(0, 19).replace('T', ' ')
+      const atStr = f.live ? '此刻（当前活动）' : fmtT(f.at)
       info.innerHTML = `<b>进入</b> ${esc((f.entered || []).join(', ') || '—')} <span class="ops-replay-at">· ${esc(atStr)}</span>`
     }
     const play = root.querySelector('[data-rp="play"]'); if (play) play.textContent = rp.playing ? '⏸' : '▶'

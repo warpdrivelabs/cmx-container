@@ -37,6 +37,10 @@ const state = { dbId: '', docType: '', title: '单据列表', filter: 'all', key
   aggregate: false, typeFilter: '', typeMap: {}, typeOptions: [] }
 
 const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+/* 时间显示统一走 cmx-shared 注册的 globalThis.cmx.datetime（转当前时区，禁截取 ISO 串）；
+   宿主未装配共享层时降级显示 ISO 原文。 */
+const __CMX_DT = (typeof globalThis !== 'undefined' && globalThis.cmx && globalThis.cmx.datetime) || null
+
 
 function styleCss() {
   return `
@@ -81,7 +85,7 @@ function actionsHtml(r) {
   return b('view', 'Transparent', 'show', '查看')
 }
 
-function fmtTime(t) { if (!t) return ''; const s = String(t); return s.length > 19 ? s.slice(0, 19).replace('T', ' ') : s }
+function fmtTime(t) { return __CMX_DT ? __CMX_DT.fmtDateTime(t) : (t ? String(t) : '') }
 
 // function tableHtml() {
 //   const rows = filtered()

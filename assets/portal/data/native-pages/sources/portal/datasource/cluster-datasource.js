@@ -682,15 +682,11 @@ function mcNormalizeDbState (raw, dbId) {
   return st
 }
 
+/* 时间显示统一走 cmx-shared 注册的 globalThis.cmx.datetime（转当前时区，禁截取 ISO 串）；
+   宿主未装配共享层时降级显示 ISO 原文。 */
+const __CMX_DT = (typeof globalThis !== 'undefined' && globalThis.cmx && globalThis.cmx.datetime) || null
 function mcShortDate (value) {
-  if (!value) return '-'
-  const s = String(value)
-  const d = new Date(s)
-  if (!Number.isNaN(d.getTime())) {
-    const pad = (n) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-  }
-  return s.replace('T', ' ').replace(/\.\d+Z?$/, '').slice(0, 16)
+  return __CMX_DT ? __CMX_DT.fmtMinute(value, { empty: '-' }) : (value ? String(value) : '-')
 }
 
 function mcKindDetailHtml (cell, kind, moduleKey = '') {

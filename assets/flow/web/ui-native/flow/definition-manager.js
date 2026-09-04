@@ -47,7 +47,10 @@ function getState (host) {
 
 function hostRoot (host) { return (host && (host.renderRoot || host.shadowRoot)) || null }
 
-function fmtTime (t) { if (!t) return ''; const s = String(t); return s.length > 19 ? s.slice(0, 19).replace('T', ' ') : s }
+/* 时间显示统一转当前时区（转当前时区，禁截取 ISO 串）：cmx-shared 注册的 globalThis.cmx.datetime。
+   宿主未装配共享层时降级显示 ISO 原文（不截取伪装本地时间）。 */
+const __CMX_DT = (typeof globalThis !== 'undefined' && globalThis.cmx && globalThis.cmx.datetime) || null
+function fmtTime (t) { return __CMX_DT ? __CMX_DT.fmtDateTime(t) : (t ? String(t) : '') }
 
 function styleCss () {
   return `

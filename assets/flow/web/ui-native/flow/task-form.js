@@ -140,13 +140,12 @@ function stOf (p) {
   return instances[key]
 }
 
+/* 时间显示统一走 cmx-shared 注册的 globalThis.cmx.datetime（转当前时区，禁截取 ISO 串）；
+   宿主未装配共享层时降级显示 ISO 原文。 */
+const __CMX_DT = (typeof globalThis !== 'undefined' && globalThis.cmx && globalThis.cmx.datetime) || null
+
 function formatLocalDateTime (iso) {
-  if (!iso) return ''
-  // 后端时间统一为 RFC3339 UTC；展示层转浏览器本地时区，避免把 05:56Z 直接当本地 05:56。
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return String(iso).replace('T', ' ').slice(0, 16)
-  const p = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  return __CMX_DT ? __CMX_DT.fmtMinute(iso) : (iso ? String(iso) : '')
 }
 const fmtTime = formatLocalDateTime
 

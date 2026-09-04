@@ -39,6 +39,10 @@ const state = {
 }
 
 const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+/* 时间显示统一走 cmx-shared 注册的 globalThis.cmx.datetime（转当前时区，禁截取 ISO 串）；未装配时降级显示原文 */
+const __CMX_DT = (typeof globalThis !== 'undefined' && globalThis.cmx && globalThis.cmx.datetime) || null
+const fmtT = (t) => (__CMX_DT ? __CMX_DT.fmtDateTime(t) : (t ? String(t) : ''))
+const fmtD = (t) => (__CMX_DT ? __CMX_DT.fmtDate(t) : (t ? String(t) : ''))
 const enc = encodeURIComponent
 
 const { apiJson: _sharedApiJson } = globalThis.__cmxDataComp // 共享 fetch 封装（cmx-data-comp/lib/cmx-page-helpers.js）；经 CFG 转发保留组件壳 configure() 契约
@@ -95,7 +99,7 @@ function explorerHtml () {
           <b>${esc(m.key)}</b>
           <small>${esc(HP_LABEL[m.hitPolicy] || m.hitPolicy || 'FIRST')} · ${esc(m.ruleCount)} 规则 · ${esc(m.inputCount)} 输入</small>
         </div>
-        <span class="dsd-badge">${esc((m.updatedAt || '').slice(0, 10))}</span>
+        <span class="dsd-badge">${esc(fmtD(m.updatedAt))}</span>
       </button>`).join('')
     : `<div class="dsd-empty"><ui5-icon name="table-view"></ui5-icon><span>${state.loading ? '加载中…' : '无决策表 · 下方新建'}</span></div>`
   return `<section class="dsd">

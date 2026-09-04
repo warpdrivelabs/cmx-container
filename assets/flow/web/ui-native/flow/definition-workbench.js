@@ -146,6 +146,10 @@ const EMPTY_DIAGRAM = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>`
 
 const { escHtml: esc } = globalThis.__cmxDataComp // 共享转义（cmx-data-comp/lib/cmx-page-helpers.js；最严格五字符集合，文本/属性上下文皆安全）
+/* 时间显示统一走 cmx-shared 注册的 globalThis.cmx.datetime（转当前时区，禁截取 ISO 串）；未装配时降级显示原文 */
+const __CMX_DT = (typeof globalThis !== 'undefined' && globalThis.cmx && globalThis.cmx.datetime) || null
+const fmtT = (t) => (__CMX_DT ? __CMX_DT.fmtDateTime(t) : (t ? String(t) : ''))
+const fmtD = (t) => (__CMX_DT ? __CMX_DT.fmtDate(t) : (t ? String(t) : ''))
 const enc = encodeURIComponent
 
 // 钻入式子流程编辑复用 content 唯一 modeler，故「当前编辑的 modeler」恒为 state.modeler。
@@ -524,7 +528,7 @@ function versionDialogHtml () {
           <div class="flow-vrow-main">
             <b>v${v.version}</b>${isCur ? '<span class="flow-vtag">当前生效</span>' : ''}
             <em>${esc(v.note || '无变更说明')}</em>
-            <small>${esc((v.publishedAt || '').slice(0, 19).replace('T', ' '))}${v.publishedBy ? ' · ' + esc(v.publishedBy) : ''}</small>
+            <small>${esc(fmtT(v.publishedAt))}${v.publishedBy ? ' · ' + esc(v.publishedBy) : ''}</small>
           </div>
           <div class="flow-vrow-act">
             <button class="flow-btn slim ${isCur ? 'is-cur' : ''}" data-vactivate="${v.version}" ${isCur ? 'disabled' : ''}>${isCur ? '当前' : '设为当前'}</button>
@@ -3989,7 +3993,7 @@ async function doSave () {
     // 协同：草稿在你 base 之后被他人改过 → 让用户选覆盖 / 载入最新。
     if (r && r.conflict) {
       const who = r.updatedBy || '他人'
-      const when = (r.currentUpdatedAt || '').slice(0, 19).replace('T', ' ')
+      const when = fmtT(r.currentUpdatedAt)
       const overwrite = window.confirm(`${who} 刚保存了草稿（${when}）。\n\n确定 = 覆盖保存（以你的为准）\n取消 = 放弃保存并载入最新`)
       if (overwrite) { state.collab.baseUpdatedAt = r.currentUpdatedAt; return doSave() }
       if (state.selectedKey) await loadDef(state.selectedKey)
