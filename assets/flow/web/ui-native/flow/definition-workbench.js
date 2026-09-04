@@ -1138,7 +1138,7 @@ function diffVersionOptions () {
 // 取某侧 XML：'' = 当前画布（getXml，含未存改动）；否则按版本号取已存 XML。
 async function diffVersionXml (sel) {
   if (sel === '' || sel == null) return await getXml()
-  const detail = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: state.selectedKey, version: sel || undefined }) })
+  const detail = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: state.selectedKey, version: Number(sel) }) })
   if (!detail || !detail.bpmnXml) throw new Error('v' + sel + ' 无 XML')
   return detail.bpmnXml
 }
@@ -3824,7 +3824,7 @@ async function loadDef (key, version) {
     const d = state.definitions.find((x) => x.key === key)
     let v = version
     if (v === undefined) v = d ? defVersion(d) : null
-    const detail = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, version: v == null ? undefined : v }) })
+    const detail = await apiJson('/api/flow/definitions/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, version: v == null ? undefined : Number(v) }) })
     if (!detail.bpmnXml) { toast('该版本无 XML'); return }
     state.selectedKey = key
     state.name = detail.name || key
