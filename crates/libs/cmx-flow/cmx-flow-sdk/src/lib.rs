@@ -701,7 +701,7 @@ mod tests {
 
         let seen = seen_requests(&seen);
         assert_eq!(seen[0].0, "http://10.0.0.1:8091");
-        assert_eq!(seen[0].1.path, paths::INSTANCES);
+        assert_eq!(seen[0].1.path, paths::INSTANCES_START);
         assert_eq!(seen[0].1.method, HttpMethod::Post);
         assert!(matches!(&seen[0].1.body, Body::Json(_)));
         let body = json_of(&seen[0].1);
